@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.134.0** — 2026-10-01 — `vps-jp1` — Gọn kho: một README, một bộ luật, 3 tài liệu; bỏ luồng cài ZIP cũ
 - **2.133.3** — 2026-10-01 — `vps-jp1` — Gọn kho: bỏ mã chết, công cụ cũ, bản trùng; README mới
 - **2.133.2** — 2026-09-30 — `vps-jp1` — Máy đăng: quét ngày độc lập, MHKT dựng từ mẫu, chờ tải xong 100% + hậu kiểm
 - **2.133.1** — 2026-09-30 — `vps-jp1` — docs(nhieu-vps): thêm dòng xem nhanh phiên bản (bản vá thử đường tự cập nhật)
