@@ -18,6 +18,8 @@ Tóm tắt một vòng:
    lại giao diện. Tắt tự động thì chỉ báo "Có bản mới x.y.z" (Bảng điều khiển +
    Cài đặt) và chờ người bấm **Cập nhật ngay**.
 
+Xem nhanh bản đang chạy và bản trên kho: `python -m core.dong_bo_git kiem`.
+
 Công cụ dùng cho việc này: `python -m core.dong_bo_git <lệnh>` (chạy tại thư mục
 gốc MyTool).
 
