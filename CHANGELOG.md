@@ -4,6 +4,10 @@ Rút gọn từ `NHAT-KY-PHAT-TRIEN.md` (nhật ký chi tiết máy — mỗi m�
 lý do sửa, tệp đụng tới, kết quả test). Tệp này chỉ ghi TÍNH NĂNG CHÍNH, cho
 người cần biết "bản mới có gì" mà không cần đọc hết nhật ký chi tiết.
 
+## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
+
+- **2.133.0** — 2026-09-30 — `vps-jp1` — feat(cap-nhat): một hệ cập nhật git duy nhất — day tự nâng phiên bản + CHANGELOG + tag; máy tự kiểm ~30' và tự nhận bản mới lúc rảnh (mặc định bật, tắt trong Cài đặt); khung Cập nhật trên giao diện; bỏ lịch 03:40; A17 kho đọc cap-nhat.json
+
 ## [3.0.0-dev] — 22/09/2026 – 29/09/2026
 
 Chuẩn bị phát hành v3.0 (sản phẩm nhiều VPS, nhiều ngách) — xem
