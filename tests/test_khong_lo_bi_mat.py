@@ -156,9 +156,8 @@ def _duoc_tha(rel: str, dong: str) -> bool:
 def _tep_can_quet():
     """Mọi file đi kèm bản giao khách mà bài kiểm này soi.
 
-    `tests/` cố ý KHÔNG nằm trong danh sách: bộ kiểm không vào gói khách
-    (`core.package.SKIP_DIRS`), và chính file này phải nhắc tới từ cấm mới làm
-    được việc của nó.
+    `tests/` cố ý KHÔNG nằm trong danh sách: chính file này phải nhắc tới từ
+    cấm mới làm được việc của nó.
     """
     for thu_muc in CAY_MA:
         goc = os.path.join(GOC, thu_muc)
@@ -215,30 +214,3 @@ def test_tai_lieu_noi_bo_khong_con_trong_cay_ma():
         "khách: {0}. Dời sang `tools/kho-github-noi-bo/`, đừng xoá.".format(con_lai)
     )
 
-
-def test_kho_bi_mat_cua_may_dong_goi_khong_vao_goi():
-    """`secrets.json`, `config.json`, `.env`, `.claude/` không được vào ZIP."""
-    from core import package
-
-    for ten in ("secrets.json", "config.json", ".env",
-                ".claude/settings.local.json"):
-        assert package.is_skipped(ten), ten
-
-
-def test_ma_quan_tri_bi_chan_theo_tien_to_thu_muc():
-    """Lưới an toàn chống lọt mã quản trị — chặn theo thư mục, không theo tên file.
-
-    Bản cũ liệt kê thẳng tên mười file cần giấu, mà chính danh sách ấy lại đi
-    kèm bản giao khách. Bắt theo tiền tố thì thêm file mới không phải khai thêm
-    dòng nào — quên khai chính là cách file lọt ra lần trước.
-    """
-    from core import package
-
-    for duong in ("core_ops/mot_file_hoan_toan_moi.py",
-                  "ui_ops/tab_ops.py",
-                  "tools/shopapi-ops/core_ops/login_run.py"):
-        assert package.is_skipped(duong), duong
-
-    # Mà vẫn không được chặn nhầm mã của bản khách.
-    assert not package.is_skipped("core/config.py")
-    assert not package.is_skipped("ui_qt/app.py")

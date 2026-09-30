@@ -820,6 +820,35 @@ def _chon_tep(goc: str, chi: Sequence[str]) -> List[str]:
     return ra
 
 
+def _thuoc_chon(p: str, chon: Sequence[str]) -> bool:
+    """`p` (đường git, dấu /) có nằm trong một mục `--chi` (tệp hay thư mục) không."""
+    for c in chon:
+        c = c.rstrip("/")
+        if c in ("", ".") or p == c or p.startswith(c + "/"):
+            return True
+    return False
+
+
+def _tep_can_add(goc: str, chon: Sequence[str]) -> List[str]:
+    """Mục `--chi` nào còn cần `git add -A`.
+
+    Bỏ qua mục đã `git rm` sẵn (không còn trong chỉ mục lẫn trên đĩa) và mục
+    đã `git rm --cached` rồi đưa vào .gitignore (còn trên đĩa nhưng bị chặn):
+    `git add` gọi đích danh những đường đó sẽ báo lỗi, mà việc xoá đã nằm sẵn
+    trong chỉ mục rồi."""
+    ra: List[str] = []
+    for p in chon:
+        if git(goc, "ls-files", "--cached", "--", p)[1].strip():
+            ra.append(p)
+            continue
+        if not os.path.exists(os.path.join(goc, p)):
+            continue
+        if git(goc, "check-ignore", "-q", "--", p)[0] == 0:
+            continue
+        ra.append(p)
+    return ra
+
+
 def _nang_phien_ban(goc: str, muc: str, thong_diep: str, ma_may: str,
                     in_ra: Callable[[str], None]) -> str:
     """Commit PHIÊN BẢN riêng (chỉ VERSION + 1 dòng CHANGELOG.md) trên HEAD rồi
@@ -886,14 +915,18 @@ def day(goc: str = GOC, thong_diep: str = "", *, bo_qua_test: bool = False,
     _dat_danh_tinh(goc, cfg["ma_may"])
     chon = _chon_tep(goc, chi or [])
     if chon:
-        # Chỉ commit đúng tệp đã chọn: chỉ mục (index) phải sạch trước, không
-        # thì `commit` cuốn luôn tệp người khác đã `git add`.
+        # Chỉ commit đúng tệp đã chọn: chỉ mục (index) không được có tệp NGOÀI
+        # lượt --chi, không thì `commit` cuốn luôn tệp người khác đã `git add`.
+        # Tệp đã `git rm` / `git rm --cached` sẵn mà nằm trong --chi thì được.
         da_cho = [p for p in git(goc, "diff", "--cached", "--name-only", "-z")[1].split("\0") if p]
-        if da_cho:
+        ngoai = [p for p in da_cho if not _thuoc_chon(p, chon)]
+        if ngoai:
             in_ra("! Đang có tệp đã `git add` sẵn ({0}) — không trộn vào lượt --chi.".format(
-                ", ".join(da_cho[:8])))
+                ", ".join(ngoai[:8])))
             return 1
-        _git_ok(goc, "add", "-A", "--", *chon)
+        them = _tep_can_add(goc, chon)
+        if them:
+            _git_ok(goc, "add", "-A", "--", *them)
     else:
         if cfg.get("xuat_bai_hoc"):
             try:

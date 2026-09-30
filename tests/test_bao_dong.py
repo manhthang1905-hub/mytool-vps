@@ -1,7 +1,7 @@
-"""Báo động ra NGOÀI máy (`core.bao_dong`) + cầu nối `core.alerts.canh_bao_ra_ngoai`.
+"""Báo động ra NGOÀI máy (`core.bao_dong`).
 
-Bối cảnh: `core/alerts.py` trước đây chỉ đổi màu trong giao diện — không ai
-thấy nếu không ngồi trước máy. `core/bao_dong.py` thêm đường bắn Telegram/
+Bối cảnh: cảnh báo trong giao diện không ai thấy nếu không ngồi trước máy.
+`core/bao_dong.py` thêm đường bắn Telegram/
 webhook RA NGOÀI, mặc định TẮT (chưa có `bao-dong.json` là im lặng), có chống
 spam theo `loai` sự cố. KHÔNG được gọi mạng thật trong test — mọi test dưới
 đây monkeypatch đúng một điểm chạm mạng: `bao_dong._http_post`.
@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from core import alerts, bao_dong
+from core import bao_dong
 
 
 def _ghi_cau_hinh(goc, **noi_dung):
@@ -211,40 +211,3 @@ class TestChongSpam:
         assert bao_dong.bao_dong("x", "t", goc=str(tmp_path), bay_gio=1.0) is True
         assert len(goi) == 2
 
-
-class TestCanhBaoRaNgoai:
-    """Cầu nối `core.alerts.canh_bao_ra_ngoai` — dùng lại `low_balance_warning_vnd`
-    qua `assess_balance()` đã có sẵn, bắn tiếp sang `core.bao_dong`."""
-
-    def test_muc_ok_khong_goi_bao_dong(self, tmp_path, monkeypatch):
-        goi = []
-        monkeypatch.setattr(bao_dong, "bao_dong", lambda *a, **k: goi.append((a, k)) or True)
-        alert = alerts.assess_balance(1_000_000_000_000, floor_vnd=50_000)  # còn nhiều -> OK
-        assert alert.level == alerts.LEVEL_OK
-        assert alerts.canh_bao_ra_ngoai(alert, goc=str(tmp_path)) is False
-        assert goi == []
-
-    def test_muc_low_goi_bao_dong_voi_dung_loai_va_chu(self, tmp_path, monkeypatch):
-        goi = []
-        monkeypatch.setattr(
-            bao_dong, "bao_dong", lambda loai, tieu_de, chi_tiet="", **k: goi.append((loai, tieu_de, chi_tiet, k)) or True
-        )
-        alert = alerts.assess_balance(1, floor_vnd=50_000)  # gần như trống -> LOW/EMPTY
-        assert alert.is_warning
-        ket_qua = alerts.canh_bao_ra_ngoai(alert, goc=str(tmp_path))
-        assert ket_qua is True
-        assert len(goi) == 1
-        loai, tieu_de, chi_tiet, kwargs = goi[0]
-        assert loai == "vi_can"
-        assert tieu_de == alert.title
-        assert kwargs["goc"] == str(tmp_path)
-
-    def test_end_to_end_khong_gia_lap_bao_dong_van_im_lang_neu_chua_cau_hinh(self, tmp_path, monkeypatch):
-        """Không monkeypatch `bao_dong.bao_dong` — kiểm tra đường dây thật
-        chạy hết tới `core.bao_dong` mà vẫn im lặng đúng nghĩa (không lỗi,
-        không gọi mạng) vì `tmp_path` chưa có `bao-dong.json`."""
-        goi = []
-        monkeypatch.setattr(bao_dong, "_http_post", lambda *a, **k: goi.append(1))
-        alert = alerts.assess_balance(1, floor_vnd=50_000)
-        assert alerts.canh_bao_ra_ngoai(alert, goc=str(tmp_path)) is False
-        assert goi == []

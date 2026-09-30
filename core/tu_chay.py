@@ -947,7 +947,7 @@ def _cong_diem_anh_em_an_toan(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
 
 #: Công thức chọn nguồn đã đăng ký (29/09/2026, chủ dự án: "Sẽ có NHIỀU công thức, nhiều
 #: cách đánh"). Tên → mô tả. Từ 30/09/2026 mỗi công thức là MỘT TỆP trong `core/chien_luoc/`
-#: (tự phát hiện — thêm công thức: chép `core/chien_luoc/_mau.py`, xem `docs/CHIEN-LUOC.md`);
+#: (tự phát hiện — thêm công thức: chép `core/chien_luoc/_mau.py`, xem `docs/kien-thuc/chien-luoc.md`);
 #: bảng này đọc từ sổ đăng ký của gói, sổ hỏng thì dùng bản cố định dưới đây.
 _CONG_THUC_NGUON_CO_DINH: Dict[str, str] = {
     "v7": "Công thức V7 — cụm đang thắng + bảng đề xuất của kênh (kênh đang lên, có chỉ số)",

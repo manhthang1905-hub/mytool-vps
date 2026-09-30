@@ -70,11 +70,13 @@ BANG_DUONG_KY_VONG = (
     ("vm/thu-muc-dang-TL9-T7.json", True),
     ("vm/may-ao.json", True),
     ("vm/logs/agent-gui.log", True),
-    # vm/tien-ich/<mã>/ sinh theo kênh thì chặn, còn khuôn .js/.json THẲNG
-    # trong vm/tien-ich/ (không qua thư mục con) vẫn là mã nguồn đi theo tool.
+    # vm/tien-ich/ trọn thư mục là bản agent tải về lúc chạy (phẳng hay theo
+    # kênh) — chặn hết. Nguồn thật của extension là core/ytb_extension/.
     ("vm/tien-ich/TL9-T7/manifest.json", True),
-    ("vm/tien-ich/manifest.json", False),
-    ("vm/tien-ich/background.js", False),
+    ("vm/tien-ich/manifest.json", True),
+    ("vm/tien-ich/background.js", True),
+    ("core/ytb_extension/manifest.json", False),
+    ("core/ytb_extension/background.js", False),
     # ── E1: CHANNEL/ — nhật ký/số liệu thật, không phải khuôn ───────────────
     ("CHANNEL/TL1-T7/can-ghim.md", True),
     ("CHANNEL/TL1-T7/NHAT-KY-KENH.md", True),

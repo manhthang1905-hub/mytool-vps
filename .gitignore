@@ -23,16 +23,13 @@
 !/tests/
 !/vm/
 !/tool-catalog/
-!/agent-skills/
 !/mau-capcut/
-!/mau-xoa-dau/
 
 # Tệp chạy ở gốc — khai TỪNG TÊN (tệp .py thử nghiệm ở gốc không tự lên kho).
 !/shopapi_studio_qt.py
 !/tu_chay.py
 !/tram_nen.py
 !/cap-nhat.py
-!/chay-den-khi-xong.py
 !/*.bat
 !/*.vbs
 !/*.ps1
@@ -47,7 +44,6 @@
 !/VERSION
 !/LICENSE
 !/CLAUDE.md
-!/MOC-THAT-GIONG-DOC.md
 !/*.example.json
 !/*.example
 
@@ -68,6 +64,8 @@
 !/vm/*.bat
 !/vm/*.vbs
 !/vm/*.md
+# Nhật ký kế hoạch 01–18/09: chỉ giữ trên máy gốc, không lên kho (gọn kho 30/09).
+/vm/KE-HOACH*.md
 !/vm/requirements*.txt
 !/vm/config.example.json
 !/vm/studio-selectors.json
@@ -75,9 +73,9 @@
 !/vm/logo.ico
 # Ảnh mẫu nút bấm Studio — vm/may_dang.py dò màn hình bằng các ảnh này (mã chạy cần).
 !/vm/icon/
-# vm/tien-ich/: tệp khuôn nằm thẳng trong thư mục; thư mục con = cấu hình theo kênh.
-!/vm/tien-ich/
-/vm/tien-ich/*/
+# vm/tien-ich/: bản extension agent tải về lúc chạy (phẳng hoặc theo kênh) —
+# không lên kho. Nguồn thật: core/ytb_extension/ (gọn kho 30/09).
+/vm/tien-ich/
 /vm/CLAUDE.md
 # Bộ cài VPS ~1,5 GB (mã + dữ liệu kênh thật + Whisper) — đã bị `/vm/*` chặn,
 # khai lại cho rõ (tests/test_goi_vps.py).

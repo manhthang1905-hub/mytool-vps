@@ -117,6 +117,36 @@ def test_lenh_day_nhan_minor_major_va_chi(monkeypatch):
     assert d.main(["day", "msg"]) == 0 and goi["muc"] == "patch" and goi["chi"] is None
 
 
+def test_chi_nhan_tep_da_git_rm_san():
+    """`--chi` gồm tệp đã `git rm` / `git rm --cached`: nằm trong chỉ mục thì
+    được, và không `git add` đích danh (git báo lỗi với đường đã xoá/bị chặn)."""
+    chon = ["core/cu.py", "agent-skills/", "MOC.md", "README.md", "core/moi.py"]
+    assert d._thuoc_chon("agent-skills/a/SKILL.md", chon)
+    assert d._thuoc_chon("core/cu.py", chon)
+    assert not d._thuoc_chon("core/cu.pyc", chon)
+    assert not d._thuoc_chon("core/khac.py", chon)
+
+
+def test_tep_can_add_bo_qua_tep_da_xoa_va_bi_chan(tmp_path, monkeypatch):
+    (tmp_path / "MOC.md").write_text("x", encoding="utf-8")        # rm --cached + .gitignore
+    (tmp_path / "README.md").write_text("x", encoding="utf-8")     # sửa thường
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "moi.py").write_text("x", encoding="utf-8")  # tệp mới
+    theo_doi = {"README.md"}
+    bi_chan = {"MOC.md"}
+
+    def git_gia(goc, *ts, **k):
+        if ts[:2] == ("ls-files", "--cached"):
+            return 0, (ts[-1] + "\n") if ts[-1] in theo_doi else "", ""
+        if ts[0] == "check-ignore":
+            return (0 if ts[-1] in bi_chan else 1), "", ""
+        raise AssertionError(ts)
+
+    monkeypatch.setattr(d, "git", git_gia)
+    chon = ["core/cu.py", "MOC.md", "README.md", "core/moi.py"]
+    assert d._tep_can_add(str(tmp_path), chon) == ["README.md", "core/moi.py"]
+
+
 def test_nhan_bai_hoc_ngoai_chi_lay_may_khac(tmp_path):
     (tmp_path / "cap-nhat.json").write_text('{"dong_bo_git": {"ma_may": "may-a"}}', encoding="utf-8")
     cs = tmp_path / "chia-se" / "bai-hoc"

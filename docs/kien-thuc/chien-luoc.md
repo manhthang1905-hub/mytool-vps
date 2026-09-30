@@ -1,6 +1,6 @@
-# Chiến lược chọn nguồn — hướng dẫn người vận hành (bản tổng quát)
+# Chiến lược chọn nguồn — hướng dẫn người vận hành
 
-Dành cho người dựng VPS mới hoặc mở ngách/quốc gia mới, không cần đọc mã. Mọi thay đổi chỉ là sửa YAML. Chưa khai khoá mới nào thì tool chạy y như trước. Bản gốc đầy đủ kèm chi tiết mã: `docs/CHIEN-LUOC.md`. Thiết kế bên trong: `thiet-ke-chien-luoc.md`.
+Dành cho người dựng VPS mới hoặc mở ngách/quốc gia mới, không cần đọc mã. Mọi thay đổi chỉ là sửa YAML. Chưa khai khoá mới nào thì tool chạy y như trước. Thiết kế bên trong (plugin công thức, `NguCanh`, dòng chuẩn): `thiet-ke-chien-luoc.md`.
 
 ## 1. Vòng học trong 5 dòng
 
@@ -58,7 +58,18 @@ Dành cho người dựng VPS mới hoặc mở ngách/quốc gia mới, không 
 
 ## 4. Đọc `nghien-cuu/chien-luoc.json`
 
-Ghi mỗi lượt, không tốn tiền, cửa sổ 28 ngày: `thong_ke.<ct>.lam / n / thang / truot / cho`, trung vị CTR trang chủ, thời lượng xem, sub/1.000 view; `nguong_thang_48h` của kênh; `ti_trong_hien_tai` → `ti_trong_goi_y` (chưa áp); `thong_ke_toan_bo`. Sổ cũ cũng được thống kê ngược.
+Ghi mỗi lượt, không tốn tiền, cửa sổ 28 ngày:
+
+| trường | nghĩa |
+|---|---|
+| `thong_ke.<ct>.lam` | số video công thức này đã ra |
+| `.n` / `.thang` / `.truot` / `.cho` | đã có kết luận / thắng / trượt / chưa đủ 48h |
+| `.ctr_trang_chu_tv`, `.avd_giay_tv`, `.sub_1k` | trung vị CTR trang chủ @48h, thời lượng xem (giây), sub trên 1.000 view |
+| `nguong_thang_48h` | ngưỡng thắng của chính kênh lúc ghi |
+| `ti_trong_hien_tai` → `ti_trong_goi_y`, `ly_do_goi_y` | tỉ trọng đang dùng và tỉ trọng vòng học **gợi ý** (chưa áp, `da_ap: false`) |
+| `thong_ke_toan_bo` | như `thong_ke` nhưng tính trên toàn bộ sổ |
+
+Sổ cũ trước bộ máy chiến lược cũng được thống kê ngược qua nhãn `run.nguon.nguon`.
 
 ## 5. Khi nào bật tự học
 
@@ -74,6 +85,8 @@ Chỉ khi đủ **cả ba**: đã khai ≥ 2 công thức; tổng n ≥ 6 (nên 
 1. Chép `core/chien_luoc/_mau.py` thành `core/chien_luoc/<ten>.py` (không bắt đầu bằng `_`; tự được phát hiện).
 2. Điền `TEN`, `MO_TA`, `LUI_KHI_RONG`.
 3. Viết `ap_dung(nc) -> 0..1` (0 khi thiếu dữ liệu) và `cham(nc) -> list[dòng chuẩn]` (mạnh nhất trước, kết bằng `return nc.loc(ds)`).
-4. Viết 1 test fixture.
+4. Viết 1 test fixture: `tests/du-lieu/chien-luoc/<ten>.json`, hoặc một bài trong `tests/test_chien_luoc.py`.
 
-Luật: không `import core.tu_chay` ở đầu tệp; `cham` không gọi mạng, không tốn ví; phân loại theo nghĩa (`nc.cum_cua`, `nc.luat_chon`), **không** thêm bộ lọc từ khoá. Golden test phải khớp từng byte khi không khai `chien_luoc`. Trên VPS **không** chạy test toàn kho.
+Luật: không `import core.tu_chay` ở đầu tệp; `cham` không gọi mạng, không tốn ví; phân loại theo nghĩa (`nc.cum_cua`, `nc.luat_chon`), **không** thêm bộ lọc từ khoá. Hợp đồng đầy đủ của `NguCanh`: docstring `core/chien_luoc/ngu_canh.py`.
+
+Kiểm: `tests/test_chien_luoc_golden.py` so đầu ra khi **không** khai `chien_luoc` với bản chụp, khớp từng byte (muốn chụp lại có chủ ý: xoá `.golden.json` rồi ghi lý do vào nhật ký); `tests/test_chien_luoc.py` kiểm phần trộn và thăm dò. Trên VPS **không** chạy test toàn kho.

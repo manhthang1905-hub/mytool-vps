@@ -1,12 +1,10 @@
-# Golden tool catalog
+# Tool catalog
 
-Day la bo manifest chuan dau tien cho pipeline YouTube cua ShopAPI Studio.
-Moi thu muc chua mot `tool.json`; Studio chi nap metadata va kiem tra port, chua
-tu dong cai dependency hay chay entrypoint khi doc catalog.
+Moi thu muc chua mot `tool.json` (metadata + port) va `run.py` (entrypoint).
+Con hai tool dang dung:
 
-Pipeline mac dinh:
-
-`research.youtube -> content.remake -> voice.shopapi -> transcribe.local -> prompt.workbook -> image.shopapi -> video.shopapi -> edit.ffmpeg`
+- `prompt.workbook`: dung bang prompt canh (`core/dao_dien_auto` nap thang `run.py`).
+- `transcribe.local`: boc loi thoai bang faster-whisper (che do may nha, `core/builder_service`).
 
 `schema` la hop dong du lieu, con `kind` la nhom artifact de UI chon cach hien
 thi. Cac permission duoc khai bao de runner xin phep nguoi dung truoc khi chay.

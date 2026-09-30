@@ -134,7 +134,7 @@ class TestAgentGoiVe:
 def test_thu_muc_vm_du_bo():
     # 02/09: vm/ là TOOL VM đầy đủ (chủ dự án: "1 tool bên vm cài là chạy
     # được các tính năng") — bảng điều khiển + 3 con + bộ cài + ảnh mẫu.
-    for ten in ("KE-HOACH.md", "agent.py", "config.example.json",
+    for ten in ("agent.py", "config.example.json",
                 "CHAY-AGENT.bat", "CAI-DAT-VM.bat", "CHAY-NGAM.vbs",
                 "nguon_tool.py", "ghep_tool_dang.py", "giao_dien.py",
                 "may_dang.py", "may_cmt.py", "requirements-vm.txt",

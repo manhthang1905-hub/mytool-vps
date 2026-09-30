@@ -126,7 +126,7 @@ def test_cho_goi_that_dung_duoi_cua_output():
     from pathlib import Path
 
     goc = Path(__file__).resolve().parent.parent
-    for ten in ("core/jobs.py", "core/pipeline.py"):
+    for ten in ("core/jobs.py",):
         chu = (goc / ten).read_text(encoding="utf-8")
         assert re.search(r"=\s*duoi_cua_output\(\s*output\s*\)", chu), \
             "{0}: chỗ đặt tên file phải gọi duoi_cua_output(output)".format(ten)

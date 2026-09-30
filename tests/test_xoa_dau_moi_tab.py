@@ -164,7 +164,7 @@ class TestHangDoiViec:
 class TestKhongDuongNaoSot:
     def test_moi_cho_tai_tep_ket_qua_deu_co_buoc_xoa_dau(self):
         """Ai thêm một đường tải mới mà quên bước này thì bài kiểm nói ngay."""
-        for ten in ("core/jobs.py", "core/pipeline.py"):
+        for ten in ("core/jobs.py",):
             chu = (GOC / ten).read_text(encoding="utf-8")
             for i, dong in enumerate(chu.splitlines()):
                 if "download_to(url, dest" not in dong:

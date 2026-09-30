@@ -3,7 +3,7 @@
 Mỗi tệp `core/chien_luoc/<ten>.py` KHÔNG bắt đầu bằng `_` là MỘT công thức (hợp đồng: `TEN`, `MO_TA`,
 `LUI_KHI_RONG`, `ap_dung(nc) -> 0..1`, `cham(nc) -> list[dòng chuẩn]`), tự phát hiện bằng
 `pkgutil.iter_modules`. Tệp nhập hỏng → log + bỏ qua, không kéo đổ cả bộ chọn nguồn.
-Thêm công thức: chép `_mau.py` — xem `docs/CHIEN-LUOC.md`.
+Thêm công thức: chép `_mau.py` — xem `docs/kien-thuc/chien-luoc.md`.
 
 kenh.yaml (phẳng — `kenh.doc_yaml` tối giản không đọc khoá lồng):
 

@@ -61,9 +61,9 @@ def kho_gia(tmp_path):
     _ghi(repo, "CHANNEL/TL1/nghien-cuu/doithu.json", '{"ten": "kenh doi thu that"}\n')
     _ghi(repo, "CHANNEL/TL1/nghien-cuu/tuyen.csv", "cot1,cot2\n1,2\n")
     _ghi(repo, "docs/ghi-chu.md", "Cài ở C:\\" "Users\\NguoiDung\\Documents\\TL\\MyTool nhé.\n")
-    # `vm/tien-ich/*.js` THẲNG trong vm/tien-ich/ (không thư mục con) là KHUÔN
-    # dùng chung — không được gắn cờ. Chỉ thư mục con theo mã kênh mới bị chặn.
-    _ghi(repo, "vm/tien-ich/khuon.js", "// khuon dung chung\n")
+    # Nguồn extension `core/ytb_extension/*.js` là mã dùng chung — không được
+    # gắn cờ. Chỉ thư mục con theo mã kênh `vm/tien-ich/<k>/` mới bị chặn.
+    _ghi(repo, "core/ytb_extension/khuon.js", "// khuon dung chung\n")
     _ghi(repo, "vm/tien-ich/TL1-T7/cau-hinh.json", '{"rieng": "may that"}\n')
     # CLAUDE.local.md: ghi rồi `git add -f` — mô phỏng đã track TRƯỚC khi có
     # dòng .gitignore chặn nó (đúng ca thật của vá E1).
@@ -141,11 +141,11 @@ def test_quet_cay_sach_bat_dung_5_loai(kho_gia, tmp_path):
     assert "docs/ghi-chu.md" in theo_loai.get("duong_tuyet_doi", set())
     assert "data/qua_lon.dat" in theo_loai.get("tep_lon", set())
     assert "vm/tien-ich/TL1-T7/cau-hinh.json" in theo_loai.get("du_lieu_kenh", set())
-    assert "vm/tien-ich/khuon.js" not in theo_loai.get("du_lieu_kenh", set())
+    assert "core/ytb_extension/khuon.js" not in theo_loai.get("du_lieu_kenh", set())
 
     # Tệp sạch không bị gắn cờ gì.
     assert "core/tab_ops.py" not in {p.duong for p in phat_hien}
-    assert "vm/tien-ich/khuon.js" not in {p.duong for p in phat_hien}
+    assert "core/ytb_extension/khuon.js" not in {p.duong for p in phat_hien}
 
 
 def test_quet_cay_sach_rong_khi_sach(tmp_path):

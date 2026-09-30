@@ -92,6 +92,9 @@ VPS (xem `docs/PHAT-TRIEN-NHIEU-VPS.md`). Nên:
 
 ## Kế hoạch và lịch sử
 
+Hai tệp dưới chỉ còn trên máy gốc (đã gỡ khỏi kho chung 30/09/2026); nội dung
+còn đúng đã nằm trong `README-VPS.md`, `docs/` và tệp này.
+
 - `vm/KE-HOACH-5-KENH.md`: kế hoạch tổng 5 kênh / 1 VPS, bảng việc đã xong,
   câu hỏi còn chờ chủ dự án.
 - `vm/KE-HOACH.md`: nhật ký đường dây trạm ↔ VM và các bẫy đã dính (IPv6,

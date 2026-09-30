@@ -418,15 +418,27 @@ def test_mat_khau_may_rieng_KHONG_nam_tho_tren_dia(tmp_path):
 
 
 def test_ten_tep_may_rieng_BI_LOAI_khoi_goi_gui_khach():
-    """Chữ `secret` trong tên là thứ giữ danh sách máy riêng khỏi gói phát hành.
+    """Chữ `secret` trong tên là thứ giữ danh sách máy riêng khỏi kho chung.
 
-    ⚠ Đổi tên tệp mà bỏ chữ đó đi là gỡ luôn lớp chặn — và không có dòng loại
-    trừ riêng nào để nhắc, vì cả cơ chế dựa vào cái tên.
+    `.gitignore` chặn `*.secret.*` ở mọi độ sâu. ⚠ Đổi tên tệp mà bỏ chữ đó đi
+    là gỡ luôn lớp chặn — và không có dòng loại trừ riêng nào để nhắc, vì cả
+    cơ chế dựa vào cái tên.
     """
-    from core.package import looks_like_secret
+    import subprocess
+
     from core.vps_rieng import TEN_TEP
 
-    assert looks_like_secret(TEN_TEP), TEN_TEP
+    goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isfile(os.path.join(goc, ".gitignore")):
+        pytest.skip("không thấy .gitignore ở gốc kho")
+    try:
+        ket = subprocess.run(("git", "check-ignore", "-q", "--no-index", TEN_TEP),
+                             cwd=goc, capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as loi:
+        pytest.skip("máy chạy test không dùng được git: {0}".format(loi))
+    if ket.returncode == 128:
+        pytest.skip("git không chạy được trên máy này (--no-index)")
+    assert ket.returncode == 0, TEN_TEP + " phải bị .gitignore chặn"
 
 
 def test_dia_chi_ipv6_bi_bo_ngoac_vuong_khi_luu(tmp_path):

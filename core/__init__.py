@@ -11,7 +11,6 @@ Chia việc:
 | `secrets.py`  | Kho bí mật: khoá API + token đăng nhập, mã hoá theo máy (DPAPI) |
 | `auth.py`     | Đăng nhập email/mật khẩu, xác thực hai lớp, tạo & thu hồi khoá API |
 | `account.py`  | Sổ cái, lịch sử job, mức dùng, **nạp tiền** (⚠ đơn vị ĐỒNG, không phải µVND) |
-| `alerts.py`   | Ngưỡng cảnh báo sắp hết tiền, tính theo mức tiêu thật của khách |
 | `money.py`    | Tính tiền µVND bằng số nguyên — TUYỆT ĐỐI không float |
 | `pricing.py`  | Bảng giá + ước tính số tiền bị tạm giữ |
 | `validate.py` | Kiểm tham số trước khi tốn một vòng mạng |
