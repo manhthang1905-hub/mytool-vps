@@ -718,6 +718,13 @@ class TrangBangDieuKhien(QWidget):
         self._nhan_luc = nhan("", "muted")
         self._nhan_luc.setMinimumWidth(1)
         ngang.addWidget(self._nhan_luc, 1)
+        # Huy hiệu "Có bản mới x.y.z" — CHỈ khi máy này TẮT tự cập nhật (bật thì
+        # tool tự cài lúc rảnh, không cần ai nhìn). Bấm → Cài đặt, khung Cập nhật.
+        self._huy_hieu_cn = nut_phu("", lambda: self._hanh_dong("mo_vi", {}))
+        self._huy_hieu_cn.setStyleSheet(
+            "color:{0};font-weight:600;".format(theme.XANH))
+        self._huy_hieu_cn.setVisible(False)
+        ngang.addWidget(self._huy_hieu_cn)
         ngang.addWidget(nut_phu("Làm mới", lambda: self.lam_moi(), rong=90))
         nut_hd = nut_huong_dan("tong-quan", hop)
         if nut_hd is not None:
@@ -1039,9 +1046,26 @@ class TrangBangDieuKhien(QWidget):
 
         self._app.run_bg(viec, on_ok=xong, on_err=lambda _l: None)
 
+    def _ve_huy_hieu_cap_nhat(self) -> None:
+        """Đọc `workspace/cap-nhat/trang-thai.json` (một tệp JSON nhỏ, luồng vẽ được)."""
+        try:
+            from core import cap_nhat_git as cng  # noqa: PLC0415
+
+            tt = cng.doc_trang_thai(self._app.base_dir)
+            tat = not cng.doc_cau_hinh(self._app.base_dir)["tu_dong_cap_nhat"]
+        except Exception:  # noqa: BLE001
+            return
+        hien = bool(tat and tt.get("ban_moi"))
+        if hien:
+            self._huy_hieu_cn.setText("Có bản mới {0}".format(tt["ban_moi"]))
+            self._huy_hieu_cn.setToolTip(
+                "Máy này đang TẮT tự cập nhật. Bấm để xem thay đổi và cập nhật.")
+        self._huy_hieu_cn.setVisible(hien)
+
     def lam_moi(self, bat_buoc: bool = True) -> None:
         if not self._con_song() or (not bat_buoc and not self.isVisible()):
             return
+        self._ve_huy_hieu_cap_nhat()
         if self._dang_nap:
             return
         self._dang_nap = True

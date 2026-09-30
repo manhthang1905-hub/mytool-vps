@@ -11,7 +11,7 @@ thứ phải đoán xem nó nấp ở tab nào.
 
 Mỗi tuỳ chọn ở đây là một ô đánh dấu kèm **một câu nói hậu quả**, không phải
 một cái tên kỹ thuật. Người dùng tool này không biết lập trình; "bật/tắt
-`tu_cap_nhat`" không giúp họ quyết được gì, còn "tắt thì bạn tự bấm khi nào
+`bao_su_co`" không giúp họ quyết được gì, còn "tắt thì bạn tự bấm khi nào
 muốn" thì có.
 
 Lưu ngay khi bấm, không có nút Lưu. Một nút Lưu ở màn hình toàn ô đánh dấu chỉ
@@ -66,13 +66,9 @@ MUC_SONG_SONG = (
 
 #: `(khoá, nhãn, câu giải thích)`. Thứ tự trên màn hình theo đúng thứ tự này.
 MUC = (
-    ("tu_cap_nhat", "Tự cập nhật khi mở tool",
-     "Mở tool lên là tôi tự tải bản mới rồi khởi động lại, xong mới đưa bạn "
-     "dùng. Tắt thì tôi chỉ báo có bản mới, bạn tự bấm khi nào tiện — hợp khi "
-     "bạn hay để tool chạy dở một mẻ dài."),
-    ("hoi_ban_moi", "Hỏi xem có bản mới không",
-     "Tắt cái này là tắt luôn cả dòng trên: không hỏi thì không biết có gì để "
-     "cập nhật. Chỉ nên tắt khi máy không nối được ra Internet."),
+    # (30/09/2026) "Tự cập nhật" / "Hỏi bản mới" đã chuyển vào khung Cập nhật
+    # (`ui_qt/cap_nhat.py: BangCapNhat`) — công tắc thật là `tu_dong_cap_nhat`
+    # trong `cap-nhat.json`, không còn ô trùng ở đây.
     ("bao_su_co", "Hiện thông báo khi tool gặp lỗi",
      "Tắt thì lỗi vẫn được ghi lại đầy đủ vào workspace/su-co.log, chỉ là "
      "không hiện lên màn hình. Hợp khi bạn để tool chạy qua đêm."),
@@ -156,6 +152,9 @@ class TrangCaiDat(QWidget):
         doc.setSpacing(12)
         doc.addWidget(tieu_de_trang(
             "Cài đặt", "Những thứ bạn cài một lần rồi thôi."))
+        from .cap_nhat import BangCapNhat  # noqa: PLC0415
+
+        doc.addWidget(BangCapNhat(app))
         doc.addWidget(self._the_cap_nhat())
         doc.addWidget(self._the_video())
         doc.addWidget(self._the_song_song())
@@ -176,7 +175,7 @@ class TrangCaiDat(QWidget):
         v = QVBoxLayout(khung)
         v.setContentsMargins(20, 16, 20, 18)
         v.setSpacing(6)
-        v.addWidget(nhan("Cập nhật và thông báo", "h2"))
+        v.addWidget(nhan("Thông báo và khởi động", "h2"))
 
         dang = cai_dat.doc(self._app.base_dir)
         for khoa, nhan_o, giai_thich in MUC:
@@ -527,10 +526,6 @@ class TrangCaiDat(QWidget):
                 "Tôi không ghi được vào thư mục workspace. Bạn kiểm tra xem ổ "
                 "đĩa còn chỗ trống không.")
             return
-        # Tắt "hỏi bản mới" thì "tự cập nhật" thành vô nghĩa — tắt luôn cho
-        # khỏi để lại một ô bật mà không làm gì.
-        if khoa == "hoi_ban_moi" and not bat and self._o["tu_cap_nhat"].isChecked():
-            self._o["tu_cap_nhat"].setChecked(False)
 
     def _mo_ket_qua(self) -> None:
         mo_thu_muc(os.path.join(self._app.base_dir, "PROJECTS"))

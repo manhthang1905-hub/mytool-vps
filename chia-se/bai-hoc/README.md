@@ -8,7 +8,8 @@ push không xung đột nhau.
   chạy trong mỗi lần `day`. Nó gom các bài học phạm vi kênh có n ≥ 3 từ
   `core.chien_luoc.bai_hoc` của mọi kênh cùng ngách trên máy. Câu nào có tên
   kênh thật, video id, URL hoặc email thì bị bỏ.
-- Tệp được **đọc** khi `python -m core.dong_bo_git keo` nhận bản mới. Lúc đó
+- Tệp được **đọc** khi máy tự nhận bản mới (`python -m core.dong_bo_git keo`,
+  do `core/cap_nhat_git.py` tự sinh lúc máy rảnh). Lúc đó
   tệp của máy khác cùng ngách được chép vào `CHANNEL/_NHOM/<ngach>/bai-hoc-ngoai/`.
   `bai_hoc._tu_ngoai` đọc chúng làm tiên nghiệm "ngoài", loại yếu nhất: chỉ
   dùng khi kênh chưa có số riêng trên trục đó.

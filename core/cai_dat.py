@@ -16,9 +16,8 @@ Người dùng tool này không biết lập trình. Mỗi tuỳ chọn để h�
 câu hỏi họ không có cơ sở để trả lời, nên mặc định phải là **thứ đúng cho phần
 đông**, còn nút gạt chỉ dành cho người có lý do riêng.
 
-`tu_cap_nhat` bật sẵn chính vì thế: cả một ngày sửa lỗi chỉ tới được máy khách
-khi họ bấm Cập nhật, mà phần lớn không bấm — họ không biết là có bản mới, và
-cũng không có lý do gì để đi tìm.
+Tự cập nhật (bật sẵn) nằm ở `cap-nhat.json: tu_dong_cap_nhat`, không ở đây —
+xem `core/cap_nhat_git.py`.
 """
 
 from __future__ import annotations
@@ -77,21 +76,10 @@ MAC_DINH: Dict[str, Any] = {
     # Cỡ cửa sổ Chrome khi mở hồ sơ. Cỡ phổ biến ngoài đời để vân tay không lạ.
     "chrome_sach_kich_thuoc": "1280×860",
 
-    # Mở tool lên là tự tải bản mới rồi khởi động lại, không hỏi.
-    #
-    # Bật sẵn vì bản vá chỉ có giá trị khi tới được máy khách. Cả một ngày sửa
-    # lỗi mà khách không bấm Cập nhật thì bằng không — và họ không bấm, vì họ
-    # không biết là có bản mới.
-    #
-    # Tắt được, dành cho người đang chạy dở một mẻ dài và không muốn tool tự
-    # khởi động lại giữa chừng.
-    "tu_cap_nhat": True,
-
-    # Hỏi GitHub xem có bản mới không, mỗi lần mở tool.
-    #
-    # Tắt cái này là tắt luôn cả `tu_cap_nhat` — không hỏi thì không biết có gì
-    # để cập nhật. Dành cho máy không nối mạng ra ngoài.
-    "hoi_ban_moi": True,
+    # (30/09/2026) `tu_cap_nhat` / `hoi_ban_moi` ĐÃ CHUYỂN khỏi đây: bật/tắt tự
+    # cập nhật là khoá `tu_dong_cap_nhat` trong `cap-nhat.json` (riêng máy, mặc
+    # định BẬT), chỉnh ở khung Cập nhật của Cài đặt — xem `core/cap_nhat_git.py`.
+    # Hai nơi cùng giữ một công tắc là hai sự thật; giữ một.
 
     # Mở tool lên là tự bật cổng nhận (trạm 8765) cho máy ảo gọi về.
     #

@@ -1,4 +1,8 @@
-"""Cập nhật tool từ kho GitHub công khai.
+"""Cập nhật tool từ kho GitHub công khai — ĐƯỜNG ZIP CŨ, ĐÃ NGỪNG ÁP MÃ (30/09/2026).
+
+Hệ cập nhật duy nhất giờ là `core/cap_nhat_git.py` (git fetch + ff-only, tự
+nâng phiên bản khi `dong_bo_git day`). Module này chỉ còn cho các hàm so số
+hiệu và `kho_nhanh` (đọc `cap-nhat.json: kho`). Phần dưới là lịch sử thiết kế.
 
 ═══ VÌ SAO LẤY TỪ GITHUB CHỨ KHÔNG TỪ MÁY CHỦ ═══
 
@@ -56,22 +60,32 @@ from typing import Callable, Optional, Tuple
 from .safe_update import UpdateError, stage_update
 
 __all__ = [
-    "KHO", "NHANH", "url_version", "url_zip", "doc_so", "hop_le", "moi_hon",
+    "KHO", "NHANH", "kho_nhanh", "url_version", "url_zip", "doc_so", "hop_le", "moi_hon",
     "kiem_ban_moi", "tai_ve_va_dung_san", "TRAN_ZIP",
 ]
 
-#: Kho công khai của tool — GIÁ TRỊ MẶC ĐỊNH DỰ PHÒNG khi nơi gọi không
-#: truyền `kho` riêng, KHÔNG còn là nguồn sự thật duy nhất từ Đợt 5.2
-#: (29/09/2026). Nguồn sự thật thật sự là `cap-nhat.json` ở gốc tool, đọc qua
-#: `core.nguon_cap_nhat.doc_cau_hinh` — kho cũ `shopapivn/youtube` không còn
-#: dùng nữa, và một dòng hằng số ở đây không đủ để đổi kho mà không phát hành
-#: bản mới trước. Giữ nguyên chuỗi này (đừng đổi) — nó chỉ còn tác dụng khi
-#: TEST hay một nơi gọi cũ chưa kịp truyền `kho` (import `KHO` ở đây vẫn hoạt
-#: động, chỉ là không còn ai nên tin nó nói đúng kho hiện dùng).
-KHO = "shopapivn/youtube"
+#: ═══ 30/09/2026 (A17): KHÔNG CÒN KHO CỨNG — ĐỌC `cap-nhat.json: kho` ═══
+#:
+#: Kho cũ `shopapivn/youtube` đã bỏ. Nguồn sự thật là `cap-nhat.json` ở gốc
+#: tool, đọc qua `core.cap_nhat_git.doc_cau_hinh` (`kho_nhanh(goc)` bên dưới);
+#: `KHO` chỉ còn là MẶC ĐỊNH khi tệp thiếu = kho chung mới. Đường ZIP của module
+#: này KHÔNG còn nơi nào gọi để áp mã — hệ cập nhật duy nhất là
+#: `core/cap_nhat_git.py` (git + kho chung); ở đây chỉ còn các hàm so số hiệu
+#: (`hop_le`, `moi_hon`, `don`) mà nơi khác dùng lại.
+KHO = "manhthang1905-hub/mytool-vps"
 
-#: Nhánh phát hành mặc định dự phòng — cùng vai trò dự phòng như `KHO`.
+#: Nhánh phát hành mặc định — cùng vai trò như `KHO`.
 NHANH = "main"
+
+
+def kho_nhanh(goc: str) -> Tuple[str, str]:
+    """(kho, nhánh) theo `cap-nhat.json` của máy `goc` — mặc định kho chung mới."""
+    try:
+        from .cap_nhat_git import doc_cau_hinh  # noqa: PLC0415 — tránh vòng nhập
+        cfg = doc_cau_hinh(goc)
+        return cfg["kho"], cfg["nhanh"]
+    except Exception:  # noqa: BLE001
+        return KHO, NHANH
 
 #: Trần dung lượng file tải về. Bản tool hiện khoảng 1,6 MB; 80 MB là rộng rãi
 #: gấp nhiều chục lần mà vẫn chặn được việc tải nhầm một thứ khổng lồ về máy khách.

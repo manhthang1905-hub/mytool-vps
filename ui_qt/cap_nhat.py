@@ -1,382 +1,352 @@
-"""Nút cập nhật ở thanh bên: tự dò bản mới, tải, rồi khởi động lại.
+"""Khung **Cập nhật** trong Cài đặt + nút nhỏ ở thanh bên — giao diện của hệ
+cập nhật DUY NHẤT `core/cap_nhat_git.py` (git + kho chung, 30/09/2026).
 
-═══ NÚT LUÔN Ở ĐÓ ═══
+Chủ dự án, 30/09/2026: *"khi có update mới tool tự nâng version, trên giao diện
+tool cũng nhìn được ở setting; mặc định là bật update, còn VPS nào ổn định tao
+sẽ tự tắt — tức là có logic cập nhật, có nút ấn cập nhật…"*
 
-Tool tự hỏi GitHub một lần lúc khởi động, rồi nút đổi chữ theo kết quả. Nó
-**không tự ẩn** khi đã ở bản mới nhất — xem `NutCapNhat` để biết vì sao (tóm
-tắt: bản ẩn khiến khách không có chỗ nào để bấm hỏi lại).
+═══ GIAO DIỆN CHỈ ĐỌC TỆP TRẠNG THÁI VÀ BẤM NÚT ═══
 
-Bấm là xong: tải, dựng sẵn, tool tự thoát và tự mở lại ở bản mới.
+Kiểm (git fetch), quyết định, áp bản mới đều ở `core.cap_nhat_git` /
+`core.dong_bo_git`. Ở đây: đọc `workspace/cap-nhat/trang-thai.json` rồi vẽ, và
+mỗi nút gọi đúng một hàm ở luồng nền. Áp bản mới luôn là tiến trình TÁCH RỜI
+(`dong_bo_git keo`) — nó đóng rồi mở lại chính cửa sổ này, theo luật máy rảnh.
 
-═══ HAI ĐIỀU KHÔNG ĐƯỢC LÀM ═══
-
-* **Không tự cập nhật.** Khách đang lồng tiếng 200 file mà tool tự thoát giữa
-  chừng là mất cả lô. Bao giờ cũng phải hỏi.
-* **Không chặn cửa sổ lúc khởi động.** Việc dò chạy ở luồng nền; mất mạng, GitHub
-  chậm, hay kho chưa tồn tại thì tool vẫn mở lên làm việc bình thường.
+Không còn đường ZIP (`cap-nhat.py`) hay manifest nào ở đây — hai hệ cùng tráo
+tệp là cây git bẩn và cả hai cùng hỏng.
 """
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from core import cai_dat, che_do_vps, nguon_cap_nhat
-from core.cap_nhat_github import KHO, kiem_ban_moi, tai_ve_va_dung_san
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QCheckBox, QFrame, QMessageBox, QVBoxLayout, QWidget
 
-from .widgets import nut_chinh
+from core import cap_nhat_git as cng
 
-__all__ = ["NutCapNhat", "doc_phien_ban", "tai_https"]
+from . import theme
+from .widgets import HangXuongDong, nhan, nut_chinh, nut_phu, the
 
-#: Chờ tối đa cho mỗi lượt gọi mạng. Dò bản mới là việc phụ — treo 30 giây ở đây
-#: là khách tưởng tool đơ.
-CHO_GIAY = 15
+__all__ = ["BangCapNhat", "NutCapNhat", "doc_phien_ban", "khoa_trang_cai_dat"]
 
-#: Riêng lượt tải GÓI thì chờ rộng tay hơn. Gói đã lớn lên ~26 MB (kênh mẫu,
-#: ảnh mẫu phong cách) — trên đường mạng chập chờn, một quãng nghẽn quá 15 giây
-#: giữa chừng là đứt cả lượt tải, và khách bấm lại lần nào cũng đứt đúng kiểu
-#: đó. 120 giây là ngưỡng "mạng thật sự có vấn đề" chứ không phải "mạng chậm".
-CHO_TAI_GOI_GIAY = 120
+#: Giao diện tự gọi `nhip` (kiểm + tự áp khi được phép) mỗi chừng này — bổ sung
+#: cho gác tổng 15', để VPS chưa đặt lịch gác tổng vẫn tự nhận bản mới.
+NHIP_KIEM_MS = 30 * 60 * 1000
+#: Khung Cập nhật đọc lại tệp trạng thái (rẻ: một tệp JSON nhỏ).
+NHIP_VE_MS = 30 * 1000
+
+_TEN_KET_QUA = {
+    "thanh_cong": "đã cập nhật",
+    "da_lui": "cập nhật lỗi, đã tự lùi về bản cũ",
+    "da_quay_lai": "đã quay lại bản trước",
+    "hong_kiem": "bản mới không qua kiểm, chưa cài",
+    "chua_ap": "chưa cập nhật",
+    "loi": "lỗi",
+}
 
 
 def doc_phien_ban(base_dir: str) -> str:
+    return cng.doc_phien_ban(base_dir)
+
+
+def khoa_trang_cai_dat(app) -> str:
+    """Trang chứa khung Cập nhật: VPS → "he-thong" (Cài đặt), máy nhà → "wallet"."""
+    return "he-thong" if getattr(app, "_la_vps", False) else "wallet"
+
+
+def _gio_gon(chu: str) -> str:
+    """"2026-09-30 23:40" → "23:40 30/09"."""
     try:
-        with open(os.path.join(base_dir, "VERSION"), "r", encoding="utf-8") as tep:
-            return tep.read().strip()
-    except OSError:
-        return ""
+        ngay, gio = str(chu).split(" ", 1)
+        _n, th, d = ngay.split("-")
+        return "{0} {1}/{2}".format(gio[:5], d, th)
+    except ValueError:
+        return str(chu or "?")
 
 
-def _tat_tren_vps(base_dir: str) -> bool:
-    """Máy này có bị CẤM cập nhật từ GitHub không.
-
-    ═══ 29/09/2026 (Đợt 5.2): KHÔNG CÒN GẮN CỨNG VỚI "CÓ PHẢI VPS" NỮA ═══
-
-    Bản trước tắt cứng đúng khi `che_do_vps.la_vps()` — chủ dự án, 21/09/2026:
-    *"tắt tính năng update của tool từ github để tránh bị ghi đè phiên bản
-    cũ"*, vì VPS mang những bản vá viết thẳng tại chỗ, chưa từng có trong kho
-    GitHub (`core/secrets.py`, bản vá `sys.stdout is None`…), kéo bản kho về
-    là ghi đè ngược lên chúng.
-
-    Giờ đọc thẳng `chinh_sach` từ `cap-nhat.json` (`core.nguon_cap_nhat`):
-    `"tat"` → tắt hệt như cũ. Còn `"hoi"`/`"khung_an_toan"` mà `kho` vẫn để
-    TRỐNG (chưa cấu hình — mặc định của mọi máy chưa có `cap-nhat.json`, kể
-    cả VPS) thì VẪN TẮT: không có kho nào để kéo, im lặng còn hơn một nút bấm
-    xong không làm gì. Hàm này chỉ trả lời "có được PHÉP THẤY nút không" —
-    tự động áp bản mới (khi `chinh_sach == "khung_an_toan"`) là việc của tầng
-    khác (`core.nguon_cap_nhat.ap_dung`), không phải ở đây.
-
-    Đừng bật cứng `True`: máy nào chưa có `cap-nhat.json` hợp lệ vẫn phải coi
-    như tắt — đúng tinh thần an toàn ban đầu của cờ `CHO_PHEP_CAP_NHAT` cũ.
-    """
-    return not nguon_cap_nhat.duoc_phep_hien_nut(base_dir)
+def _ngay_gon(ngay: str) -> str:
+    """"2026-09-30" → "30/09"."""
+    phan = ngay.split("-")
+    return "{0}/{1}".format(phan[2], phan[1]) if len(phan) == 3 else ngay
 
 
-def tai_https(url: str, cho: float = CHO_GIAY) -> bytes:
-    """Tải một địa chỉ HTTPS. **Chạy ở luồng nền.**
+def mo_ta_trang_thai(tt: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, str]:
+    """Các câu hiện trên khung (hàm thuần — test được không cần Qt)."""
+    ra: Dict[str, str] = {}
+    ra["hien_tai"] = "Phiên bản hiện tại: {0}".format(tt.get("hien_tai") or "?")
+    if tt.get("ban_moi"):
+        ra["ban_moi"] = "Bản mới: {0}".format(tt["ban_moi"])
+    elif tt.get("kiem_luc") and not tt.get("loi"):
+        ra["ban_moi"] = "Đang dùng bản mới nhất."
+    else:
+        ra["ban_moi"] = ""
+    dong = []
+    for d in (tt.get("thay_doi") or [])[:12]:
+        dong.append("• {0} ({1}, máy {2}): {3}".format(
+            d.get("phien_ban"), _ngay_gon(str(d.get("ngay") or "")),
+            d.get("may") or "?", d.get("noi_dung") or ""))
+    ra["thay_doi"] = "\n".join(dong)
+    trang_thai = []
+    if tt.get("kiem_luc"):
+        trang_thai.append("Kiểm lần cuối: {0}{1}".format(
+            _gio_gon(tt["kiem_luc"]), "" if tt.get("kiem_ok", True) else " (chưa nối được GitHub)"))
+    c = tt.get("cap_nhat_cuoi") or {}
+    if c:
+        trang_thai.append("Lần cập nhật gần nhất: {0} — {1}{2}".format(
+            _gio_gon(c.get("luc") or ""), _TEN_KET_QUA.get(c.get("ket_qua"), c.get("ket_qua") or "?"),
+            (": " + c["chi_tiet"]) if c.get("chi_tiet") else ""))
+    if tt.get("ban_moi"):
+        if tt.get("quyet") == "cho":
+            trang_thai.append("Sẽ tự cập nhật khi máy rảnh — đang chờ: {0}".format(tt.get("quyet_ly_do") or "?"))
+        elif tt.get("quyet") == "ap":
+            trang_thai.append("Đang cập nhật…")
+        elif not cfg.get("tu_dong_cap_nhat") and not tt.get("hen_cap_nhat"):
+            trang_thai.append("Tự động cập nhật đang tắt — bấm “Cập nhật ngay” khi tiện.")
+        elif tt.get("quyet_ly_do") and tt.get("quyet") == "khong":
+            trang_thai.append("Chưa cập nhật: {0}".format(tt["quyet_ly_do"]))
+    if tt.get("loi"):
+        trang_thai.append(str(tt["loi"]))
+    ra["trang_thai"] = "\n".join(trang_thai)
+    doi = tt.get("co_sua_chua_day") or []
+    if doi or tt.get("so_commit_chua_day"):
+        ten = ", ".join(str(d)[3:].strip() for d in doi[:4]) + (" …" if len(doi) > 4 else "")
+        ra["sua"] = ("Máy này có sửa chưa đẩy lên kho ({0}). Tool KHÔNG tự cập nhật để khỏi đè "
+                     "mất sửa đó: đẩy lên trước, hoặc bỏ các sửa này.").format(
+            "{0} tệp: {1}".format(len(doi), ten) if doi else
+            "{0} commit chưa đẩy".format(tt.get("so_commit_chua_day")))
+    else:
+        ra["sua"] = ""
+    return ra
 
-    Gắn `User-Agent` vì GitHub từ chối một số client không khai tên. Kiểm lại
-    `https` ngay trước khi mở: hằng địa chỉ nằm trong mã, nhưng đây là bytes sắp
-    thành mã chạy trên máy khách nên đáng kiểm thêm một lần.
-    """
-    if not url.startswith("https://"):
-        raise ValueError("Chỉ tải qua HTTPS")
-    # ═══ PHẢI ĐI QUA `mang_an_toan`, KHÔNG DÙNG `urlopen` TRẦN ═══
-    #
-    # `urlopen` trần lấy kho chứng chỉ của hệ điều hành, và trên Windows kho
-    # ấy hỏng theo đủ kiểu ngoài tầm tay khách. Máy khách ngày 03/09/2026 báo
-    # đúng cú đó khi bấm cập nhật lên 2.113.0:
-    #
-    #     [SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate
-    #
-    # `core/mang_an_toan` mang theo bộ gốc `certifi` — đúng thứ `httpx` vẫn
-    # dùng cho đường gọi API, nên đường API chạy tốt còn đường này thì không.
-    #
-    # Chỗ này đáng sửa nhất trong cả tool: hỏng ở đây là khách **kẹt vĩnh
-    # viễn**, vì cập nhật là con đường duy nhất để mọi bản vá khác tới được
-    # với họ.
-    from core.mang_an_toan import tai_bytes  # noqa: PLC0415 — tránh vòng nhập
 
-    # ═══ ĐỪNG ĐỂ MÁY CHỦ ĐỆM TRẢ LỜI CŨ ═══
-    #
-    # `raw.githubusercontent.com` đi qua CDN và giữ đệm chừng năm phút. Trong
-    # năm phút đó, tool hỏi "bản mới nhất là gì" và nhận về số hiệu CŨ — rồi
-    # bình thản hiện **"Đã mới nhất (2.12.2)"** trong khi 2.12.3 đã có trên
-    # kho. Khách bấm lại mấy lần cũng đúng câu ấy, và kết luận là nút cập nhật
-    # hỏng. Xảy ra thật 15/08/2026.
-    return tai_bytes(url, cho=cho, headers={
-        "Cache-Control": "no-cache, max-age=0",
-        "Pragma": "no-cache",
-    })
+class BangCapNhat(QFrame):
+    """Khung Cập nhật: phiên bản, bản mới + thay đổi, các nút, công tắc."""
+
+    def __init__(self, app, cha: Optional[QWidget] = None):
+        super().__init__(cha)
+        self.setObjectName("card")
+        theme.bong(self)
+        self._app = app
+        self._goc = app.base_dir
+        self._ban = False
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(20, 16, 20, 18)
+        v.setSpacing(6)
+        v.addWidget(nhan("Cập nhật tool", "h2"))
+        self._nhan_hien_tai = self._chu("")
+        self._nhan_hien_tai.setStyleSheet("font-weight:600;")
+        v.addWidget(self._nhan_hien_tai)
+        self._nhan_ban_moi = self._chu("")
+        v.addWidget(self._nhan_ban_moi)
+        self._nhan_thay_doi = self._chu("", "phu")
+        v.addWidget(self._nhan_thay_doi)
+
+        self._khung_sua = QFrame()
+        vs = QVBoxLayout(self._khung_sua)
+        vs.setContentsMargins(0, 4, 0, 4)
+        self._nhan_sua = self._chu("")
+        self._nhan_sua.setStyleSheet("color:{0};font-weight:600;".format(theme.CAM))
+        vs.addWidget(self._nhan_sua)
+        hs = HangXuongDong()
+        hs.addWidget(nut_phu("Đẩy lên kho", self._day_len, rong=150))
+        hs.addWidget(nut_phu("Bỏ các sửa này", self._bo_sua, rong=160))
+        vs.addLayout(hs)
+        v.addWidget(self._khung_sua)
+
+        hang = HangXuongDong()
+        self._nut_kiem = nut_phu("Kiểm tra cập nhật", self._kiem, rong=170)
+        self._nut_ngay = nut_chinh("Cập nhật ngay", self._cap_nhat_ngay, rong=160)
+        self._nut_lui = nut_phu("Quay lại bản trước", self._quay_lai, rong=170)
+        for n in (self._nut_kiem, self._nut_ngay, self._nut_lui):
+            hang.addWidget(n)
+        v.addLayout(hang)
+
+        self._o_tu_dong = QCheckBox("Tự động cập nhật")
+        self._o_tu_dong.setChecked(cng.doc_cau_hinh(self._goc)["tu_dong_cap_nhat"])
+        self._o_tu_dong.stateChanged.connect(lambda _s: self._doi_tu_dong())
+        v.addWidget(self._o_tu_dong)
+        mo = self._chu(
+            "Bật sẵn. Có bản mới là tool tự cài lúc máy rảnh — không đang đăng, dựng, "
+            "làm phụ đề hay quét, và trong khung phút :15–:45 — rồi tự mở lại; bản mới "
+            "lỗi thì tự quay về bản cũ. Máy nào đã chạy ổn định muốn giữ nguyên thì "
+            "tắt: tool vẫn báo có bản mới, bạn bấm “Cập nhật ngay” khi tiện.", "phu")
+        mo.setContentsMargins(24, 0, 0, 6)
+        v.addWidget(mo)
+        self._nhan_trang_thai = self._chu("", "muted")
+        v.addWidget(self._nhan_trang_thai)
+
+        self._dong_ho = QTimer(self)
+        self._dong_ho.timeout.connect(self.ve)
+        self._dong_ho.start(NHIP_VE_MS)
+        self.ve()
+
+    @staticmethod
+    def _chu(chu: str, kieu: str = ""):
+        nh = nhan(chu, kieu)
+        nh.setWordWrap(True)
+        nh.setMinimumWidth(1)
+        return nh
+
+    # ── vẽ ──────────────────────────────────────────────────────────────────
+
+    def ve(self) -> None:
+        cfg = cng.doc_cau_hinh(self._goc)
+        tt = cng.doc_trang_thai(self._goc)
+        tt.setdefault("hien_tai", cng.doc_phien_ban(self._goc))
+        mt = mo_ta_trang_thai(tt, cfg)
+        self._nhan_hien_tai.setText(mt["hien_tai"])
+        self._nhan_ban_moi.setText(mt["ban_moi"] or "Chưa kiểm — bấm “Kiểm tra cập nhật”.")
+        self._nhan_ban_moi.setStyleSheet(
+            "color:{0};font-weight:600;".format(theme.XANH) if tt.get("ban_moi") else "")
+        self._nhan_thay_doi.setText(mt["thay_doi"])
+        self._nhan_thay_doi.setVisible(bool(mt["thay_doi"]))
+        self._nhan_sua.setText(mt["sua"])
+        self._khung_sua.setVisible(bool(mt["sua"]))
+        self._nhan_trang_thai.setText(mt["trang_thai"])
+        self._nut_ngay.setEnabled(bool(tt.get("ban_moi")) and not self._ban)
+        self._nut_kiem.setEnabled(not self._ban)
+        self._nut_lui.setEnabled(not self._ban)
+        if self._o_tu_dong.isChecked() != cfg["tu_dong_cap_nhat"]:
+            self._o_tu_dong.blockSignals(True)
+            self._o_tu_dong.setChecked(cfg["tu_dong_cap_nhat"])
+            self._o_tu_dong.blockSignals(False)
+
+    # ── nút ─────────────────────────────────────────────────────────────────
+
+    def _chay(self, viec, tieu_de: str, dang: str) -> None:
+        if self._ban:
+            return
+        self._ban = True
+        self._nhan_trang_thai.setText(dang)
+        self._nut_ngay.setEnabled(False)
+        self._nut_kiem.setEnabled(False)
+        self._nut_lui.setEnabled(False)
+
+        def xong(kq) -> None:
+            self._ban = False
+            self.ve()
+            cau = kq.get("cau") if isinstance(kq, dict) else kq
+            if cau:
+                self._app.show_message(tieu_de, str(cau))
+
+        def hong(loi) -> None:
+            self._ban = False
+            self.ve()
+            self._app.show_message(tieu_de, "Có lỗi: {0}: {1}".format(type(loi).__name__, loi))
+
+        self._app.run_bg(viec, on_ok=xong, on_err=hong)
+
+    def _kiem(self) -> None:
+        goc = self._goc
+
+        def viec():
+            tt = cng.nhip(goc, bat_buoc_kiem=True)
+            if tt.get("ban_moi"):
+                return {"cau": ""}
+            if tt.get("loi"):
+                return {"cau": str(tt["loi"])}
+            return {"cau": ""}
+        self._chay(viec, "Kiểm tra cập nhật", "Đang hỏi kho chung trên GitHub…")
+
+    def _cap_nhat_ngay(self) -> None:
+        goc = self._goc
+        self._chay(lambda: cng.yeu_cau_cap_nhat_ngay(goc), "Cập nhật", "Đang kiểm lại trước khi cập nhật…")
+
+    def _quay_lai(self) -> None:
+        tags = cng.tag_lui(self._goc)
+        if not tags:
+            self._app.show_message("Quay lại bản trước",
+                                   "Chưa có bản trước nào để quay lại — máy này chưa tự cập nhật lần nào.")
+            return
+        hoi = QMessageBox.question(
+            self, "Quay lại bản trước",
+            "Đưa tool về bản ngay trước lần cập nhật gần nhất ({0})?\n\n"
+            "Tool sẽ đóng rồi mở lại (khi máy rảnh). Bản đang có trên kho sẽ không tự "
+            "cài lại cho tới khi có bản mới hơn.".format(tags[0].replace(cng.dbg.TIEN_TO_TAG, "")))
+        if hoi != QMessageBox.Yes:
+            return
+        goc = self._goc
+        self._chay(lambda: cng.yeu_cau_quay_lai(goc), "Quay lại bản trước", "Đang chuẩn bị quay lại…")
+
+    def _day_len(self) -> None:
+        hoi = QMessageBox.question(
+            self, "Đẩy sửa lên kho",
+            "Đẩy các sửa của máy này lên kho chung? Tool kiểm mã, quét khoá/bí mật, rồi tự "
+            "nâng phiên bản. Mất vài phút; các VPS khác sẽ tự nhận bản này.")
+        if hoi != QMessageBox.Yes:
+            return
+        goc = self._goc
+
+        def viec():
+            ma, chu = cng.day_sua_cuc_bo(goc)
+            return {"cau": ("Đã đẩy lên kho.\n\n" if ma == 0 else "Chưa đẩy được (mã {0}).\n\n".format(ma)) + chu}
+        self._chay(viec, "Đẩy sửa lên kho", "Đang kiểm và đẩy lên kho…")
+
+    def _bo_sua(self) -> None:
+        hoi = QMessageBox.question(
+            self, "Bỏ các sửa này",
+            "Bỏ các sửa chưa đẩy của máy này để tool cập nhật được?\n\n"
+            "Không mất hẳn: tôi cất chúng vào git stash, lấy lại được bằng `git stash pop`.")
+        if hoi != QMessageBox.Yes:
+            return
+        goc = self._goc
+
+        def viec():
+            ok, chu = cng.bo_sua_cuc_bo(goc)
+            return {"cau": chu if ok else "Chưa bỏ được: " + chu}
+        self._chay(viec, "Bỏ các sửa này", "Đang cất các sửa…")
+
+    def _doi_tu_dong(self) -> None:
+        bat = self._o_tu_dong.isChecked()
+        if not cng.dat_tu_dong(self._goc, bat):
+            self._app.show_message("Không lưu được", "Không ghi được cap-nhat.json ở thư mục tool.")
+        self.ve()
 
 
 class NutCapNhat:
-    """Nút cập nhật ở đáy thanh bên — **luôn hiện**.
+    """Nút nhỏ (thanh bên máy nhà / thẻ "Bản tool" trên VPS) + nhịp kiểm của giao diện.
 
-    Bản trước tự ẩn khi đang ở bản mới nhất. Nghe thì gọn, nhưng chủ dự án hỏi
-    đúng câu của một người dùng thật (12/08/2026): *"giờ khách cài tool rồi thì
-    ấn đâu để update"*. Không ấn đâu cả — nút không có ở đó, và khách cũng
-    không có cách nào tự bảo tool đi hỏi lại.
-
-    Nên nút ở nguyên đó với ba trạng thái, ai nhìn cũng biết mình đang ở đâu:
-
-        Đang kiểm tra…          vừa mở tool, đang hỏi GitHub
-        Cập nhật lên 0.6.3      có bản mới, bấm là tải
-        Đã mới nhất (0.6.2)     bấm để hỏi lại
+    `do_ngam()`: gọi lúc cửa sổ vừa dựng xong — kiểm một lượt ở luồng nền (không
+    chặn cửa sổ), rồi mỗi 30 phút gọi `cap_nhat_git.nhip` (tự áp nếu được phép).
+    Bấm nút = mở trang Cài đặt tới khung Cập nhật.
     """
 
     def __init__(self, app):
         self._app = app
-        self._ban_moi: Optional[str] = None
-        self.nut = nut_chinh("Đang kiểm tra…", self._bam)
-        self.nut.setToolTip("Tool tự hỏi GitHub xem có bản mới không.")
-
-    def _bao_lan_truoc_hong(self) -> None:
-        """Lần cập nhật trước có hỏng không — và nếu có thì nói ra.
-
-        ═══ VÌ SAO ═══
-
-        Việc tráo bản mới do `cap-nhat.py` làm, **sau khi tool đã thoát**. Lúc
-        ấy không còn cửa sổ nào để báo, nên nó chỉ ghi một dòng vào tệp log
-        cạnh thư mục tool. Không ai nghĩ tới chuyện mở tệp đó.
-
-        Hậu quả đúng như khách gặp 15/08/2026: bấm Cập nhật, tool khởi động lại
-        vẫn ở bản cũ, **không một lời giải thích**. Họ chỉ biết là "hình như có
-        gì sai sai". Ba lần cập nhật hỏng liên tiếp mà không ai biết là hỏng.
-
-        Nên lần mở sau, tool tự đọc tệp đó và nói thẳng.
-        """
-        goc = os.path.abspath(self._app.base_dir)
-        log = os.path.join(os.path.dirname(goc),
-                           os.path.basename(goc) + "-cap-nhat.log")
-        try:
-            if not os.path.isfile(log):
-                return
-            chu = open(log, encoding="utf-8", errors="replace").read().strip()
-        except OSError:
-            return
-        # Đọc xong là xoá: không thì mỗi lần mở tool lại báo lại một chuyện cũ.
-        try:
-            os.remove(log)
-        except OSError:
-            pass
-        if not chu or chu.lower().startswith("cập nhật thành công"):
-            return
-        self._app.show_message(
-            "Lần cập nhật trước chưa xong",
-            "{0}\n\nTool vẫn đang chạy bản cũ. Bạn bấm “Cập nhật” lần nữa; "
-            "nếu vẫn vậy thì đóng hết cửa sổ Explorer đang mở thư mục tool rồi "
-            "thử lại.".format(chu))
-
-    def _don_ban_lui(self) -> None:
-        """Xoá `<tên>.rollback` — bản cũ giữ lại phòng khi bản mới không chạy.
-
-        Gọi ở đây, tức **sau khi cửa sổ đã dựng xong**, là cố ý: tới được dòng
-        này nghĩa là bản mới nạp được mọi mô-đun, dựng được đủ chín trang và mở
-        lên tới nơi. Đó là bằng chứng đủ tốt rằng không cần lùi nữa.
-
-        Xoá sớm hơn — ngay trong lúc cập nhật — là vứt cái phao đúng lúc còn
-        cần nó nhất. Không xoá thì cạnh thư mục tool đọng lại một thư mục nặng
-        bằng cả bản cài, và khách hỏi nó là cái gì.
-        """
-        goc = os.path.abspath(self._app.base_dir)
-        lui = goc + ".rollback"
-        if not os.path.isdir(lui):
-            return
-
-        def don():
-            import shutil  # noqa: PLC0415
-
-            shutil.rmtree(lui, ignore_errors=True)
-
-        # Ở luồng nền: thư mục này cỡ vài chục MB, xoá trên luồng vẽ là cửa sổ
-        # khựng đúng lúc khách vừa mở tool lên.
-        self._app.run_bg(don, on_ok=lambda _k: None, on_err=lambda _l: None)
+        self.nut = nut_phu("Bản {0}".format(doc_phien_ban(app.base_dir) or "?"), self._bam)
+        self.nut.setToolTip("Phiên bản tool. Bấm để xem cập nhật (Cài đặt).")
+        self._dong_ho: Optional[QTimer] = None
 
     def do_ngam(self) -> None:
-        """Hỏi GitHub ở luồng nền. Gọi lúc cửa sổ vừa dựng xong, và mỗi lần
-        khách bấm nút lúc đang ở bản mới nhất."""
-        self._bao_lan_truoc_hong()
-        self._don_ban_lui()
-        if _tat_tren_vps(self._app.base_dir):
-            self._tat_vi_vps()
-            return
-        dang_dung = doc_phien_ban(self._app.base_dir)
-        if not dang_dung:
-            self._khong_biet()
-            return
-        if not cai_dat.doc(self._app.base_dir).get("hoi_ban_moi", True):
-            # Khách tự tắt ở tab Cài đặt. Nút vẫn ở đó để bấm tay.
-            self.nut.setText("Kiểm tra bản mới")
-            self.nut.setToolTip(
-                "Tự hỏi đang tắt (mục Cài đặt trong tab Tài khoản & Cài đặt). "
-                "Bấm để hỏi một lần.")
-            return
-        self.nut.setText("Đang kiểm tra…")
-        cfg = self._cau_hinh()
-        kho, nhanh = cfg.get("kho") or KHO, cfg.get("nhanh") or "main"
-        self._app.run_bg(
-            lambda: kiem_ban_moi(dang_dung, tai_https, kho=kho, nhanh=nhanh),
-            on_ok=self._co_ban_moi, on_err=lambda _loi: self._hong_mang())
+        goc = self._app.base_dir
+        self._app.run_bg(lambda: cng.nhip(goc, bat_buoc_kiem=True),
+                         on_ok=self._ve, on_err=lambda _l: None)
+        if self._dong_ho is None:
+            try:
+                cha = self._app if isinstance(self._app, QWidget) else None
+                self._dong_ho = QTimer(cha)
+                self._dong_ho.timeout.connect(self._nhip)
+                self._dong_ho.start(NHIP_KIEM_MS)
+            except Exception:  # noqa: BLE001 — không có vòng Qt (test) thì thôi
+                self._dong_ho = None
 
-    def _cau_hinh(self) -> dict:
-        """`cap-nhat.json` của máy này — đọc hỏng thì lùi về mặc định an
-        toàn (`nguon_cap_nhat.doc_cau_hinh` đã tự làm chuyện đó)."""
-        try:
-            return nguon_cap_nhat.doc_cau_hinh(self._app.base_dir)
-        except Exception:  # noqa: BLE001 — không để một cấu hình hỏng chặn cả nút
-            return {"kho": "", "nhanh": "main", "chinh_sach": "tat"}
+    def _nhip(self) -> None:
+        goc = self._app.base_dir
+        self._app.run_bg(lambda: cng.nhip(goc), on_ok=self._ve, on_err=lambda _l: None)
 
-    def _tat_vi_vps(self) -> None:
-        """Nút vẫn ở nguyên chỗ cũ, nhưng nói thẳng là đang tắt — đúng lý do
-        nút này chưa bao giờ được phép tự ẩn (xem docstring của lớp)."""
-        self.nut.setText("Cập nhật: đã tắt")
-        self.nut.setToolTip(self._ly_do_tat())
-
-    def _ly_do_tat(self) -> str:
-        """Câu giải thích khớp ĐÚNG lý do đang tắt — `cap-nhat.json` chưa có
-        `kho`, hay `chinh_sach` là `"tat"`, là hai chuyện khác nhau."""
-        cfg = self._cau_hinh()
-        if cfg.get("chinh_sach") == "tat" and cfg.get("kho"):
-            return ("Cập nhật đang tắt (chinh_sach=\"tat\" trong cap-nhat.json) "
-                    "— máy này có thể đang mang bản vá viết riêng, chưa lên kho.")
-        return ("Chưa cấu hình nguồn cập nhật (thiếu \"kho\" trong "
-                "cap-nhat.json ở gốc tool) — xem cap-nhat.example.json.")
-
-    def _khong_biet(self) -> None:
-        self.nut.setText("Kiểm tra bản mới")
-        self.nut.setToolTip("Không đọc được số hiệu bản đang cài.")
-
-    def _hong_mang(self) -> None:
-        """Hỏi không được thì nói thật, đừng giả vờ đã mới nhất."""
-        self.nut.setText("Kiểm tra lại")
-        self.nut.setToolTip("Chưa hỏi được github.com — kiểm tra mạng rồi bấm lại.")
-
-    def _co_ban_moi(self, ban_moi) -> None:
-        self._ban_moi = ban_moi or None
-        if not ban_moi:
-            dang = doc_phien_ban(self._app.base_dir) or "?"
-            self.nut.setText("Đã mới nhất ({0})".format(dang))
-            self.nut.setToolTip("Bấm để hỏi lại GitHub xem có bản mới chưa.")
-            return
-        self.nut.setText("Cập nhật lên {0}".format(ban_moi))
-        kho_hien = self._cau_hinh().get("kho") or KHO
-        self.nut.setToolTip(
-            "Tải bản {0} từ github.com/{1} rồi khởi động lại tool.\n"
-            "Khoá API, kết quả đã tạo, phiên viết và template của bạn được giữ "
-            "nguyên.".format(ban_moi, kho_hien))
-
-        # ═══ TỰ CẬP NHẬT: BẬT SẴN ═══
-        #
-        # Chủ dự án, 15/08/2026: *"mặc định là khách mở lên tool sẽ tự động cập
-        # nhật xong thì reset cho khách, kiểu update xong thì mới dùng"*.
-        #
-        # Lý do đằng sau: bản vá chỉ có giá trị khi tới được máy khách. Riêng
-        # ngày 15/08 có tám bản sửa lỗi thật — `.bin`, tool tự tắt, mất kênh và
-        # lời nhắc, khoá việc kẹt — và không bản nào tới được người không bấm
-        # nút. Mà họ không bấm, vì họ không biết là có bản mới.
-        #
-        # Tắt được ở tab Cài đặt, cho người hay để tool chạy dở một mẻ dài.
-        if not cai_dat.doc(self._app.base_dir).get("tu_cap_nhat", True):
-            return
-        self.nut.setText("Đang cập nhật lên {0}…".format(ban_moi))
-        self._app.show_message(
-            "Đang cập nhật lên bản {0}".format(ban_moi),
-            "Tôi tải bản mới rồi tự mở lại, khoảng một phút.\n\n"
-            "Không muốn tự cập nhật nữa thì tắt ở mục Cài đặt trong tab "
-            "Tài khoản & Cài đặt.")
-        self._bam()
+    def _ve(self, tt) -> None:
+        tt = tt if isinstance(tt, dict) else {}
+        hien = tt.get("hien_tai") or doc_phien_ban(self._app.base_dir) or "?"
+        if tt.get("ban_moi"):
+            self.nut.setText("Có bản mới {0}".format(tt["ban_moi"]))
+            self.nut.setToolTip("Đang dùng {0}. Bấm để xem thay đổi và cập nhật.".format(hien))
+        else:
+            self.nut.setText("Bản {0}".format(hien))
+            self.nut.setToolTip("Phiên bản tool. Bấm để xem cập nhật (Cài đặt).")
 
     def _bam(self) -> None:
-        if _tat_tren_vps(self._app.base_dir):
-            self._tat_vi_vps()
-            self._app.show_message("Cập nhật từ GitHub đang tắt trên máy này",
-                                   self._ly_do_tat())
-            return
-        if not self._ban_moi:
-            # Đang ở bản mới nhất (hoặc lần hỏi trước hỏng) — bấm là hỏi lại.
-            self.do_ngam()
-            return
-        # ═══ ĐANG CÓ VIỆC CHẠY THÌ KHÔNG CẬP NHẬT ═══
-        #
-        # Cập nhật là tool phải THOÁT để launcher tráo thư mục. Đang có job
-        # (ảnh/video/giọng — tiền thật) thì hoặc mất kết quả, hoặc tool nấn ná
-        # thoát cho xong việc và launcher chờ hết kiên nhẫn rồi bỏ cuộc — khách
-        # thấy "Lần cập nhật trước chưa xong" lặp đi lặp lại mà không hiểu vì
-        # sao. Nói thẳng lý do ngay lúc bấm, đỡ một vòng hỏng.
-        jobs = getattr(self._app, "jobs", None)
-        if jobs is not None and getattr(jobs, "is_running", False):
-            self._app.show_message(
-                "Đang có việc chạy — chưa cập nhật vội",
-                "Tool đang tạo ảnh/video/giọng đọc. Cập nhật bây giờ là phải "
-                "tắt tool giữa chừng và có thể mất phần đang chạy.\n\n"
-                "Bạn chờ lô này xong (hoặc bấm Dừng ở tab đang chạy) rồi bấm "
-                "Cập nhật lại nhé.")
-            return
-        self.nut.setEnabled(False)
-        self.nut.setText("Đang tải bản {0}…".format(self._ban_moi))
-        ban_moi, goc = self._ban_moi, self._app.base_dir
-        # Chỗ dựng sẵn nằm CẠNH thư mục cài, không nằm trong: `apply_tai_cho`
-        # từ chối thay khi bản mới nằm bên trong thư mục sắp bị thay — nó sẽ
-        # tự dọn mất chính mình giữa chừng.
-        cho_dung = os.path.join(os.path.dirname(os.path.abspath(goc)),
-                                "ShopAPI-Studio-cap-nhat")
-        cfg = self._cau_hinh()
-        kho, nhanh = cfg.get("kho") or KHO, cfg.get("nhanh") or "main"
-        self._app.run_bg(
-            lambda: tai_ve_va_dung_san(
-                ban_moi, cho_dung,
-                lambda url: tai_https(url, cho=CHO_TAI_GOI_GIAY),
-                kho=kho, nhanh=nhanh),
-            on_ok=self._tai_xong, on_err=self._hong)
-
-    def _tai_xong(self, duong_dan: str) -> None:
-        self.nut.setText("Đang khởi động lại…")
-        goc = os.path.abspath(self._app.base_dir)
-        lenh = [sys.executable, os.path.join(goc, "cap-nhat.py"),
-                "--wait-pid", str(os.getpid()), "--staged", duong_dan,
-                "--current", goc]
-        try:
-            from core.tien_trinh_con import CO_TACH_KHOI_JOB  # noqa: PLC0415
-
-            co = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-            # Tiến trình tráo PHẢI sống lâu hơn tool: nó đợi tool chết rồi mới
-            # đổi thư mục và mở lại. Tool nằm trong job kill-on-close (xem
-            # `core/tien_trinh_con`), nên phải cho nó tách khỏi job — không thì
-            # tool vừa đóng là nó chết theo, cập nhật không bao giờ xong.
-            co |= CO_TACH_KHOI_JOB
-            # `cwd` là thư mục CHA, không phải thư mục cài.
-            #
-            # Không đặt thì tiến trình tráo thừa hưởng thư mục làm việc của
-            # tool — tức đứng ngay bên trong thư mục nó sắp đổi tên — và
-            # Windows chặn bằng `WinError 32`. `cap-nhat.py` cũng tự `chdir`
-            # cho chắc, nhưng chặn ngay từ đây thì bản cũ của launcher còn nằm
-            # trên máy khách cũng chạy được.
-            subprocess.Popen(lenh, creationflags=co, close_fds=True,
-                             cwd=os.path.dirname(goc) or None)
-        except OSError as loi:
-            self._hong(loi)
-            return
-        # Thoát để launcher tráo thư mục. Trên Windows không xoá nổi file đang mở,
-        # nên tool phải chết hẳn trước khi bản mới được đặt vào chỗ.
-        self._app.close()
-
-    def _hong(self, loi: BaseException) -> None:
-        """Nói rõ hỏng ở khâu tải/dựng, kèm nguyên văn lỗi.
-
-        Không đi qua `show_error`/`describe`: bộ dịch đó viết cho lỗi GỌI API
-        ("bạn KHÔNG bị trừ tiền…") — lạc đề ở đây, và câu chung chung khiến
-        khách chỉ báo lại được đúng bốn chữ "nó toàn báo lỗi". Hộp này in
-        nguyên văn để một tấm ảnh chụp là đủ biết hỏng chỗ nào.
-        """
-        self.nut.setEnabled(True)
-        self.nut.setText("Cập nhật lên {0}".format(self._ban_moi or ""))
-        self._app.show_message(
-            "Cập nhật chưa tải được",
-            "Tải/dựng bản {0} chưa xong. Lỗi gốc:\n\n{1}: {2}\n\n"
-            "Bạn thử lại giúp mình; nếu vẫn vậy thì tắt VPN/phần mềm chặn "
-            "mạng rồi thử, hoặc chụp đúng hộp này gửi hỗ trợ — dòng lỗi ở "
-            "trên là thứ giúp tìm ra bệnh.".format(
-                self._ban_moi or "?", type(loi).__name__, loi))
+        mo = getattr(self._app, "show_page", None)
+        if mo is not None:
+            mo(khoa_trang_cai_dat(self._app))

@@ -80,11 +80,15 @@ VPS (xem `docs/PHAT-TRIEN-NHIEU-VPS.md`). Nên:
 1. Sửa trong khung :15–:45, sao lưu bản cũ vào `workspace/ban-va/<ngày>-<việc>/`
    (kèm GHI-CHU.md), ghi một mục vào `NHAT-KY-PHAT-TRIEN.md` (nhật ký riêng
    máy, không lên kho).
-2. **Mọi sửa xong phải `python -m core.dong_bo_git day "<thông điệp>"`** —
-   kiểm + quét bí mật + commit + rebase + push. Xung đột thì nó dừng và báo,
+2. **Mọi sửa xong phải `python -m core.dong_bo_git day "<thông điệp>"`**
+   (`--minor`/`--major` khi cần, `--chi <tệp…>` nếu máy còn tệp dở của người
+   khác) — kiểm + quét bí mật + commit + rebase + TỰ NÂNG PHIÊN BẢN (VERSION,
+   1 dòng CHANGELOG.md, tag v<x.y.z>) + push. Xung đột thì nó dừng và báo,
    đừng tự giải bừa.
-3. Các VPS khác tự kéo về (`dong_bo_git keo`, lịch `ShopAPI-DongBoGit` giờ
-   vắng). Máy có sửa chưa đẩy thì KHÔNG bị kéo đè — nên đừng để sửa nằm lại.
+3. Các VPS khác TỰ NHẬN bản mới (`core/cap_nhat_git.py`: kiểm ~30 phút trong
+   gác tổng + giao diện, áp lúc máy rảnh trong khung :15–:45, tự lùi nếu
+   hỏng). Mặc định bật; tắt ở Cài đặt → Cập nhật tool. Máy có sửa chưa đẩy
+   thì KHÔNG bị kéo đè — nên đừng để sửa nằm lại.
 
 ## Kế hoạch và lịch sử
 

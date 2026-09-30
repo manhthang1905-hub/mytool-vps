@@ -486,8 +486,9 @@ class TheMay(QWidget):
         v.setSpacing(8)
         v.addWidget(nhan("Bản tool", "h2"))
         v.addWidget(nhan(
-            "Cập nhật giữa chừng có thể cắt ngang một lượt đang sản xuất hoặc "
-            "một phiên đang đăng — xem trang Điều khiển trước khi bấm.", "muted"))
+            "Tool tự cập nhật lúc máy rảnh (không cắt ngang lượt đăng/dựng). "
+            "Xem thay đổi, cập nhật ngay, quay lại bản trước hay tắt tự động: "
+            "trang Cài đặt → Cập nhật tool.", "muted"))
         nut = getattr(getattr(self._app, "_cap_nhat", None), "nut", None)
         if nut is not None:
             nut.setParent(khung)
@@ -581,6 +582,11 @@ class TrangHeThongVps(QWidget):
             "Chọn đúng việc cần làm; phần chi tiết chỉ mở khi bạn cần.",
             "may-vi"))
 
+        # Khung Cập nhật (30/09/2026): phiên bản, bản mới + thay đổi, Kiểm tra /
+        # Cập nhật ngay / Quay lại, công tắc Tự động cập nhật — `ui_qt/cap_nhat.py`.
+        from .cap_nhat import BangCapNhat  # noqa: PLC0415
+
+        doc.addWidget(BangCapNhat(app))
         self._nhan_suc_khoe = nhan("Đang đọc trạng thái…", "muted")
         doc.addWidget(self._the_hanh_dong(
             "Sức khỏe tool",

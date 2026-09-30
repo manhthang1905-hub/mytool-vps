@@ -1,4 +1,11 @@
-"""Cập nhật qua MANIFEST + `raw.githubusercontent.com` — dùng được trên máy
+"""Cập nhật qua MANIFEST + `raw.githubusercontent.com` — ĐÃ NGỪNG (30/09/2026).
+
+Hệ cập nhật duy nhất giờ là `core/cap_nhat_git.py` (git + kho chung
+`cap-nhat.json: kho`). Không giao diện/lịch nào gọi `ap_dung` nữa; máy có
+`.git` thì `ap_dung` luôn nhường (`core.dong_bo_git.dang_quan_ly`). Giữ lại
+module cho bản cài cũ không có Git và cho test — phần dưới là thiết kế cũ.
+
+(Thiết kế cũ) dùng được trên máy
 CHỈ CÓ IPv6 (VPS, `vm/VPS-CLAUDE.md` mục "Mạng chỉ có IPv6").
 
 ═══ VÌ SAO KHÔNG DÙNG ZIP NHƯ `core/cap_nhat_github.py` ═══
@@ -361,7 +368,7 @@ def ap_dung(goc: str, cfg: Dict[str, Any], manifest: Dict[str, Any],
     cố. Chỉ ném `UpdateError` khi ĐÃ bắt đầu áp mà hỏng giữa chừng (và lúc đó
     đã tự khôi phục xong trước khi ném).
     """
-    # Máy cài từ git clone + bật `dong_bo_git.tu_keo`: mã cập nhật qua
+    # Máy cài từ git clone: mã CHỈ cập nhật qua `core.cap_nhat_git` /
     # `core.dong_bo_git.keo` (ff-only + tag lùi). Hai hệ cùng tráo tệp là
     # cây git bẩn và `keo` sẽ từ chối mãi — đường manifest nhường (30/09/2026).
     try:

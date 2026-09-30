@@ -67,10 +67,16 @@ Tool này được phát triển chung trên nhiều VPS (mỗi máy một ngác
 nguồn gốc là kho `github.com/manhthang1905-hub/mytool-vps`. Đọc
 `docs/PHAT-TRIEN-NHIEU-VPS.md` và `docs/kien-thuc/luat-van-hanh-vps.md`.
 
-- **Mọi sửa xong phải `python -m core.dong_bo_git day "<thông điệp>"`.** Lệnh
-  này kiểm (py_compile, kiểm khói, test nhanh), quét bí mật/dữ liệu kênh,
-  commit, rebase lên origin rồi push. Xung đột thì dừng và báo — không tự giải
-  bừa. Sửa mà không đẩy thì máy này không được tự cập nhật nữa.
+- **Mọi sửa xong phải `python -m core.dong_bo_git day "<thông điệp>"`** (thêm
+  `--minor`/`--major` khi cần; `--chi <tệp…>` nếu máy còn tệp dở của người khác).
+  Lệnh này kiểm (py_compile, kiểm khói, test nhanh), quét bí mật/dữ liệu kênh,
+  commit, rebase lên origin, **tự nâng `VERSION`** (+patch mặc định) + một dòng
+  `CHANGELOG.md` + tag `v<x.y.z>`, rồi push. Xung đột thì dừng và báo — không tự
+  giải bừa. Không tự sửa `VERSION` bằng tay.
+- Các máy khác **tự nhận bản mới** (`core/cap_nhat_git.py`: kiểm ~30', áp lúc máy
+  rảnh, tự lùi nếu hỏng) — mặc định bật, tắt ở Cài đặt → Cập nhật tool
+  (`cap-nhat.json: tu_dong_cap_nhat`). Sửa mà không đẩy thì máy này không được tự
+  cập nhật nữa (giao diện báo "có sửa chưa đẩy").
 - Máy sản xuất: **không** `pytest tests/` toàn kho (chỉ test lẻ liên quan),
   thay tệp mã sống trong khung phút :15–:45 và sao lưu vào
   `workspace/ban-va/<ngày>-<việc>/`, không dừng tiến trình đang chạy thật.

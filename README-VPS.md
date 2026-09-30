@@ -130,11 +130,20 @@ uy tín kênh):
   trạm + phiên kênh phải tự sống lại không cần ai mở tay (lịch
   `ShopAPI-TramLucDangNhap` lo việc này). Vẫn không sống lại thì mở MyTool
   bằng tay một lần.
-- **Chép/gộp bản vá mới** — chủ dự án gửi thư mục
-  `workspace/ban-va/<ngày>-<việc>/` từ máy nhà (qua cách cập nhật của
-  `cap-nhat.json`, hoặc chép tay qua RDP với máy chỉ IPv6) — không tự ý sửa
-  thẳng mã trên VPS nếu không phải phiên Claude Code đang làm việc đó (xem
-  `CLAUDE.local.md`).
+- **Cập nhật tool — tự động, mặc định BẬT** — máy tự hỏi kho chung GitHub
+  khoảng 30 phút một lần (và mỗi lần mở giao diện). Có bản mới thì tool tự
+  cài lúc máy rảnh (không đang đăng, dựng, làm phụ đề hay quét; trong khung
+  phút :15–:45), tự mở lại giao diện, và tự quay về bản cũ nếu bản mới lỗi.
+  Xem ở **Cài đặt → Cập nhật tool**: phiên bản hiện tại, bản mới và danh sách
+  thay đổi, nút **Kiểm tra cập nhật**, **Cập nhật ngay** (máy bận thì tool hẹn,
+  tự cài khi rảnh), **Quay lại bản trước**, công tắc **Tự động cập nhật**. VPS
+  đã chạy ổn định muốn giữ nguyên thì tắt công tắc đó — Bảng điều khiển sẽ hiện
+  huy hiệu "Có bản mới x.y.z" để bạn bấm khi tiện. Giao diện báo "máy này có sửa
+  chưa đẩy" thì máy đang có sửa riêng: bấm **Đẩy lên kho** (hoặc **Bỏ các sửa
+  này**, được cất vào git stash) thì mới tự cập nhật lại được.
+- **Sửa mã trên VPS** — chỉ phiên Claude Code đang làm việc đó mới sửa (xem
+  `CLAUDE.local.md`); sửa xong đẩy bằng `python -m core.dong_bo_git day "..."`
+  (tự nâng phiên bản) để mọi VPS khác tự nhận.
 
 ### Cảnh báo tự động — máy tự nhắc, bạn chỉ làm theo "Việc cần làm"
 

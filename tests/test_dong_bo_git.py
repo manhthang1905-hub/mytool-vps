@@ -11,30 +11,24 @@ import os
 from core import dong_bo_git as d
 
 
-def test_cau_hinh_mac_dinh_tat_tu_keo(tmp_path):
+def test_cau_hinh_mac_dinh(tmp_path):
     cfg = d.doc_cau_hinh(str(tmp_path))
-    assert cfg["tu_keo"] is False
-    assert cfg["gio"] == "03:40"
     assert cfg["ma_may"].startswith("may-")
+    assert "tu_keo" not in cfg and "gio" not in cfg     # lịch 03:40 đã bỏ (30/09/2026)
 
 
 def test_cau_hinh_doc_khoa_dong_bo_git(tmp_path):
     (tmp_path / "cap-nhat.json").write_text(json.dumps(
-        {"kho": "", "dong_bo_git": {"tu_keo": True, "gio": "25:99", "ma_may": "VPS 2 Nhat"}}),
+        {"kho": "", "dong_bo_git": {"ma_may": "VPS 2 Nhat", "theo_doi_phut": "x"}}),
         encoding="utf-8")
     cfg = d.doc_cau_hinh(str(tmp_path))
-    assert cfg["tu_keo"] is True
-    assert cfg["gio"] == "03:40"          # giờ hỏng -> mặc định
     assert cfg["ma_may"] == "vps-2-nhat"  # chuẩn hoá tên tệp
+    assert cfg["theo_doi_phut"] == 20     # hỏng -> mặc định
 
 
-def test_tu_keo_chi_bat_khi_dung_true(tmp_path):
-    (tmp_path / "cap-nhat.json").write_text('{"dong_bo_git": {"tu_keo": "yes"}}', encoding="utf-8")
-    assert d.doc_cau_hinh(str(tmp_path))["tu_keo"] is False
-
-
-def test_dang_quan_ly_can_ca_git_lan_tu_keo(tmp_path):
-    (tmp_path / "cap-nhat.json").write_text('{"dong_bo_git": {"tu_keo": true}}', encoding="utf-8")
+def test_dang_quan_ly_la_moi_may_co_git(tmp_path):
+    """Máy có .git thì mã CHỈ đổi qua git — kể cả khi tắt tự cập nhật."""
+    (tmp_path / "cap-nhat.json").write_text('{"tu_dong_cap_nhat": false}', encoding="utf-8")
     assert d.dang_quan_ly(str(tmp_path)) is False
     (tmp_path / ".git").mkdir()
     assert d.dang_quan_ly(str(tmp_path)) is True
@@ -103,9 +97,24 @@ def test_tim_tien_trinh_dung_duong_khong_nham_ten_na_na():
 
 
 def test_keo_tat_thi_thoat_ngay(tmp_path):
+    (tmp_path / "cap-nhat.json").write_text('{"tu_dong_cap_nhat": false}', encoding="utf-8")
     ra = []
     assert d.keo(str(tmp_path), in_ra=ra.append) == 0
     assert "TẮT" in ra[0]
+
+
+def test_keo_mac_dinh_bat_nhung_khong_co_git_thi_bao_ro(tmp_path):
+    ra = []
+    assert d.keo(str(tmp_path), in_ra=ra.append) == 3
+    assert "Git" in ra[0]
+
+
+def test_lenh_day_nhan_minor_major_va_chi(monkeypatch):
+    goi = {}
+    monkeypatch.setattr(d, "day", lambda goc, td, **k: goi.update(td=td, **k) or 0)
+    assert d.main(["day", "msg", "--minor", "--chi", "a.py", "docs/x.md"]) == 0
+    assert goi["muc"] == "minor" and goi["chi"] == ["a.py", "docs/x.md"] and goi["td"] == "msg"
+    assert d.main(["day", "msg"]) == 0 and goi["muc"] == "patch" and goi["chi"] is None
 
 
 def test_nhan_bai_hoc_ngoai_chi_lay_may_khac(tmp_path):

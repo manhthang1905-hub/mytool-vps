@@ -7,28 +7,31 @@ ngách/quốc gia khác; sửa ở máy nào thì đẩy lên, các máy khác t
 
     python -m core.dong_bo_git ket_noi            # kiểm/sửa đường tới GitHub (NAT64 cho máy chỉ IPv6)
     python -m core.dong_bo_git trang_thai         # nhánh, trước/sau origin, tệp đổi
-    python -m core.dong_bo_git day "thông điệp"   # kiểm -> commit -> rebase -> push
-    python -m core.dong_bo_git keo [--ep]         # tự cập nhật an toàn trên máy sản xuất
+    python -m core.dong_bo_git day "thông điệp" [--minor|--major] [--chi tệp…]
+                                                  # kiểm -> commit -> rebase -> TỰ NÂNG VERSION
+                                                  #   + 1 dòng CHANGELOG + tag v<x.y.z> -> push
+    python -m core.dong_bo_git kiem               # kiểm có bản mới không (fetch, đọc origin/main:VERSION)
+    python -m core.dong_bo_git keo [--ep]         # áp bản mới an toàn (thường do core.cap_nhat_git.nhip sinh ra)
+    python -m core.dong_bo_git lui [--tag T]      # quay lại bản trước (tag truoc-cap-nhat-*)
     python -m core.dong_bo_git bai_hoc            # xuất bài học ngách của máy này ra chia-se/
-    python -m core.dong_bo_git lich [bat|tat]     # lịch Windows ShopAPI-DongBoGit (keo hằng ngày)
+    python -m core.dong_bo_git lich bat|tat       # bat: bảo đảm lịch ShopAPI-GacTong (15') + gỡ lịch 03:40 cũ
 
-═══ VÌ SAO KHÔNG DÙNG `core/nguon_cap_nhat.py` (manifest) CHO VIỆC NÀY ═══
+═══ MỘT HỆ CẬP NHẬT DUY NHẤT (30/09/2026) ═══
 
-Manifest + `raw.githubusercontent.com` là đường cho bản cài KHÔNG có `.git`
-(khách tải ZIP). Máy cài từ kho (git clone) thì Git đã biết chính xác từng
-tệp, có lịch sử để lùi (`truoc-cap-nhat-<ts>`), và chiều ĐẨY lên — manifest
-không có chiều đẩy. Hai hệ không được cùng chạy trên một máy: máy nào có
-`.git` + `dong_bo_git.tu_keo` bật thì `nguon_cap_nhat.ap_dung` tự nhường
-(xem `dang_quan_ly`).
+Kiểm định kỳ + quyết định áp nằm ở `core/cap_nhat_git.py` (gác tổng 15' và
+giao diện gọi `nhip`). Đường ZIP (`core/cap_nhat_github.py`, `cap-nhat.py`) và
+manifest (`core/nguon_cap_nhat.py`) không còn áp mã lên máy nào nữa. Lịch
+Windows `ShopAPI-DongBoGit` (kéo 03:40 mỗi ngày) ĐÃ BỎ — `lich bat` tự gỡ nó.
 
-═══ BẬT/TẮT: khoá `dong_bo_git` trong `cap-nhat.json` (riêng máy, không lên kho) ═══
+═══ BẬT/TẮT: `cap-nhat.json` (riêng máy, không lên kho) ═══
 
-    "dong_bo_git": {"tu_keo": false, "gio": "03:40", "ma_may": "vps1",
-                    "cho_toi_da_phut": 180, "theo_doi_phut": 20,
-                    "khoi_dong_lai": true, "xuat_bai_hoc": true}
+    {"kho": "manhthang1905-hub/mytool-vps", "nhanh": "main", "tu_dong_cap_nhat": true,
+     "dong_bo_git": {"ma_may": "vps1", "cho_toi_da_phut": 180, "theo_doi_phut": 20,
+                     "khoi_dong_lai": true, "xuat_bai_hoc": true}}
 
-`tu_keo: false` (mặc định) = lịch có chạy cũng thoát ngay. `keo --ep` bỏ qua
-khoá này (người vận hành gọi tay) nhưng KHÔNG bỏ qua khung giờ/máy rảnh.
+`tu_dong_cap_nhat` mặc định BẬT (chỉ `false` mới tắt; công tắc "Tự động cập
+nhật" trong Cài đặt). `keo --ep` bỏ qua khoá này (nút "Cập nhật ngay") nhưng
+KHÔNG bỏ qua khung giờ/máy rảnh.
 
 ═══ LUẬT MÁY SẢN XUẤT (CLAUDE.md / docs/kien-thuc/luat-van-hanh-vps.md) ═══
 
@@ -87,8 +90,6 @@ GIU_TAG = 5
 TEN_VIEC_LICH = "ShopAPI-DongBoGit"
 
 MAC_DINH: Dict[str, Any] = {
-    "tu_keo": False,
-    "gio": "03:40",
     "ma_may": "",
     "cho_toi_da_phut": 180,
     "theo_doi_phut": 20,
@@ -102,12 +103,13 @@ MODULE_CHINH = (
     "core.khe", "core.an_toan_khoi_dong", "core.tu_chay", "core.auto_khau",
     "core.dieu_phoi", "core.gac_tong", "core.lich_tu_chay", "core.canh_tram",
     "core.giam_sat_vm", "core.kiem_phat_hanh", "core.nguon_cap_nhat",
-    "core.dong_bo_git", "core.chien_luoc.bai_hoc", "ui_qt.app",
+    "core.dong_bo_git", "core.cap_nhat_git", "core.chien_luoc.bai_hoc", "ui_qt.app",
 )
 
 #: Nhóm test NHANH, thuần (không mạng, không tiến trình thật) — KHÔNG phải cả kho.
 TEST_NHANH = (
     "tests/test_dong_bo_git.py",
+    "tests/test_cap_nhat_git.py",
     "tests/test_an_toan_khoi_dong.py",
     "tests/test_khong_day_tep_bi_mat.py",
 )
@@ -204,7 +206,8 @@ def _luu_trang_thai(goc: str, **muc: Any) -> None:
 
 
 def doc_cau_hinh(goc: str) -> Dict[str, Any]:
-    """Khoá `dong_bo_git` trong `cap-nhat.json`. Thiếu/hỏng → `MAC_DINH` (tu_keo tắt)."""
+    """Khoá `dong_bo_git` trong `cap-nhat.json`. Thiếu/hỏng → `MAC_DINH`. Bật/tắt
+    tự cập nhật KHÔNG ở đây mà là `tu_dong_cap_nhat` (`core.cap_nhat_git.doc_cau_hinh`)."""
     cfg = dict(MAC_DINH)
     try:
         with io.open(os.path.join(goc, "cap-nhat.json"), encoding="utf-8-sig") as tep:
@@ -216,9 +219,6 @@ def doc_cau_hinh(goc: str) -> Dict[str, Any]:
         for k in MAC_DINH:
             if k in rieng:
                 cfg[k] = rieng[k]
-    cfg["tu_keo"] = cfg.get("tu_keo") is True
-    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(cfg.get("gio") or "")):
-        cfg["gio"] = MAC_DINH["gio"]
     cfg["ma_may"] = _ma_may_hop_le(str(cfg.get("ma_may") or "")) or _ma_may_mac_dinh()
     for k in ("cho_toi_da_phut", "theo_doi_phut"):
         try:
@@ -243,10 +243,11 @@ def la_kho_git(goc: str) -> bool:
 
 
 def dang_quan_ly(goc: str) -> bool:
-    """Máy này cập nhật mã qua Git (có `.git` + bật `tu_keo`) — đường manifest
-    (`core.nguon_cap_nhat.ap_dung`) phải nhường, không được hai hệ cùng tráo tệp."""
+    """Máy cài từ kho (có `.git`) thì MÃ CHỈ ĐƯỢC ĐỔI QUA GIT (`day`/`keo`/`lui`) —
+    đường manifest/ZIP cũ phải nhường, không được hai hệ cùng tráo tệp. Tắt tự
+    cập nhật (`tu_dong_cap_nhat: false`) KHÔNG trao quyền lại cho đường cũ."""
     try:
-        return la_kho_git(goc) and bool(doc_cau_hinh(goc).get("tu_keo"))
+        return la_kho_git(goc)
     except Exception:  # noqa: BLE001
         return False
 
@@ -491,10 +492,14 @@ def trang_thai(goc: str = GOC, *, in_ra: Callable[[str], None] = print, co_fetch
     if len(doi) > 40:
         in_ra("  … và {0} tệp nữa".format(len(doi) - 40))
     cfg = doc_cau_hinh(goc)
-    in_ra("Tự kéo: {0} (giờ {1}, mã máy {2})".format("BẬT" if cfg["tu_keo"] else "tắt", cfg["gio"], cfg["ma_may"]))
-    luu = doc_trang_thai_luu(goc)
-    if luu.get("keo_cuoi"):
-        in_ra("Lượt kéo cuối: {0}".format(luu.get("keo_cuoi")))
+    from . import cap_nhat_git as cng  # noqa: PLC0415
+    ccn = cng.doc_cau_hinh(goc)
+    in_ra("Phiên bản: {0} | tự động cập nhật: {1} | mã máy {2}".format(
+        cng.doc_phien_ban(goc) or "?", "BẬT" if ccn["tu_dong_cap_nhat"] else "tắt", cfg["ma_may"]))
+    luu = cng.doc_trang_thai(goc)
+    if luu.get("cap_nhat_cuoi"):
+        c = luu["cap_nhat_cuoi"]
+        in_ra("Lượt cập nhật cuối: {0} {1} {2}".format(c.get("luc"), c.get("ket_qua"), c.get("chi_tiet") or ""))
     return {"kho_git": True, "nhanh": nhanh, "truoc": truoc, "sau": sau, "tep_doi": doi,
             "fetch_ok": ok_fetch}
 
@@ -794,47 +799,133 @@ def _tep_doi_giua(goc: str, cu: str, moi: str) -> List[str]:
     return [p for p in ra.split("\0") if p]
 
 
+TEP_PHIEN_BAN = ("VERSION", "CHANGELOG.md")
+
+
+def _dang_do_rebase(goc: str) -> bool:
+    return (os.path.isdir(os.path.join(goc, ".git", "rebase-merge"))
+            or os.path.isdir(os.path.join(goc, ".git", "rebase-apply")))
+
+
+def _chon_tep(goc: str, chi: Sequence[str]) -> List[str]:
+    """Chuẩn hoá danh sách `--chi` về đường tương đối kiểu git (dấu /)."""
+    ra: List[str] = []
+    for p in chi:
+        p = str(p).strip()
+        if not p:
+            continue
+        if os.path.isabs(p):
+            p = os.path.relpath(p, goc)
+        ra.append(p.replace("\\", "/"))
+    return ra
+
+
+def _nang_phien_ban(goc: str, muc: str, thong_diep: str, ma_may: str,
+                    in_ra: Callable[[str], None]) -> str:
+    """Commit PHIÊN BẢN riêng (chỉ VERSION + 1 dòng CHANGELOG.md) trên HEAD rồi
+    tag `v<x.y.z>`. Số mới = max(VERSION ở HEAD, ở origin) + `muc`, và tăng tiếp
+    nếu tag đã có (máy khác vừa dùng). Trả số mới."""
+    from . import cap_nhat_git as cng  # noqa: PLC0415
+    tren_head = git(goc, "show", "HEAD:VERSION")[1].strip()
+    tren_xa = git(goc, "show", "{0}/{1}:VERSION".format(REMOTE, NHANH))[1].strip()
+    goc_so = tren_xa if cng.moi_hon(tren_xa, tren_head) else tren_head
+    moi = cng.tang(goc_so or "0.0.0", muc)
+    while _co_ref(goc, "refs/tags/v" + moi):
+        moi = cng.tang(moi, "patch")
+    with io.open(os.path.join(goc, "VERSION"), "w", encoding="utf-8", newline="\n") as tep:
+        tep.write(moi)
+    duong_cl = os.path.join(goc, "CHANGELOG.md")
+    try:
+        with io.open(duong_cl, encoding="utf-8-sig") as tep:
+            chu = tep.read()
+    except OSError:
+        chu = "# Nhật ký phát hành\n"
+    with io.open(duong_cl, "w", encoding="utf-8", newline="\n") as tep:
+        tep.write(cng.them_dong_changelog(chu, moi, time.strftime("%Y-%m-%d"), ma_may, thong_diep))
+    _git_ok(goc, "add", "--", *TEP_PHIEN_BAN)
+    _git_ok(goc, "commit", "-q", "-m", "v{0}: {1}\n\nMáy: {2}".format(moi, cng._mot_dong(thong_diep, 120), ma_may),  # noqa: SLF001
+            "--", *TEP_PHIEN_BAN)
+    _git_ok(goc, "tag", "v" + moi)
+    in_ra("  phiên bản: {0} -> {1} ({2}), tag v{1}.".format(goc_so or "?", moi, muc))
+    return moi
+
+
+def _bo_phien_ban(goc: str, phien_ban: str) -> None:
+    """Gỡ commit phiên bản vừa tạo (push bị từ chối) — CHỈ đụng VERSION/CHANGELOG,
+    không `reset --hard` (máy có thể còn tệp dở của agent khác)."""
+    git(goc, "tag", "-d", "v" + phien_ban)
+    git(goc, "reset", "-q", "--soft", "HEAD~1")
+    git(goc, "checkout", "HEAD", "--", *TEP_PHIEN_BAN)
+
+
 def day(goc: str = GOC, thong_diep: str = "", *, bo_qua_test: bool = False,
-        in_ra: Callable[[str], None] = print, khong_push: bool = False) -> int:
-    """Kiểm → commit → rebase lên origin → push. Mã thoát: 0 xong, 1 kiểm hỏng,
-    2 xung đột (đã huỷ rebase, commit cục bộ còn nguyên), 3 lỗi mạng/git."""
+        in_ra: Callable[[str], None] = print, khong_push: bool = False,
+        muc: str = "patch", chi: Optional[Sequence[str]] = None) -> int:
+    """Kiểm → commit → rebase lên origin → TỰ NÂNG VERSION (commit phiên bản
+    riêng + dòng CHANGELOG + tag) → push nguyên tử (nhánh + tag).
+
+    `muc`: "patch" (mặc định) | "minor" | "major". `chi`: chỉ commit các tệp/thư
+    mục này (tệp dở của người khác để nguyên, rebase dùng --autostash).
+
+    Mã thoát: 0 xong, 1 kiểm hỏng, 2 xung đột (đã huỷ rebase, commit cục bộ còn
+    nguyên), 3 lỗi mạng/git."""
     if not la_kho_git(goc):
         in_ra("! Không phải kho Git.")
         return 3
+    if muc not in ("patch", "minor", "major"):
+        in_ra("! muc phải là patch/minor/major.")
+        return 1
     nhanh = _nhanh_hien_tai(goc)
     if nhanh != NHANH:
         in_ra("! Đang ở nhánh '{0}', không phải '{1}' — dừng.".format(nhanh, NHANH))
         return 3
-    if os.path.isdir(os.path.join(goc, ".git", "rebase-merge")) or os.path.isdir(os.path.join(goc, ".git", "rebase-apply")):
+    if _dang_do_rebase(goc):
         in_ra("! Kho đang dở một lượt rebase — giải xong (hoặc `git rebase --abort`) rồi chạy lại.")
         return 2
     cfg = doc_cau_hinh(goc)
     _dat_danh_tinh(goc, cfg["ma_may"])
-    if cfg.get("xuat_bai_hoc"):
-        try:
-            xuat_bai_hoc(goc, in_ra=in_ra)
-        except Exception as e:  # noqa: BLE001 — bài học hỏng không chặn việc đẩy mã
-            in_ra("  (bỏ qua xuất bài học: {0})".format(e))
+    chon = _chon_tep(goc, chi or [])
+    if chon:
+        # Chỉ commit đúng tệp đã chọn: chỉ mục (index) phải sạch trước, không
+        # thì `commit` cuốn luôn tệp người khác đã `git add`.
+        da_cho = [p for p in git(goc, "diff", "--cached", "--name-only", "-z")[1].split("\0") if p]
+        if da_cho:
+            in_ra("! Đang có tệp đã `git add` sẵn ({0}) — không trộn vào lượt --chi.".format(
+                ", ".join(da_cho[:8])))
+            return 1
+        _git_ok(goc, "add", "-A", "--", *chon)
+    else:
+        if cfg.get("xuat_bai_hoc"):
+            try:
+                xuat_bai_hoc(goc, in_ra=in_ra)
+            except Exception as e:  # noqa: BLE001 — bài học hỏng không chặn việc đẩy mã
+                in_ra("  (bỏ qua xuất bài học: {0})".format(e))
+        _git_ok(goc, "add", "-A")
 
-    _git_ok(goc, "add", "-A")
+    def bo_chi_muc() -> None:
+        if chon:
+            git(goc, "reset", "-q", "--", *chon)
+        else:
+            git(goc, "reset", "-q")
+
     tep = _tep_dang_cho(goc)
     co_thay_doi = git(goc, "diff", "--cached", "--quiet")[0] != 0 or not _co_ref(goc, "HEAD")
-    in_ra("--- {0} tệp thêm/sửa đang chờ commit ---".format(len(tep)))
+    in_ra("--- {0} tệp thêm/sửa đang chờ commit{1} ---".format(len(tep), " (chọn lọc)" if chon else ""))
 
     if co_thay_doi:
         loi = bien_dich(goc, tep)
         if loi:
-            git(goc, "reset", "-q")
+            bo_chi_muc()
             in_ra("! py_compile hỏng:\n  " + "\n  ".join(loi))
             return 1
         loi = kiem_khoi(goc, co_test=not bo_qua_test, in_ra=in_ra)
         if loi:
-            git(goc, "reset", "-q")
+            bo_chi_muc()
             in_ra("! Kiểm khói hỏng — KHÔNG commit:\n" + "\n".join(loi))
             return 1
         chan = quet_bi_mat(goc, tep)
         if chan:
-            git(goc, "reset", "-q")
+            bo_chi_muc()
             in_ra("! Quét bí mật/dữ liệu kênh CHẶN {0} mục — KHÔNG commit:".format(len(chan)))
             for c in chan[:60]:
                 in_ra("  " + c)
@@ -842,26 +933,30 @@ def day(goc: str = GOC, thong_diep: str = "", *, bo_qua_test: bool = False,
         in_ra("  quét bí mật: sạch.")
         if not thong_diep.strip():
             in_ra("! Thiếu thông điệp commit: day \"<thông điệp>\"")
-            git(goc, "reset", "-q")
+            bo_chi_muc()
             return 1
         _git_ok(goc, "commit", "-q", "-m", thong_diep.strip() + "\n\nMáy: {0}".format(cfg["ma_may"]))
         in_ra("  đã commit.")
 
     if khong_push:
-        in_ra("(khong_push) dừng trước khi đẩy.")
+        in_ra("(khong_push) dừng trước khi đẩy — chưa nâng phiên bản.")
         return 0
+    tom = thong_diep.strip() or git(goc, "log", "-1", "--format=%s")[1].strip()
 
-    for lan in (1, 2):
+    for lan in (1, 2, 3):
         ok, loi_f = fetch(goc)
         if not ok:
             in_ra("! fetch lỗi: " + loi_f[:300])
             return 3
         dich = "{0}/{1}".format(REMOTE, NHANH)
         if _co_ref(goc, dich):
-            truoc, sau = truoc_sau(goc)
+            _truoc, sau = truoc_sau(goc)
             if sau:
                 cu = _git_ok(goc, "rev-parse", "HEAD").strip()
-                ma, ra, err = git(goc, "rebase", dich)
+                # Tệp dở (của agent khác, hay ngoài lượt --chi) đứng yên: --autostash
+                # cất rồi trả lại đúng chỗ, không bị cuốn vào commit.
+                tham = ["rebase"] + (["--autostash"] if tep_doi_cuc_bo(goc) else []) + [dich]
+                ma, ra, err = git(goc, *tham)
                 if ma != 0:
                     xung = git(goc, "diff", "--name-only", "--diff-filter=U")[1].split()
                     git(goc, "rebase", "--abort")
@@ -874,18 +969,27 @@ def day(goc: str = GOC, thong_diep: str = "", *, bo_qua_test: bool = False,
                 if loi:
                     in_ra("! Sau khi rebase lên mã mới của máy khác, kiểm khói HỎNG — chưa đẩy:\n" + "\n".join(loi))
                     return 1
-            if not truoc and not sau:
-                in_ra("Không có gì để đẩy — đã khớp origin.")
-                return 0
-        ma, ra, err = git(goc, "push", "-u", REMOTE, "HEAD:" + NHANH, timeout=300)
-        if ma == 0:
-            _luu_trang_thai(goc, day_cuoi=time.strftime("%Y-%m-%d %H:%M"))
-            _ghi_nhat_ky(goc, "day ok: " + thong_diep.strip()[:120])
-            in_ra("Đã đẩy lên {0}/{1}.".format(REMOTE, NHANH))
+        truoc, _sau = truoc_sau(goc)
+        if not truoc:
+            in_ra("Không có gì để đẩy — đã khớp origin.")
             return 0
+        ban = _nang_phien_ban(goc, muc, tom, cfg["ma_may"], in_ra)
+        ma, ra, err = git(goc, "push", "--atomic", "-u", REMOTE, "HEAD:" + NHANH, "refs/tags/v" + ban, timeout=300)
+        if ma == 0:
+            _luu_trang_thai(goc, day_cuoi=time.strftime("%Y-%m-%d %H:%M"), ban_cuoi=ban)
+            _ghi_nhat_ky(goc, "day ok v{0}: {1}".format(ban, tom[:120]))
+            try:
+                from . import cap_nhat_git as cng  # noqa: PLC0415
+                cng.kiem(goc, co_fetch=False)
+            except Exception:  # noqa: BLE001
+                pass
+            in_ra("Đã đẩy lên {0}/{1} — phiên bản {2} (tag v{2}).".format(REMOTE, NHANH, ban))
+            return 0
+        _bo_phien_ban(goc, ban)
         chu = (err or ra).strip()
-        if lan == 1 and ("rejected" in chu or "fetch first" in chu or "non-fast-forward" in chu):
-            in_ra("  origin vừa có commit mới — kéo lại rồi đẩy lần nữa.")
+        if lan < 3 and ("rejected" in chu or "fetch first" in chu or "non-fast-forward" in chu
+                        or "already exists" in chu):
+            in_ra("  origin vừa có commit/tag mới của máy khác — kéo lại, rebase, tăng lại phiên bản.")
             continue
         in_ra("! push lỗi: " + chu[:400])
         if "Permission denied" in chu or "publickey" in chu or "denied" in chu:
@@ -1059,38 +1163,63 @@ def _theo_doi(goc: str, truoc: Dict[str, Any], phut: int, in_ra: Callable[[str],
     return ""
 
 
-def _lui(goc: str, tag: str, ly_do: str, in_ra: Callable[[str], None]) -> None:
+def _lui(goc: str, tag: str, ly_do: str, in_ra: Callable[[str], None], sha_bo_qua: str = "") -> None:
+    """Tự lùi sau cập nhật hỏng. Bản hỏng (`sha_bo_qua`) bị BỎ QUA ở các lượt
+    nhịp sau — không thì cứ 30 phút lại cài lại đúng bản vừa làm chết máy."""
     in_ra("! LÙI về {0}: {1}".format(tag, ly_do))
     git(goc, "reset", "--hard", tag)
     _luu_trang_thai(goc, lui_cuoi={"tag": tag, "ly_do": ly_do[:400], "luc": time.strftime("%Y-%m-%d %H:%M")})
     _ghi_nhat_ky(goc, "LUI ve {0}: {1}".format(tag, ly_do[:300]))
+    try:
+        from . import cap_nhat_git as cng  # noqa: PLC0415
+        cng.ghi_trang_thai(goc, bo_qua_sha=sha_bo_qua, hen_cap_nhat=False, hien_tai=cng.doc_phien_ban(goc))
+        cng.ghi_ket_qua(goc, "da_lui", "tự lùi về {0}: {1}".format(tag, ly_do), tag=tag)
+    except Exception:  # noqa: BLE001 — ghi trạng thái hỏng không được chặn việc lùi
+        pass
 
 
 def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = None,
         in_ra: Callable[[str], None] = print, ngu: Callable[[float], None] = time.sleep,
         bay_gio: Callable[[], _dt.datetime] = _dt.datetime.now) -> int:
-    """Tự cập nhật an toàn. Mã thoát: 0 (đã áp / không có gì mới / tắt),
-    1 bản mới hỏng kiểm, 3 máy có sửa chưa đẩy / lỗi git, 4 hết giờ chờ máy rảnh,
-    5 đã lùi sau cập nhật."""
-    cfg = doc_cau_hinh(goc)
-    if not ep and not cfg["tu_keo"]:
-        in_ra("Tự kéo đang TẮT (cap-nhat.json: dong_bo_git.tu_keo) — thoát.")
+    """Áp bản mới an toàn. Mã thoát: 0 (đã áp / không có gì mới / tắt / đang có
+    lượt khác), 1 bản mới hỏng kiểm, 3 máy có sửa chưa đẩy / lỗi git, 4 chưa gặp
+    lúc máy rảnh, 5 đã lùi sau cập nhật. Mọi kết quả ghi vào
+    `workspace/cap-nhat/trang-thai.json` (giao diện đọc)."""
+    from . import cap_nhat_git as cng  # noqa: PLC0415
+    if not ep and not cng.doc_cau_hinh(goc)["tu_dong_cap_nhat"]:
+        in_ra("Tự động cập nhật đang TẮT (cap-nhat.json: tu_dong_cap_nhat=false) — thoát. "
+              "Bấm “Cập nhật ngay” trong Cài đặt, hoặc chạy `keo --ep`.")
         return 0
     if not la_kho_git(goc):
-        in_ra("! Không phải kho Git — máy này cập nhật qua core.nguon_cap_nhat.")
+        in_ra("! Không phải kho Git — cài lại bằng CAI-DAT-VPS.bat (git clone) để tự cập nhật.")
         return 3
+    if not cng.giu_khoa(goc, "keo"):
+        in_ra("Đang có một lượt cập nhật khác chạy — thoát.")
+        return 0
+    try:
+        return _keo(goc, ep=ep, cho_toi_da_phut=cho_toi_da_phut, in_ra=in_ra, ngu=ngu, bay_gio=bay_gio)
+    finally:
+        cng.nha_khoa(goc)
+
+
+def _keo(goc: str, *, ep: bool, cho_toi_da_phut: Optional[int], in_ra: Callable[[str], None],
+         ngu: Callable[[float], None], bay_gio: Callable[[], _dt.datetime]) -> int:
+    from . import cap_nhat_git as cng  # noqa: PLC0415
+    cfg = doc_cau_hinh(goc)
     if _nhanh_hien_tai(goc) != NHANH:
         in_ra("! Không ở nhánh {0} — không kéo.".format(NHANH))
+        cng.ghi_ket_qua(goc, "chua_ap", "máy không ở nhánh {0}".format(NHANH))
         return 3
     doi = tep_doi_cuc_bo(goc)
     if doi:
         in_ra("! Máy này có sửa chưa đẩy ({0} tệp) — KHÔNG kéo đè. Chạy `python -m core.dong_bo_git day \"...\"` trước.".format(len(doi)))
-        _luu_trang_thai(goc, keo_cuoi="{0}: máy có sửa chưa đẩy ({1} tệp)".format(time.strftime("%Y-%m-%d %H:%M"), len(doi)))
+        cng.ghi_trang_thai(goc, co_sua_chua_day=doi[:60])
+        cng.ghi_ket_qua(goc, "chua_ap", "máy có sửa chưa đẩy ({0} tệp)".format(len(doi)))
         return 3
     ok, loi = fetch(goc)
     if not ok:
         in_ra("! fetch lỗi: " + loi[:300])
-        _luu_trang_thai(goc, keo_cuoi="{0}: fetch lỗi".format(time.strftime("%Y-%m-%d %H:%M")))
+        cng.ghi_ket_qua(goc, "loi", "không nối được GitHub: " + loi[:200])
         return 3
     dich = "{0}/{1}".format(REMOTE, NHANH)
     if not _co_ref(goc, dich):
@@ -1099,23 +1228,35 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
     truoc, sau = truoc_sau(goc)
     if not sau:
         in_ra("Đã mới nhất." + ("" if not truoc else " (máy này có {0} commit chưa đẩy)".format(truoc)))
-        _luu_trang_thai(goc, keo_cuoi="{0}: đã mới nhất".format(time.strftime("%Y-%m-%d %H:%M")))
+        cng.ghi_trang_thai(goc, hen_cap_nhat=False)
+        cng.kiem(goc, co_fetch=False)
         return 0
     if truoc:
         in_ra("! Máy này có {0} commit chưa đẩy, origin có {1} commit mới — không fast-forward được. "
               "Chạy `day` để rebase + đẩy.".format(truoc, sau))
-        _luu_trang_thai(goc, keo_cuoi="{0}: lệch nhánh (máy có commit chưa đẩy)".format(time.strftime("%Y-%m-%d %H:%M")))
+        cng.ghi_ket_qua(goc, "chua_ap", "máy có {0} commit chưa đẩy lên kho".format(truoc))
         return 3
     moi = _git_ok(goc, "rev-parse", dich).strip()
-    in_ra("origin có {0} commit mới ({1}) — dựng bản kiểm…".format(sau, moi[:10]))
+    ban_moi = git(goc, "show", dich + ":VERSION")[1].strip() or moi[:10]
+    ban_cu = cng.doc_phien_ban(goc) or "?"
+    in_ra("origin có {0} commit mới (bản {1}, {2}) — dựng bản kiểm…".format(sau, ban_moi, moi[:10]))
+    # Dựng + kiểm là việc vừa-nặng: chỉ làm khi máy rảnh (nhịp đã kiểm trước khi sinh,
+    # nhưng `keo --ep` chạy tay thì chưa).
+    cho = cfg["cho_toi_da_phut"] if cho_toi_da_phut is None else cho_toi_da_phut
+    ly_do = ly_do_chua_ranh(goc, bay_gio())
+    if ly_do and not cho:
+        in_ra("  máy chưa rảnh — để lượt sau: {0}".format("; ".join(ly_do)[:200]))
+        cng.ghi_trang_thai(goc, quyet="cho", quyet_ly_do="; ".join(ly_do)[:300])
+        return 4
     loi_kiem = _dung_ban_kiem(goc, moi, in_ra)
     if loi_kiem:
         in_ra("! Bản mới HỎNG kiểm — không áp:\n" + "\n".join(loi_kiem)[:3000])
-        _luu_trang_thai(goc, keo_cuoi="{0}: bản {1} hỏng kiểm".format(time.strftime("%Y-%m-%d %H:%M"), moi[:10]),
-                        ban_hong=moi)
+        _luu_trang_thai(goc, ban_hong=moi)
+        cng.ghi_trang_thai(goc, bo_qua_sha=moi, hen_cap_nhat=False)
+        cng.ghi_ket_qua(goc, "hong_kiem", "bản {0} hỏng kiểm, không áp (bỏ qua tới khi có bản mới hơn): {1}".format(
+            ban_moi, "; ".join(loi_kiem)[:250]), len=ban_moi)
         return 1
 
-    cho = cfg["cho_toi_da_phut"] if cho_toi_da_phut is None else cho_toi_da_phut
     han = time.time() + cho * 60
     from . import khe  # noqa: PLC0415
     phien = None
@@ -1127,8 +1268,8 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
                 break
             ly_do = ["không giành được khe nặng"]
         if time.time() >= han:
-            in_ra("! Hết {0} phút chờ máy rảnh: {1}".format(cho, "; ".join(ly_do)[:300]))
-            _luu_trang_thai(goc, keo_cuoi="{0}: hết giờ chờ máy rảnh".format(time.strftime("%Y-%m-%d %H:%M")))
+            in_ra("! Chưa gặp lúc máy rảnh ({0} phút): {1}".format(cho, "; ".join(ly_do)[:300]))
+            cng.ghi_trang_thai(goc, quyet="cho", quyet_ly_do="; ".join(ly_do)[:300])
             return 4
         in_ra("  chờ máy rảnh: {0}".format("; ".join(ly_do)[:200]))
         ngu(300)
@@ -1137,6 +1278,7 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
     try:
         if tep_doi_cuc_bo(goc):
             in_ra("! Vừa có sửa cục bộ trong lúc chờ — không kéo đè.")
+            cng.ghi_ket_qua(goc, "chua_ap", "vừa có sửa cục bộ trong lúc chờ")
             return 3
         cu = _git_ok(goc, "rev-parse", "HEAD").strip()
         _git_ok(goc, "tag", tag, cu)
@@ -1144,11 +1286,12 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
         if ma != 0:
             in_ra("! merge --ff-only lỗi: " + (err or ra).strip()[:300])
             git(goc, "reset", "--hard", tag)
+            cng.ghi_ket_qua(goc, "loi", "merge --ff-only lỗi: " + (err or ra).strip()[:200])
             return 3
         doi_moi = _tep_doi_giua(goc, cu, "HEAD")
         loi = bien_dich(goc, doi_moi) + kiem_khoi(goc, co_test=False, in_ra=in_ra)
         if loi:
-            _lui(goc, tag, "kiểm khói sau khi áp hỏng: " + "; ".join(loi)[:300], in_ra)
+            _lui(goc, tag, "kiểm khói sau khi áp hỏng: " + "; ".join(loi)[:300], in_ra, sha_bo_qua=moi)
             return 5
         try:
             nhan_bai_hoc_ngoai(goc, in_ra=in_ra)
@@ -1158,6 +1301,10 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
         _ghi_nhat_ky(goc, "ap {0} -> {1} tag {2}".format(cu[:10], moi[:10], tag))
         _luu_trang_thai(goc, keo_cuoi="{0}: đã áp {1}".format(time.strftime("%Y-%m-%d %H:%M"), moi[:10]),
                         tag_lui=tag)
+        cng.ghi_trang_thai(goc, hen_cap_nhat=False, bo_qua_sha="", hien_tai=ban_moi, ban_moi="",
+                           thay_doi=[], so_commit_moi=0)
+        cng.ghi_ket_qua(goc, "thanh_cong", "đã cập nhật {0} → {1}".format(ban_cu, ban_moi),
+                        tu=ban_cu, len=ban_moi, tag=tag)
     finally:
         phien.nha()
 
@@ -1165,22 +1312,82 @@ def keo(goc: str = GOC, *, ep: bool = False, cho_toi_da_phut: Optional[int] = No
         truoc_kd = khoi_dong_lai(goc, in_ra=in_ra)
         ly_do_lui = _theo_doi(goc, truoc_kd, int(cfg["theo_doi_phut"]), in_ra, ngu)
         if ly_do_lui:
-            _lui(goc, tag, ly_do_lui, in_ra)
+            _lui(goc, tag, ly_do_lui, in_ra, sha_bo_qua=moi)
             khoi_dong_lai(goc, in_ra=in_ra)
             return 5
     _don_tag_cu(goc)
     return 0
 
 
+def lui_ban(goc: str = GOC, tag: Optional[str] = None, *, in_ra: Callable[[str], None] = print,
+            bay_gio: Callable[[], _dt.datetime] = _dt.datetime.now) -> int:
+    """Nút "Quay lại bản trước": `reset --hard` về tag `truoc-cap-nhat-*` (mới nhất,
+    hoặc `tag`) — chỉ khi cây sạch + máy rảnh; rồi khởi động lại giao diện. Bản
+    đang có trên kho bị BỎ QUA (không tự cài lại) cho tới khi có bản mới hơn.
+    Mã: 0 xong/đang có lượt khác, 3 lỗi/cây bẩn, 4 máy chưa rảnh (nhịp tự thử lại)."""
+    from . import cap_nhat_git as cng  # noqa: PLC0415
+    if not la_kho_git(goc):
+        in_ra("! Không phải kho Git.")
+        return 3
+    if not cng.giu_khoa(goc, "lui"):
+        in_ra("Đang có một lượt cập nhật khác chạy — thoát.")
+        return 0
+    try:
+        tags = cng.tag_lui(goc)
+        tag = tag or (tags[0] if tags else "")
+        if not tag or not _co_ref(goc, "refs/tags/" + tag):
+            in_ra("! Không có tag để quay lại.")
+            cng.ghi_trang_thai(goc, hen_quay_lai="")
+            cng.ghi_ket_qua(goc, "loi", "không có bản trước để quay lại")
+            return 3
+        doi = tep_doi_cuc_bo(goc)
+        if doi:
+            in_ra("! Máy có sửa chưa đẩy ({0} tệp) — không quay lại.".format(len(doi)))
+            cng.ghi_ket_qua(goc, "chua_ap", "máy có sửa chưa đẩy — chưa quay lại được")
+            return 3
+        ly_do = ly_do_chua_ranh(goc, bay_gio())
+        from . import khe  # noqa: PLC0415
+        phien = None if ly_do else khe.thu_giu(goc, khe.LOP_NANG, "cap_nhat_git", uu_tien=1)
+        if phien is None:
+            ly = "; ".join(ly_do or ["không giành được khe nặng"])
+            in_ra("  máy chưa rảnh — quay lại sau: " + ly[:200])
+            cng.ghi_trang_thai(goc, quyet="cho", quyet_ly_do=ly[:300])
+            return 4
+        try:
+            ban_cu = cng.doc_phien_ban(goc) or "?"
+            sha_xa = git(goc, "rev-parse", "{0}/{1}".format(REMOTE, NHANH))[1].strip()
+            _git_ok(goc, "reset", "--hard", tag)
+            ban = cng.doc_phien_ban(goc) or "?"
+            cng.ghi_trang_thai(goc, hen_quay_lai="", hen_cap_nhat=False, bo_qua_sha=sha_xa, hien_tai=ban)
+            cng.ghi_ket_qua(goc, "da_quay_lai", "đã quay lại {0} → {1} (theo yêu cầu); bỏ qua bản trên kho "
+                            "tới khi có bản mới hơn".format(ban_cu, ban), tu=ban_cu, len=ban, tag=tag)
+            _ghi_nhat_ky(goc, "QUAY LAI ve {0} ({1} -> {2})".format(tag, ban_cu, ban))
+            in_ra("Đã quay lại {0} ({1} → {2}).".format(tag, ban_cu, ban))
+        finally:
+            phien.nha()
+        if doc_cau_hinh(goc).get("khoi_dong_lai"):
+            khoi_dong_lai(goc, in_ra=in_ra)
+        cng.kiem(goc, co_fetch=False)
+        return 0
+    finally:
+        cng.nha_khoa(goc)
+
+
 # ═══ 5) lịch Windows ════════════════════════════════════════════════════════
 
 
-def dang_ky_lich(goc: str = GOC, gio: Optional[str] = None) -> Tuple[bool, str]:
+def dang_ky_lich(goc: str = GOC) -> Tuple[bool, str]:
+    """Kiểm cập nhật chạy trong gác tổng (`core.cap_nhat_git.nhip`, mỗi 15') →
+    bảo đảm lịch `ShopAPI-GacTong`, và GỠ lịch `ShopAPI-DongBoGit` 03:40 cũ."""
     from . import lich_tu_chay as ltc  # noqa: PLC0415
-    return ltc.dang_ky_dong_bo_git(goc, gio or doc_cau_hinh(goc)["gio"])
+    ok1, cau1 = ltc.dang_ky_gac_tong(goc)
+    ok2, cau2 = ltc.huy_dong_bo_git(goc)
+    return ok1 and ok2, cau1 + "\n" + cau2
 
 
 def huy_lich(goc: str = GOC) -> Tuple[bool, str]:
+    """Chỉ gỡ lịch 03:40 cũ. Muốn tắt tự cập nhật: công tắc trong Cài đặt, hoặc
+    `python -m core.cap_nhat_git tu_dong tat` (gác tổng còn nhiều việc khác)."""
     from . import lich_tu_chay as ltc  # noqa: PLC0415
     return ltc.huy_dong_bo_git(goc)
 
@@ -1208,9 +1415,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("thong_diep", nargs="?", default="")
     p.add_argument("--bo-qua-test", action="store_true")
     p.add_argument("--khong-push", action="store_true", help="kiểm + commit, không đẩy")
+    nhom = p.add_mutually_exclusive_group()
+    nhom.add_argument("--minor", action="store_true", help="nâng x.Y.0 (mặc định +patch)")
+    nhom.add_argument("--major", action="store_true", help="nâng X.0.0")
+    p.add_argument("--chi", nargs="+", default=None, metavar="TỆP",
+                   help="chỉ commit các tệp/thư mục này (tệp dở của người khác để nguyên)")
     p = sub.add_parser("keo")
-    p.add_argument("--ep", action="store_true", help="bỏ qua khoá tu_keo (vẫn giữ khung giờ/máy rảnh)")
+    p.add_argument("--ep", action="store_true", help="bỏ qua tu_dong_cap_nhat (vẫn giữ khung giờ/máy rảnh)")
     p.add_argument("--cho-toi-da-phut", type=int, default=None)
+    p = sub.add_parser("lui", help="quay lại bản trước (tag truoc-cap-nhat-*)")
+    p.add_argument("--tag", default=None)
+    sub.add_parser("kiem", help="kiểm có bản mới không")
     sub.add_parser("bai_hoc")
     p = sub.add_parser("quet", help="quét bí mật trên các tệp git sẽ theo dõi")
     p = sub.add_parser("lich")
@@ -1230,9 +1445,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
         if ns.lenh == "day":
             return day(goc, ns.thong_diep, bo_qua_test=ns.bo_qua_test, in_ra=_in_an_toan,
-                       khong_push=ns.khong_push)
+                       khong_push=ns.khong_push, chi=ns.chi,
+                       muc="major" if ns.major else ("minor" if ns.minor else "patch"))
         if ns.lenh == "keo":
             return keo(goc, ep=ns.ep, cho_toi_da_phut=ns.cho_toi_da_phut, in_ra=_in_an_toan)
+        if ns.lenh == "lui":
+            return lui_ban(goc, ns.tag, in_ra=_in_an_toan)
+        if ns.lenh == "kiem":
+            from . import cap_nhat_git as cng  # noqa: PLC0415
+            tt = cng.kiem(goc)
+            _in_an_toan(cng.tom_tat(tt))
+            for d in tt.get("thay_doi") or []:
+                _in_an_toan("  {phien_ban} ({ngay}, {may}): {noi_dung}".format(**d))
+            if tt.get("co_sua_chua_day"):
+                _in_an_toan("  ! máy có {0} tệp sửa chưa đẩy — không tự cập nhật.".format(
+                    len(tt["co_sua_chua_day"])))
+            return 0
         if ns.lenh == "bai_hoc":
             xuat_bai_hoc(goc, in_ra=_in_an_toan)
             return 0

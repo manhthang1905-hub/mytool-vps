@@ -24,9 +24,15 @@ from core import cai_dat
 
 class TestMacDinh:
     def test_tu_cap_nhat_BAT_san(self, tmp_path):
-        assert cai_dat.doc(str(tmp_path))["tu_cap_nhat"] is True, (
+        """(30/09/2026) Công tắc tự cập nhật chuyển sang `cap-nhat.json:
+        tu_dong_cap_nhat` (`core/cap_nhat_git.py`) — vẫn BẬT sẵn, và không còn
+        ô trùng trong `cai-dat.json`."""
+        from core import cap_nhat_git
+
+        assert cap_nhat_git.doc_cau_hinh(str(tmp_path))["tu_dong_cap_nhat"] is True, (
             "tắt sẵn nghĩa là mọi bản vá nằm lại trên kho — khách không biết "
             "là có bản mới nên không bao giờ bấm")
+        assert "tu_cap_nhat" not in cai_dat.MAC_DINH and "hoi_ban_moi" not in cai_dat.MAC_DINH
 
     def test_chua_co_tep_thi_van_chay_duoc(self, tmp_path):
         cai = cai_dat.doc(str(tmp_path))
@@ -42,8 +48,8 @@ class TestMacDinh:
 
 class TestGhiVaDoc:
     def test_tat_roi_doc_lai_van_tat(self, tmp_path):
-        assert cai_dat.dat(str(tmp_path), "tu_cap_nhat", False)
-        assert cai_dat.doc(str(tmp_path))["tu_cap_nhat"] is False
+        assert cai_dat.dat(str(tmp_path), "bao_su_co", False)
+        assert cai_dat.doc(str(tmp_path))["bao_su_co"] is False
 
     def test_khoa_la_thi_khong_nhan(self, tmp_path):
         assert not cai_dat.dat(str(tmp_path), "khoa-khong-co-that", True)
@@ -52,16 +58,16 @@ class TestGhiVaDoc:
         """Tệp sửa tay có thể có giá trị lạ; lấy bừa là lỗi nổ ở chỗ khác."""
         duong = cai_dat.duong_tep(str(tmp_path))
         os.makedirs(os.path.dirname(duong), exist_ok=True)
-        json.dump({"tu_cap_nhat": "co"}, open(duong, "w", encoding="utf-8"))
-        assert cai_dat.doc(str(tmp_path))["tu_cap_nhat"] is True
+        json.dump({"bao_su_co": "co"}, open(duong, "w", encoding="utf-8"))
+        assert cai_dat.doc(str(tmp_path))["bao_su_co"] is True
 
     def test_khoa_la_trong_tep_khong_lot_vao(self, tmp_path):
         duong = cai_dat.duong_tep(str(tmp_path))
         os.makedirs(os.path.dirname(duong), exist_ok=True)
-        json.dump({"linh_tinh": 1, "tu_cap_nhat": False},
+        json.dump({"linh_tinh": 1, "bao_su_co": False},
                   open(duong, "w", encoding="utf-8"))
         cai = cai_dat.doc(str(tmp_path))
-        assert "linh_tinh" not in cai and cai["tu_cap_nhat"] is False
+        assert "linh_tinh" not in cai and cai["bao_su_co"] is False
 
     def test_khong_nam_chung_cho_voi_khoa_API(self, tmp_path):
         """Mỗi lần bật/tắt một ô là một lần ghi tệp. Đừng ghi đè lên chỗ có khoá."""
@@ -106,11 +112,11 @@ class TestTrangCaiDat:
             assert nhan_o and not nhan_o.endswith("."), khoa
 
 
-def test_nut_cap_nhat_biet_hoi_cai_dat():
-    """Gỡ chỗ này ra là tự cập nhật im lặng thành không tắt được."""
+def test_khung_cap_nhat_doc_cong_tac_trong_cap_nhat_json():
+    """Gỡ chỗ này ra là công tắc Tự động cập nhật trên màn hình thành vô nghĩa."""
     from pathlib import Path
 
     chu = (Path(__file__).resolve().parent.parent / "ui_qt" / "cap_nhat.py"
            ).read_text(encoding="utf-8")
-    assert 'cai_dat.doc(self._app.base_dir).get("tu_cap_nhat"' in chu
-    assert 'cai_dat.doc(self._app.base_dir).get("hoi_ban_moi"' in chu
+    assert 'cng.doc_cau_hinh(self._goc)["tu_dong_cap_nhat"]' in chu
+    assert "cng.dat_tu_dong(self._goc, bat)" in chu

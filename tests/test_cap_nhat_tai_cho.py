@@ -364,37 +364,15 @@ class TestKhongCapNhatGiuaLucCoViec:
     xong" → khách bấm Cập nhật lại giữa lúc lô vẫn chạy → lặp. Ba chốt chặn:
     """
 
-    def test_dang_co_job_thi_tu_choi_va_noi_ro(self):
-        import os
-
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        from PyQt5.QtWidgets import QApplication
-
-        global _APP_GIU_QT
-        _APP_GIU_QT = QApplication.instance() or QApplication([])
-        from ui_qt.cap_nhat import NutCapNhat
-
-        class _Jobs:
-            is_running = True
-
-        class _App:
-            base_dir = "."
-            jobs = _Jobs()
-            thong_bao = []
-            goi_nen = []
-
-            def show_message(self, tieu_de, noi_dung):
-                self.thong_bao.append((tieu_de, noi_dung))
-
-            def run_bg(self, viec, **_k):
-                self.goi_nen.append(viec)
-
-        app = _App()
-        nut = NutCapNhat(app)
-        nut._ban_moi = "9.9.9"
-        nut._bam()
-        assert app.thong_bao, "phải nói lý do, không im lặng bỏ qua"
-        assert not app.goi_nen, "không được tải gói khi job đang chạy"
+    def test_giao_dien_khong_con_duong_zip(self):
+        """(30/09/2026) Hệ cập nhật duy nhất là git (`core/cap_nhat_git.py`):
+        nút/khung Cập nhật không được gọi lại đường ZIP + `cap-nhat.py` — hai hệ
+        cùng tráo tệp là cây git bẩn và cả hai cùng hỏng. Luật "đang bận thì
+        không cập nhật" nay nằm ở `cap_nhat_git.quyet_dinh` (test_cap_nhat_git)."""
+        chu = (Path(__file__).resolve().parent.parent / "ui_qt" / "cap_nhat.py").read_text(
+            encoding="utf-8")
+        assert "tai_ve_va_dung_san" not in chu and "cap-nhat.py" not in chu.split('"""', 2)[2]
+        assert "cap_nhat_git" in chu
 
     def test_launcher_cho_du_lau(self):
         """60 giây là bỏ cuộc giữa lúc tool đang thoát tử tế; giờ chờ 10 phút."""
@@ -418,13 +396,3 @@ class TestKhongCapNhatGiuaLucCoViec:
         from core.jobs import JobManager
 
         assert "cancel_futures=True" in inspect.getsource(JobManager.shutdown)
-
-    def test_tai_goi_duoc_cho_rong_hon_hoi_version(self):
-        """Gói ~26 MB cần trần chờ rộng hơn lượt hỏi VERSION vài trăm byte."""
-        from ui_qt import cap_nhat as cn
-
-        assert cn.CHO_TAI_GOI_GIAY >= 60
-        import inspect
-
-        assert "CHO_TAI_GOI_GIAY" in inspect.getsource(cn.NutCapNhat._bam), \
-            "lượt tải gói phải dùng trần chờ rộng"

@@ -2,8 +2,21 @@
 
 Kho `github.com/manhthang1905-hub/mytool-vps` là **nguồn gốc duy nhất** của mã
 tool. Mỗi VPS chạy một ngách hoặc một quốc gia riêng. Sửa ở máy nào thì máy đó
-đẩy lên kho, các máy khác tự kéo về. Càng nhiều VPS thì tool càng được sửa
-nhiều.
+đẩy lên kho (`day` **tự nâng phiên bản**), các máy khác **tự nhận bản mới** lúc
+rảnh — mặc định bật, tắt được trong Cài đặt. Càng nhiều VPS thì tool càng được
+sửa nhiều.
+
+Tóm tắt một vòng:
+
+1. Máy A sửa xong: `python -m core.dong_bo_git day "fix(...): ..."` → kiểm, commit,
+   rebase, `VERSION` +patch (hoặc `--minor`/`--major`), một dòng `CHANGELOG.md`,
+   tag `v<x.y.z>`, push.
+2. Máy B (mỗi ~30 phút, trong gác tổng 15' và giao diện; và mỗi lần mở giao
+   diện): `git fetch`, đọc `origin/main:VERSION` → ghi
+   `workspace/cap-nhat/trang-thai.json`.
+3. Có bản mới + `tu_dong_cap_nhat` bật + máy rảnh → máy B tự áp (mục 3) rồi tự mở
+   lại giao diện. Tắt tự động thì chỉ báo "Có bản mới x.y.z" (Bảng điều khiển +
+   Cài đặt) và chờ người bấm **Cập nhật ngay**.
 
 Công cụ dùng cho việc này: `python -m core.dong_bo_git <lệnh>` (chạy tại thư mục
 gốc MyTool).
@@ -12,11 +25,16 @@ gốc MyTool).
 |---|---|
 | `ket_noi` | Kiểm đường tới GitHub. Máy có IPv4 thì đi thẳng; máy chỉ có IPv6 thì dò NAT64 qua DNS64 và sửa `HostName` của `Host github-mytool` trong `~/.ssh/config`. Cuối cùng thử xác thực bằng deploy key. |
 | `trang_thai` | Cho biết nhánh, số commit máy này đi trước hay sau origin, và các tệp đã đổi. |
-| `day "thông điệp"` | Kiểm rồi commit, rebase lên origin, push (chi tiết ở mục 2). |
-| `keo [--ep]` | Tự cập nhật an toàn trên máy sản xuất (chi tiết ở mục 3). |
+| `day "thông điệp" [--minor\|--major] [--chi tệp…]` | Kiểm, commit, rebase lên origin, **tự nâng phiên bản** + CHANGELOG + tag, push (mục 2). `--chi`: chỉ commit các tệp đó, tệp dở của người khác để nguyên. |
+| `kiem` | Kiểm có bản mới không (fetch, đọc `origin/main:VERSION`, in các thay đổi). |
+| `keo [--ep]` | Áp bản mới an toàn (mục 3). Thường do `core.cap_nhat_git.nhip` tự sinh ra; `--ep` = như nút "Cập nhật ngay". |
+| `lui [--tag T]` | Quay lại bản trước (tag `truoc-cap-nhat-*`), như nút "Quay lại bản trước". |
 | `quet` | Chỉ quét bí mật và dữ liệu kênh trên toàn bộ tệp sẽ lên kho. |
 | `bai_hoc` | Xuất bài học ngách của máy này ra `chia-se/bai-hoc/`. |
-| `lich bat` / `lich tat` | Bật hoặc tắt lịch Windows `ShopAPI-DongBoGit`, chạy `keo` mỗi ngày. |
+| `lich bat` | Bảo đảm lịch `ShopAPI-GacTong` (15', trong đó có kiểm cập nhật) và gỡ lịch `ShopAPI-DongBoGit` 03:40 cũ. |
+
+Tắt/bật tự cập nhật: công tắc **Tự động cập nhật** (Cài đặt → Cập nhật tool), hoặc
+`python -m core.cap_nhat_git tu_dong tat|bat` — ghi `tu_dong_cap_nhat` trong `cap-nhat.json`.
 
 ## 1. Cài một VPS mới từ kho
 
@@ -47,8 +65,11 @@ gốc MyTool).
 5. **Tạo cấu hình riêng của máy** từ các tệp mẫu (xem mục 4), rồi thêm kênh
    (theo `docs/THEM-KENH.md`).
 6. **Kiểm:** chạy `python -m core.dong_bo_git ket_noi`, sau đó `trang_thai`.
-7. **Bật tự kéo:** trong `cap-nhat.json`, đặt `"dong_bo_git": {"tu_keo": true, "ma_may": "<ma-may>"}`,
-   rồi chạy `python -m core.dong_bo_git lich bat`.
+7. **Tự cập nhật: đã BẬT sẵn** (kể cả khi chưa có `cap-nhat.json`). Chỉ cần đặt mã máy
+   trong `cap-nhat.json`: `{"dong_bo_git": {"ma_may": "<ma-may>"}}` (mẫu:
+   `cap-nhat.example.json`), rồi `python -m core.dong_bo_git lich bat` để có gác tổng
+   15' (giao diện đang mở cũng tự kiểm mỗi 30'). VPS nào đã ổn định muốn giữ nguyên:
+   tắt công tắc **Tự động cập nhật** trong Cài đặt.
 
 ## 2. Quy trình phát triển (cho người và cho phiên Claude)
 
@@ -63,20 +84,40 @@ gốc MyTool).
      ở ưu tiên thấp, chỉ khi khe "nang" đang trống;
    - quét bí mật: `core/kiem_phat_hanh.py` cộng thêm lớp quét khoá, email,
      đường có tên người dùng, tên kênh thật, video id và tiêu đề video của máy này;
-   - commit, `fetch`, rebase lên `origin/main`, rồi push.
+   - commit, `fetch`, rebase lên `origin/main` (có tệp dở thì `--autostash`);
+   - **nâng phiên bản** trong một commit riêng `v<x.y.z>: <thông điệp>`: số mới =
+     max(VERSION của máy, của origin) +patch (`--minor`, `--major`), thêm một dòng
+     `- **x.y.z** — ngày — `mã máy` — thông điệp` vào mục tự ghi của `CHANGELOG.md`,
+     tag `v<x.y.z>`;
+   - push nguyên tử (`--atomic`: nhánh + tag). Máy khác vừa đẩy (bị từ chối) thì
+     bỏ commit phiên bản, kéo lại, rebase, **tăng lại số** — hai máy không bao giờ
+     cùng một phiên bản.
+
+   Còn tệp dở của người/agent khác trên máy? Dùng `--chi <tệp của mình…>`: chỉ
+   những tệp đó được commit, phần còn lại để nguyên.
 
    Nếu rebase gặp **xung đột**, lệnh huỷ rebase và báo tên các tệp bị xung đột.
    Commit trên máy vẫn còn nguyên. Người sửa tự giải xung đột rồi chạy lại
    `day`, không để máy tự giải.
-3. Các máy khác tự nhận bản mới qua `keo`. Lịch chạy mỗi ngày lúc 03:40, hoặc
-   gọi tay bằng `keo --ep`.
+3. Các máy khác **tự nhận** bản mới (mục 3) — không còn lịch 03:40.
 
 Chuỗi mẫu trong test cố tình trông giống khoá (để kiểm bộ lọc) phải được viết
 tách, ví dụ `"sk_live_" "abc…"`, hoặc cuối dòng có đánh dấu `# dong-bo-git: mau`.
 
-## 3. `keo` trên máy sản xuất làm gì
+## 3. Máy sản xuất tự nhận bản mới thế nào
 
-1. Thoát ngay nếu `tu_keo` đang tắt (gọi `--ep` thì bỏ qua khoá này).
+**Kiểm** (`core/cap_nhat_git.py: nhip`, mỗi ~30 phút qua gác tổng và giao diện, và
+khi mở giao diện): `git fetch` → `origin/main:VERSION` + các dòng CHANGELOG mới
+hơn bản đang chạy → `workspace/cap-nhat/trang-thai.json` (hiện tại, bản mới, thay
+đổi, lần kiểm, kết quả lần cập nhật gần nhất, lỗi, sửa chưa đẩy). Có bản mới +
+tự động bật (hoặc người đã bấm "Cập nhật ngay") + máy rảnh → sinh tiến trình tách
+rời `dong_bo_git keo` (không là con cháu của giao diện, nên khởi động lại giao
+diện không giết nó). Bận thì ghi "sẽ cập nhật khi máy rảnh" và thử lại nhịp sau.
+
+**`keo`** làm:
+
+1. Thoát ngay nếu `tu_dong_cap_nhat` đang tắt (gọi `--ep` thì bỏ qua khoá này).
+   Chỉ một lượt cập nhật mỗi lúc (khoá `workspace/cap-nhat/dang-cap-nhat.json`).
 2. Nếu máy **có sửa cục bộ chưa commit, hoặc có commit chưa đẩy**, lệnh KHÔNG
    kéo đè mà báo "máy này có sửa chưa đẩy".
 3. `fetch`. Nếu có commit mới thì dựng bản đó trong một **git worktree tạm**
@@ -94,11 +135,17 @@ tách, ví dụ `"sk_live_" "abc…"`, hoặc cuối dòng có đánh dấu `# d
 6. Khởi động lại giao diện. Giao diện mới tự mở lại ba tiến trình con của vm/.
    Lịch `tu_chay` mở tiến trình mới cho mỗi lượt nên tự nhận mã mới.
 7. Theo dõi `theo_doi_phut` phút. Nếu giao diện hoặc agent vm/ (cổng 8767)
-   chết 3 lần kiểm liền, tool **tự lùi về tag** rồi khởi động lại.
+   chết 3 lần kiểm liền, tool **tự lùi về tag** rồi khởi động lại, ghi lý do, và
+   **bỏ qua** bản hỏng đó cho tới khi kho có bản mới hơn (bản không qua kiểm ở
+   bước 3 cũng vậy).
 
-Nhật ký nằm ở `workspace/dong-bo-git/nhat-ky.txt`, trạng thái ở `workspace/dong-bo-git/trang-thai.json`.
-Đường cập nhật cũ qua manifest (`core/nguon_cap_nhat.py`) dành cho bản cài không có `.git`.
-Máy đã bật `tu_keo` thì đường manifest tự nhường, nên không có hai hệ cùng thay tệp.
+Nút **Quay lại bản trước** (`lui`) về tag `truoc-cap-nhat-*` mới nhất theo cùng luật
+máy rảnh, và cũng bỏ qua bản đang có trên kho cho tới khi có bản mới hơn.
+
+Trạng thái: `workspace/cap-nhat/trang-thai.json`, nhật ký `workspace/cap-nhat/nhat-ky.txt`
+và `workspace/dong-bo-git/nhat-ky.txt`. **Một hệ duy nhất**: đường ZIP
+(`core/cap_nhat_github.py`, `cap-nhat.py`) và manifest (`core/nguon_cap_nhat.py`)
+không còn áp mã lên máy nào; máy có `.git` thì chúng luôn nhường.
 
 ## 4. Cấu hình riêng của mỗi máy (KHÔNG lên kho)
 
@@ -106,7 +153,7 @@ Máy đã bật `tu_keo` thì đường manifest tự nhường, nên không có
 |---|---|---|
 | `config.json` | địa chỉ máy chủ, số job | `config.example.json` |
 | `secrets.json` | khoá API, đã mã hoá DPAPI theo máy | tool tự tạo khi đăng nhập |
-| `cap-nhat.json` | khoá `dong_bo_git` (tu_keo, gio, ma_may…) | `cap-nhat.example.json` |
+| `cap-nhat.json` | `kho`, `nhanh`, `tu_dong_cap_nhat` (mặc định true), `dong_bo_git.ma_may`… | `cap-nhat.example.json` |
 | `vps.json`, `workspace/cai-dat.json` | dấu chế độ VPS, cài đặt vận hành | CAI-DAT-VPS.bat tạo |
 | `vm/config.json`, `vm/cai-dat-tool.json` | máy đăng: kênh, trình duyệt | `vm/config.example.json` |
 | `CHANNEL/<kênh>/` | kênh thật: kenh.yaml, chỉ số, nghiên cứu, hồ sơ video | `CHANNEL/_KHUON/` |
@@ -136,7 +183,7 @@ cho nó trong `.gitignore`.
   `chia-se/bai-hoc/<ma-may>-<ngach>.json`. Mỗi máy một tệp cho mỗi ngách, nên
   push không xung đột. Câu nào có tên kênh thật, video id, URL hoặc email thì
   bị bỏ.
-- Khi `keo` nhận bản mới, tệp của **máy khác** cùng ngách được chép vào
+- Khi máy tự nhận bản mới (`keo`), tệp của **máy khác** cùng ngách được chép vào
   `CHANNEL/_NHOM/<ngach>/bai-hoc-ngoai/`. `bai_hoc` đọc những tệp này làm tiên
   nghiệm "ngoài": yếu nhất, chỉ dùng khi kênh chưa có số riêng.
 - Tri thức dạng văn bản (con đường kênh thắng, thiết kế chiến lược, nghiên cứu

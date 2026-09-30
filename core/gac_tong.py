@@ -1641,6 +1641,18 @@ def _main(argv: Optional[List[str]] = None) -> int:
         print("Tự sửa{0}:".format(" (--thu: SẼ làm, chưa làm thật)" if thu else ""))
         for h in hanh_dong_tu_sua:
             print("  - {0}".format(h["chuyen_gi"]))
+    # Kiểm cập nhật (30/09/2026, `core/cap_nhat_git.py`): tự hãm nhịp ~30 phút,
+    # `git fetch` + đọc origin/main:VERSION; có bản mới + tự động bật + máy rảnh
+    # thì SINH tiến trình `dong_bo_git keo` tách rời (gác tổng không chờ nó).
+    # `--thu` không kiểm (không gọi mạng, không sinh gì).
+    if not thu:
+        try:
+            from core import cap_nhat_git  # noqa: PLC0415
+
+            print("")
+            print("Cập nhật: {0}".format(cap_nhat_git.nhip(goc)["tom_tat"]))
+        except Exception as loi_cn:  # noqa: BLE001 — kiểm cập nhật hỏng không được làm sập gác tổng
+            print("Cập nhật: không kiểm được ({0})".format(str(loi_cn)[:200]))
     return 0
 
 

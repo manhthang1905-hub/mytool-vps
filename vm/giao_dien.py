@@ -288,8 +288,32 @@ def cam_loi_tat():
 #: `core.nguon_cap_nhat` (xem `_doc_chinh_sach_cap_nhat`). Không đổi tên biến
 #: này để khỏi phải sửa `URL_PHIEN_BAN`/`URL_GOI_GITHUB` bên dưới, vốn vẫn
 #: dùng được cho máy có IPv4 khi `CHO_PHEP_CAP_NHAT` bật tay.
-KHO_GITHUB = "shopapivn/youtube"
-NHANH = "main"
+def _doc_kho_nhanh():
+    """(kho, nhánh) từ `cap-nhat.json` ở gốc MyTool (thư mục cha của vm/) — A17,
+    30/09/2026: không còn kho cứng. Thiếu tệp/khoá → kho chung mới, nhánh main."""
+    kho, nhanh = "manhthang1905-hub/mytool-vps", "main"
+    try:
+        with open(os.path.join(os.path.dirname(GOC), "cap-nhat.json"),
+                  encoding="utf-8-sig") as tep:
+            du = json.load(tep)
+        if isinstance(du, dict):
+            kho = str(du.get("kho") or "").strip().strip("/") or kho
+            nhanh = str(du.get("nhanh") or "").strip() or nhanh
+    except Exception:  # noqa: BLE001 — thiếu/hỏng thì dùng mặc định
+        pass
+    return kho, nhanh
+
+
+def _trong_mytool_git():
+    """vm/ nằm trong một MyTool cài từ git clone → mã vm/ cập nhật CÙNG MyTool
+    (`core/cap_nhat_git.py`, git ff-only). Bảng này KHÔNG được tự giải nén ZIP
+    đè lên — cây git bẩn thì cả hệ cập nhật chung dừng lại."""
+    goc_tool = os.path.dirname(GOC)
+    return os.path.exists(os.path.join(goc_tool, ".git")) and \
+        os.path.isfile(os.path.join(goc_tool, "shopapi_studio_qt.py"))
+
+
+KHO_GITHUB, NHANH = _doc_kho_nhanh()
 URL_PHIEN_BAN = ("https://raw.githubusercontent.com/{0}/{1}/VERSION"
                  .format(KHO_GITHUB, NHANH))
 URL_GOI_GITHUB = ("https://github.com/{0}/archive/refs/heads/{1}.zip"
@@ -309,6 +333,8 @@ def _duoc_phep_cap_nhat_github() -> bool:
     không chắc là gì, hay chưa cấu hình kho, thì không tự bật cập nhật.
     """
     goc_tool = os.path.dirname(GOC)
+    if _trong_mytool_git():
+        return False
     try:
         if not os.path.isfile(os.path.join(goc_tool, "vps.json")):
             return False
@@ -348,6 +374,13 @@ CHO_PHEP_CAP_NHAT = _duoc_phep_cap_nhat_github()
 
 
 def doc_phien_ban():
+    if _trong_mytool_git():
+        try:
+            with open(os.path.join(os.path.dirname(GOC), "VERSION"),
+                      encoding="utf-8-sig") as tep:
+                return tep.read().strip() or "?"
+        except OSError:
+            pass
     try:
         with open(TEP_PHIEN_BAN, encoding="utf-8") as tep:
             return tep.read().strip() or "?"
@@ -932,7 +965,9 @@ class BangDieuKhien:
             # TẮT từ 21/09/2026 — xem `CHO_PHEP_CAP_NHAT` ở đầu tệp.
             if not CHO_PHEP_CAP_NHAT and self._nhip in (2,):
                 self.dong_tt.config(
-                    text="bản {0} · cập nhật từ GitHub: đã tắt".format(
+                    text=("bản {0} · cập nhật cùng MyTool (Cài đặt → Cập nhật)"
+                          if _trong_mytool_git() else
+                          "bản {0} · cập nhật từ GitHub: đã tắt").format(
                         doc_phien_ban()))
             if CHO_PHEP_CAP_NHAT and (self._nhip in (2,) or self._nhip % 720 == 0):
                 import threading
