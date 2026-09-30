@@ -436,16 +436,14 @@ HUONG_DAN: Dict[str, Dict[str, object]] = {
     },
     "may-vi": {
         "tieu_de": "Cài đặt",
-        "tom_tat": "Ba việc ít dùng nhưng quan trọng: kiểm tra sức khỏe tool, "
-                   "sửa cài đặt và thêm một VPS.",
+        "tom_tat": "Việc ít dùng nhưng quan trọng: kiểm tra sức khỏe tool "
+                   "và sửa cài đặt. VPS mới: clone kho rồi chạy CAI-DAT-VPS.bat "
+                   "(README.md).",
         "buoc": [
             "Sức khỏe tool: mở khi thấy tool chậm, dừng hoặc không tự chạy. "
             "Ở đó có trạng thái máy nền, lỗi gần nhất, lịch và báo sự cố.",
             "Sửa và cài đặt: chỉ mở khi cần đổi đường nhận dữ liệu, tài khoản "
             "dịch vụ hoặc số dư.",
-            "Thêm VPS có ba bước trên màn hình: chọn tối đa 5 kênh; chọn chuyển "
-            "kênh đang làm hay tạo kênh mới từ khuôn; kiểm tra rồi tạo thư mục.",
-            "Chép nguyên thư mục vừa tạo sang VPS mới và chạy CAI-DAT-VM.bat.",
         ],
         "luu_y": [
             "Mã bot Telegram nằm trong tệp riêng (`bao-dong.json`), KHÔNG nằm "

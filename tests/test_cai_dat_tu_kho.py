@@ -40,20 +40,18 @@ def _chay_gia(ghi_lai):
 
 
 def _dung_du_may(tmp_path, m, *, co_setup=True, co_req_vm=True, co_mau=True):
-    """Dựng một cây thư mục MyTool tối giản (SETUP.bat, vm/requirements-vm.txt,
-    vm/config.example.json, vm/VPS-CLAUDE.md) trong `tmp_path`."""
+    """Dựng một cây thư mục MyTool tối giản (scripts/SETUP.bat,
+    vm/requirements-vm.txt, vm/config.example.json) trong `tmp_path`."""
     goc = tmp_path / "MyTool"
     (goc / "vm").mkdir(parents=True)
     if co_setup:
-        (goc / "SETUP.bat").write_text("@echo off\r\necho gia\r\n", encoding="ascii")
+        (goc / "scripts").mkdir()
+        (goc / "scripts" / "SETUP.bat").write_text("@echo off\r\necho gia\r\n", encoding="ascii")
     if co_req_vm:
         (goc / "vm" / "requirements-vm.txt").write_text("requests\nwebsocket-client\n", encoding="ascii")
     if co_mau:
         (goc / "vm" / "config.example.json").write_text(
             json.dumps({"tram": "", "che_do_phien": False, "kenh": ""}), encoding="utf-8")
-    (goc / "vm" / "VPS-CLAUDE.md").write_text(
-        "tối đa 10 kênh.\nRepo (cấu hình trong `cap-nhat.json` ở gốc MyTool) đây.\n",
-        encoding="utf-8")
     return goc
 
 
@@ -71,7 +69,7 @@ def test_cai_dat_vps_bat_crlf_thuan_va_ascii():
     b = open(duong, "rb").read()
     assert b.count(b"\n") == b.count(b"\r\n"), "CAI-DAT-VPS.bat có dòng LF trần"
     assert all(byte <= 127 for byte in b), "CAI-DAT-VPS.bat phải thuần ASCII"
-    assert b"call \"%~dp0SETUP.bat\" < NUL" in b, (
+    assert b"call \"%~dp0scripts\\SETUP.bat\" < NUL" in b, (
         "phải gọi SETUP.bat với stdin rỗng để pause cuối không treo cửa sổ")
 
 
@@ -98,7 +96,7 @@ def test_chay_setup_bat_goi_qua_chay(tmp_path, m):
     goi = []
     ok = m.chay_setup_bat(str(goc), bao=lambda _d: None, chay=_chay_gia(goi))
     assert ok is True
-    assert goi and goi[0][-1] == str(goc / "SETUP.bat")
+    assert goi and goi[0][-1] == str(goc / "scripts" / "SETUP.bat")
 
 
 def test_chay_setup_bat_thieu_tep_khong_sap(tmp_path, m):
@@ -217,7 +215,7 @@ def test_tao_thu_muc_done(tmp_path, m):
     assert (goc / "DONE").is_dir()
 
 
-# ── CLAUDE.local.md từ vm/VPS-CLAUDE.md ─────────────────────────────────
+# ── CLAUDE.local.md: luật riêng máy (luật chung ở CLAUDE.md) ──────────────
 
 
 def test_dat_ho_so_phat_trien_sinh_claude_local(tmp_path, m):
@@ -246,6 +244,28 @@ def test_dat_ho_so_phat_trien_doc_repo_tu_cap_nhat_json(tmp_path, m):
     assert "cấu hình trong `cap-nhat.json`" not in noi_dung  # đã bị thay bằng repo thật
 
 
+def test_dat_ho_so_phat_trien_tro_luat_chung_claude_md(tmp_path, m):
+    goc = _dung_du_may(tmp_path, m)
+    m.dat_ho_so_phat_trien(str(goc), bao=lambda _d: None)
+    assert "`CLAUDE.md`" in (goc / "CLAUDE.local.md").read_text(encoding="utf-8")
+
+
+def test_dat_ho_so_phat_trien_giu_ban_nguoi_da_sua(tmp_path, m):
+    goc = _dung_du_may(tmp_path, m)
+    (goc / "CLAUDE.local.md").write_text("# Luật riêng\n- mạng chỉ IPv6\n", encoding="utf-8")
+    m.dat_ho_so_phat_trien(str(goc), bao=lambda _d: None)
+    assert "mạng chỉ IPv6" in (goc / "CLAUDE.local.md").read_text(encoding="utf-8")
+
+
+def test_dat_ho_so_phat_trien_thay_ban_chep_tu_khuon_cu(tmp_path, m):
+    goc = _dung_du_may(tmp_path, m)
+    (goc / "CLAUDE.local.md").write_text(m._DAU_BAN_CU + "\n\nluật cũ trùng CLAUDE.md\n",
+                                         encoding="utf-8")
+    m.dat_ho_so_phat_trien(str(goc), bao=lambda _d: None)
+    moi = (goc / "CLAUDE.local.md").read_text(encoding="utf-8")
+    assert "luật cũ trùng" not in moi and moi.startswith(m._TIEU_DE_LOCAL)
+
+
 def test_dat_ho_so_phat_trien_khong_co_cap_nhat_json_van_doc_duoc(tmp_path, m):
     goc = _dung_du_may(tmp_path, m)
     m.dat_ho_so_phat_trien(str(goc), bao=lambda _d: None)
@@ -262,10 +282,30 @@ def test_dat_ho_so_phat_trien_khong_ghi_de_nhat_ky_da_co(tmp_path, m):
     assert duong_nk.read_text(encoding="utf-8") == "noi dung cu, dung dung vao"
 
 
-# ── 3 lịch qua core/lich_tu_chay (chỉ GỌI hàm có sẵn, không gọi schtasks thật) ─
+# ── 5 lịch qua core/lich_tu_chay (chỉ GỌI hàm có sẵn, không gọi schtasks thật) ─
 
 
-def test_dang_ky_lich_goi_hai_ham_co_san(tmp_path, m, monkeypatch):
+@pytest.fixture(autouse=True)
+def _lich_gia(monkeypatch):
+    """Mọi bài trong tệp này: KHÔNG bao giờ gọi `schtasks` thật. Hai lịch
+    điều phối + gác tổng mặc định giả OK; bài nào cần thì tự thay."""
+    from core import lich_tu_chay
+    goi = {}
+
+    def _dieu_phoi(g, *a, **k):
+        goi["dieu_phoi"] = g
+        return True, "ok3"
+
+    def _gac_tong(g, *a, **k):
+        goi["gac_tong"] = g
+        return True, "ok4"
+
+    monkeypatch.setattr(lich_tu_chay, "dang_ky_dieu_phoi", _dieu_phoi)
+    monkeypatch.setattr(lich_tu_chay, "dang_ky_gac_tong", _gac_tong)
+    return goi
+
+
+def test_dang_ky_lich_goi_du_nam_viec(tmp_path, m, monkeypatch, _lich_gia):
     goc = _dung_du_may(tmp_path, m)
     from core import lich_tu_chay
 
@@ -286,6 +326,7 @@ def test_dang_ky_lich_goi_hai_ham_co_san(tmp_path, m, monkeypatch):
     assert ok is True
     assert goi["dang_ky"] == (str(goc), "03:30")
     assert goi["canh_tram"] == (str(goc), 7)
+    assert _lich_gia == {"dieu_phoi": str(goc), "gac_tong": str(goc)}
 
 
 def test_dang_ky_lich_thu_khong_goi_gi(tmp_path, m, monkeypatch):
@@ -297,6 +338,8 @@ def test_dang_ky_lich_thu_khong_goi_gi(tmp_path, m, monkeypatch):
 
     monkeypatch.setattr(lich_tu_chay, "dang_ky", _no_call)
     monkeypatch.setattr(lich_tu_chay, "dang_ky_canh_tram", _no_call)
+    monkeypatch.setattr(lich_tu_chay, "dang_ky_dieu_phoi", _no_call)
+    monkeypatch.setattr(lich_tu_chay, "dang_ky_gac_tong", _no_call)
     ok = m.dang_ky_lich(str(goc), bao=lambda _d: None, thu=True)
     assert ok is True
 

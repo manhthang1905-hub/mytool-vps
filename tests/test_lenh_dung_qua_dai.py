@@ -261,7 +261,7 @@ class TestBaoDamFfmpeg:
 
     def test_setup_bat_goi_dung_cua_nay(self):
         goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(goc, "SETUP.bat"), encoding="utf-8", errors="replace") as tep:
+        with open(os.path.join(goc, "scripts", "SETUP.bat"), encoding="utf-8", errors="replace") as tep:
             chu = tep.read()
         assert "bao_dam_ffmpeg" in chu, "SETUP phải TẢI FFmpeg đủ, không chỉ tìm"
 

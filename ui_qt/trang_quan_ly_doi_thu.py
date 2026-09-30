@@ -382,8 +382,8 @@ class TrangDanhBa(QWidget):
             self._app.show_message(
                 "Đã giao việc — nhưng máy ảo đang KHÔNG gọi về",
                 "Việc #{0} và #{1} đã xếp vào hộp, máy ảo của kênh {2} sẽ nhận ngay khi gọi về. "
-                "Nhưng {3} — agent trên máy ảo có đang chạy không? Trên máy ảo: nhấp đúp CHAY-NGAM.vbs "
-                "trong thư mục vm (hoặc khởi động lại máy ảo). Dòng trạng thái dưới nút sẽ tự đổi khi "
+                "Nhưng {3} — agent trên máy ảo có đang chạy không? Mở MyTool (CHAY-GON.vbs) để nó "
+                "tự nuôi agent, hoặc khởi động lại máy. Dòng trạng thái dưới nút sẽ tự đổi khi "
                 "máy ảo nhận việc.".format(so_studio, so_tc, self._kenh,
                                            "máy ảo chưa gọi về lần nào từ lúc mở tool" if giay is None
                                            else "lần gọi về gần nhất đã {0} phút trước".format(giay // 60)))

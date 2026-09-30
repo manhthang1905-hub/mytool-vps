@@ -36,7 +36,7 @@ from PyQt5.QtGui import (
     QDesktopServices, QIcon, QKeySequence, QPixmap,
 )
 from PyQt5.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QHeaderView, QInputDialog,
+    QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QInputDialog,
     QLineEdit, QMenu, QMessageBox, QPlainTextEdit, QSpinBox, QTableWidget,
     QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -58,7 +58,7 @@ from .widgets import (
     HangXuongDong, mo_thu_muc, nhan, nut_chinh, nut_phu, the, tieu_de_trang,
 )
 
-__all__ = ["TrangPhanTich", "TrangDoiThu", "TrangMayVM", "HopChonKenhVPS"]
+__all__ = ["TrangPhanTich", "TrangDoiThu", "TrangMayVM"]
 
 #: Nhãn các mục con — xếp theo dòng chảy: xem ngách (Đối thủ) → content họ làm → tuyến → xem mình
 #: (Chỉ số kênh) → chốt video làm tiếp (Công thức V7). Bốn mục đầu là NGUỒN DỮ LIỆU; mục cuối là
@@ -1414,115 +1414,6 @@ def _view_trung_vi(kenh) -> int:
     return int(statistics.median(view)) if view else 0
 
 
-class HopChonKenhVPS(QDialog):
-    """Chọn kênh mang theo VPS rồi gói CẢ TOOL vào `vm/goi-vps/` — 18/09/2026,
-    bước E của `vm/KE-HOACH-5-KENH.md`: *"đóng gói kênh vào vps và kênh đó sẽ
-    tự chạy"*.
-
-    Khác hẳn "Tạo bộ cài VM" (chỉ điền `vm/config.json`): nút này gọi
-    `core.goi_vps.dong_goi_vps`, nặng hơn nhiều (chép cả mã tool, dữ liệu
-    kênh, bộ nghe Whisper, FFmpeg) nên PHẢI chạy ở luồng nền — bấm xong không
-    được để cửa sổ đứng hình, và người dùng cần thấy tiến trình vì việc này
-    có thể mất vài phút với kênh nhiều dữ liệu.
-    """
-
-    def __init__(self, app, kenh_mac_dinh: str = "", cha=None):
-        super().__init__(cha)
-        self.setWindowTitle("Tạo bộ cài VPS")
-        self.setMinimumWidth(420)
-        self._app = app
-        self._dang_chay = False
-
-        v = QVBoxLayout(self)
-        v.setSpacing(8)
-        v.addWidget(nhan(
-            "Gói CẢ TOOL (không chỉ vm/) cho một VPS chạy độc lập: chọn kênh "
-            "mang theo — mỗi kênh chép TOÀN BỘ dữ liệu (kịch bản, đối thủ, "
-            "chỉ số, kế hoạch đăng), kênh đó coi VPS là NHÀ MỚI. Việc này có "
-            "thể mất vài phút và vài trăm MB tới vài GB, tuỳ dữ liệu kênh.",
-            "muted"))
-
-        self._o_kenh: Dict[str, QCheckBox] = {}
-        for ma in liet_ke_kenh(app.base_dir):
-            o = QCheckBox(ma)
-            o.setChecked(ma == kenh_mac_dinh)
-            v.addWidget(o)
-            self._o_kenh[ma] = o
-
-        self._nhan_trang_thai = nhan("", "muted")
-        self._nhan_trang_thai.setWordWrap(True)
-        v.addWidget(self._nhan_trang_thai)
-
-        self._log = QPlainTextEdit()
-        self._log.setReadOnly(True)
-        self._log.setMaximumHeight(160)
-        self._log.hide()
-        v.addWidget(self._log)
-
-        hang = HangXuongDong()
-        self._nut_tao = nut_chinh("Tạo bộ cài VPS", self._bat_dau, rong=150)
-        hang.addWidget(self._nut_tao)
-        self._nut_dong = nut_phu("Đóng", self.reject, rong=90)
-        hang.addWidget(self._nut_dong)
-        v.addLayout(hang)
-
-    def _kenh_da_chon(self) -> List[str]:
-        return [ma for ma, o in self._o_kenh.items() if o.isChecked()]
-
-    def _bat_dau(self) -> None:
-        if self._dang_chay:
-            return
-        cac_kenh = self._kenh_da_chon()
-        if not cac_kenh:
-            self._app.show_message("Chưa chọn kênh",
-                                   "Tích ít nhất một kênh để mang theo VPS.")
-            return
-        self._dang_chay = True
-        self._nut_tao.setEnabled(False)
-        self._nut_tao.setText("Đang gói…")
-        self._log.show()
-        self._log.setPlainText("")
-        threading.Thread(target=self._chay_goi, args=(cac_kenh,),
-                         daemon=True).start()
-
-    def _ghi(self, dong: str) -> None:
-        """Gọi được từ luồng nền — chữ luôn đi qua luồng giao diện."""
-        self._app.goi_tren_luong_ve(lambda: self._log.appendPlainText(dong))
-
-    def _chay_goi(self, cac_kenh: List[str]) -> None:
-        """**Luồng nền.** Không được gọi API, không được đụng giao diện trực
-        tiếp — mọi cập nhật đi qua :meth:`_ghi` / ``goi_tren_luong_ve``."""
-        from core import goi_vps  # noqa: PLC0415
-
-        try:
-            ket = goi_vps.dong_goi_vps(self._app.base_dir,
-                                       kenh_mang_theo=cac_kenh, on_log=self._ghi)
-        except Exception as loi:  # noqa: BLE001 — báo thật, không để cửa sổ chết
-            self._app.goi_tren_luong_ve(lambda: self._xong(loi=str(loi)))
-            return
-        self._app.goi_tren_luong_ve(lambda: self._xong(ket=ket))
-
-    def _xong(self, ket: Optional[dict] = None, loi: str = "") -> None:
-        self._dang_chay = False
-        self._nut_tao.setEnabled(True)
-        self._nut_tao.setText("Tạo bộ cài VPS")
-        if loi:
-            self._nhan_trang_thai.setText("Lỗi: " + loi)
-            self._app.show_message("Gói bộ cài VPS không xong", loi)
-            return
-        thu_muc = str((ket or {}).get("thu_muc") or "")
-        self._nhan_trang_thai.setText("Đã gói xong.")
-        if thu_muc:
-            mo_thu_muc(os.path.dirname(thu_muc))
-        self._app.show_message(
-            "Đã tạo bộ cài VPS",
-            "Chép CẢ thư mục vm/ vừa mở sang VPS (đặt cạnh các trình duyệt "
-            "kênh <mã>\\<mã>.exe), rồi nhấp đúp CAI-DAT-VM.bat — bộ cài nhận "
-            "ra goi-vps/ và tự cài trọn vẹn: mã tool, thư viện, bộ nghe, "
-            "FFmpeg, rồi tự mở MyTool lên.")
-        self.accept()
-
-
 class TrangMayVM(QWidget):
     """Nhìn và điều khiển các máy ảo của kênh — giai đoạn 1 của `vm/KE-HOACH.md`.
 
@@ -1589,27 +1480,6 @@ class TrangMayVM(QWidget):
         chu.setMinimumWidth(1)
         v.addWidget(chu)
 
-        # Nút xuống hàng riêng — dồn chung hàng chọn kênh là hàng đó đòi hơn
-        # 760px và cả trang không co được (`test_bo_cuc` canh mốc này).
-        d0b = QHBoxLayout()
-        nut_goi = nut_chinh("Tạo bộ cài VM", self._tao_bo_cai, rong=150)
-        nut_goi.setToolTip(
-            "Điền sẵn địa chỉ máy này và mã kênh vào vm/config.json rồi mở "
-            "thư mục vm/ — chép cả thư mục đó sang máy ảo, nhấp đúp "
-            "CAI-DAT-VM.bat là nối luôn, không phải gõ gì.")
-        d0b.addWidget(nut_goi)
-        nut_vps = nut_phu("Tạo bộ cài VPS", self._tao_bo_cai_vps, rong=150)
-        nut_vps.setToolTip(
-            "Gói CẢ TOOL (không chỉ vm/) kèm dữ liệu kênh, bộ nghe Whisper "
-            "và FFmpeg vào vm/goi-vps/ — cho một VPS chạy kênh 24/7 độc lập, "
-            "khác hẳn 'Tạo bộ cài VM' (chỉ đăng/trả lời cmt).")
-        d0b.addWidget(nut_vps)
-        # Hai nút "Quét Studio ngay" và "Quét trang chủ" đã DỜI sang tab Nghiên cứu ›
-        # Đối thủ và GỘP thành một (chủ dự án 05/09/2026: "bỏ cái quét studio ở vps mà
-        # để ở tab phân tích nghiên cứu rồi làm đồng bộ 1 nút đủ chức năng"). Tab này
-        # chỉ còn thiết lập máy ảo; máy ảo vẫn là tay quét, nút bấm nằm cạnh hộp thư.
-        d0b.addStretch(1)
-        v.addLayout(d0b)
         # Hàng kế hoạch đăng — giai đoạn 4 (nửa đầu): kế hoạch nằm ở
         # CHANNEL/<kênh>/ke-hoach-dang/ke-hoach.csv, sửa bằng Excel trong lúc
         # giao diện soạn chưa xây; agent tải về máy ảo qua trạm.
@@ -2050,57 +1920,6 @@ class TrangMayVM(QWidget):
         duong = duong_ke_hoach(self._app.base_dir, kenh)
         os.makedirs(os.path.dirname(duong), exist_ok=True)
         mo_thu_muc(os.path.dirname(duong))
-
-    def _tao_bo_cai(self) -> None:
-        """Điền sẵn vm/config.json rồi mở thư mục vm/ — chép đi là nối được.
-
-        Chủ dự án, 02/09/2026: *"bên tool chỉ cần setup để thư mục vm chuẩn
-        — ấn cái gì — sau đó copy sang bên vm là được kết nối"*.
-        """
-        import os
-
-        from core import vm_cai_dat
-        from core.chi_so_ytb import tram as tr
-
-        kenh = self._chon_kenh.currentText().strip()
-        if not kenh:
-            self._app.show_message("Chưa chọn kênh",
-                                   "Chọn kênh cho máy ảo này trước đã.")
-            return
-        ung = tr.dia_chi_dong_goi(tr.CONG_MAC_DINH)
-        if not ung:
-            self._app.show_message(
-                "Máy này chưa có địa chỉ mạng",
-                "Không tìm thấy địa chỉ nào để máy ảo gọi về — kiểm tra lại "
-                "mạng của máy này rồi bấm lại.")
-            return
-        duong = vm_cai_dat.dong_goi_vm(self._app.base_dir, kenh, ung)
-        # Một nút lo hết: cổng nhận cũng tự mở luôn, không bắt người dùng
-        # ghé mục Chỉ số kênh bật tay (02/09: "đừng nhiều tab nhiều mục").
-        try:
-            loi_tram = self._chi_so.bao_dam_bat()
-        except Exception as e:  # noqa: BLE001
-            loi_tram = str(e)
-        mo_thu_muc(os.path.dirname(duong))
-        nhac = ("\n\nCổng nhận đang mở sẵn — không phải bật gì thêm."
-                if not loi_tram else
-                "\n\nCHÚ Ý — chưa mở được cổng nhận: " + loi_tram)
-        self._app.show_message(
-            "Đã tạo bộ cài cho " + kenh,
-            "Chép CẢ thư mục vm/ vừa mở sang máy ảo (đè lên bản cũ nếu có, "
-            "đặt cạnh Chrome của kênh), rồi nhấp đúp CAI-DAT-VM.bat — hết, "
-            "không phải gõ gì. Từ đó máy ảo bật lên là tự chạy." + nhac)
-
-    def _tao_bo_cai_vps(self) -> None:
-        """Mở hộp chọn kênh rồi gói CẢ TOOL cho VPS (`core/goi_vps.py`).
-
-        Khác "Tạo bộ cài VM": việc này NẶNG (chép mã + dữ liệu kênh + bộ
-        nghe + FFmpeg) nên chạy ở luồng nền bên trong hộp thoại, không chặn
-        cửa sổ chính — xem :class:`HopChonKenhVPS`.
-        """
-        kenh_mac_dinh = self._chon_kenh.currentText().strip()
-        hop = HopChonKenhVPS(self._app, kenh_mac_dinh, cha=self)
-        hop.exec_()
 
     def _ve(self) -> None:
         tram = self._tram()

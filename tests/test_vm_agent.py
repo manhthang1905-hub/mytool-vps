@@ -132,20 +132,18 @@ class TestAgentGoiVe:
 
 
 def test_thu_muc_vm_du_bo():
-    # 02/09: vm/ là TOOL VM đầy đủ (chủ dự án: "1 tool bên vm cài là chạy
-    # được các tính năng") — bảng điều khiển + 3 con + bộ cài + ảnh mẫu.
+    # vm/ có đủ agent + máy đăng/bình luận + ảnh mẫu. Bộ cài riêng của vm/
+    # (CAI-DAT-VM.bat, CHAY-NGAM.vbs, CHAY-AGENT.bat) đã bỏ 01/10/2026: VPS cài
+    # bằng CAI-DAT-VPS.bat ở gốc, giao diện (core/giam_sat_vm) nuôi agent.
     for ten in ("agent.py", "config.example.json",
-                "CHAY-AGENT.bat", "CAI-DAT-VM.bat", "CHAY-NGAM.vbs",
                 "nguon_tool.py", "ghep_tool_dang.py", "giao_dien.py",
                 "may_dang.py", "may_cmt.py", "requirements-vm.txt",
                 "logo.ico"):
         assert (GOC / "vm" / ten).exists(), "thiếu vm/" + ten
     assert (GOC / "vm" / "icon" / "chonfile.png").exists(), \
         "máy đăng cần ảnh mẫu PyAutoGUI trong vm/icon/"
-    for ten_bat in ("CHAY-AGENT.bat", "CAI-DAT-VM.bat"):
-        bat = (GOC / "vm" / ten_bat).read_bytes()
-        assert bat.count(b"\n") == bat.count(b"\r\n") and all(b <= 127 for b in bat), \
-            ten_bat + ": .bat phải CRLF thuần + ASCII — xem bài học 01/09"
+    for ten in ("CAI-DAT-VM.bat", "CHAY-NGAM.vbs", "CHAY-AGENT.bat", "cai_dat_vm.py"):
+        assert not (GOC / "vm" / ten).exists(), "vm/" + ten + " thuộc luồng cài cũ, đã bỏ"
 
 
 class TestLichHangNgay:
@@ -943,27 +941,6 @@ class TestVeSinhDaiHan:
         assert agent.mot_minh(cong=cong,
                               duong_pid=str(tmp_path / "agent.pid")) is True
 
-    def test_dang_ky_tu_chay_ghi_vao_khoi_dong(self, tmp_path, monkeypatch):
-        import importlib.util
-
-        khoi = tmp_path / "Microsoft" / "Windows" / "Start Menu" / \
-            "Programs" / "Startup"
-        os.makedirs(khoi)
-        monkeypatch.setenv("APPDATA", str(tmp_path))
-        monkeypatch.syspath_prepend(str(GOC / "vm"))
-        spec = importlib.util.spec_from_file_location(
-            "vm_cai_dat_vm", GOC / "vm" / "cai_dat_vm.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        duong = mod.dang_ky_tu_chay()
-        assert duong and os.path.isfile(duong)
-        du_lieu = open(duong, "rb").read()
-        assert b"\r\n" in du_lieu, ".bat phải CRLF (bài SETUP.bat)"
-        assert b"CHAY-NGAM.vbs" in du_lieu, "phải trỏ bản chạy ngầm"
-        # CHAY-NGAM.vbs phải có thật và cũng CRLF — không thì lối tắt trỏ ma.
-        vbs = open(GOC / "vm" / "CHAY-NGAM.vbs", "rb").read()
-        assert b"\r\n" in vbs and b"CAI-DAT-VM.bat" in vbs
-
 
 class TestMotConDuyNhat:
     """02/09: 'tích hợp cái tool upload để tao bật tool đó là all mọi thứ' —
@@ -1084,29 +1061,6 @@ class TestGuiVaKeyCuaTool:
         assert agent._TOOL_DANG["tt"] is None, \
             "có GUI nằm cạnh thì GUI là người nuôi, agent đứng ngoài"
 
-    def test_khoi_dong_tro_gui_khi_co(self, tmp_path, monkeypatch):
-        import importlib.util
-
-        khoi = tmp_path / "Microsoft" / "Windows" / "Start Menu" / \
-            "Programs" / "Startup"
-        os.makedirs(khoi)
-        monkeypatch.setenv("APPDATA", str(tmp_path))
-        monkeypatch.syspath_prepend(str(GOC / "vm"))
-        spec = importlib.util.spec_from_file_location(
-            "vm_cai_dat_vm2", GOC / "vm" / "cai_dat_vm.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        goc_vm = tmp_path / "upload" / "vm"
-        os.makedirs(goc_vm)
-        (tmp_path / "upload" / "run.bat").write_bytes(b"@echo off\r\n")
-        (tmp_path / "upload" / "tool_gui.py").write_text("pass")
-        monkeypatch.setattr(mod, "GOC", str(goc_vm))
-        duong = mod.dang_ky_tu_chay()
-        du_lieu = open(duong, "rb").read()
-        assert b"run.bat" in du_lieu, \
-            "có GUI thì máy bật lên phải mở GUI (GUI nuôi cả agent)"
-        assert b"CHAY-NGAM" not in du_lieu
-
 
 class TestToolVmDayDu:
     """02/09: 'tao cần 1 tool bên vm... cài là chạy được các tính năng' —
@@ -1126,8 +1080,7 @@ class TestToolVmDayDu:
             with zipfile.ZipFile(io_mod.BytesIO(du)) as goi:
                 ten = set(goi.namelist())
             for can in ("giao_dien.py", "agent.py", "may_dang.py",
-                        "may_cmt.py", "nguon_tool.py", "CAI-DAT-VM.bat",
-                        "logo.ico"):
+                        "may_cmt.py", "nguon_tool.py", "logo.ico"):
                 assert can in ten, "gói thiếu " + can
             assert any(t.startswith("icon/") for t in ten), "gói thiếu ảnh mẫu"
             # Đồ của RIÊNG cái máy không được phát đi

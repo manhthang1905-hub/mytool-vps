@@ -4,7 +4,7 @@
 mọi bài dưới đây chỉ kiểm phần LOGIC KIỂM TRA (đủ/thiếu điều kiện) và không
 được gọi mạng, không mở Chrome thật (đúng luật cứng của phiên vá này). Phần
 mở Chrome/chạy OAuth thật (`may_cmt.setup_channel` / `_setup_thu_cong`) không
-test được ở đây — cần chạy tay theo `vm/HUONG-DAN-OAUTH.md`.
+test được ở đây — cần chạy tay theo `docs/DANG-VA-BINH-LUAN.md`.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def test_thieu_thu_vien_thi_bao_ro_khong_dung_mang(setup_oauth, may_cmt_gia, mon
     monkeypatch.setattr(may_cmt_gia, "_THIEU_THU_VIEN", "no module googleapiclient")
     ok, cau = setup_oauth.kiem_tra_truoc("TL1-T7")
     assert ok is False
-    assert "CAI-DAT-VM.bat" in cau
+    assert "CAI-DAT-VPS.bat" in cau
 
 
 def test_da_co_token_thi_khong_lam_lai(setup_oauth, may_cmt_gia):
@@ -69,7 +69,7 @@ def test_thieu_client_secret_thi_tro_toi_huong_dan(setup_oauth, may_cmt_gia):
     ok, cau = setup_oauth.kiem_tra_truoc("TL1-T7")
     assert ok is False
     assert "CHUA co file OAuth client" in cau
-    assert "HUONG-DAN-OAUTH.md" in cau
+    assert "DANG-VA-BINH-LUAN.md" in cau
 
 
 def test_du_dieu_kien_tra_ve_duong_client(setup_oauth, may_cmt_gia):

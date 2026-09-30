@@ -2,7 +2,7 @@
 '  My Tool — BẬT KHÔNG CÓ CỬA SỔ ĐEN
 ' ===========================================================================
 '
-'  Nhấp đúp file này thay cho CHAY-QT.bat. Không hiện cửa sổ dòng lệnh nào.
+'  Nhấp đúp file này thay cho scripts\CHAY-QT.bat. Không hiện cửa sổ dòng lệnh nào.
 '
 '  ── Vì sao có file này ─────────────────────────────────────────────────────
 '
@@ -15,7 +15,7 @@
 '  Giữ cả hai là cố ý:
 '
 '      CHAY-GON.vbs  → dùng hằng ngày, không cửa sổ
-'      CHAY-QT.bat   → khi có trục trặc, xem thẳng thông báo trong cửa sổ đen
+'      scripts\CHAY-QT.bat → khi có trục trặc, xem thẳng thông báo trong cửa sổ đen
 '
 '  Bỏ hẳn CHAY-QT.bat thì lúc hỏng sẽ không còn cách nào nhìn thấy lỗi.
 '
@@ -59,7 +59,7 @@ shell.Environment("PROCESS")("VEO3TOP_LOCALE") = "vi-VN"
 ' cập nhật Windows bật lại "App execution aliases", đẩy bản giả lên trước). Nên
 ' KHÔNG dựa vào PATH nữa: tìm thẳng ở đúng chỗ Python đã cài, và bỏ qua mọi thứ
 ' nằm trong WindowsApps. Môi trường ảo của tool được ưu tiên trước để chạy đúng
-' bộ thư viện SETUP.bat đã cài, không phải bộ nào đó cài lẫn ở ngoài.
+' bộ thư viện scripts\SETUP.bat đã cài, không phải bộ nào đó cài lẫn ở ngoài.
 Dim lad
 lad = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%")
 pythonw = ""
@@ -103,9 +103,9 @@ If pythonw = "" Then
         "Thường gặp nhất: lệnh ""python"" đang trỏ vào bản GIẢ của Microsoft " & _
         "Store (báo ""Python was not found...""), không phải Python thật — hay " & _
         "xảy ra sau một bản cập nhật Windows." & vbCrLf & vbCrLf & _
-        "Cách sửa nhanh: nhấp đúp SETUP.bat một lần. Nó tự tìm lại Python thật, " & _
+        "Cách sửa nhanh: nhấp đúp CAI-DAT-VPS.bat một lần. Nó tự tìm lại Python thật, " & _
         "tạo lại lối tắt và mở tool." & vbCrLf & vbCrLf & _
-        "Nếu vẫn lỗi, mở CHAY-QT.bat — nó hiện cửa sổ đen và nói rõ đang thiếu gì.", _
+        "Nếu vẫn lỗi, mở scripts\CHAY-QT.bat — nó hiện cửa sổ đen và nói rõ đang thiếu gì.", _
         vbCritical, "My Tool"
     WScript.Quit 1
 End If
@@ -141,7 +141,7 @@ If ma <> 0 Then
     End If
     If Trim(chiTiet) = "" Then
         chiTiet = "Tool đóng lại ngay khi vừa mở (mã " & ma & ")." & vbCrLf & vbCrLf & _
-                  "Hãy nhấp đúp CHAY-QT.bat — nó hiện cửa sổ đen và nói rõ đang thiếu gì."
+                  "Hãy nhấp đúp scripts\CHAY-QT.bat — nó hiện cửa sổ đen và nói rõ đang thiếu gì."
     End If
     MsgBox chiTiet, vbCritical, "My Tool"
     WScript.Quit ma

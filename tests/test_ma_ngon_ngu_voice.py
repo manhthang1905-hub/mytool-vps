@@ -99,7 +99,7 @@ def test_khong_hua_dieu_chua_lam_duoc():
     cam = ("ngắt nghỉ tự nhiên hơn", "đọc hỏng cả bài", "giọng ngắt nghỉ theo")
     # Chỉ soi chữ KHÁCH THẤY; bình luận trong mã được phép kể lại phép đo.
     for rel in ("ui_qt/trang_voice.py", "ui_qt/huong_dan.py", "ui_qt/kenh.py",
-                "CHANNEL/README.md"):
+                "docs/KENH-VA-NGACH.md"):
         chu = io.open(os.path.join(goc, rel), encoding="utf-8").read()
         for xau in cam:
             assert xau not in chu, (

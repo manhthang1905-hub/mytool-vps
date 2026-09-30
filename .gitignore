@@ -8,7 +8,7 @@
 #
 #  Lớp kiểm thứ hai: `python -m core.dong_bo_git day` chạy
 #  `core/kiem_phat_hanh.py` + quét thêm (khoá, email, tên kênh thật, video id
-#  của máy) trước mỗi lần đẩy. Xem docs/PHAT-TRIEN-NHIEU-VPS.md.
+#  của máy) trước mỗi lần đẩy. Xem docs/PHAT-TRIEN.md.
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── 1) Chặn mọi thứ ở gốc ──────────────────────────────────────────────────
@@ -24,22 +24,22 @@
 !/vm/
 !/tool-catalog/
 !/mau-capcut/
+!/scripts/
 
 # Tệp chạy ở gốc — khai TỪNG TÊN (tệp .py thử nghiệm ở gốc không tự lên kho).
+# Công cụ phụ ít dùng nằm trong scripts/, không ở gốc.
 !/shopapi_studio_qt.py
 !/tu_chay.py
 !/tram_nen.py
-!/cap-nhat.py
-!/*.bat
-!/*.vbs
-!/*.ps1
+!/CAI-DAT-VPS.bat
+!/CHAY-GON.vbs
 !/pytest.ini
 !/requirements*.txt
 
 # ── 3) Mở: tài liệu + khuôn ────────────────────────────────────────────────
 !/docs/
 !/chia-se/
-!/README*.md
+!/README.md
 !/CHANGELOG.md
 !/VERSION
 !/LICENSE
@@ -51,7 +51,6 @@
 # INSIGHT-CHON-CONTENT.md). Thư mục kênh thật (TL1-T7, K1, …) KHÔNG BAO GIỜ lên.
 !/CHANNEL/
 /CHANNEL/*
-!/CHANNEL/README.md
 !/CHANNEL/_KHUON/
 !/CHANNEL/_NHOM/
 /CHANNEL/_NHOM/*/*
@@ -61,11 +60,6 @@
 # vm/: mã + khuôn; trạng thái/nhật ký/cấu hình máy thật thì không.
 /vm/*
 !/vm/*.py
-!/vm/*.bat
-!/vm/*.vbs
-!/vm/*.md
-# Nhật ký kế hoạch 01–18/09: chỉ giữ trên máy gốc, không lên kho (gọn kho 30/09).
-/vm/KE-HOACH*.md
 !/vm/requirements*.txt
 !/vm/config.example.json
 !/vm/studio-selectors.json
@@ -76,10 +70,6 @@
 # vm/tien-ich/: bản extension agent tải về lúc chạy (phẳng hoặc theo kênh) —
 # không lên kho. Nguồn thật: core/ytb_extension/ (gọn kho 30/09).
 /vm/tien-ich/
-/vm/CLAUDE.md
-# Bộ cài VPS ~1,5 GB (mã + dữ liệu kênh thật + Whisper) — đã bị `/vm/*` chặn,
-# khai lại cho rõ (tests/test_goi_vps.py).
-/vm/goi-vps/
 
 # ── 4) Chặn ở MỌI độ sâu (thắng các dòng mở ở trên) ─────────────────────────
 __pycache__/

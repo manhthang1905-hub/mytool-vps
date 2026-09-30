@@ -246,39 +246,6 @@ def duoi_log(duong, so_byte=60 * 1024):
         return "(lỗi đọc log: {0})".format(loi)
 
 
-def cam_loi_tat():
-    """Tự cắm lối tắt như MyTool: 'MyTool VM' ngoài màn hình + Khởi động.
-
-    Cả hai trỏ CHAY-NGAM.vbs (mở ẩn, tự tìm Python) và mang ĐÚNG logo của
-    MyTool (vm/logo.ico — chủ dự án 02/09: "để logo như bên MyTool đi").
-    `CreateShortcut` mở được cả lối tắt ĐÃ CÓ, nên máy đã cắm từ bản trước
-    cũng được thay logo — không chỉ máy cắm mới. Dọn lối tắt đời cũ trong
-    Khởi động để không mở trùng."""
-    vbs = os.path.join(GOC, "CHAY-NGAM.vbs").replace("'", "''")
-    ico = os.path.join(GOC, "logo.ico").replace("'", "''")
-    ps = (
-        "$sh=New-Object -ComObject WScript.Shell;"
-        "$ico='{ico}';"
-        "$st=[Environment]::GetFolderPath('Startup');"
-        "Remove-Item -LiteralPath (Join-Path $st 'shopapi-vm-agent.bat') "
-        "-ErrorAction SilentlyContinue;"
-        "Remove-Item -LiteralPath (Join-Path $st 'Tool Upload.lnk') "
-        "-ErrorAction SilentlyContinue;"
-        "foreach($noi in @([Environment]::GetFolderPath('Desktop'),$st)){{"
-        "$l=Join-Path $noi 'MyTool VM.lnk';"
-        "$s=$sh.CreateShortcut($l);"
-        "if(!$s.TargetPath){{$s.TargetPath='wscript.exe';"
-        "$s.Arguments='\"{vbs}\"';$s.WorkingDirectory='{goc}'}};"
-        "if(Test-Path $ico){{$s.IconLocation=$ico}};"
-        "$s.Save()}}"
-    ).format(ico=ico, vbs=vbs, goc=GOC.replace("'", "''"))
-    try:
-        subprocess.Popen(["powershell", "-NoProfile", "-Command", ps],
-                         creationflags=CREATE_NO_WINDOW)
-    except Exception:
-        pass
-
-
 #: Cập nhật kiểu MyTool (chủ dự án 02/09: "như kiểu khách dùng MyTool - mở
 #: lên là có phiên bản mới... đưa lên github phần đó"): vm/ nằm ngay trong
 #: kho MyTool, nên phiên bản = VERSION của kho, gói = zip nhánh chính.
@@ -571,7 +538,7 @@ def da_dung_mytool_vps(goc_vm=None):
     (`core/giam_sat_vm.py`) — bảng Tkinter ở đây đứng ra thêm chỉ tổ có HAI
     người cùng nhắm một khoá cổng (8767/8768/8769: người tới sau luôn thua,
     khoá một-mình không hỏng gì) mà không được tích sự gì, lại còn cắm thêm
-    lối tắt/dọn lối tắt đời cũ (`cam_loi_tat`) một cách vô nghĩa. Máy VM một-
+    lối tắt đời cũ một cách vô nghĩa. Máy VM một-
     kênh CŨ (không có MyTool cạnh nó) thì `vps.json` không tồn tại — hàm này
     trả `False`, mọi thứ y nguyên như trước.
     """
@@ -705,7 +672,6 @@ class BangDieuKhien:
             self.o_log[khoa] = o
         than.rowconfigure(1, weight=1)
 
-        cam_loi_tat()
         self.chay_lai_het()
         self.lam_moi()
         self.cua.after(30000, self._thu_nho)

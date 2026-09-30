@@ -47,7 +47,7 @@ _THIEU_THU_VIEN = ""
 try:
     import pyautogui
     import pyperclip
-except ImportError as _e:  # chay CAI-DAT-VM.bat de cai; loi bao ro khi chay that
+except ImportError as _e:  # chay CAI-DAT-VPS.bat de cai; loi bao ro khi chay that
     pyautogui = pyperclip = None
     _THIEU_THU_VIEN = str(_e)
 try:
@@ -92,7 +92,7 @@ if not _LOG_HANDLERS:
     _LOG_HANDLERS.append(logging.StreamHandler())  # khong con duong nao khac -> ep co it nhat 1
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s",
                     handlers=_LOG_HANDLERS)
-if pyautogui:  # thieu thu vien (chua CAI-DAT-VM.bat) thi ĐỪNG nổ ở đây — để
+if pyautogui:  # thieu thu vien (chua CAI-DAT-VPS.bat) thi ĐỪNG nổ ở đây — để
                # nhánh `if pyautogui is None` trong __main__ báo lỗi RÕ RÀNG
                # thay vì AttributeError mù mờ ngay lúc import module.
     pyautogui.FAILSAFE = False
@@ -3545,7 +3545,7 @@ if __name__ == "__main__":
         ket_qua = che_do_kiem()
         raise SystemExit(0 if ket_qua["san_sang_ha_tang"] else 1)
     if pyautogui is None:
-        logging.error("Thieu thu vien (%s). Chay CAI-DAT-VM.bat de cai roi mo lai.",
+        logging.error("Thieu thu vien (%s). Chay CAI-DAT-VPS.bat de cai roi mo lai.",
                       _THIEU_THU_VIEN)
         raise SystemExit(1)
     if not _khoa_mot_minh():

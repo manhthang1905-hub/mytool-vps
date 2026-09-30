@@ -106,7 +106,7 @@ def test_setup_dung_venv_va_chan_python_32_bit():
     """
     from pathlib import Path
 
-    chu = (Path(__file__).resolve().parent.parent / "SETUP.bat").read_text(
+    chu = (Path(__file__).resolve().parent.parent / "scripts" / "SETUP.bat").read_text(
         encoding="utf-8", errors="replace")
     assert "-m venv" in chu and ".venv" in chu
     assert "sys.maxsize > 2**32" in chu, "phải kiểm Python 32-bit"
@@ -125,10 +125,11 @@ def test_launcher_khong_dat_pyexe_duong_dan_khong_nhay():
     from pathlib import Path
 
     goc = Path(__file__).resolve().parent.parent
-    for ten in ("SETUP.bat", "CHAY-QT.bat"):
+    for ten in ("scripts/SETUP.bat", "scripts/CHAY-QT.bat"):
         chu = (goc / ten).read_text(encoding="utf-8", errors="replace")
         assert 'set "PYEXE=%LocalAppData%' not in chu, ten
         assert 'set "PYEXE=%~dp0' not in chu, ten
+        assert 'set "PYEXE=%GOC%' not in chu, ten
         assert 'set "PYEXE=%%d' not in chu, ten
 
 
@@ -139,7 +140,8 @@ def test_file_khoi_dong_phai_crlf_va_thuan_ascii():
     from pathlib import Path
 
     goc = Path(__file__).resolve().parent.parent
-    for ten in ("SETUP.bat", "CHAY-QT.bat", "KIEM-TRA.bat", "CHAY-GON.vbs"):
+    for ten in ("CAI-DAT-VPS.bat", "CHAY-GON.vbs", "scripts/SETUP.bat", "scripts/CHAY-QT.bat",
+                "scripts/KIEM-TRA.bat", "scripts/KIEM-TRA-PHAT-HANH.bat"):
         b = (goc / ten).read_bytes()
         assert b.count(b"\n") == b.count(b"\r\n"), ten + ": co dong LF tran"
         if ten.endswith(".bat"):

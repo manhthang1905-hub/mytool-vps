@@ -12,7 +12,9 @@ REM  canh bao cua file nay danh dau bang "!!!". Da dinh mot lan: dong
 REM  "CAI XONG!" in ra thanh "CAI XONG". Muon lay duong dan python thi dung
 REM  ong dan (pipe) thang vao find, khong can bien trung gian.
 chcp 65001 >nul
-cd /d "%~dp0"
+REM Tep nay nam trong scripts\ - thu muc goc MyTool la thu muc cha.
+cd /d "%~dp0.."
+set "GOC=%CD%\"
 set PYTHONUTF8=1
 title My Tool - CAI DAT (chay 1 lan)
 echo ============================================================
@@ -29,7 +31,7 @@ REM lam mat ket qua cua ho.
 echo [0/5] Kiem tra vi tri thu muc...
 REM Dat duong dan trong dau nhay khi day vao find: thu muc co the chua ky tu
 REM "&" (vi du "C:\Tom & Jerry\") - khong nhay thi cmd hieu do la lenh moi.
-set "HERE=%~dp0"
+set "HERE=%GOC%"
 echo "%HERE%" | find /i "\AppData\Local\Temp\" >nul
 if not errorlevel 1 goto :in_zip
 echo "%HERE%" | find /i "\Temp1_" >nul
@@ -50,7 +52,7 @@ echo     1^) Dong cua so nay lai.
 echo     2^) Bam chuot phai vao file .zip vua tai ve, chon "Extract All"
 echo        ^(hoac "Giai nen tat ca"^).
 echo     3^) Chon mot cho de nho, vi du:   C:\My-Tool
-echo     4^) Mo thu muc VUA GIAI NEN ra, roi nhay dup SETUP.bat trong do.
+echo     4^) Mo thu muc VUA GIAI NEN ra, roi nhay dup CAI-DAT-VPS.bat trong do.
 echo.
 pause
 exit /b 1
@@ -151,7 +153,7 @@ echo.
 echo   Windows nay khong co winget, hoac winget bi chan. Lam theo 3 buoc:
 echo     1^) Mo https://www.python.org/downloads/
 echo     2^) Tai Python va tich [v] Add python.exe to PATH.
-echo     3^) Bam Install Now, roi chay lai SETUP.bat.
+echo     3^) Bam Install Now, roi chay lai CAI-DAT-VPS.bat.
 echo.
 pause
 exit /b 1
@@ -163,7 +165,7 @@ if errorlevel 1 (
   echo.
   echo   !!! PYTHON QUA CU. Tool can Python 3.9 tro len.
   echo   -^> Tai ban moi tai https://www.python.org/downloads/
-  echo      ^(nho tich "Add python.exe to PATH"^) roi chay lai SETUP.bat.
+  echo      ^(nho tich "Add python.exe to PATH"^) roi chay lai CAI-DAT-VPS.bat.
   echo.
   pause
   exit /b 1
@@ -180,7 +182,7 @@ if errorlevel 1 (
     echo.
     echo   !!! VAN DANG NHAN PHAI PYTHON 32-BIT sau khi da cai ban 64-bit.
     echo   -^> Go het Python 32-bit trong "Add or remove programs" roi chay lai
-    echo      SETUP.bat, hoac cai tay Python 64-bit tu python.org.
+    echo      CAI-DAT-VPS.bat, hoac cai tay Python 64-bit tu python.org.
     echo.
     pause
     exit /b 1
@@ -242,12 +244,12 @@ REM      Windows 64-bit) la gan nhu chay duoc ngay.
 REM  CHAY-GON.vbs va CHAY-QT.bat von UU TIEN .venv tu truoc, con duong cap
 REM  nhat giu nguyen .venv (PRESERVE trong core/safe_update.py).
 echo [2.5/5] Moi truong rieng trong thu muc tool...
-if not exist "%~dp0.venv\Scripts\python.exe" (
+if not exist "%GOC%.venv\Scripts\python.exe" (
   echo   - Dang tao .venv trong thu muc tool...
-  %PYEXE% -m venv "%~dp0.venv"
+  %PYEXE% -m venv "%GOC%.venv"
 )
-if exist "%~dp0.venv\Scripts\python.exe" (
-  set PYEXE="%~dp0.venv\Scripts\python.exe"
+if exist "%GOC%.venv\Scripts\python.exe" (
+  set PYEXE="%GOC%.venv\Scripts\python.exe"
   set "DUNG_VENV=1"
   echo   - Tu gio thu vien nam trong: .venv cua thu muc tool
 ) else (
@@ -286,9 +288,9 @@ if errorlevel 1 (
     echo     1^) May khong vao duoc mang / dang bi chan proxy.
     echo        -^> Thu mo trinh duyet vao https://pypi.org xem co vao duoc khong.
     echo     2^) Phan mem diet virus chan pip tai file.
-    echo        -^> Tat tam thoi roi chay lai SETUP.bat.
+    echo        -^> Tat tam thoi roi chay lai CAI-DAT-VPS.bat.
     echo     3^) Thieu quyen ghi.
-    echo        -^> Bam chuot phai vao SETUP.bat, chon "Run as administrator".
+    echo        -^> Bam chuot phai vao CAI-DAT-VPS.bat, chon "Run as administrator".
     echo.
     echo   Chup man hinh nay gui nguoi ho tro neu van khong duoc.
     echo.
@@ -377,7 +379,7 @@ echo   Van chua duoc.
 echo.
 echo   Loi cu the o tren. Hay:
 echo     1^) CHUP MAN HINH TOAN BO doan loi (ke ca ten DLL thieu^)
-echo     2^) Khoi dong lai may mot lan, chay lai SETUP.bat
+echo     2^) Khoi dong lai may mot lan, chay lai CAI-DAT-VPS.bat
 echo     3^) Neu van loi: gui anh chup man hinh cho nguoi ho tro.
 echo.
 echo   Khong gui anh thi khong biet DLL nao thieu - khong sua duoc.
@@ -395,7 +397,7 @@ REM khach biet ngay luc cai, chua mat dong nao.
 if errorlevel 1 (
   echo.
   echo   !!! Thieu thu vien cho tab Tu dong.
-  echo   -^> Chay lai SETUP.bat khi may co mang. Cac tab khac van dung duoc.
+  echo   -^> Chay lai CAI-DAT-VPS.bat khi may co mang. Cac tab khac van dung duoc.
   echo.
 )
 REM Bo nghe tieng (faster-whisper-small, ~0.5GB): tab Prompt Visuals can no de
@@ -403,7 +405,7 @@ REM nghe file mp3/wav ra phu de ngay tren may (mien phi). Tai mot lan ve thang
 REM thu muc tool (models\), cac lan sau dung lai - dung ProgramData hay cache
 REM lung tung o cho khac. Thieu no thi TOOL VAN CHAY, chi tab Prompt Visuals bao
 REM thieu bo nghe, nen o day chi tai va nhac chu khong dung setup lai.
-if exist "%~dp0models\faster-whisper-small\config.json" (
+if exist "%GOC%models\faster-whisper-small\config.json" (
   echo   - Bo nghe tieng: da co
 ) else (
   echo   - Bo nghe tieng: chua co, dang tai ~0.5GB mot lan ^(can mang^)...
@@ -411,7 +413,7 @@ if exist "%~dp0models\faster-whisper-small\config.json" (
   if errorlevel 1 (
     echo.
     echo   !!! Chua tai duoc bo nghe tieng. Tab Prompt Visuals se bao thieu.
-    echo   -^> Chay lai SETUP.bat khi may co mang on dinh. Cac tab khac van dung duoc.
+    echo   -^> Chay lai CAI-DAT-VPS.bat khi may co mang on dinh. Cac tab khac van dung duoc.
     echo.
   )
 )
@@ -445,9 +447,9 @@ if errorlevel 1 (
   echo.
   echo   !!! KHONG TIM THAY SDK shopapi.
   echo.
-  echo   Thu muc _sdk phai nam ngay canh file SETUP.bat nay. Kha nang cao la
-  echo   luc giai nen bi thieu file. Hay xoa thu muc nay di, giai nen lai
-  echo   ShopAPI-Studio.zip mot lan nua cho day du, roi chay lai SETUP.bat.
+  echo   Thu muc _sdk phai nam trong thu muc goc MyTool. Kha nang cao la
+  echo   ban clone bi thieu file. Chay "git status" trong thu muc goc,
+  echo   lay lai tep thieu ("git checkout -- _sdk"), roi chay lai CAI-DAT-VPS.bat.
   echo.
   pause
   exit /b 1
@@ -478,7 +480,7 @@ if errorlevel 1 (
   echo.
   echo   Cac tab khac van dung binh thuong, rieng tab Dung video se bao loi.
   echo   Tool da thu tai FFmpeg ban day du ve thu muc runtime\ o buoc tren.
-  echo   Neu tai khong duoc: chay lai SETUP.bat khi may co mang.
+  echo   Neu tai khong duoc: chay lai CAI-DAT-VPS.bat khi may co mang.
   echo   Trong tool: tab Dung video -^> Tuy chon -^> "Kiem tra may" de thu lai.
   echo.
 )
@@ -537,18 +539,18 @@ REM  va powershell. Duong dan co dau cach ("C:\Users\A Plus Computer\...") nen
 REM  tham so bat buoc phai duoc boc nhay.
 echo Dang tao loi tat "My Tool" ngoai man hinh chinh...
 set "PYW="
-set "PYARG=%~dp0shopapi_studio_qt.py"
+set "PYARG=%GOC%shopapi_studio_qt.py"
 REM Uu tien pythonw cua .venv trong thu muc tool - cung mot nguyen tac "moi
 REM thu tool can nam trong thu muc tool", va khoi phai hoi Python he thong.
-if defined DUNG_VENV if exist "%~dp0.venv\Scripts\pythonw.exe" set "PYW=%~dp0.venv\Scripts\pythonw.exe"
+if defined DUNG_VENV if exist "%GOC%.venv\Scripts\pythonw.exe" set "PYW=%GOC%.venv\Scripts\pythonw.exe"
 if not defined PYW for /f "delims=" %%i in ('%PYEXE% -c "import os,sys;d=os.path.dirname(sys.executable);p=os.path.join(d,'pythonw.exe');print(p if os.path.isfile(p) else '')" 2^>nul') do set "PYW=%%i"
 if not defined PYW (
   REM Khong tim ra pythonw thi lui ve duong cu. Ban Python rut gon co the
   REM khong kem pythonw.exe; luc do wscript+vbs van hon la khong co loi tat.
   set "PYW=%SystemRoot%\System32\wscript.exe"
-  set "PYARG=%~dp0CHAY-GON.vbs"
+  set "PYARG=%GOC%CHAY-GON.vbs"
 )
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$q=[char]34;$g='%~dp0'.TrimEnd('\');$w=New-Object -ComObject WScript.Shell;$p=Join-Path $w.SpecialFolders('Desktop') 'My Tool.lnk';$s=$w.CreateShortcut($p);$s.TargetPath='%PYW%';$s.Arguments=$q+'%PYARG%'+$q;$s.WorkingDirectory=$g;$s.IconLocation=(Join-Path $g 'ui_qt\logo.ico');$s.Description='My Tool';$s.Save();Write-Host ('  - Da tao loi tat tren Desktop -> ' + (Split-Path $s.TargetPath -Leaf))}catch{Write-Host '  - Chua tao duoc loi tat (khong sao, nhay dup CHAY-QT.bat trong thu muc nay)'}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$q=[char]34;$g='%GOC%'.TrimEnd('\');$w=New-Object -ComObject WScript.Shell;$p=Join-Path $w.SpecialFolders('Desktop') 'My Tool.lnk';$s=$w.CreateShortcut($p);$s.TargetPath='%PYW%';$s.Arguments=$q+'%PYARG%'+$q;$s.WorkingDirectory=$g;$s.IconLocation=(Join-Path $g 'ui_qt\logo.ico');$s.Description='My Tool';$s.Save();Write-Host ('  - Da tao loi tat tren Desktop -> ' + (Split-Path $s.TargetPath -Leaf))}catch{Write-Host '  - Chua tao duoc loi tat (khong sao, nhay dup CHAY-QT.bat trong thu muc nay)'}"
 echo.
 
 REM --- Mo tool luon ---------------------------------------------------------
@@ -586,9 +588,9 @@ echo.
 echo    Chua co tai khoan? Dang ky mien phi:  https://shopapi.vn/register
 echo.
 echo    Lan sau mo tool: nhay dup bieu tuong  My Tool  ngoai man hinh chinh.
-echo    Khong phai chay lai SETUP.bat nua.
+echo    Khong phai chay lai CAI-DAT-VPS.bat nua.
 echo ============================================================
 echo.
-echo    (Neu tool khong hien ra: nhay dup CHAY-QT.bat trong thu muc nay,
+echo    (Neu tool khong hien ra: nhay dup scripts\CHAY-QT.bat,
 echo     no mo cua so den va noi ro dang thieu gi.)
 pause

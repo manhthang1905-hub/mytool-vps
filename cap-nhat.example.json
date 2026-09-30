@@ -2,7 +2,7 @@
   "_ghi_chu": [
     "Chep tep nay thanh cap-nhat.json (khong dau '.example') roi sua theo may. May chua co tep nay van chay voi mac dinh ben duoi.",
     "cap-nhat.json KHONG len kho (.gitignore) - moi may tu cau hinh rieng.",
-    "He cap nhat DUY NHAT: core/cap_nhat_git.py (git fetch + ff-only tu kho chung). Xem docs/PHAT-TRIEN-NHIEU-VPS.md.",
+    "He cap nhat DUY NHAT: core/cap_nhat_git.py (git fetch + ff-only tu kho chung). Xem docs/PHAT-TRIEN.md.",
     "kho: 'owner/repo' kho chung tren GitHub. Mac dinh 'manhthang1905-hub/mytool-vps'.",
     "nhanh: mac dinh 'main'.",
     "tu_dong_cap_nhat: true (MAC DINH, ke ca VPS moi) = co ban moi thi tu cai luc may ranh (khung :15-:45, khong dang/dung/phu de/quet), roi tu mo lai; loi lap thi tu lui. false = chi bao 'co ban moi', bam 'Cap nhat ngay' trong Cai dat. Doi ngay trong Cai dat > Cap nhat tool.",

@@ -19,7 +19,7 @@
 2. `quet_cay_sach` — soi cây sạch: bí mật (tên tệp lẫn nội dung), dữ liệu kênh
    THẬT lọt qua `.gitignore`, đường tuyệt đối `C:\\Users`, chính
    `CLAUDE.local.md`, tệp > 5MB. Mọi phát hiện đều vào danh sách CHẶN — đây là
-   lớp kiểm THỨ HAI, không tin rằng `.gitignore`/`core/goi_vps.py` luôn đúng.
+   lớp kiểm THỨ HAI, không tin rằng `.gitignore` luôn đúng.
 3. `san_sang_chay_pytest` + `chay_pytest_cay_sach` — chạy `pytest` TRÊN CÂY
    SẠCH, KHÔNG PHẢI trên kho đang sửa dở (nhiều phiên agent có thể đang sửa
    file cùng lúc). Chỉ chạy khi RAM trống đủ VÀ máy không đang giữ khe "nang"
@@ -46,8 +46,12 @@ from typing import Callable, Dict, FrozenSet, List, Optional, Sequence, Set, Tup
 
 from .auto import DANG as _KHAU_DANG
 from .ghi_dia import ghi_chu
-from .goi_vps import _MAU_BI_MAT  # lớp chặn bí mật theo TÊN, dùng lại nguyên vẹn
 from .khe import pid_con_song, ram_gb
+
+#: Lớp chặn bí mật theo TÊN tệp (trước ở `core/goi_vps.py`, bỏ 01/10/2026 cùng luồng cài ZIP).
+_MAU_BI_MAT = re.compile(
+    r"secret|cookie|credential|(?:^|[-_.])token(?:[-_.]|$)|api[-_]?key|"
+    r"-rieng\.json$|\.key$|\.pem$", re.IGNORECASE)
 
 __all__ = [
     "KiemPhatHanhError", "CaySach", "PhatHien", "KetQuaPytest",
@@ -289,7 +293,7 @@ def _doc_dau_tep(duong: str, kich_toi_da: int) -> str:
 def quet_cay_sach(cay: CaySach) -> List[PhatHien]:
     """Soi cây sạch, trả về danh sách CHẶN (rỗng = sạch).
 
-    Lớp kiểm THỨ HAI — không tin rằng `.gitignore`/`core/goi_vps.py` luôn lọc
+    Lớp kiểm THỨ HAI — không tin rằng `.gitignore` luôn lọc
     đúng (đã có tiền lệ, mục E của lộ trình v3: `CLAUDE.local.md` bị Git theo
     dõi dù đã lên `.gitignore`)."""
     phat_hien: List[PhatHien] = []

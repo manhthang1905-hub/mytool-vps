@@ -127,7 +127,7 @@ def kiem_whisper(goc: str = GOC) -> MucKiem:
     return MucKiem(
         "Mô hình Whisper (phụ đề)", False,
         "chưa có models/faster-whisper-small/ — máy chỉ IPv6 có thể không tự tải "
-        "được (HuggingFace không vào được), xem hướng dẫn chép tay qua RDP trong README-VPS.md")
+        "được (HuggingFace không vào được), xem hướng dẫn chép tay qua RDP trong README.md")
 
 
 def kiem_vps_json(goc: str = GOC) -> MucKiem:

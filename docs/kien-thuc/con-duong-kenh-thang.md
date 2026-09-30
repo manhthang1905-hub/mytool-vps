@@ -62,7 +62,7 @@ Theo thứ tự ưu tiên:
 | Giống cả chủ ngữ | `kiem_trung_y`, biên tập viên AI | theo nghĩa bằng LLM |
 | Chấm đọc khán giả thật | khâu chấm 2b/2c/2e + `so_vong_cham` | đồng bộ v2 |
 | Phiếu giả thuyết | `bien_tap` → `danh_gia_lai` | hiện trong hồ sơ video |
-| Mục tiêu theo YPP còn thiếu | `NguCanh.ypp` (xem `thiet-ke-chien-luoc.md`) | |
+| Mục tiêu theo YPP còn thiếu | `NguCanh.ypp` (xem `chien-luoc.md` mục 8) | |
 | Cá nhân hoá tệp khán giả | style / SEO / hook riêng từng kênh, bìa học riêng | giữ riêng, không chép sang kênh khác |
 
 ## Áp cho ngách khác

@@ -1,6 +1,6 @@
-# Chiến lược chọn nguồn — hướng dẫn người vận hành
+# Chiến lược chọn nguồn
 
-Dành cho người dựng VPS mới hoặc mở ngách/quốc gia mới, không cần đọc mã. Mọi thay đổi chỉ là sửa YAML. Chưa khai khoá mới nào thì tool chạy y như trước. Thiết kế bên trong (plugin công thức, `NguCanh`, dòng chuẩn): `thiet-ke-chien-luoc.md`.
+Bộ máy này là vòng học của từng kênh, bọc quanh các công thức chọn nguồn. Người vận hành chỉ sửa YAML (mục 1–6); người viết mã đọc thêm mục 7–9. Chưa khai khoá mới nào thì tool chạy y như trước. Mục tiêu thiết kế: đơn giản, dễ thêm công thức, không cứng ngách / quốc gia / ngôn ngữ.
 
 ## 1. Vòng học trong 5 dòng
 
@@ -29,7 +29,7 @@ Dành cho người dựng VPS mới hoặc mở ngách/quốc gia mới, không 
 
    **Đừng thêm danh sách từ khoá để lọc nội dung.** Phân loại do AI làm theo nghĩa; từ khoá chỉ là đường lùi khi AI lỗi.
 3. **Thị trường** (`thi_truong:`): `quoc_gia`, `ngon_ngu`, `mui_gio`, `bac_lam_tron_view` (bậc làm tròn view YouTube hiển thị ở thị trường đó), `ctr_trang_chu_muc_tieu` (nếu khác 5%). Thị trường nhỏ hơn thì khai thêm `bac_view_manh` (mặc định 100000) và `tran_vuot` (mặc định 25) — hai khoá quyết định thế nào là nguồn "đang nổ thật".
-4. **Gắn kênh vào nhóm:** trong `CHANNEL/<kênh>/kenh.yaml` thêm `nhom: "<tên-nhóm>"` và `tep: "<mã tệp khán giả>"`. Tạo kênh, trình duyệt, giọng đọc: `docs/THEM-KENH.md`.
+4. **Gắn kênh vào nhóm:** trong `CHANNEL/<kênh>/kenh.yaml` thêm `nhom: "<tên-nhóm>"` và `tep: "<mã tệp khán giả>"`. Tạo kênh, trình duyệt, giọng đọc: `docs/KENH-VA-NGACH.md`.
 5. **Chạy thử miễn phí** ở chế độ `--thu` (không tốn ví), đọc log chọn nguồn: dòng `đang dùng công thức …`, phải có ứng viên và tiêu đề đúng ngách.
 
 Ưu tiên khi một khoá khai nhiều nơi: **kenh.yaml > ngach.yaml > mặc định trong mã** — mỗi kênh vẫn tự cá nhân hoá được trong nhóm.
@@ -90,3 +90,42 @@ Chỉ khi đủ **cả ba**: đã khai ≥ 2 công thức; tổng n ≥ 6 (nên 
 Luật: không `import core.tu_chay` ở đầu tệp; `cham` không gọi mạng, không tốn ví; phân loại theo nghĩa (`nc.cum_cua`, `nc.luat_chon`), **không** thêm bộ lọc từ khoá. Hợp đồng đầy đủ của `NguCanh`: docstring `core/chien_luoc/ngu_canh.py`.
 
 Kiểm: `tests/test_chien_luoc_golden.py` so đầu ra khi **không** khai `chien_luoc` với bản chụp, khớp từng byte (muốn chụp lại có chủ ý: xoá `.golden.json` rồi ghi lý do vào nhật ký); `tests/test_chien_luoc.py` kiểm phần trộn và thăm dò. Trên VPS **không** chạy test toàn kho.
+
+## 8. (Người viết mã) Hợp đồng bên trong
+
+**Công thức** (`core/chien_luoc/<ten>.py`, tự phát hiện bằng `pkgutil.iter_modules`; tệp nhập hỏng thì ghi log rồi bỏ qua):
+
+```python
+TEN = "vph"; MO_TA = "…"; LUI_KHI_RONG = "mot_nut"   # "" = không lùi
+def ap_dung(nc) -> float: ...     # 0..1 độ hợp với kênh/giai đoạn; 0 = không dùng được
+def cham(nc) -> list[dict]: ...   # bảng ĐÃ XẾP, mạnh nhất trước, dòng chuẩn
+```
+
+| tệp | ý chính | hợp với |
+|---|---|---|
+| `vph.py` | đột biến view-mỗi-giờ của đối thủ; rỗng thì lùi về Một nút | kênh mới |
+| `v7.py` | remake theo cụm đã thắng của kênh; = 0 khi chưa có video thắng | kênh đang lên / kiếm tiền |
+| `mot_nut.py` | gộp bảng mới / vượt / bứt + điểm anh em | đường lùi |
+| `_mau.py` | khuôn chép cho công thức mới | |
+
+**Dòng chuẩn:** `nguon`, `ma`, `link`, `tieu_de`, `kenh`, `diem`, `loai`, `view`, `vph`, `dot_bien`, `tuoi_gio`, `cum`, `tuyen`, `ly_do[]`, thêm `cong_thuc`, `tham_do`, `tin_hieu{}`.
+
+**Ngữ cảnh kênh `NguCanh`** (`ngu_canh.py`, chỉ đọc đĩa; hỏng chỗ nào thì trường đó rỗng): định danh (kênh, nhóm, tệp), hồ sơ ngách + `thi_truong`, giai đoạn `moi` / `dang_len` / `kiem_tien`, YPP (sub, giờ xem, đang thiếu gì — số Studio là 28 ngày, kenh.yaml ghi đè số trọn đời), bộ lọc `loc(ds)`, và `muc_tieu()` trả 3 dòng mục tiêu dùng cho mọi lời nhắc.
+
+**Bộ điều phối:**
+- `tu_dong`: công thức `ap_dung` cao nhất 0,8, thứ hai 0,2; bỏ tên lạ và công thức `ap_dung == 0`.
+- Thăm dò tất định: `hash(kênh|ngày|số lượt hôm nay) % 100 < tham_do` — mọi nơi gọi cùng bảng (vòng chọn nguồn, trạm lấy lời thoại) ra cùng kết quả.
+- Trộn theo thứ hạng (vòng xoay có trọng số), khử trùng theo mã. Chỉ 1 công thức thì kết quả trùng hệt bảng cũ (golden test).
+- Sau đó vẫn qua phân cụm AI, biên tập viên AI (TỐT/TẠM/TỆ), cổng chất lượng, kiểm trùng ý. Biên tập viên AI chốt cuối; nhãn `cong_thuc`/`tham_do` đi theo vào hồ sơ video.
+
+**Vòng học** (`bai_hoc.py`): gộp mọi nguồn thành `{pham_vi, truc, cau (≤2 câu, có số), n, tin_cay, dung_cho}`. Điểm thoát (% còn lại ở 30s / 2 phút, "vách") nối ngược về nguồn → bài học có số theo cụm + khối "nguồn của video giữ tốt / rơi sớm" cho biên tập viên AI so theo nghĩa. `ket_qua.py` nối sổ lượt với hồ sơ video ở mốc 48h/72h.
+
+**Tiên nghiệm nhóm giảm dần** (`core/cong_thuc_v7.he_so_tien_nghiem(n48, he_so, k=2, tat_khi=6) = he_so × k/(k+n48)`): hệ số mượn 0,35; 1 video riêng trượt đủ 48h thì bỏ phần mượn của cụm; ngoài tệp 0,5. Giá trị lưu trong `cong-thuc-v7.json` của từng kênh **đè** mặc định trong mã.
+
+**Lời nhắc:** MỤC TIÊU (3 dòng) + TIÊU CHÍ (bài học, tối đa 8) + DỮ LIỆU + DẠNG TRẢ LỜI. Không chữ cứng theo thị trường; đọc `mo_ta_ngach`, `luat_chon`, `vi_du_phan_cum`, `thi_truong.quoc_gia` từ hồ sơ ngách.
+
+## 9. (Người viết mã) Sửa bộ máy trên máy đang chạy
+- Golden test trước: chụp đầu ra hàm xếp hạng trên fixture kênh giả; mọi bước sau phải khớp từng byte khi chưa khai khoá mới.
+- Bật đọc cấu hình mới (YAML ngách) chỉ sau khi đồng bộ nó với hằng số đang chạy, kèm test "YAML khớp hằng số".
+- Khi tách công thức thành plugin, giữ đúng thứ tự bước (ví dụ cộng điểm anh em chạy SAU lọc loại trừ và lọc trùng tiêu đề).
+- Bật thử chiến lược mới trên 1 kênh trước. Luật chung khi sửa mã sống: `CLAUDE.md`.

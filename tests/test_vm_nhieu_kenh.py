@@ -425,29 +425,3 @@ class TestGiaoDienTheoKenh:
             assert cai["tu_dang"] is True and cai["tu_tra_loi_cmt"] is False
         finally:
             tram.tat()
-
-
-class TestCaiDatVmNhieuKenh:
-    def test_kenh_va_danh_sach_khi_nhieu_kenh_canh_ben(self, tmp_path, monkeypatch):
-        monkeypatch.syspath_prepend(str(GOC / "vm"))
-        mod = _nap("vm_cai_dat_vm_nk", GOC / "vm" / "cai_dat_vm.py")
-        goc_vm = tmp_path / "TL" / "vm"
-        os.makedirs(goc_vm)
-        monkeypatch.setattr(mod.agent, "GOC", str(goc_vm))
-        for kenh in ("TL4-T7", "KENH2"):
-            os.makedirs(tmp_path / "TL" / kenh)
-            (tmp_path / "TL" / kenh / (kenh + ".exe")).write_bytes(b"x")
-        kenh, cac_kenh = mod._kenh_va_danh_sach("http://khong-dung:1")
-        assert kenh == "KENH2"
-        assert cac_kenh == ["KENH2", "TL4-T7"]
-
-    def test_mot_kenh_thi_cac_kenh_rong(self, tmp_path, monkeypatch):
-        monkeypatch.syspath_prepend(str(GOC / "vm"))
-        mod = _nap("vm_cai_dat_vm_nk2", GOC / "vm" / "cai_dat_vm.py")
-        goc_vm = tmp_path / "TL" / "vm"
-        os.makedirs(goc_vm)
-        monkeypatch.setattr(mod.agent, "GOC", str(goc_vm))
-        os.makedirs(tmp_path / "TL" / "TL4-T7")
-        (tmp_path / "TL" / "TL4-T7" / "TL4-T7.exe").write_bytes(b"x")
-        kenh, cac_kenh = mod._kenh_va_danh_sach("http://khong-dung:1")
-        assert kenh == "TL4-T7" and cac_kenh == []

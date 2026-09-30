@@ -14,13 +14,15 @@ REM  File nay khong sua gi ca. No chi doc va in ra, de khach chup mot tam anh
 REM  gui lai. Khong sua gi la co y: mot cong cu chan doan ma tu sua thi lan sau
 REM  khong ai dam chay no.
 chcp 65001 >nul
-cd /d "%~dp0"
+REM Tep nay nam trong scripts\ - thu muc goc MyTool la thu muc cha.
+cd /d "%~dp0.."
+set "GOC=%CD%\"
 title My Tool - Kiem tra may
 echo ============================================================
 echo    My Tool - Kiem tra may  (khong sua gi, chi doc va in)
 echo ============================================================
 echo.
-echo Thu muc tool: %~dp0
+echo Thu muc tool: %GOC%
 echo.
 
 echo --- Python ---------------------------------------------------
@@ -64,9 +66,9 @@ if exist "%CODE%" (
 echo.
 
 echo --- Cau hinh Claude trong thu muc tool ------------------------
-if exist "%~dp0.claude\settings.local.json" (
+if exist "%GOC%.claude\settings.local.json" (
   echo   co file .claude\settings.local.json:
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$j=Get-Content -Raw '%~dp0.claude\settings.local.json' | ConvertFrom-Json;$e=$j.env;Write-Host ('    ANTHROPIC_BASE_URL   = ' + $e.ANTHROPIC_BASE_URL);$t=[string]$e.ANTHROPIC_AUTH_TOKEN;if($t){Write-Host ('    ANTHROPIC_AUTH_TOKEN = ' + $t.Substring(0,[Math]::Min(10,$t.Length)) + '... (' + $t.Length + ' ky tu)')}else{Write-Host '    ANTHROPIC_AUTH_TOKEN = (TRONG)'}}catch{Write-Host ('    doc khong duoc: ' + $_.Exception.Message)}"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$j=Get-Content -Raw '%GOC%.claude\settings.local.json' | ConvertFrom-Json;$e=$j.env;Write-Host ('    ANTHROPIC_BASE_URL   = ' + $e.ANTHROPIC_BASE_URL);$t=[string]$e.ANTHROPIC_AUTH_TOKEN;if($t){Write-Host ('    ANTHROPIC_AUTH_TOKEN = ' + $t.Substring(0,[Math]::Min(10,$t.Length)) + '... (' + $t.Length + ' ky tu)')}else{Write-Host '    ANTHROPIC_AUTH_TOKEN = (TRONG)'}}catch{Write-Host ('    doc khong duoc: ' + $_.Exception.Message)}"
 ) else (
   echo   CHUA co .claude\settings.local.json
   echo   ^(vao tab Agen xay tool, bam Mo VS Code mot lan la tool tu ghi^)
@@ -88,8 +90,8 @@ echo.
 echo --- Tool da chay nhung tien trinh nao (lan mo gan nhat) -------
 REM  Cot thu ba: "ngam" = chay khong cua so, "CO CUA SO" = se nhay len
 REM  mot o den. Neu co dong nao CO CUA SO thi do chinh la thu dang bat len.
-if exist "%~dp0workspace\tien-trinh.log" (
-  powershell -NoProfile -Command "Get-Content '%~dp0workspace\tien-trinh.log' -Tail 25 | ForEach-Object { Write-Host ('  ' + $_) }"
+if exist "%GOC%workspace\tien-trinh.log" (
+  powershell -NoProfile -Command "Get-Content '%GOC%workspace\tien-trinh.log' -Tail 25 | ForEach-Object { Write-Host ('  ' + $_) }"
 ) else (
   echo   chua co - hay mo tool mot lan roi chay lai file nay
 )

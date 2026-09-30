@@ -152,57 +152,6 @@ class TestHongThiTraLaiBanCu:
             apply_tai_cho(ben_trong, cai)
 
 
-class TestHoiTienTrinhConSong:
-    """`os.kill(pid, 0)` báo nhầm trên Windows — phải hỏi mã thoát."""
-
-    def _nap(self):
-        import importlib.util
-
-        goc = Path(__file__).resolve().parent.parent
-        spec = importlib.util.spec_from_file_location(
-            "cap_nhat_launcher", goc / "cap-nhat.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
-    def test_tien_trinh_da_chet_thi_bao_la_chet(self):
-        import subprocess
-        import sys
-
-        mod = self._nap()
-        con = subprocess.Popen([sys.executable, "-c", "pass"])
-        con.wait()
-        # Handle vẫn do tiến trình này giữ — đây đúng là cảnh `os.kill(pid, 0)`
-        # trả lời sai. Hỏi mã thoát thì ra đáp án đúng.
-        assert not mod._con_song(con.pid), \
-            "tiến trình đã thoát mà vẫn báo còn sống -> launcher đợi đủ 60 giây"
-
-    def test_tien_trinh_dang_chay_thi_bao_la_song(self):
-        import subprocess
-        import sys
-
-        mod = self._nap()
-        con = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
-        try:
-            assert mod._con_song(con.pid)
-        finally:
-            con.kill()
-            con.wait()
-
-    def test_pid_khong_ton_tai_thi_bao_la_chet(self):
-        mod = self._nap()
-        assert not mod._con_song(999_999)
-
-
-def test_launcher_dung_cap_nhat_tai_cho():
-    """Đưa lại lối đổi tên thư mục vào là khách hết cập nhật được."""
-    goc = Path(__file__).resolve().parent.parent
-    chu = (goc / "cap-nhat.py").read_text(encoding="utf-8")
-    assert "apply_tai_cho" in chu
-    assert "apply_staged(" not in chu, \
-        "đổi tên thư mục cài hỏng 100% trên Windows — xem core/safe_update.py"
-
-
 class TestKenhCuaKhach:
     """Cập nhật KHÔNG được xoá lời nhắc khách đã sửa, nhưng vẫn phải mang kênh mẫu mới về.
 
@@ -325,36 +274,6 @@ class TestThuMucLaThiKhongDung:
         assert (cai / "dau-vet.txt").read_text(encoding="utf-8") == "ban moi"
 
 
-class TestMoLaiSauCapNhat:
-    """Cập nhật xong tool phải tự mở lại — và nếu không thì phải nói được vì sao.
-
-    Khách báo 15/08/2026: *"lên được rồi nhưng nó không reset tool"*. Dựng lại
-    đúng luồng trên máy dựng tool, kể cả với một tiến trình Qt thật, thì nó mở
-    lại bình thường — tức lỗi nằm ở thứ chỉ máy đó có.
-
-    Mà `DETACHED_PROCESS` nghĩa là tiến trình mới không còn chỗ nào để kêu:
-    không cửa sổ, không màn hình đen, và launcher thoát ngay sau đó. Tool mới
-    chết lúc nạp mô-đun là chết hoàn toàn câm — với khách thì "bật lên rồi tắt
-    ngay" và "không bật lên" trông giống hệt nhau.
-    """
-
-    def test_launcher_hung_loi_cua_tool_vua_mo_lai(self):
-        chu = (Path(__file__).resolve().parent.parent / "cap-nhat.py").read_text(
-            encoding="utf-8")
-        assert "mo-lai.log" in chu, \
-            "phải hứng thứ tool mới in ra, nếu không nó chết câm"
-        assert "con.poll()" in chu, \
-            "phải hỏi lại xem nó còn sống, không chỉ bắn đi rồi thôi"
-
-    def test_launcher_mo_lai_dung_diem_vao_con_song(self):
-        """Bản trước gọi `shopapi_studio.py` — điểm vào của bản tkinter đã xoá."""
-        goc = Path(__file__).resolve().parent.parent
-        chu = (goc / "cap-nhat.py").read_text(encoding="utf-8")
-        assert "shopapi_studio_qt.py" in chu
-        assert (goc / "shopapi_studio_qt.py").exists(), \
-            "điểm vào launcher mở lại phải thật sự tồn tại"
-
-
 class TestKhongCapNhatGiuaLucCoViec:
     """Khách 31/08/2026: *"ấn update mãi không được - nó toàn báo lỗi"*.
 
@@ -373,19 +292,8 @@ class TestKhongCapNhatGiuaLucCoViec:
             encoding="utf-8")
         assert "tai_ve_va_dung_san" not in chu and "cap-nhat.py" not in chu.split('"""', 2)[2]
         assert "cap_nhat_git" in chu
-
-    def test_launcher_cho_du_lau(self):
-        """60 giây là bỏ cuộc giữa lúc tool đang thoát tử tế; giờ chờ 10 phút."""
-        import importlib.util
-
-        duong = Path(__file__).resolve().parent.parent / "cap-nhat.py"
-        spec = importlib.util.spec_from_file_location("cap_nhat_launcher", duong)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        import inspect
-
-        mac_dinh = inspect.signature(mod.wait_for_exit).parameters["timeout"].default
-        assert mac_dinh >= 600, "launcher phải chờ tool thoát ít nhất 10 phút"
+        assert not (Path(__file__).resolve().parent.parent / "cap-nhat.py").exists(), \
+            "launcher ZIP cap-nhat.py đã bỏ — đừng đưa lại hệ cập nhật thứ hai"
 
     def test_dong_tool_khong_bung_them_viec_xep_hang(self):
         """`cancel_futures=True`: việc chưa gửi thì bỏ (đã nằm trong sổ phiên),

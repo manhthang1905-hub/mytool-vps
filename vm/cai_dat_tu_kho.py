@@ -1,37 +1,29 @@
 # -*- coding: utf-8 -*-
-"""Cài VPS TỪ BẢN CLONE — Việc 5.1, `workspace/LO-TRINH-PHAT-HANH-V3.md`.
+"""Cài VPS TỪ BẢN CLONE — bước riêng của VPS, gọi từ `CAI-DAT-VPS.bat` (xem README.md).
 
-═══ KHÁC `vm/cai_dat_vps.py` THẾ NÀO ═══
+Khi kịch bản này chạy, `vm/` đã nằm SẴN BÊN TRONG MyTool (bản clone git), nên
+chỉ còn các bước RIÊNG của VPS:
 
-`vm/cai_dat_vps.py` cài từ một GÓI đóng sẵn trên máy nhà (`vm/goi-vps/
-tool.zip`), và dựng MyTool thành thư mục SIBLING của `vm/`. Tệp NÀY cài từ
-một bản CLONE THẲNG của kho — nghĩa là khi kịch bản này chạy, `vm/` đã nằm
-SẴN BÊN TRONG MyTool (`core/`, `ui_qt/`, `tu_chay.py`... đã có đủ, đúng cấu
-trúc `vm/VPS-CLAUDE.md` mô tả), chỉ còn thiếu vài bước RIÊNG của VPS:
+    1. chạy scripts/SETUP.bat (cài requirements.txt gốc — TÁI DÙNG, không viết lại)
+    2. msvc-runtime qua pip (lùi nguồn cho máy chỉ IPv6)
+    3. cài thêm vm/requirements-vm.txt
+    4. ghi vps.json (đánh dấu "đang chạy chế độ VPS") + vm/config.json từ mẫu
+    5. tạo DONE/ + CLAUDE.local.md (luật RIÊNG máy; luật chung là CLAUDE.md)
+    6. đăng ký 5 lịch Task Scheduler qua core/lich_tu_chay
+    7. nhắc chạy `python -m core.kiem_may --day-du`
 
-    1. chạy SETUP.bat (cài requirements.txt gốc — TÁI DÙNG, không viết lại)
-    2. cài thêm vm/requirements-vm.txt
-    3. ghi vps.json (đánh dấu "đang chạy chế độ VPS")
-    4. tạo vm/config.json từ vm/config.example.json (trạm loopback, chế độ phiên)
-    5. tạo DONE/ (nơi chứa gói video chờ đăng)
-    6. sinh CLAUDE.local.md từ vm/VPS-CLAUDE.md
-    7. đăng ký 3 lịch Task Scheduler qua core/lich_tu_chay
-
-Không giống `vm/cai_dat_vps.py` (CẤM import `core.*` — lúc nó chạy, Python có
-thể còn chưa cài xong pip), tệp NÀY được phép import `core.*`: tiền đề của cả
-luồng cài này là bước 1 (SETUP.bat) đã chạy xong TRƯỚC — `core/` đã dùng
-được. Vẫn tránh mọi thứ kéo theo PyQt5 (giao diện chưa chắc mở được ở đây,
-và kịch bản này chạy không cửa sổ trong `CAI-DAT-VPS.bat`).
+Tệp này được phép import `core.*`: tiền đề là bước 1 (SETUP.bat) đã chạy
+xong. Vẫn tránh mọi thứ kéo theo PyQt5 (kịch bản chạy không cửa sổ).
 
 ═══ CHẾ ĐỘ `--thu` ═══
 
 In ra CÁC BƯỚC SẼ LÀM mà không làm gì thật — không gọi pip, không ghi tệp,
 không gọi `schtasks`. Cùng tinh thần `tu_chay.py --thu`
-(`CLAUDE.local.md` luật riêng VPS số 3: "Muốn thử thì dùng --thu").
+(`CLAUDE.md` mục 1: "Muốn thử thì dùng --thu").
 
 ═══ VÌ SAO `msvc-runtime` QUA PIP THAY VÌ `aka.ms` ═══
 
-`vm/VPS-CLAUDE.md` luật 5: mạng VPS chỉ có IPv6, `aka.ms`/`github.com` đo
+`CLAUDE.md` mục 4: mạng VPS chỉ có IPv6, `aka.ms`/`github.com` đo
 KHÔNG vào được (18/09/2026). `SETUP.bat` (không sửa ở đây, TÁI DÙNG nguyên
 văn) tự tải `vc_redist.x64.exe` từ `aka.ms` NẾU import PyQt5 thất bại vì
 thiếu Visual C++ runtime — trên VPS chỉ-IPv6, nhánh đó treo tới khi hết giờ
@@ -55,11 +47,11 @@ gọi `cai_ffmpeg()` (hàm tự tải qua mạng ngoài).
 
 ═══ Whisper: KHÔNG TỰ TẢI ĐƯỢC THÌ CHÉP TAY QUA RDP ═══
 
-Mô hình `faster-whisper-small` nằm trên HuggingFace — `vm/VPS-CLAUDE.md` luật
-5 liệt kê HuggingFace vào danh sách KHÔNG vào được từ máy chỉ-IPv6. Kịch bản
+Mô hình `faster-whisper-small` nằm trên HuggingFace — `CLAUDE.md` mục 4
+liệt kê HuggingFace vào danh sách KHÔNG vào được từ máy chỉ-IPv6. Kịch bản
 này THỬ tải (best-effort, không chặn cả lượt cài nếu hỏng) rồi in hướng dẫn
 chép tay `models/faster-whisper-small/` từ máy nhà qua RDP khi tải không
-được — xem `README-VPS.md`.
+được — xem `README.md`.
 """
 
 from __future__ import annotations
@@ -75,9 +67,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # MyTool (vm/ nam BEN TRONG)
 VM_DIR = os.path.join(GOC, "vm")
 
-#: Trùng `vm/cai_dat_vps.TRAM_VPS` / `core/goi_vps.TRAM_VPS` — trạm luôn cố
-#: định ở loopback trên VPS, ba nơi định nghĩa lại vì mỗi nơi có luật import
-#: riêng (tệp này với `core.*` được phép, hai tệp kia thì không).
+#: Trạm luôn cố định ở loopback trên VPS.
 TRAM_VPS = "http://127.0.0.1:8765"
 
 #: Số kênh tối đa mặc định của một VPS — quyết định #17 trong lộ trình v3.0
@@ -104,7 +94,7 @@ def _chay_that(lenh: Sequence[str], *, timeout: float = 1800) -> Tuple[int, str]
     return ket.returncode, (ket.stdout or "") + (ket.stderr or "")
 
 
-# ── 1. SETUP.bat — TÁI DÙNG, không viết lại ─────────────────────────────────
+# ── 1. scripts/SETUP.bat — TÁI DÙNG, không viết lại ─────────────────────────
 
 
 def chay_setup_bat(goc: str, *, bao: Optional[BaoHam] = None,
@@ -119,9 +109,9 @@ def chay_setup_bat(goc: str, *, bao: Optional[BaoHam] = None,
     rộng (1 giờ) thay vì mặc định 30 phút của các bước khác.
     """
     bao = bao or _im_lang
-    duong = os.path.join(goc, "SETUP.bat")
+    duong = os.path.join(goc, "scripts", "SETUP.bat")
     if not os.path.isfile(duong):
-        bao("  !!! Không thấy SETUP.bat ở {0} — bỏ qua bước này.".format(goc))
+        bao("  !!! Không thấy scripts/SETUP.bat ở {0} — bỏ qua bước này.".format(goc))
         return False
     if thu:
         bao("  [thử] sẽ chạy SETUP.bat (cài requirements.txt gốc, kiểm giao "
@@ -194,7 +184,7 @@ def cai_msvc_runtime(python_exe: str, *, bao: Optional[BaoHam] = None,
     return False
 
 
-# ── 3. vps.json — đánh dấu chế độ VPS (xem vm/cai_dat_vps.ghi_vps_json) ─────
+# ── 3. vps.json — đánh dấu chế độ VPS ────────────────────────────────────────
 
 
 def ghi_vps_json(goc: str, *, bao: Optional[BaoHam] = None, thu: bool = False) -> str:
@@ -222,7 +212,7 @@ def dat_vm_config(goc: str, *, bao: Optional[BaoHam] = None, thu: bool = False) 
     đè lên là mất `kenh`/`cac_kenh`/`chrome` khách đã điền). Dù có sẵn hay
     vừa chép, luôn BẢO ĐẢM hai khoá bắt buộc của chế độ VPS đúng giá trị:
     `che_do_phien=true`, `tram=http://127.0.0.1:8765` — cùng logic
-    `vm/cai_dat_vps.bao_dam_tram_loopback`, viết lại ở đây vì tệp đó không
+    bộ cài cũ (đã bỏ 01/10/2026), viết lại ở đây vì tệp đó không
     được `import` (nguyên tắc "chạy trước khi có pip" của chính nó)."""
     bao = bao or _im_lang
     duong = os.path.join(goc, "vm", "config.json")
@@ -283,16 +273,29 @@ def tao_thu_muc_done(goc: str, *, bao: Optional[BaoHam] = None, thu: bool = Fals
     return duong
 
 
-# ── 6. CLAUDE.local.md từ vm/VPS-CLAUDE.md (khuôn có biến) ──────────────────
+# ── 6. CLAUDE.local.md — luật RIÊNG của máy này ─────────────────────────────
 
-#: Đoạn văn bản MẶC ĐỊNH trong `vm/VPS-CLAUDE.md` — bản thân tài liệu đã đọc
-#: TRÔI CHẢY với đúng các giá trị này (10 kênh, repo đọc từ cap-nhat.json),
-#: nên bản cài CŨ (`vm/cai_dat_vps.py`, chép nguyên văn không thay biến) vẫn
-#: ra một CLAUDE.local.md đúng ngữ pháp. Ở ĐÂY chỉ thay khi máy cụ thể có số
-#: liệu KHÁC mặc định — không có "khuôn kiểu __TOKEN__" nào lộ ra nếu bước
-#: thay này không chạy (an toàn hơn cho các đường gọi khác chưa biết tới nó).
-_NEO_SO_KENH = "tối đa 10"
-_NEO_REPO = "(cấu hình trong `cap-nhat.json` ở gốc MyTool)"
+#: Luật CHUNG cho mọi VPS chỉ có MỘT nguồn: `CLAUDE.md` (lên kho). `CLAUDE.local.md`
+#: (không lên kho) chỉ giữ thứ riêng của máy, và người trên máy được ghi thêm vào
+#: đó — nên bộ cài KHÔNG ghi đè bản đã có, trừ bản chép nguyên từ khuôn cũ
+#: `vm/VPS-CLAUDE.md` (trước 01/10/2026: trùng luật chung, dễ lệch).
+_DAU_BAN_CU = "# Máy này là VPS tự chạy kênh — đọc trước khi sửa gì"
+_TIEU_DE_LOCAL = "# Luật riêng của máy này"
+
+
+def noi_dung_claude_local(so_kenh_toi_da: int, repo: str = "") -> str:
+    """Nội dung `CLAUDE.local.md` mới — ngắn, chỉ thứ riêng của máy."""
+    kho = repo or "(cấu hình trong `cap-nhat.json` ở gốc MyTool)"
+    return (
+        _TIEU_DE_LOCAL + "\n\n"
+        "Bộ cài (`CAI-DAT-VPS.bat`) sinh tệp này một lần; tệp không lên kho. "
+        "Luật chung cho mọi phiên Claude trên mọi VPS nằm ở `CLAUDE.md`, "
+        "cài đặt và vận hành ở `README.md`.\n\n"
+        "- Số kênh: tối đa {0} kênh cùng ngách trên máy này.\n"
+        "- Kho cập nhật: {1}.\n"
+        "- Trình duyệt kênh: `<MÃ>\\<MÃ>.exe`, cùng cấp với thư mục MyTool.\n"
+        "- Ghi thêm bên dưới những gì CHỈ đúng trên máy này (mạng, ổ đĩa, kênh đặc biệt…).\n"
+    ).format(so_kenh_toi_da, kho)
 
 
 def _doc_repo_cap_nhat(goc: str) -> str:
@@ -318,32 +321,28 @@ def _doc_repo_cap_nhat(goc: str) -> str:
 
 def dat_ho_so_phat_trien(goc: str, *, so_kenh_toi_da: int = SO_KENH_TOI_DA_MAC_DINH,
                          bao: Optional[BaoHam] = None, thu: bool = False) -> None:
-    """Chép `vm/VPS-CLAUDE.md` → `MyTool/CLAUDE.local.md` (LUÔN đè — tài liệu
-    của TA, không phải nhật ký riêng của máy), điền số kênh tối đa + gợi ý
-    kho cập nhật nếu khác mặc định, và dựng `NHAT-KY-PHAT-TRIEN.md` +
-    `workspace/ban-va/` cho phiên Claude Code mở thẳng trên VPS này."""
+    """Sinh `CLAUDE.local.md` (luật riêng máy — chưa có, hoặc còn là bản chép từ
+    khuôn cũ, thì mới ghi; bản người trên máy đã sửa thì giữ nguyên), và dựng
+    `NHAT-KY-PHAT-TRIEN.md` + `workspace/ban-va/` cho phiên Claude Code trên VPS."""
     bao = bao or _im_lang
-    nguon = os.path.join(goc, "vm", "VPS-CLAUDE.md")
     dich = os.path.join(goc, "CLAUDE.local.md")
     if thu:
-        bao("  [thử] sẽ sinh CLAUDE.local.md từ vm/VPS-CLAUDE.md (số kênh tối "
-            "đa={0}, đọc repo cập nhật từ cap-nhat.json nếu có), tạo "
-            "NHAT-KY-PHAT-TRIEN.md và workspace/ban-va/ nếu chưa có."
-            .format(so_kenh_toi_da))
+        bao("  [thử] sẽ sinh CLAUDE.local.md nếu chưa có (số kênh tối đa={0}, đọc "
+            "kho cập nhật từ cap-nhat.json nếu có), tạo NHAT-KY-PHAT-TRIEN.md và "
+            "workspace/ban-va/ nếu chưa có.".format(so_kenh_toi_da))
         return
-    if os.path.isfile(nguon):
-        with open(nguon, encoding="utf-8") as tep:
-            noi_dung = tep.read()
-        if so_kenh_toi_da != 10 and _NEO_SO_KENH in noi_dung:
-            noi_dung = noi_dung.replace(_NEO_SO_KENH, "tối đa {0}".format(so_kenh_toi_da))
-        repo = _doc_repo_cap_nhat(goc)
-        if repo and _NEO_REPO in noi_dung:
-            noi_dung = noi_dung.replace(_NEO_REPO, "({0})".format(repo))
+    cu = ""
+    try:
+        with open(dich, encoding="utf-8") as tep:
+            cu = tep.read()
+    except OSError:
+        pass
+    if not cu.strip() or cu.lstrip().startswith(_DAU_BAN_CU):
         with open(dich, "w", encoding="utf-8") as tep:
-            tep.write(noi_dung)
-        bao("  đã cập nhật CLAUDE.local.md (hướng dẫn Claude Code trên VPS này).")
+            tep.write(noi_dung_claude_local(so_kenh_toi_da, _doc_repo_cap_nhat(goc)))
+        bao("  đã ghi CLAUDE.local.md (luật riêng máy; luật chung ở CLAUDE.md).")
     else:
-        bao("  !!! Không thấy vm/VPS-CLAUDE.md — không sinh được CLAUDE.local.md.")
+        bao("  CLAUDE.local.md đã có — giữ nguyên.")
 
     duong_nk = os.path.join(goc, "NHAT-KY-PHAT-TRIEN.md")
     if not os.path.isfile(duong_nk):
@@ -357,29 +356,29 @@ def dat_ho_so_phat_trien(goc: str, *, so_kenh_toi_da: int = SO_KENH_TOI_DA_MAC_D
     os.makedirs(os.path.join(goc, "workspace", "ban-va"), exist_ok=True)
 
 
-# ── 7. 3 lịch Task Scheduler qua core/lich_tu_chay (chỉ GỌI hàm có sẵn) ──────
+# ── 7. 5 lịch Task Scheduler qua core/lich_tu_chay (chỉ GỌI hàm có sẵn) ──────
 
 
 def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
                  bao: Optional[BaoHam] = None, thu: bool = False) -> bool:
-    """Đăng ký BA việc trong Task Scheduler bằng cách GỌI hai hàm có sẵn của
+    """Đăng ký NĂM việc Task Scheduler bằng cách GỌI các hàm có sẵn của
     `core/lich_tu_chay` — không viết lại logic `schtasks` ở đây:
 
-    * `dang_ky()`                → `ShopAPI-TuChay` (sản xuất hằng ngày)
-    * `dang_ky_canh_tram()`      → `ShopAPI-CanhTram` + `ShopAPI-TramLucDangNhap`
-      (hàm này tự đăng ký CẢ HAI việc — xem docstring của nó trong
-      `core/lich_tu_chay.py`).
+    * `dang_ky()`             → `ShopAPI-TuChay` (sản xuất hằng ngày)
+    * `dang_ky_canh_tram()`   → `ShopAPI-CanhTram` + `ShopAPI-TramLucDangNhap`
+    * `dang_ky_dieu_phoi()`   → `ShopAPI-DieuPhoi` (10'; chỉ làm khi cai-dat.json bật)
+    * `dang_ky_gac_tong()`    → `ShopAPI-GacTong` (15'; gồm kiểm cập nhật)
     """
     bao = bao or _im_lang
     if thu:
         bao("  [thử] sẽ gọi core.lich_tu_chay.dang_ky(goc, \"{0}\") + "
-            "dang_ky_canh_tram(goc, {1}) — đăng ký 3 việc Task Scheduler."
-            .format(gio, phut_canh))
+            "dang_ky_canh_tram(goc, {1}) + dang_ky_dieu_phoi + dang_ky_gac_tong "
+            "— đăng ký 5 việc Task Scheduler.".format(gio, phut_canh))
         return True
     try:
         from core import lich_tu_chay
     except Exception as loi:  # noqa: BLE001 — core/ chưa sẵn sàng thì báo rõ, không sập cả lượt cài
-        bao("  !!! Không nạp được core.lich_tu_chay ({0}) — SETUP.bat có chạy "
+        bao("  !!! Không nạp được core.lich_tu_chay ({0}) — scripts/SETUP.bat có chạy "
             "xong chưa?".format(loi))
         return False
 
@@ -387,7 +386,11 @@ def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
     bao("  ShopAPI-TuChay: {0}".format(msg1))
     ok2, msg2 = lich_tu_chay.dang_ky_canh_tram(goc, phut_canh)
     bao("  ShopAPI-CanhTram + ShopAPI-TramLucDangNhap: {0}".format(msg2))
-    return ok1 and ok2
+    ok3, msg3 = lich_tu_chay.dang_ky_dieu_phoi(goc)
+    bao("  ShopAPI-DieuPhoi: {0}".format(msg3))
+    ok4, msg4 = lich_tu_chay.dang_ky_gac_tong(goc)
+    bao("  ShopAPI-GacTong: {0}".format(msg4))
+    return ok1 and ok2 and ok3 and ok4
 
 
 # ── Toàn bộ dây chuyền ───────────────────────────────────────────────────────
@@ -400,7 +403,7 @@ def cai(*, goc: str = GOC, gio_tu_chay: str = "02:00", phut_canh_tram: int = 5,
     bao = bao or print
     python_exe = sys.executable or "python"
 
-    bao("Bước 1/7 — SETUP.bat (thư viện gốc, kiểm giao diện)")
+    bao("Bước 1/7 — scripts/SETUP.bat (thư viện gốc, kiểm giao diện)")
     b1 = chay_setup_bat(goc, bao=bao, chay=chay, thu=thu)
 
     bao("Bước 2/7 — msvc-runtime (lùi nguồn cho máy chỉ IPv6)")
@@ -417,7 +420,7 @@ def cai(*, goc: str = GOC, gio_tu_chay: str = "02:00", phut_canh_tram: int = 5,
     b5a = tao_thu_muc_done(goc, bao=bao, thu=thu)
     dat_ho_so_phat_trien(goc, so_kenh_toi_da=so_kenh_toi_da, bao=bao, thu=thu)
 
-    bao("Bước 6/7 — đăng ký 3 lịch Task Scheduler")
+    bao("Bước 6/7 — đăng ký 5 lịch Task Scheduler")
     b6 = dang_ky_lich(goc, gio=gio_tu_chay, phut_canh=phut_canh_tram, bao=bao, thu=thu)
 
     bao("Bước 7/7 — kiểm lại máy")
@@ -443,8 +446,8 @@ def cai(*, goc: str = GOC, gio_tu_chay: str = "02:00", phut_canh_tram: int = 5,
 
 def main(argv: Optional[List[str]] = None) -> int:
     phan_tich = argparse.ArgumentParser(
-        description="Cài VPS từ bản clone (SETUP.bat + thư viện vm/ + vps.json "
-                    "+ vm/config.json + DONE/ + CLAUDE.local.md + 3 lịch).")
+        description="Cài VPS từ bản clone (scripts/SETUP.bat + thư viện vm/ + vps.json "
+                    "+ vm/config.json + DONE/ + CLAUDE.local.md + 5 lịch).")
     phan_tich.add_argument("--thu", action="store_true",
                            help="chỉ in các bước sẽ làm, không làm gì thật")
     phan_tich.add_argument("--gio", default="02:00", help="giờ chạy tu_chay.py --tat-ca mỗi ngày (HH:MM)")

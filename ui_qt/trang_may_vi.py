@@ -596,10 +596,6 @@ class TrangHeThongVps(QWidget):
             "Sửa và cài đặt",
             "Đổi đường nhận dữ liệu, tài khoản dịch vụ, số dư và các thiết lập ít dùng.",
             "Mở cài đặt", self._mo_cai_dat))
-        doc.addWidget(self._the_hanh_dong(
-            "Mở rộng sang VPS khác",
-            "Chọn kênh và tạo một thư mục sẵn sàng chép sang máy mới.",
-            "Thêm VPS", self._mo_trien_khai))
         self._nhan_khoi_dong_lai = nhan("Đang kiểm…", "muted")
         doc.addWidget(self._the_hanh_dong(
             "Khởi động lại giao diện",
@@ -680,11 +676,6 @@ class TrangHeThongVps(QWidget):
                 "✕ Chưa nên: {0}".format(ly_do or "chưa rõ lý do"))
             self._nhan_khoi_dong_lai.setStyleSheet(
                 "color:{0};font-weight:600;".format(theme.DO))
-
-    def _mo_trien_khai(self) -> None:
-        from .trang_trien_khai_vps import HopTrienKhaiVps  # noqa: PLC0415
-
-        HopTrienKhaiVps(self._app, self).exec_()
 
     def _bao_dam_may(self) -> TheMay:
         if self.may is None:

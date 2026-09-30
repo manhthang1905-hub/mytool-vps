@@ -21,7 +21,9 @@ REM
 REM  Nen file nay KHONG goi "python" tay khong nua. No di tim ban Python THAT
 REM  o dung cho da cai, bo qua ban gia WindowsApps.
 chcp 65001 >nul
-cd /d "%~dp0"
+REM Tep nay nam trong scripts\ - thu muc goc MyTool la thu muc cha.
+cd /d "%~dp0.."
+set "GOC=%CD%\"
 set PYTHONUTF8=1
 title My Tool (cua so den de xem loi)
 
@@ -32,8 +34,8 @@ REM  cach thi goi khong nhay se bi cat o dau cach. Xem chu thich SETUP.bat.
 set "PYEXE="
 
 REM 1) Moi truong ao cua tool (neu co) - dung dung bo thu vien SETUP da cai.
-if exist "%~dp0.venv\Scripts\python.exe" set PYEXE="%~dp0.venv\Scripts\python.exe"
-if not defined PYEXE if exist "%~dp0venv\Scripts\python.exe" set PYEXE="%~dp0venv\Scripts\python.exe"
+if exist "%GOC%.venv\Scripts\python.exe" set PYEXE="%GOC%.venv\Scripts\python.exe"
+if not defined PYEXE if exist "%GOC%venv\Scripts\python.exe" set PYEXE="%GOC%venv\Scripts\python.exe"
 
 REM 2) Python Install Manager (Python 3.14+): %LocalAppData%\Python\pythoncore-*
 if not defined PYEXE for /d %%d in ("%LocalAppData%\Python\pythoncore-*") do if not defined PYEXE if exist "%%d\python.exe" set PYEXE="%%d\python.exe"
@@ -66,7 +68,7 @@ if not defined PYEXE (
   echo   ^("Python was not found..."^) chu khong phai Python that.
   echo.
   echo   Cach sua nhanh nhat:
-  echo     -^) Nhay dup SETUP.bat trong thu muc nay mot lan. No tu tim lai
+  echo     -^) Nhay dup CAI-DAT-VPS.bat o thu muc goc mot lan. No tu tim lai
   echo        Python that, tao lai loi tat va mo tool.
   echo.
   echo   Hoac tu tay tat ban gia:

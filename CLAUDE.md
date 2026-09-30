@@ -1,145 +1,78 @@
-# ShopAPI Studio — hướng dẫn cho trợ lý lập trình
+# Luật cho mọi phiên Claude trên mọi VPS
 
-Bạn đang ở **trong thư mục cài đặt của một công cụ đang chạy trên máy khách**.
-Người ngồi trước máy là người làm YouTube ở Việt Nam, **không biết lập trình**.
-Họ mở tab "Agent xây tool" rồi nhờ bạn sửa chính công cụ này cho hợp việc của họ.
+Máy này vừa chạy kênh thật vừa là chỗ phát triển tool. Nó tiêu tiền thật và đăng video thật. Không được làm chết máy đang kiếm tiền.
 
-## Việc của bạn
+- Luật riêng của từng máy (mạng, số kênh) nằm ở `CLAUDE.local.md`. Tệp này do bộ cài sinh ra.
+- Luật và số liệu của từng kênh nằm ở `CHANNEL/<k>/CLAUDE.md` và `NHAT-KY-KENH.md`. Hai tệp này thắng mọi phân tích chung.
+- Cài đặt và vận hành: `README.md`. Sửa mã và bản đồ module: `docs/PHAT-TRIEN.md`.
 
-Sửa mã trong thư mục này để công cụ làm được thứ họ vừa nói. Thêm tab mới, đổi
-tab sẵn có, viết Skill riêng — tuỳ yêu cầu.
+## 1. Tài sản của chủ: không đụng
+- `PROJECTS/` là kết quả đã trả tiền: không xoá, không dọn, không đổi tên. Dọn video đã đăng là việc của `core/don_dep.py` khi kênh bật `tu_don`.
+- `config.json`, `secrets.json`, `.claude/` chứa khoá API: không đụng.
+- Không tự bật tiền hay tự động. `tu_chay`, `tu_dang`, `tu_duyet`, `tu_don`, `ngan_sach_ngay` (trong `kenh.yaml`) và `cach_dang` (trong `may-ao.json`) do chủ dự án quyết. Muốn thử thì chạy `python tu_chay.py --kenh <k> --thu`: lệnh này chỉ nghiên cứu và chọn nguồn, không tốn ví.
+- Kênh có bản `-v2` là cặp A/B có chủ đích. Không đổi cách bản gốc làm video khi chưa được bảo.
+- Không in hay lưu mật khẩu, khoá vào log hoặc tài liệu. Tài liệu lên kho không được có IP, email, tên người dùng, tên kênh thật, số tiền.
 
-Bốn luật, cả bốn đều là tiền thật của họ:
+## 2. Sửa mã đang sống
+- Chỉ thay tệp mã sống trong khung phút :15–:45 của mỗi giờ.
+- Viết trên bản nháp, chạy `python -m py_compile`, rồi thay một lần trọn vẹn. Không sửa dở các tệp mà lịch đang gọi (`tu_chay.py`, `core/tu_chay.py` và các tệp chúng nạp).
+- Trước khi thay, sao lưu bản gốc vào `workspace/ban-va/<ngày>-<việc>/`, kèm `GHI-CHU.md` ghi vì sao sửa, đã chạy test nào, cách hoàn tác. Sau đó ghi một mục vào `NHAT-KY-PHAT-TRIEN.md`. Nhật ký này nằm trên máy, không lên kho.
+- Nháp cũ không bao giờ chép đè nguyên tệp lên bản sống. Áp từng đoạn. Đoạn nào không áp được thì chép tay theo nghĩa.
+- Không dời hay đổi tên các điểm vào mà tác vụ Windows trỏ tới: `tu_chay.py`, `tram_nen.py`, `shopapi_studio_qt.py`, `CHAY-GON.vbs`, `-m core.gac_tong`.
+- Sửa xong **phải** chạy `python -m core.dong_bo_git day "<thông điệp>"`:
+  - thêm `--minor` hoặc `--major` khi cần;
+  - thêm `--chi <tệp…>` khi máy còn tệp dở của người khác;
+  - lệnh này tự kiểm, quét bí mật, commit, rebase, nâng `VERSION`, ghi CHANGELOG, gắn tag rồi push;
+  - không sửa `VERSION` bằng tay;
+  - gặp xung đột thì lệnh dừng và báo. Không tự giải bừa.
+- Sửa mà không đẩy thì máy này không tự cập nhật được nữa.
 
-1. **Không đụng vào thư mục kết quả.** `PROJECTS/` là sản phẩm họ đã trả tiền để
-   tạo ra. Không xoá, không dọn, không đổi tên "cho gọn".
-2. **Không đụng `config.json`, `secrets.json`, `.claude/`.** Trong đó có khoá API
-   của họ. Sửa hỏng là họ mất đường vào tài khoản.
-3. **Mỗi lần gọi API là một lần trừ tiền.** Đừng viết vòng lặp gọi thử. Muốn
-   kiểm tra thì chạy `python -m pytest tests/` — bộ test không gọi mạng.
-4. **ĐỪNG HỎI DÀY khi chờ job.** Không việc nào ở đây xong dưới 30 giây:
+## 3. Một khe nặng: không chạy nặng song song
+- Tối đa **1 agent viết mã** trên máy sản xuất tại một thời điểm. Từng có lúc nhiều agent cùng chạy test toàn kho làm VM cạn RAM và treo.
+- **Không `pytest tests/` toàn kho** trên máy sản xuất. Chỉ chạy test lẻ liên quan: `python -m pytest tests/test_<việc>.py -q`. `dong_bo_git day` tự chạy nhóm test nhanh.
+- Tool điều phối tài nguyên như sau:
+  - khâu gọi API (LLM, giọng, ảnh, video) chạy song song nhiều kênh;
+  - việc nặng trên máy (FFmpeg, Whisper, xoá dấu, chuẩn nhạc) đi 1 khe;
+  - việc mở trình duyệt kênh đi 1 khe (mỗi lúc một trình duyệt);
+  - hai khe này loại trừ nhau;
+  - thứ tự ưu tiên: đăng đúng giờ > quét Studio > dựng > việc nền.
+- Agent chạy song song (khi được phép) phải có phạm vi tệp riêng. Tệp dùng chung thì làm tuần tự.
 
-   | loại | thời gian thật |
-   |---|---|
-   | ảnh | ~30 giây (nhanh nhất) |
-   | video | ~2 phút |
-   | giọng nói | vài chục giây tới vài phút, theo độ dài văn bản |
+## 4. Không phá việc đang chạy
+- Không giết lượt sản xuất, động cơ `vm/`, hay trình duyệt kênh. Trước khi khởi động lại, xem `vm/trang-thai.json` và `vm/agent.log`. Giết giữa lúc tải lên có thể để lại video dở trên kênh.
+- Tránh khung giờ phiên kênh, khoảng 60 phút trước giờ đăng (`CHANNEL/<k>/ke-hoach-dang/ke-hoach.csv`). Trong khung đó không thay mã đăng hay quét, không khởi động lại, không chạy việc nặng.
+- Test và công cụ dev không được gọi hàm dọn tiến trình thật, không xoá sạch `%TEMP%`, không đăng ký tác vụ Windows thật.
+- **Không hỏi job dày.** Không job nào xong dưới 30 giây. Hỏi dày làm nghẽn CPU máy chủ và đường truyền của chính máy.
+  - Dùng `app.start_batch`, webhook hoặc SSE (`client.jobs.stream`).
+  - Buộc phải tự hỏi thì dùng `poll_delays(estimated_seconds=...)` của SDK, và không kẹp nhỏ nhịp nó tính ra.
+  - Không bao giờ viết `while True: sleep(2); jobs.list()`. Chờ một job thì hỏi `jobs.get(id)` của đúng job đó.
+  - Muốn nút Dừng nhạy thì dùng `Event.wait(giây)`.
+- Ảnh tải lên được giữ một bản trên đĩa (`core/auto_khau._luu_ban_cuc_bo`), và phía nhận tra bản đó trước. Sửa đầu này thì phải sửa cả đầu kia cho khớp.
+- **Mạng.** Danh tính kênh gắn với IPv6. Khi trình duyệt kênh đang mở thì IPv4 phải tắt. Chỉ mở van IPv4 (`vm/van-ipv4.json`) khi đã đóng hết trình duyệt, và đóng lại ngay khi xong.
+- Máy chỉ có IPv6 không tới được github.com (trừ qua NAT64), HuggingFace, downloads.claude.ai. Đừng viết mã phụ thuộc các nơi này.
 
-   Hỏi lại mỗi 2–5 giây **không làm job xong sớm hơn một giây nào**. Nó chỉ lấy
-   CPU của máy chủ — và máy chủ dùng đúng CPU đó để kết sổ tiền cho chính job
-   bạn đang chờ.
+## 5. Chọn content theo NGHĨA bằng LLM
+- Chọn content quyết định khoảng 80% thành công. Đầu tư mạnh nhất ở khâu này: LLM mạnh, đủ bối cảnh, biên tập viên AI chốt nguồn có lý do, và đo lại dự đoán so với kết quả thật.
+- Mọi quyết định nội dung đều do LLM đọc nghĩa, có cache: cụm chủ đề, lọc ngách hoặc đối thủ, tệp khán giả, chống trùng ý. **Không lọc bằng từ khoá.** Regex chỉ là đường lùi khi LLM lỗi.
+- Không cắt lượt gọi AI chỉ để tiết kiệm. Chỉ bỏ lượt gọi thừa: lặp y hệt, hoặc kết quả bị bỏ đi.
+- Mỗi kênh tự học từ số của chính nó. Dữ liệu nhóm chỉ là tiên nghiệm yếu. Chỉ tính video do tool làm, hoặc đăng sau mốc bắt đầu ngách.
+- Mục đích: kênh có view và bật kiếm tiền (YPP). Chọn content theo thứ kênh đang thiếu: thiếu sub, hoặc thiếu giờ xem.
 
-   Đo trên máy chủ thật ngày 16/08/2026, một khách hỏi 10 lần/giây
-   (`GET /v1/jobs` 3.146 lần trong 5 phút) đã tự làm hỏng phần lớn lượt kết sổ
-   tiền của **chính mình** — chỉ vì hỏi quá dày.
+## 6. Tự vận hành một năm: không chết im lặng
+Mọi tính năng mới phải trả lời được 3 câu:
+1. Lỗi thì tự thử lại hay tự phục hồi thế nào?
+2. Kẹt vĩnh viễn thì có bị phát hiện, bỏ qua hoặc làm lượt mới không? Lượt dở bị bỏ kẹt là bug.
+3. Việc máy không tự làm được (nạp tiền, đăng nhập lại, license) có hiện ở "Việc của bạn" và `workspace/loi-chay-max.md` bằng câu người thường hiểu, và có nhắc lại không?
 
-   **Cách đúng, theo thứ tự ưu tiên:**
-   - Dùng `app.start_batch(...)` có sẵn — nó đã tự lo nhịp hỏi.
-   - Cần biết ngay khi xong: **webhook** hoặc **SSE** (`client.jobs.stream`) —
-     không tốn một lời hỏi nào.
-   - Buộc phải tự hỏi: dùng `poll_delays(estimated_seconds=...)` của SDK. Nó đợi
-     gần hết quãng máy chủ dự tính rồi mới hỏi lần đầu, và không bao giờ hỏi dày
-     hơn 30 giây một lần — mốc chốt vì job nhanh nhất cũng đã 30 giây.
-   - **Không bao giờ** viết `while True: sleep(2); jobs.list()`. Hỏi `jobs.list()`
-     tốn gấp ~200 lần `jobs.get(id)` ở phía máy chủ vì nó trả về cả trăm job kèm
-     toàn bộ file kết quả. Chờ MỘT job thì hỏi ĐÚNG job đó.
-   - **Đừng kẹp lại nhịp mà SDK đã tính.** Ngày 16/08/2026 tìm ra `core/jobs.py`
-     viết `min(next(delays), 5.0)` — ghì `poll_delays` (đã giãn tới 30 giây)
-     xuống lại đúng nhịp dày mà nó sinh ra để tránh. Muốn nút Dừng nhạy thì
-     dùng `Event.wait(giây)`, nó tỉnh ngay bất kể ngủ bao lâu; đừng ngủ ngắn
-     rồi hỏi lại.
+Thêm:
+- Mọi cải tiến (bìa, tiêu đề, hook, độ dài) là vòng lặp: đọc Studio → bài học → áp vào → đo 48h/72h/7 ngày → học tiếp.
+- Lời nhắc sinh nội dung giữ ngắn nhưng nêu mục tiêu cụ thể. Sức mạnh nằm ở sinh nhiều bản và có tiêu chí chấm tốt.
+- Tiêu chí mềm chỉ cảnh báo. Chỉ chặn lỗi thật: video hỏng, không tiếng, thiếu phụ đề, tiêu đề hoặc bìa không hợp lệ.
+- Lượt tải hỏng để lại nháp trên Studio thì lượt sau tải mới. Không sửa, không xoá nháp cũ.
+- Lời nhắc hay khuôn mới phải qua các bước: tạo thử thật → chấm → xem bằng mắt → mới áp vào sản xuất.
+- Khi tài nguyên (đĩa, RAM) cản đường, nói rõ con số và đề nghị nâng phần cứng. Không tự hạ quy mô.
 
-5. **Nhịp hỏi dày còn giành mất ĐƯỜNG TRUYỀN, không chỉ sức máy chủ.** Vừa
-   bắn hàng nghìn lượt hỏi vừa đẩy hàng trăm ảnh lên trong cùng 5 phút là bịt
-   kín đường lên của chính máy này. Đường lên kín thì tín hiệu báo nhận của
-   đường xuống cũng nghẹt, và job bắt đầu hỏng kèm câu báo lỗi đổ tại "địa chỉ
-   ảnh của bạn" — ta đổ lỗi cho khách vì đường truyền của chính ta.
-
-   Vì thế ảnh tải lên được **để lại một bản ngay trên đĩa máy này**
-   (`core/auto_khau._luu_ban_cuc_bo`), và phía nhận ảnh tra bản đó trước khi
-   nghĩ tới việc gọi ra Internet. Sửa một đầu thì phải sửa cả đầu kia — đường
-   dẫn và cách rút mã `upl_...` phải khớp, lệch nhau thì lối tắt im lặng ngừng
-   chạy và triệu chứng duy nhất là job chậm.
-
-## Trên VPS: kho chung, luật bắt buộc
-
-Tool này được phát triển chung trên nhiều VPS (mỗi máy một ngách/quốc gia),
-nguồn gốc là kho `github.com/manhthang1905-hub/mytool-vps`. Đọc
-`docs/PHAT-TRIEN-NHIEU-VPS.md` và `docs/kien-thuc/luat-van-hanh-vps.md`.
-
-- **Mọi sửa xong phải `python -m core.dong_bo_git day "<thông điệp>"`** (thêm
-  `--minor`/`--major` khi cần; `--chi <tệp…>` nếu máy còn tệp dở của người khác).
-  Lệnh này kiểm (py_compile, kiểm khói, test nhanh), quét bí mật/dữ liệu kênh,
-  commit, rebase lên origin, **tự nâng `VERSION`** (+patch mặc định) + một dòng
-  `CHANGELOG.md` + tag `v<x.y.z>`, rồi push. Xung đột thì dừng và báo — không tự
-  giải bừa. Không tự sửa `VERSION` bằng tay.
-- Các máy khác **tự nhận bản mới** (`core/cap_nhat_git.py`: kiểm ~30', áp lúc máy
-  rảnh, tự lùi nếu hỏng) — mặc định bật, tắt ở Cài đặt → Cập nhật tool
-  (`cap-nhat.json: tu_dong_cap_nhat`). Sửa mà không đẩy thì máy này không được tự
-  cập nhật nữa (giao diện báo "có sửa chưa đẩy").
-- Máy sản xuất: **không** `pytest tests/` toàn kho (chỉ test lẻ liên quan),
-  thay tệp mã sống trong khung phút :15–:45 và sao lưu vào
-  `workspace/ban-va/<ngày>-<việc>/`, không dừng tiến trình đang chạy thật.
-- Không đưa lên kho thứ riêng của máy: cấu hình, khoá, `CHANNEL/<kênh thật>/`,
-  `PROJECTS/`, `workspace/`, nhật ký, media. `.gitignore` là danh sách trắng;
-  tri thức dùng chung viết TỔNG QUÁT vào `docs/kien-thuc/`.
-
-## Thư mục
-
-```
-shopapi_studio_qt.py   điểm vào duy nhất
-CHAY-GON.vbs           khách bấm cái này (không hiện cửa sổ đen)
-CHAY-QT.bat            bản có cửa sổ đen, dùng khi cần xem lỗi
-SETUP.bat              cài thư viện, chạy một lần
-
-ui_qt/                 toàn bộ giao diện (PyQt5)
-  app.py               cửa sổ chính + danh sách tab (`TRANG`)
-  trang_*.py           mỗi tab một file
-  widgets.py           khối dựng sẵn: thẻ, nút, ô chọn thư mục
-  theme.py             màu và font
-  huong_dan.py         nội dung nút "? Hướng dẫn" của từng tab
-
-core/                  phần không có giao diện
-  jobs.py              hàng đợi việc chạy nền — CHỖ TRỪ TIỀN
-  claude_code.py       cài và mở Claude Code
-  codex.py             cài và mở Codex
-  skill_rieng.py       Skill khách tự đặt làm
-  errors.py            đổi lỗi kỹ thuật thành câu người thường đọc được
-
-PROJECTS/              KẾT QUẢ CỦA KHÁCH — không đụng vào
-  CONTENT/ VOICE/ EXCEL/ VISUAL/ DONE/
-tests/                 chạy: python -m pytest tests/
-```
-
-## Các tab
-
-| tab | file | làm gì |
-|---|---|---|
-| Agent xây tool | `ui_qt/trang_agent.py` | cài Claude Code / Codex rồi mở nó ngay trong thư mục này |
-| Skill | `ui_qt/trang_skill.py` | việc lẻ: một ô nhập → một kết quả |
-| Viết kịch bản | `ui_qt/trang_content.py` | chat, hoặc chạy chuỗi lời nhắc khách tự soạn |
-| Voice | `ui_qt/trang_voice.py` | đọc chữ thành giọng nói, cả thư mục .txt một lượt |
-| Phụ đề (SRT) | `ui_qt/trang_phu_de.py` | mp3 + kịch bản .txt → .srt; hoặc chữa .srt cũ sai chữ. Chạy trên máy |
-| Ảnh & Video | `ui_qt/trang_anh_video.py` | tab con **Thủ công** (gửi từng cái, kiểu Flow) và **Hàng loạt** (bảng cảnh, ảnh nối sang video) |
-| Dựng video | `ui_qt/trang_edit.py` | ghép clip + lời đọc bằng FFmpeg, chạy trên máy, miễn phí |
-| Ví & Tài khoản | `ui_qt/trang_tai_khoan.py` | đăng nhập, số dư, nạp tiền |
-
-## Cách thêm một tab
-
-1. Viết `ui_qt/trang_<tên>.py`, một lớp `QWidget` nhận `app` ở hàm khởi tạo.
-2. Thêm một dòng vào `TRANG` trong `ui_qt/app.py` (khoá, biểu tượng, nhãn).
-3. Thêm khoá đó vào xưởng dựng trang trong `_dung_cac_trang`.
-4. Thêm bài hướng dẫn vào `HUONG_DAN` trong `ui_qt/huong_dan.py`.
-5. Chạy `python -m pytest tests/` — có bài tự kiểm tab mới không tràn mép cửa sổ.
-
-Việc chạy nền (gọi API) thì dựng `JobSpec` rồi gọi `app.start_batch([spec],
-folder=…)`; **không bao giờ** gọi mạng trên luồng giao diện, cửa sổ sẽ đứng hình.
-
-## Cách viết cho hợp chỗ này
-
-- **Tiếng Việt**, xưng "tôi", gọi khách là "bạn". Không dùng từ kỹ thuật trên
-  giao diện: khách không biết "schema", "endpoint", "runtime" là gì.
-- **Nhãn ngắn.** Chữ trong nút không tự xuống dòng; nhãn dài kéo cả trang rộng
-  quá mép cửa sổ. Phần giải thích đưa vào tooltip hoặc bài hướng dẫn.
-- **Nói thật khi hỏng.** Đừng báo "đã xong" cho việc chưa xong, đừng bảo khách
-  "chụp màn hình gửi hỗ trợ" cho một sự cố mạng tự khỏi sau 5 giây.
+## 7. Nói thật, báo ngắn
+- Không báo "đã xong" cho việc chưa xong. Báo cáo gồm kết quả chính và việc chủ phải làm, nếu có.
+- Tự quyết khi đủ dữ liệu. Chỉ hỏi chủ về việc chỉ người làm được (đăng nhập, tiền, license) hoặc về hành động không đảo ngược được.
+- Giao diện viết tiếng Việt, nhãn ngắn, không dùng từ kỹ thuật. Thứ gì chỉnh được thì nên có chỗ chỉnh trên giao diện.

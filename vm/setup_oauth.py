@@ -5,7 +5,7 @@ Dung:
     python vm\\setup_oauth.py --kenh TL1-T7
 
 Khong go duoc dong lenh tren? Xem tung buoc co anh chu mo ta trong
-vm\\HUONG-DAN-OAUTH.md - lam tu dau toi cuoi, khong can hieu code.
+docs\\DANG-VA-BINH-LUAN.md - lam tu dau toi cuoi, khong can hieu code.
 
 Script nay CHI la lop KIEM TRA + HUONG DAN quanh ham `setup_channel()` da co
 san trong `may_cmt.py` (KHONG viet lai luong OAuth tu dau, dung dung y "tan
@@ -15,7 +15,7 @@ dung cai co san"). Viec no lam:
        kenh da co token chua (co roi thi KHONG lam lai, tranh mat token dang
        dung), co file OAuth client (`vm/clients/<kenh>.json`) chua.
     2. Con thieu gi -> NOI RO thieu gi va phai lam gi tiep (thuong la doc
-       HUONG-DAN-OAUTH.md), KHONG dong mang, KHONG mo Chrome.
+       docs/DANG-VA-BINH-LUAN.md), KHONG dong mang, KHONG mo Chrome.
     3. Du dieu kien -> mo DUNG trinh duyet cua kenh do (nep GPM/Chrome
        portable <kenh>\\<kenh>.exe, dung ho so tai <thu_muc_cha_MyTool>\\
        <kenh>\\Data\\profile - xem core/mang_youtube.py va
@@ -61,7 +61,7 @@ def kiem_tra_truoc(kenh: str):
     if may_cmt.build is None:
         return False, (
             "Thieu thu vien Python can thiet ({0}).\n"
-            "Chay CAI-DAT-VM.bat roi mo lai cua so nay.".format(
+            "Chay CAI-DAT-VPS.bat roi mo lai cua so nay.".format(
                 may_cmt._THIEU_THU_VIEN))
 
     duong_token = may_cmt.token_path(kenh)
@@ -75,7 +75,7 @@ def kiem_tra_truoc(kenh: str):
     if not client_file or not os.path.isfile(client_file):
         return False, (
             "Kenh {0}: CHUA co file OAuth client trong vm/clients/.\n"
-            "Lam theo TUNG BUOC trong vm/HUONG-DAN-OAUTH.md de tao va tai file "
+            "Lam theo TUNG BUOC trong docs/DANG-VA-BINH-LUAN.md de tao va tai file "
             "client_secret ve, dat vao vm/clients/{0}.json (hoac 1 file .json "
             "duy nhat dung chung cho moi kenh) roi chay lai lenh nay.".format(kenh))
 
@@ -154,13 +154,13 @@ def chay(kenh: str, thu_cong: bool = False) -> int:
     _dong_ke()
     print("CHUA XONG - khong thay token duoc luu.")
     print("Thu lai lenh nay, hoac them co --thu-cong de tu dan link thay vi "
-          "de tool tu dieu khien trinh duyet. Xem vm/HUONG-DAN-OAUTH.md.")
+          "de tool tu dieu khien trinh duyet. Xem docs/DANG-VA-BINH-LUAN.md.")
     return 1
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Dang nhap YouTube (OAuth) cho MOT kenh - xem vm/HUONG-DAN-OAUTH.md")
+        description="Dang nhap YouTube (OAuth) cho MOT kenh - xem docs/DANG-VA-BINH-LUAN.md")
     ap.add_argument("--kenh", help="Ma kenh, vi du TL1-T7")
     ap.add_argument("--thu-cong", action="store_true",
                     help="Bo qua tu dong dieu khien Chrome, in duong dan de tu dan")

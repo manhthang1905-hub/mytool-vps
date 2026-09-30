@@ -59,7 +59,7 @@ try:
     from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
     from google_auth_oauthlib.flow import InstalledAppFlow
     import requests
-except ImportError as _e:   # chay CAI-DAT-VM.bat de cai; loi bao ro khi chay that
+except ImportError as _e:   # chay CAI-DAT-VPS.bat de cai; loi bao ro khi chay that
     build = Credentials = Request = HttpError = None
     YouTubeTranscriptApi = TranscriptsDisabled = NoTranscriptFound = None
     InstalledAppFlow = requests = None
@@ -1446,7 +1446,7 @@ def _khoa_mot_minh(cong=8769):
 
 if __name__ == "__main__":
     if build is None:
-        print("Thieu thu vien ({0}). Chay CAI-DAT-VM.bat de cai roi mo lai.".format(
+        print("Thieu thu vien ({0}). Chay CAI-DAT-VPS.bat de cai roi mo lai.".format(
             _THIEU_THU_VIEN))
         raise SystemExit(1)
     if not _khoa_mot_minh():

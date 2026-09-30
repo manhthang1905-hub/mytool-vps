@@ -185,7 +185,7 @@ class TestDungKenh:
 
 
 class TestConSoDiTheoTiengNoi:
-    """Ba thứ mà `CHANNEL/README.md` cảnh báo "lấy nhầm của tiếng khác là hỏng".
+    """Ba thứ mà `docs/KENH-VA-NGACH.md` cảnh báo "lấy nhầm của tiếng khác là hỏng".
 
     Chúng đi kèm bộ khán giả, nên chọn "Nhật Bản" là được trọn bộ số của tiếng
     Nhật. Người dùng không có ô nào để điền sai.

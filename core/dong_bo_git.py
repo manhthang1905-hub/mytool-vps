@@ -33,7 +33,7 @@ Windows `ShopAPI-DongBoGit` (kéo 03:40 mỗi ngày) ĐÃ BỎ — `lich bat` t�
 nhật" trong Cài đặt). `keo --ep` bỏ qua khoá này (nút "Cập nhật ngay") nhưng
 KHÔNG bỏ qua khung giờ/máy rảnh.
 
-═══ LUẬT MÁY SẢN XUẤT (CLAUDE.md / docs/kien-thuc/luat-van-hanh-vps.md) ═══
+═══ LUẬT MÁY SẢN XUẤT (CLAUDE.md) ═══
 
 * Không pytest toàn kho — chỉ một NHÓM test nhanh chọn sẵn (`TEST_NHANH`), chạy
   ưu tiên thấp, và chỉ khi khe "nang" trống.

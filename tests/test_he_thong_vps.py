@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("PyQt5.QtWidgets", reason="máy chạy test không có giao diện")
 
 from PyQt5.QtWidgets import (  # noqa: E402
-    QApplication, QPushButton, QStackedWidget, QTabWidget, QWidget,
+    QApplication, QPushButton, QTabWidget, QWidget,
 )
 
 from test_giao_dien_vps import _dung_goc  # noqa: E402
@@ -63,7 +63,8 @@ def test_hien_may_nen_va_cac_loi_quan_ly(trang):
     assert t.may is None, "khối sức khỏe nặng chỉ dựng khi người dùng mở"
     assert t.vi is None, "ví chỉ được dựng khi người dùng mở"
     chu = {n.text().replace("&&", "&") for n in t.findChildren(QPushButton)}
-    assert {"Kiểm tra tool", "Mở cài đặt", "Thêm VPS"} <= chu
+    assert {"Kiểm tra tool", "Mở cài đặt"} <= chu
+    assert "Thêm VPS" not in chu, "luồng cài ZIP cũ đã bỏ: VPS mới clone kho (README.md)"
     assert "2/3 dịch vụ nền đang chạy" in t._nhan_suc_khoe.text()
 
 
@@ -92,37 +93,4 @@ def test_khoi_dong_lai_chua_an_toan_hien_ly_do(trang, monkeypatch):
     t._cap_nhat_khoi_dong_lai()
     assert "Chưa nên" in t._nhan_khoi_dong_lai.text()
     assert "Kênh TL1-T7 đang sản xuất video." in t._nhan_khoi_dong_lai.text()
-
-
-def test_hop_trien_khai_nhom_kenh_va_gioi_han_nam(trang):
-    _t, app, _qapp = trang
-    from ui_qt.trang_trien_khai_vps import HopTrienKhaiVps
-
-    hop = HopTrienKhaiVps(app)
-    assert len(hop._o_kenh) == 1
-    assert hop.findChild(QStackedWidget).count() == 3
-    assert hop._cac_buoc.currentIndex() == 0
-    assert hop._chon_day_du.isChecked()
-    assert not hop._chon_sach.isChecked()
-    assert "Bước 1/3" in hop._chi_buoc.text()
-    hop.close()
-
-
-def test_hop_trien_khai_chi_cho_qua_buoc_khi_da_chon_kenh(trang):
-    _t, app, _qapp = trang
-    from ui_qt.trang_trien_khai_vps import HopTrienKhaiVps
-
-    hop = HopTrienKhaiVps(app)
-    hop._tiep()
-    assert hop._cac_buoc.currentIndex() == 0
-    assert app.thong_bao[-1][0] == "Chưa chọn kênh"
-    next(iter(hop._o_kenh.values())).setChecked(True)
-    hop._tiep()
-    assert hop._cac_buoc.currentIndex() == 1
-    hop._chon_sach.setChecked(True)
-    assert not hop._chon_day_du.isChecked(), "hai cách chuyển phải loại trừ nhau"
-    hop._tiep()
-    assert hop._cac_buoc.currentIndex() == 2
-    assert "Tạo kênh mới từ khuôn" in hop._tom_tat.text()
-    hop.close()
 
