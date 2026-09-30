@@ -922,6 +922,22 @@ class TestLuong:
                             BAY_GIO.date().isoformat())
         assert qd["hanh_dong"] == "tai_moi", "gói tải hỏng: lượt sau TẢI MỚI (nháp/bản hỏng để kệ)"
 
+    def test_hau_kiem_hong_khong_cham_vm_logs_that(self, moi):
+        """Canh cô lập (30/09/2026, rò 22:18/22:23): chạy luồng hậu kiểm HỎNG xong,
+        không tệp nào trong vm/logs THẬT bị tạo/đổi; sự cố nằm cạnh sổ tạm."""
+        that = Path(mdd.THU_MUC_LOG)
+        truoc = {p.name: p.stat().st_mtime for p in that.glob("*")} if that.is_dir() else {}
+        md = Path(mdd.GOC).parent / "workspace" / "loi-chay-max.md"
+        md_truoc = md.stat().st_mtime if md.exists() else None
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        k.goi_studio["VID1xxxxxxx"] = {"status": "VIDEO_STATUS_FAILED"}
+        m.chay([_dong()])
+        sau = {p.name: p.stat().st_mtime for p in that.glob("*")} if that.is_dir() else {}
+        assert {n: t for n, t in sau.items() if truoc.get(n) != t} == {}, "bài kiểm chạm vm/logs thật"
+        assert (md.stat().st_mtime if md.exists() else None) == md_truoc, "bài kiểm ghi loi-chay-max.md thật"
+        assert (moi / "su-co-tai-len.jsonl").exists()
+
     def test_mhkt_loi_van_len_lich(self, moi):
         k, bao = KenhGia(), Bao()
         k.loi.add("mhkt")

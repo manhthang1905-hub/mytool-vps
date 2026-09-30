@@ -1981,14 +1981,22 @@ class MayDangDom:
     def _bao_su_co_tai_len(self, ma: str, vid: str, ly_do: str) -> None:
         """Sự cố tải lên → `vm/logs/su-co-tai-len.jsonl` + một dòng
         `workspace/loi-chay-max.md` (người gác tổng đọc) — không ném lỗi."""
+        # Chỉ báo khi videoId khớp ĐÚNG mục sổ của gói (không bao giờ báo cho id lạ).
+        if str(self.so.lay(self.khoa_so(ma)).get("video_id") or "") != str(vid or ""):
+            self.nk("{0}: sự cố tải lên của {1} không khớp sổ — bỏ qua, không báo".format(ma, vid))
+            return
         dong = {"luc": time.strftime("%Y-%m-%d %H:%M:%S"), "kenh": self.kenh, "ma": ma,
                 "video_id": vid, "ly_do": ly_do}
+        # Ghi CẠNH SỔ đang dùng (bài kiểm dùng sổ trong thư mục tạm → không chạm vm/logs thật).
+        thu_muc = os.path.dirname(os.path.abspath(self.so.duong))
         try:
-            os.makedirs(THU_MUC_LOG, exist_ok=True)
-            with open(os.path.join(THU_MUC_LOG, "su-co-tai-len.jsonl"), "a", encoding="utf-8") as tep:
+            os.makedirs(thu_muc, exist_ok=True)
+            with open(os.path.join(thu_muc, "su-co-tai-len.jsonl"), "a", encoding="utf-8") as tep:
                 tep.write(json.dumps(dong, ensure_ascii=False) + "\n")
         except OSError:
             pass
+        if os.path.normcase(os.path.abspath(self.so.duong)) != os.path.normcase(os.path.abspath(DUONG_SO)):
+            return      # không phải sổ thật của máy → không báo gác tổng
         goc_tool = os.path.dirname(GOC)
         md = os.path.join(goc_tool, "workspace", "loi-chay-max.md")
         if os.path.isfile(os.path.join(goc_tool, "vps.json")) and os.path.isfile(md):
@@ -2100,7 +2108,7 @@ class MayDangDom:
             except Exception as loi:  # noqa: BLE001 — hậu kiểm hỏng ≠ video hỏng
                 hk = {"ket": "chua-ro", "ly_do": "hậu kiểm lỗi: {0}".format(str(loi)[:100])}
                 self.so.cap_nhat(k, tai_xong=True, hau_kiem="chua-ro: " + hk["ly_do"])
-            if hk["ket"] == "hong":
+            if hk["ket"] == "hong" and str(self.so.lay(k).get("video_id") or "") == vid:
                 self.so.cap_nhat(k, trang_thai="tai-hong", tai_xong=False)
                 self.bao(ma, "{0} · tải hỏng {1}".format(TIEN_TO_DANG_DANG, vid), video_id=vid)
                 self._canh_bao("{0}: HẬU KIỂM tải lên video {1} HỎNG ({2}) — lượt sau TẢI MỚI".format(

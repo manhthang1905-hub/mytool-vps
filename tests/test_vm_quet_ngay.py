@@ -180,3 +180,18 @@ class TestCongQuetMatCao:
             assert can in js, can
         tc = (GOC / "core" / "ytb_extension" / "trang-chu.js").read_text(encoding="utf-8")
         assert "cho_phep_quet" in tc
+
+
+def test_doi_ten_nen_theo_ban_buoc_chrome_nap_worker_moi(tmp_path):
+    """30/09/2026 22:40: Chrome giữ service worker CŨ dù đĩa đã mới → đổi URL script theo nội dung."""
+    ag = _nap_agent(tmp_path)
+    tm = tmp_path / "ext"
+    tm.mkdir()
+    (tm / "background.js").write_text("// v1", encoding="utf-8")
+    (tm / "manifest.json").write_text(json.dumps({"background": {"service_worker": "background.js"}}), encoding="utf-8")
+    t1 = ag.doi_ten_nen_theo_ban(str(tm))
+    assert t1.startswith("nen-") and (tm / t1).read_text(encoding="utf-8") == "// v1"
+    assert json.loads((tm / "manifest.json").read_text(encoding="utf-8"))["background"]["service_worker"] == t1
+    (tm / "background.js").write_text("// v2", encoding="utf-8")
+    t2 = ag.doi_ten_nen_theo_ban(str(tm))
+    assert t2 != t1 and not (tm / t1).exists()

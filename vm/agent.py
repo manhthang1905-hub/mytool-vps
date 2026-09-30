@@ -761,12 +761,48 @@ def bao_dam_tien_ich(cau_hinh: dict) -> str:
             json.dump({"host": cau_hinh.get("tram", "").rstrip("/"),
                        "ma_kenh": cau_hinh.get("kenh", "")},
                       tep, ensure_ascii=False, indent=1)
-        ghi("đã cập nhật extension từ trạm → " + thu_muc)
+        nen = doi_ten_nen_theo_ban(thu_muc)
+        ghi("đã cập nhật extension từ trạm → " + thu_muc + (" (nền {0})".format(nen) if nen else ""))
         return thu_muc
     except Exception as loi:  # noqa: BLE001 — trạm tắt thì dùng bản đã có
         if os.path.isfile(os.path.join(thu_muc, "manifest.json")):
             return thu_muc
         ghi("chưa tải được extension từ trạm ({0})".format(str(loi)[:120]))
+        return ""
+
+
+def doi_ten_nen_theo_ban(thu_muc: str) -> str:
+    """Chép `background.js` thành `nen-<sha1 8 ký tự>.js` và trỏ `manifest.json`
+    (`background.service_worker`) vào đó. Trả tên tệp, "" nếu không làm được.
+
+    ═══ VÌ SAO (đo thật 30/09/2026 22:40) ═══ Chrome kênh giữ bản service worker
+    CŨ của mắt cào trong bộ nhớ đệm service worker của hồ sơ: đĩa đã là 2.9.0
+    (manifest mới, `nâng cấp 2.8.0 → 2.9.0` hiện trong nhật ký) mà trong worker
+    `typeof choPhepQuet === "undefined"` — mã cũ vẫn chạy, cổng quét vô hiệu.
+    Đổi URL script theo nội dung buộc Chrome đăng ký worker mới mỗi khi mã đổi."""
+    try:
+        with open(os.path.join(thu_muc, "background.js"), "rb") as tep:
+            ma = tep.read()
+        import hashlib  # noqa: PLC0415
+        ten = "nen-{0}.js".format(hashlib.sha1(ma).hexdigest()[:8])
+        duong_mf = os.path.join(thu_muc, "manifest.json")
+        with open(duong_mf, "r", encoding="utf-8") as tep:
+            mf = json.load(tep)
+        with open(os.path.join(thu_muc, ten), "wb") as tep:
+            tep.write(ma)
+        mf.setdefault("background", {})["service_worker"] = ten
+        tam = duong_mf + ".tam"
+        with open(tam, "w", encoding="utf-8") as tep:
+            json.dump(mf, tep, ensure_ascii=False, indent=2)
+        os.replace(tam, duong_mf)
+        for cu in os.listdir(thu_muc):
+            if cu.startswith("nen-") and cu.endswith(".js") and cu != ten:
+                try:
+                    os.remove(os.path.join(thu_muc, cu))
+                except OSError:
+                    pass
+        return ten
+    except (OSError, ValueError):
         return ""
 
 
