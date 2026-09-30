@@ -1,0 +1,231 @@
+# ============================================================================
+# KHUÔN MẪU — hồ sơ ngách (ngach.yaml)
+# ============================================================================
+#
+# Chép tệp này vào CHANNEL/_NHOM/<tên-nhóm-của-bạn>/ngach.yaml rồi điền theo NGÁCH (chủ đề)
+# mà nhóm kênh của bạn đang làm. `core/ho_so_ngach.doc_ngach(goc, ma_kenh)` tìm nhóm của một
+# kênh qua `kenh.yaml: nhom` rồi đọc đúng tệp này.
+#
+# KHÔNG BẮT BUỘC điền hết mọi khoá, NHƯNG: khoá danh sách từ nào để trống (hay không viết) thì mã
+# lùi về hằng số MẶC ĐỊNH của nó — bộ từ tiếng Nhật của ngách "tâm lý" (bản đầy đủ:
+# CHANNEL/_KHUON/ngach-mau-ja-tam-ly.yaml). Với ngách tiếng khác, chữ Nhật gần như không khớp gì
+# nên vô hại, nhưng vài từ La-tinh (2ch, BGM, SNS…) vẫn có thể khớp — hãy điền đủ các bộ loại trừ.
+# Lời nhắc AI (mau_tieu_de, mo_ta_kenh_cho_ai, mo_ta_phan_cum…) để trống thì mã viết câu TRUNG
+# TÍNH theo mo_ta_ngach, không rơi về câu tâm lý Nhật.
+#
+# Từ khoá ở đây chỉ là ĐƯỜNG LÙI khi AI lỗi. Chọn/phân cụm content theo NGHĨA do AI đọc
+# `mo_ta_ngach` + `mo_ta_cho_loc_ai` + `luat_chon` — hãy viết kỹ ba khoá đó trước.
+#
+# Mẫu theo thị trường: ngach-mau-vi.yaml (Việt Nam), ngach-mau-en-us.yaml (Mỹ),
+# ngach-mau-ja-tam-ly.yaml (bản sống của nhóm tam-ly-nhat — tham chiếu đầy đủ mọi khoá).
+#
+# Ví dụ dưới đây minh hoạ một ngách hoàn toàn khác: "nấu ăn tiếng Việt". XOÁ nội dung ví dụ,
+# điền đúng ngách của bạn (tài chính, làm đẹp, nuôi thú cưng, review công nghệ…).
+#
+# Không gọi mạng, không cần cài gì thêm ngoài PyYAML (thường có sẵn khi cài `requirements.txt`
+# của tool) — thiếu PyYAML thì tệp này bị bỏ qua, mã lùi về mặc định, có ghi log cảnh báo.
+
+
+# ── Mô tả (chỉ để người/AI đọc, KHÔNG đi vào phép lọc/chấm) ─────────────────────────────────
+
+# Một câu mô tả ngách, hiện trong ghi chú/nhật ký cho người đọc hiểu nhóm này làm gì.
+mo_ta_ngach: "Nấu ăn tiếng Việt — công thức, mẹo bếp, review món ăn"
+
+# Ngôn ngữ của KÊNH NGUỒN (đối thủ) bạn remake — mã ngắn: vi, ja, en, ko, zh... Dùng ở
+# `core/trang_chu.ngon_ngu_kenh`/`dung_tieng` qua chính `kenh.yaml: ngon_ngu` của TỪNG kênh
+# (không phải khoá này) — khoá này chỉ để MÔ TẢ, chưa có mã nào đọc trực tiếp hôm nay.
+ngon_ngu_nguon: vi
+
+# Một câu mô tả DẠNG VIDEO đang thắng của kênh bạn — câu này được chèn thẳng vào lời nhắc AI
+# (`core/cong_thuc_v7_ai.de_bai_kenh`) để AI hiểu "thắng" ở ngách của bạn trông như thế nào.
+# Có thể chứa dấu ngoặc kép — khi đó nhớ bọc cả chuỗi bằng NHÁY ĐƠN như ví dụ dưới, để khỏi
+# phải gõ \" (YAML nháy đơn không cần thoát dấu ngoặc kép bên trong).
+dang_thang: 'công thức nấu ăn từng bước — "làm theo là ra đúng món, không hỏng"'
+
+# Mô tả ngách THEO NGHĨA cho AI lọc trang chủ / chốt đối thủ / biên tập viên — viết bằng Ý, không
+# bằng từ khoá: cái gì thuộc ngách, cái gì không, khán giả thật là ai.
+mo_ta_cho_loc_ai: >-
+  Thuộc ngách: video hướng dẫn nấu MỘT món cụ thể, từng bước, người xem làm theo được ở bếp nhà.
+  Không thuộc ngách: mukbang/ăn thử, review quán, vlog du lịch ẩm thực, tin tức, giải trí.
+
+# Luật chọn nguồn theo NGHĨA cho biên tập viên AI — vài câu ngắn.
+luat_chon:
+  - "Chỉ chọn video dạy nấu một món cụ thể; review quán/ăn thử là lệch ngách."
+
+
+# ── Lọc trang chủ / ứng viên đối thủ (core/trang_chu.py) ────────────────────────────────────
+
+# TỪ MẠNH: MỘT từ trong danh sách này xuất hiện là ĐỦ để coi tiêu đề/tiêu đề+tag "đúng ngách".
+tu_manh:
+  - "cách làm"
+  - "công thức"
+  - "mẹo nấu"
+  - "món ngon"
+  - "đầu bếp"
+
+# TỪ YẾU: cần KHỚP ÍT NHẤT HAI từ trong danh sách này (chỉ đếm trên tiêu đề) mới coi là "đúng
+# ngách" — dùng cho những từ chung chung, một mình chưa đủ để chắc chắn.
+tu_yeu:
+  - "bếp"
+  - "nấu"
+  - "ăn"
+  - "món"
+  - "thực đơn"
+  - "nguyên liệu"
+
+# TỪ LOẠI TRỪ: dính MỘT từ trong danh sách này ở tiêu đề (hay tên kênh nguồn) là LOẠI THẲNG,
+# bất kể còn lại nói gì — thể loại khác hẳn ngách, không remake được.
+# ⚠ So khớp PHÂN BIỆT HOA/THƯỜNG (mã viết cho chữ Nhật) — chữ La-tinh ghi cả dạng viết hoa đầu câu.
+tu_loai_tru:
+  - "review phim"
+  - "Review phim"
+  - "trailer"
+  - "Trailer"
+  - "gaming"
+  - "bóng đá"
+  - "livestream"
+
+# Tên KÊNH NGUỒN (không phải tiêu đề) chứa các từ này thì loại — thể loại không remake được dù
+# tiêu đề nghe có vẻ đúng ngách (ví dụ kênh tóm tắt sách nấu ăn, không phải kênh dạy nấu thật).
+ten_kenh_loai_tru:
+  - "tóm tắt"
+  - "review sách"
+  - "audio book"
+
+# Handle/link kênh nguồn (dạng @something, viết liền không dấu) chứa các từ này thì loại.
+handle_loai_tru:
+  - "reup"
+  - "vietsub"
+  - "compilation"
+
+
+# ── Cổng tuổi (core/phan_tuyen.py, core/cong_thuc_v7.py, core/chot_doi_thu.py) ──────────────
+
+# Dính MỘT từ trong danh sách này ở tiêu đề → coi là nhắm khán giả LỚN TUỔI, bị trừ/loại ở cửa
+# chấm thường (Công thức V7) và bị tính vào "% tiêu đề gắn thẻ già" khi chấm ứng viên đối thủ
+# (`core/chot_doi_thu.py`). Để RỖNG nếu ngách của bạn không có khái niệm "tệp tuổi".
+tu_tuoi:
+  - "cho người cao tuổi"
+  - "dưỡng già"
+  - "về hưu"
+  - "người lớn tuổi"
+
+
+# ── Dạng "chân dung một kiểu người" vs "cách làm" (core/cong_thuc_v7.py) ────────────────────
+#
+# Công thức V7 vốn viết cho ngách "tâm lý": video THẮNG của kênh gốc là CHÂN DUNG một kiểu
+# người, còn dạng "hướng dẫn cách làm" bị hạ điểm. Một kênh NẤU ĂN thì "cách làm" chính là
+# ĐÚNG khuôn — nên ở đây để `tu_chan_dung` RỖNG (không có khái niệm "chân dung người" trong
+# ngách này) và `tu_cach_lam` cũng RỖNG (đừng tự trừ điểm chính khuôn thắng của mình). Nếu
+# ngách của bạn CÓ khái niệm tương tự (ví dụ kênh review sản phẩm: "một kiểu người dùng" so
+# với "cách chọn mua") thì điền hai danh sách này giống cách kênh tâm lý đã làm.
+tu_chan_dung: []
+tu_cach_lam: []
+
+
+# ── Cụm chủ đề để chấm Công thức V7 (core/cong_thuc_v7.py) ──────────────────────────────────
+#
+# Mỗi cụm: một khoá ngắn (mã), "ten" hiển thị cho người đọc, "tu" là danh sách từ khoá — MỘT
+# từ trong danh sách khớp tiêu đề là đủ để tính video đó thuộc cụm này. Cụm "đang thắng" của
+# kênh mình nặng nhất thang điểm Công thức V7 (30/100) — càng nhiều cụm càng dễ nhận ra ứng
+# viên đúng chủ đề, nhưng cũng càng dễ chấm nhầm nếu từ khoá quá chung chung.
+cum:
+  mon-man:
+    ten: "Món mặn hàng ngày"
+    tu:
+      - "kho"
+      - "xào"
+      - "canh"
+      - "rim"
+      - "chiên"
+  banh-trang-mieng:
+    ten: "Bánh / tráng miệng"
+    tu:
+      - "bánh"
+      - "chè"
+      - "kem"
+      - "mứt"
+  do-uong:
+    ten: "Đồ uống"
+    tu:
+      - "sinh tố"
+      - "trà sữa"
+      - "nước ép"
+
+
+# ── Ngách của KÊNH NGUỒN — cửa 5 Công thức V7 (core/cong_thuc_v7.py, khoá "ngach") ──────────
+#
+# Khác `cum` (chấm TỪNG VIDEO): hai danh sách này chấm CẢ KÊNH NGUỒN — catalogue của kênh đó
+# có đúng "nghề" (tu) hay đã lạc sang nghề khác (tu_lac) không. `san`/`tran_lac`/
+# `so_video_toi_thieu` (ngưỡng %) KHÔNG nằm trong ngach.yaml — vẫn là số chung trong
+# `cong_thuc_v7.CAU_HINH_MAC_DINH["ngach"]`, chỉ hai danh sách từ khoá này đổi theo ngách.
+ngach:
+  tu:
+    - "nấu ăn"
+    - "công thức"
+    - "mẹo bếp"
+    - "món ngon"
+    - "ẩm thực"
+  tu_lac:
+    - "review"
+    - "vlog"
+    - "mukbang"
+    - "ăn thử"
+
+
+# ── Tệp khán giả (core/trung_tam.py, core/tuyen_noi_dung.py, core/tuyen_con.py) ─────────────
+#
+# Mỗi tệp là MỘT NHÓM khán giả mà một kênh trong nhóm này sẽ "đánh" (nhắm tới) — giống 5 tệp
+# của ngách tâm lý (Lệch nhịp/Bị đánh giá thấp/Tò mò/Trung niên/Cảnh giác), nhưng của NGÁCH
+# BẠN. "ma" là mã NGẮN, KHÔNG ĐỔI khi đã dùng (đi vào kenh.yaml: tep, và vào tuyen.csv của
+# từng kênh) — đặt mã xong thì đừng đổi, chỉ đổi "ten"/"ten_ngan" cho đẹp lên tuỳ thích.
+tep_khan_gia:
+  - ma: "1"
+    ten: "Người mới tập nấu, sợ hỏng món"
+    ten_ngan: "Mới tập nấu"
+  - ma: "2"
+    ten: "Người nấu lâu năm, tìm mẹo hay/tiết kiệm thời gian"
+    ten_ngan: "Nấu lâu năm"
+  - ma: "3"
+    ten: "Người thích xem nấu ăn giải trí, không nhất thiết tự làm theo"
+    ten_ngan: "Xem giải trí"
+
+
+# ── Lời nhắc AI ──────────────────────────────────────────────────────────────────────────────
+
+# Chèn vào `core/auto_khau.de_bai_nan_khuon` (câu mở đầu lời nhắc "nắn khuôn" tiêu đề):
+# "Bạn đặt tiêu đề cho một {mau_tieu_de}."
+mau_tieu_de: "kênh YouTube nấu ăn tiếng Việt"
+
+# Câu mở đầu `core/cong_thuc_v7_ai.de_bai_kenh` — mô tả kênh của bạn cho AI đọc catalogue kênh
+# nguồn rồi đoán kênh đó có "cùng nghề" với bạn không (dùng·gần·lạc).
+mo_ta_kenh_cho_ai: "Kênh của tôi làm lại (remake) công thức nấu ăn cho khán giả Việt Nam."
+
+# Cụm từ "dạng video đang thắng" viết cho đề bài AI đọc catalogue kênh nguồn (rỗng → dang_thang).
+dang_thang_cho_ai: ""
+# Ba mức ngách của KÊNH NGUỒN trong đề bài đó (thiếu mức nào → câu trung tính).
+luat_kenh_nguon:
+  dung: "cùng nghề với tôi — dạy nấu từng món cụ thể."
+  gan: "có dạy nấu nhưng lẫn nhiều vlog/ăn thử."
+  lac: "nghề khác: mukbang, review quán, du lịch, tin tức, giải trí."
+
+# Đề bài phân cụm theo nghĩa (core/phan_cum_ai.py). Rỗng → viết theo mo_ta_ngach.
+mo_ta_phan_cum: "tiếng Việt (ngách nấu ăn)"
+nhan_the_loai_mau: ""
+vi_du_phan_cum: "(「cách luộc trứng」 không phải cụm bánh chỉ vì có chữ trứng)"
+
+# Tuyến con dựng sẵn trong mã chỉ có cho ngách tâm lý Nhật — ngách khác để false.
+chu_de_con_mac_dinh: false
+
+# ── Thị trường (kenh.yaml > ngach.yaml > mặc định mã) ─────────────────────────────────────────
+thi_truong:
+  quoc_gia: VN
+  ngon_ngu: vi
+  mui_gio: Asia/Ho_Chi_Minh
+  # Bậc làm tròn lượt xem YouTube hiển thị ("1,2 N", "13 N", "1,2 Tr"). view < duoi → bậc.
+  bac_lam_tron_view:
+    - {duoi: 1000, bac: 1}
+    - {duoi: 10000, bac: 100}
+    - {duoi: 1000000, bac: 1000}
+    - {duoi: 10000000, bac: 100000}
+    - {bac: 1000000}

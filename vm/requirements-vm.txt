@@ -1,0 +1,18 @@
+pyautogui
+pyperclip
+opencv-python
+pillow
+requests
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+httplib2
+certifi
+youtube-transcript-api
+# websocket-client: vm/cdp.py noi Chrome DevTools Protocol qua websocket -
+# vm/may_dang_dom.py (may dang DOM) va vm/agent.py DUNG THANG goi nay, khong
+# co la ca luong dang video hong tren may sach (vh 29/09/2026, thieu tu truoc
+# ma khong ai bao vi may cu da cai san). Ten goi PyPI la "websocket-client",
+# nhung import trong ma la "import websocket".
+websocket-client

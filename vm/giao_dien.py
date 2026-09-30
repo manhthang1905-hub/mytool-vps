@@ -1,0 +1,1061 @@
+# -*- coding: utf-8 -*-
+"""Bảng điều khiển của tool VM (MyTool VM) — thứ DUY NHẤT hiện trên màn hình.
+
+Chủ dự án, 02/09/2026: *"tao cần 1 tool bên vm và nó cài là chạy được các
+tính năng: quét studio, quét trang chủ lấy đối thủ, đăng, trả lời bình luận,
+và về sau còn cập nhật các tính năng mới"*.
+
+Bốn tính năng = ba con chạy ẩn mà bảng này nuôi:
+
+    agent.py        quét Studio + quét trang chủ (qua Chrome + tiện ích),
+                    nối về trạm của MyTool ở máy nhà, nhận thiết lập
+    may_dang.py     đăng video theo kế hoạch của tool (tắt/bật được)
+    may_cmt.py      trả lời bình luận — key của tool trước, Gemini dự phòng
+
+Cập nhật tính năng mới: nút "Cập nhật từ tool" tải gói vm/ mới nhất từ TRẠM
+(máy nhà cập nhật MyTool là có bản mới) — không cần GitHub trên VM.
+
+Mở bảng là tự cắm lối tắt ra màn hình + thư mục Khởi động (kiểu MyTool):
+máy bật lên là tool tự chạy. Con nào chết là tự mở lại sau ~20 giây.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+GOC = os.path.dirname(os.path.abspath(__file__))
+if GOC not in sys.path:
+    sys.path.insert(0, GOC)
+
+import tkinter as tk
+
+import agent  # cạnh đây, chỉ thư viện chuẩn — dùng chung logic chế độ phiên
+
+THU_LOG = os.path.join(GOC, "logs")
+os.makedirs(THU_LOG, exist_ok=True)
+CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_CONSOLE = 0x00000010
+
+NEN = "#1e1e2e"
+NEN_O = "#11111b"
+CHU = "#cdd6f4"
+XANH = "#a6e3a1"
+DO = "#f38ba8"
+VANG = "#f9e2af"
+CAM = "#fab387"
+
+#: Ba con được nuôi: (khoá, tên hiện, tệp, tệp log). Khoá trùng tên núm
+#: trong cai-dat-tool.json (tool ở máy nhà đẩy xuống) khi có.
+CAC_CON = (
+    ("agent", "Quét && kết nối", "agent.py", "agent-gui.log"),
+    ("tu_dang", "Đăng video", "may_dang.py", "dang.log"),
+    ("tu_tra_loi_cmt", "Trả lời cmt", "may_cmt.py", "cmt.log"),
+)
+
+
+def _danh_sach_kenh_may():
+    """Kênh máy này phục vụ — đọc từ config.json. `cac_kenh` (máy 1 VPS
+    phục vụ tới 5 kênh cùng niche) thắng; không thì kênh đơn `kenh` (nếp
+    một-máy-một-kênh cũ)."""
+    try:
+        du = json.load(open(os.path.join(GOC, "config.json"), encoding="utf-8"))
+    except Exception:
+        du = {}
+    nhieu = [str(k).strip() for k in (du.get("cac_kenh") or []) if str(k).strip()]
+    if nhieu:
+        return list(dict.fromkeys(nhieu))
+    don = str(du.get("kenh") or "").strip()
+    return [don] if don else []
+
+
+def _che_do_phien_hieu_luc():
+    """Chế độ phiên (18/09 — xem vm/KE-HOACH.md "5 kênh / 1 VPS — bước A")
+    có đang bật hiệu lực trên máy này không — dùng chung phép tính với agent
+    (`agent.che_do_phien_bat`): tự động theo số kênh của máy, trừ khi cai-dat-
+    tool.json (agent chép xuống từ tool) ép rõ true/false."""
+    try:
+        cfg = json.load(open(os.path.join(GOC, "config.json"), encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    try:
+        du = json.load(open(os.path.join(GOC, "cai-dat-tool.json"), encoding="utf-8"))
+    except Exception:
+        du = {}
+    return agent.che_do_phien_bat(cfg, {"che_do_phien": du.get("che_do_phien")})
+
+
+def doc_cong_tac_kenh(kenh):
+    """Công tắc Tự đăng / Tự trả lời CỦA MỘT KÊNH — `cai-dat-tool.json`
+    `["kenh"][kenh]` thắng; không có thì khoá top-level (đời cũ, hoặc kênh
+    CHÍNH của máy); không có nữa thì mặc định như `vm_cai_dat.MAC_DINH`
+    (tự đăng tắt, tự trả lời cmt bật)."""
+    ra = {"tu_dang": False, "tu_tra_loi_cmt": True}
+    try:
+        du = json.load(open(os.path.join(GOC, "cai-dat-tool.json"), encoding="utf-8"))
+    except Exception:
+        du = {}
+    theo_kenh = (du.get("kenh") or {}).get(kenh)
+    if isinstance(theo_kenh, dict):
+        for k in ("tu_dang", "tu_tra_loi_cmt"):
+            if k in theo_kenh:
+                ra[k] = bool(theo_kenh[k])
+        return ra
+    for k in ("tu_dang", "tu_tra_loi_cmt"):
+        if k in du:
+            ra[k] = bool(du[k])
+    return ra
+
+
+def _ghi_cong_tac_kenh_cuc_bo(kenh, tu_dang, tu_cmt):
+    """Ghi NGAY công tắc của MỘT KÊNH vào `cai-dat-tool.json["kenh"][kenh]`
+    — núm phải DÍNH trước khi báo về tool kịp (xem `doi_cong_tac`: tool đẩy
+    thiết lập cũ xuống mỗi nhịp tim, không ghi cục bộ trước thì núm tự lật
+    lại trong vài giây)."""
+    duong = os.path.join(GOC, "cai-dat-tool.json")
+    try:
+        du = json.load(open(duong, encoding="utf-8")) if os.path.isfile(duong) else {}
+        if not isinstance(du, dict):
+            du = {}
+    except Exception:
+        du = {}
+    theo_kenh = du.get("kenh")
+    if not isinstance(theo_kenh, dict):
+        theo_kenh = {}
+    rieng = dict(theo_kenh.get(kenh) or {})
+    rieng["tu_dang"], rieng["tu_tra_loi_cmt"] = bool(tu_dang), bool(tu_cmt)
+    theo_kenh[kenh] = rieng
+    du["kenh"] = theo_kenh
+    try:
+        with open(duong + ".tmp", "w", encoding="utf-8") as tep:
+            json.dump(du, tep, ensure_ascii=False, indent=1)
+        os.replace(duong + ".tmp", duong)
+    except Exception:
+        pass
+
+
+def _goi_thiet_lap_vm(tram, kenh, tu_dang, tu_cmt, cho=10):
+    """(luồng nền) Báo công tắc CỦA MỘT KÊNH về tool — `POST /thiet-lap-vm`
+    mang đúng `kenh` (máy nhiều kênh: không còn ngầm định kênh đầu)."""
+    if not tram or not kenh:
+        return
+    try:
+        import urllib.request
+        du = json.dumps({"kenh": kenh, "tu_dang": bool(tu_dang),
+                         "tu_tra_loi_cmt": bool(tu_cmt)}).encode("utf-8")
+        urllib.request.urlopen(urllib.request.Request(
+            tram.rstrip("/") + "/thiet-lap-vm", data=du,
+            headers={"Content-Type": "application/json"}), timeout=cho).read()
+    except Exception:
+        pass
+
+
+def doc_cong_tac():
+    """Núm tự đăng / tự trả lời: config.json là gốc, cai-dat-tool.json
+    (MyTool ở máy nhà đẩy xuống qua agent) THẮNG. Agent luôn bật.
+
+    Máy NHIỀU kênh: đây chỉ còn quyết định có nên CHẠY HẲN hai con
+    dang/cmt không — CHẠY nếu bất kỳ MỘT kênh nào muốn bật (con tự bỏ qua
+    từng kênh đang tắt bên trong nó, xem `_tu_dang_bat`/`_tu_tra_loi_bat`
+    của `may_dang.py`/`may_cmt.py`); trạng thái hiện trên bảng vẫn theo
+    từng kênh riêng (`doc_cong_tac_kenh`)."""
+    cac_kenh = _danh_sach_kenh_may()
+    if len(cac_kenh) > 1:
+        bat = {"agent": True, "tu_dang": False, "tu_tra_loi_cmt": False}
+        for kenh in cac_kenh:
+            cong = doc_cong_tac_kenh(kenh)
+            bat["tu_dang"] = bat["tu_dang"] or cong["tu_dang"]
+            bat["tu_tra_loi_cmt"] = bat["tu_tra_loi_cmt"] or cong["tu_tra_loi_cmt"]
+        return bat
+    # tu_dang mac dinh TAT (02/09 chu du an: dang tay la duong chinh,
+    # bat o tab Quan ly kenh cua MyTool khi san sang)
+    ra = {"agent": True, "tu_dang": False, "tu_tra_loi_cmt": True}
+    for duong, khoa in ((os.path.join(GOC, "config.json"),
+                         (("tu_dang", "tu_dang"), ("tu_tra_loi_cmt", "tu_tra_loi_cmt"))),
+                        (os.path.join(GOC, "cai-dat-tool.json"),
+                         (("tu_dang", "tu_dang"), ("tu_tra_loi_cmt", "tu_tra_loi_cmt")))):
+        try:
+            du = json.load(open(duong, encoding="utf-8"))
+            for k_ra, k_tep in khoa:
+                if k_tep in du:
+                    ra[k_ra] = bool(du[k_tep])
+        except Exception:
+            pass
+    return ra
+
+
+def luu_cong_tac(tu_dang, tu_cmt):
+    try:
+        duong = os.path.join(GOC, "config.json")
+        du = json.load(open(duong, encoding="utf-8")) if os.path.isfile(duong) else {}
+        du["tu_dang"] = bool(tu_dang)
+        du["tu_tra_loi_cmt"] = bool(tu_cmt)
+        with open(duong, "w", encoding="utf-8") as tep:
+            json.dump(du, tep, ensure_ascii=False, indent=4)
+    except Exception:
+        pass
+
+
+def tim_python():
+    """Python để chạy các con: đúng con đang chạy bảng này là chắc nhất."""
+    py = sys.executable or "python"
+    # pythonw chạy bảng thì các con vẫn cần python thường (có stdout để log)
+    if py.lower().endswith("pythonw.exe"):
+        thu = os.path.join(os.path.dirname(py), "python.exe")
+        if os.path.isfile(thu):
+            return thu
+    return py
+
+
+def mo_ngam(tep_py, tep_log):
+    """Chạy một con ẩn cửa sổ, chữ nó in đổ vào tệp log."""
+    duong_log = os.path.join(THU_LOG, tep_log)
+    try:
+        open(duong_log, "w", encoding="utf-8").close()
+    except Exception:
+        pass
+    lf = open(duong_log, "a", encoding="utf-8", errors="replace")
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return subprocess.Popen(
+        [tim_python(), "-u", "-X", "utf8", os.path.join(GOC, tep_py)],
+        cwd=GOC, stdout=lf, stderr=subprocess.STDOUT,
+        creationflags=CREATE_NO_WINDOW, env=env)
+
+
+def giet(tt):
+    if tt is None:
+        return
+    try:
+        subprocess.run("taskkill /F /T /PID {0}".format(tt.pid), shell=True,
+                       capture_output=True)
+    except Exception:
+        pass
+
+
+def duoi_log(duong, so_byte=60 * 1024):
+    try:
+        if not os.path.isfile(duong):
+            return "(chưa có gì)"
+        with open(duong, "rb") as tep:
+            if os.path.getsize(duong) > so_byte:
+                tep.seek(-so_byte, os.SEEK_END)
+            return tep.read().decode("utf-8", errors="replace")
+    except Exception as loi:
+        return "(lỗi đọc log: {0})".format(loi)
+
+
+def cam_loi_tat():
+    """Tự cắm lối tắt như MyTool: 'MyTool VM' ngoài màn hình + Khởi động.
+
+    Cả hai trỏ CHAY-NGAM.vbs (mở ẩn, tự tìm Python) và mang ĐÚNG logo của
+    MyTool (vm/logo.ico — chủ dự án 02/09: "để logo như bên MyTool đi").
+    `CreateShortcut` mở được cả lối tắt ĐÃ CÓ, nên máy đã cắm từ bản trước
+    cũng được thay logo — không chỉ máy cắm mới. Dọn lối tắt đời cũ trong
+    Khởi động để không mở trùng."""
+    vbs = os.path.join(GOC, "CHAY-NGAM.vbs").replace("'", "''")
+    ico = os.path.join(GOC, "logo.ico").replace("'", "''")
+    ps = (
+        "$sh=New-Object -ComObject WScript.Shell;"
+        "$ico='{ico}';"
+        "$st=[Environment]::GetFolderPath('Startup');"
+        "Remove-Item -LiteralPath (Join-Path $st 'shopapi-vm-agent.bat') "
+        "-ErrorAction SilentlyContinue;"
+        "Remove-Item -LiteralPath (Join-Path $st 'Tool Upload.lnk') "
+        "-ErrorAction SilentlyContinue;"
+        "foreach($noi in @([Environment]::GetFolderPath('Desktop'),$st)){{"
+        "$l=Join-Path $noi 'MyTool VM.lnk';"
+        "$s=$sh.CreateShortcut($l);"
+        "if(!$s.TargetPath){{$s.TargetPath='wscript.exe';"
+        "$s.Arguments='\"{vbs}\"';$s.WorkingDirectory='{goc}'}};"
+        "if(Test-Path $ico){{$s.IconLocation=$ico}};"
+        "$s.Save()}}"
+    ).format(ico=ico, vbs=vbs, goc=GOC.replace("'", "''"))
+    try:
+        subprocess.Popen(["powershell", "-NoProfile", "-Command", ps],
+                         creationflags=CREATE_NO_WINDOW)
+    except Exception:
+        pass
+
+
+#: Cập nhật kiểu MyTool (chủ dự án 02/09: "như kiểu khách dùng MyTool - mở
+#: lên là có phiên bản mới... đưa lên github phần đó"): vm/ nằm ngay trong
+#: kho MyTool, nên phiên bản = VERSION của kho, gói = zip nhánh chính.
+#:
+#: `KHO_GITHUB` giờ chỉ còn là GIÁ TRỊ DỰ PHÒNG (Đợt 5.2, 29/09/2026) — nguồn
+#: sự thật thật sự là `cap-nhat.json` ở gốc MyTool, đọc qua
+#: `core.nguon_cap_nhat` (xem `_doc_chinh_sach_cap_nhat`). Không đổi tên biến
+#: này để khỏi phải sửa `URL_PHIEN_BAN`/`URL_GOI_GITHUB` bên dưới, vốn vẫn
+#: dùng được cho máy có IPv4 khi `CHO_PHEP_CAP_NHAT` bật tay.
+KHO_GITHUB = "shopapivn/youtube"
+NHANH = "main"
+URL_PHIEN_BAN = ("https://raw.githubusercontent.com/{0}/{1}/VERSION"
+                 .format(KHO_GITHUB, NHANH))
+URL_GOI_GITHUB = ("https://github.com/{0}/archive/refs/heads/{1}.zip"
+                  .format(KHO_GITHUB, NHANH))
+TEP_PHIEN_BAN = os.path.join(GOC, "phien-ban.txt")
+
+
+def _duoc_phep_cap_nhat_github() -> bool:
+    """Có được PHÉP THẤY/dùng đường cập nhật GitHub này không — đọc qua
+    `core.nguon_cap_nhat.duoc_phep_hien_nut` (thư mục CHA của `vm/` ở kiến
+    trúc VPS — dấu hiệu `vps.json` cạnh `shopapi_studio_qt.py`, xem
+    `core.che_do_vps`). Trả `False` bất cứ khi nào không đọc được chắc chắn:
+    không phải chế độ VPS, gói `core` không nằm trên `sys.path` (module này
+    cũng phải chạy được KHI `vm/` đứng RIÊNG một mình, không có MyTool cạnh
+    — kiến trúc VM nhẹ cũ), hay `cap-nhat.json` thiếu/hỏng/`kho` để trống.
+    Đây đúng mặc định AN TOÀN cũ của `CHO_PHEP_CAP_NHAT = False`: một máy
+    không chắc là gì, hay chưa cấu hình kho, thì không tự bật cập nhật.
+    """
+    goc_tool = os.path.dirname(GOC)
+    try:
+        if not os.path.isfile(os.path.join(goc_tool, "vps.json")):
+            return False
+        if goc_tool not in sys.path:
+            sys.path.insert(0, goc_tool)
+        from core import nguon_cap_nhat  # noqa: PLC0415 — chỉ có khi vm/ nằm trong MyTool
+        return bool(nguon_cap_nhat.duoc_phep_hien_nut(goc_tool))
+    except Exception:  # noqa: BLE001 — đọc hỏng kiểu gì cũng lùi về tắt
+        return False
+
+
+#: Có được phép kéo bản mới từ GitHub về không.
+#:
+#: ═══ 29/09/2026 (Đợt 5.2): ĐỌC TỪ `cap-nhat.json`, KHÔNG CÒN CỜ CỨNG ═══
+#:
+#: Trước đó cờ này hard-code `False` (21/09/2026) — chủ dự án: *"tắt tính
+#: năng update của tool từ github để tránh bị ghi đè phiên bản cũ"*. Ba lý do
+#: gốc vẫn còn nguyên giá trị, chỉ đổi CHỖ QUYẾT ĐỊNH từ "sửa mã, phát hành
+#: lại" sang "sửa một dòng JSON trên máy":
+#:
+#: 1. Đường cập nhật ở đây KHÔNG so "mới hơn", nó so "khác" (`_soi_ban_moi`:
+#:    `self._co_ban_moi = (moi != doc_phien_ban())`) — VERSION trên kho chỉ
+#:    cần KHÁC, kể cả CŨ HƠN, là cờ bật, và `lam_moi()` thấy cờ bật thì TỰ
+#:    gọi `cap_nhat()`, không hỏi ai.
+#: 2. Máy VPS mang bản vá viết thẳng tại chỗ, chưa từng có trên GitHub — kéo
+#:    bản kho về là ghi đè ngược lên chúng.
+#: 3. `cap_nhat()` tự `_bat_ipv4(True)` để với tới GitHub khi VM chỉ có
+#:    IPv6, mà luật của dự án là "Chrome kênh mở thì IPv4 phải tắt".
+#:
+#: `chinh_sach == "tat"`, HAY `kho` còn để trống (mặc định khi CHƯA có
+#: `cap-nhat.json` — xem `core.nguon_cap_nhat.doc_cau_hinh`) → cờ này
+#: `False`, y hệt hành vi cũ: không có kho thì không có gì để kéo, một
+#: `chinh_sach` cho phép cũng vô nghĩa. Đổi `chinh_sach` thành
+#: `"hoi"`/`"khung_an_toan"` VÀ điền `kho` thật thì mới bật lại — không còn
+#: phải sửa mã.
+CHO_PHEP_CAP_NHAT = _duoc_phep_cap_nhat_github()
+
+
+def doc_phien_ban():
+    try:
+        with open(TEP_PHIEN_BAN, encoding="utf-8") as tep:
+            return tep.read().strip() or "?"
+    except OSError:
+        return "?"
+
+
+def _ghi_phien_ban(v):
+    try:
+        with open(TEP_PHIEN_BAN, "w", encoding="utf-8") as tep:
+            tep.write(str(v).strip())
+    except OSError:
+        pass
+
+
+def _tai(url, cho=30):
+    import urllib.request
+    yeu_cau = urllib.request.Request(url, headers={"User-Agent": "MyToolVM"})
+    with urllib.request.urlopen(yeu_cau, timeout=cho) as tra:
+        return tra.read()
+
+
+def _ten_trinh_duyet():
+    """Tên tiến trình trình duyệt cần diệt: chuẩn + browser kênh (<K>/<K>.exe
+    nằm cạnh thư mục cha — nếp của tool đăng)."""
+    ten = ["chrome.exe", "msedge.exe", "firefox.exe"]
+    cha = os.path.dirname(GOC)
+    try:
+        for t in os.listdir(cha):
+            if os.path.isfile(os.path.join(cha, t, t + ".exe")):
+                ten.append(t + ".exe")
+    except OSError:
+        pass
+    return ten
+
+
+def _giet_trinh_duyet_va_cho_chet(cho_giay=12):
+    """Đóng mọi trình duyệt và CHỜ chết hẳn — luật sắt: IPv4 chỉ được bật
+    khi không còn trình duyệt nào sống."""
+    ten = _ten_trinh_duyet()
+    for t in ten:
+        subprocess.run('taskkill /F /IM "{0}" /T'.format(t), shell=True,
+                       capture_output=True)
+    het = time.time() + cho_giay
+    while time.time() < het:
+        ra = subprocess.run("tasklist /fo csv /nh", shell=True,
+                            capture_output=True, text=True,
+                            errors="replace").stdout.lower()
+        if not any(t.lower() in ra for t in ten):
+            return True
+        time.sleep(1)
+    return False
+
+
+def _bat_ipv4(bat):
+    """VM đa phần CHỈ có IPv6 mà GitHub chỉ nói IPv4 — bật IPv4 tạm lúc
+    tải rồi tắt lại (đúng chiêu tool upload cũ vẫn dùng, cần quyền admin).
+
+    Luật sắt của chủ kênh (02/09): Chrome KHÔNG BAO GIỜ sống khi IPv4 bật.
+    Nên trước khi bật: cắm CỜ VAN (vm/van-ipv4.json — agent thấy là đứng
+    im, không nuôi Chrome) + diệt trình duyệt và CHỜ chết hẳn. Tắt xong
+    thì nhổ cờ."""
+    van = os.path.join(GOC, "van-ipv4.json")
+    if bat:
+        try:
+            with open(van, "w", encoding="utf-8") as tep:
+                json.dump({"ai": "giao_dien", "pid": os.getpid()}, tep)
+        except Exception:
+            pass
+        _giet_trinh_duyet_va_cho_chet()
+    dong = "Enable" if bat else "Disable"
+    lenh = ("Get-NetAdapter | ForEach-Object {{ {0}-NetAdapterBinding "
+            "-Name $_.Name -ComponentID ms_tcpip -ErrorAction "
+            "SilentlyContinue }}").format(dong)
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", lenh],
+                       capture_output=True, creationflags=CREATE_NO_WINDOW,
+                       timeout=60)
+        if bat:
+            subprocess.run(["powershell", "-NoProfile", "-Command",
+                            "Get-NetAdapter | Where-Object {$_.Status -eq "
+                            "'Up'} | ForEach-Object { "
+                            "Set-DnsClientServerAddress -InterfaceIndex "
+                            "$_.ifIndex -ServerAddresses 8.8.8.8 "
+                            "-ErrorAction SilentlyContinue }"],
+                           capture_output=True,
+                           creationflags=CREATE_NO_WINDOW, timeout=60)
+            time.sleep(6)
+    except Exception:
+        pass
+    if not bat:
+        try:
+            os.remove(van)
+        except OSError:
+            pass
+
+
+def _giai_nen_goi_vm(du_lieu, goc_vm):
+    """Bung phần vm/ của một gói zip vào chỗ mình — nhận CẢ HAI khổ:
+    zip của GitHub (kho-x/vm/agent.py...) lẫn zip của trạm (agent.py...).
+    Đồ RIÊNG của máy (config, log, token...) không bao giờ bị đè."""
+    import io as io_mod
+    import zipfile
+    so = 0
+    with zipfile.ZipFile(io_mod.BytesIO(du_lieu)) as goi:
+        cac_ten = [m.filename.replace("\\", "/") for m in goi.infolist()]
+        # GitHub zip: mọi thứ nằm dưới "<kho>-<nhánh>/..." — chỉ lấy vm/.
+        # Zip của trạm: tệp nằm trần ("agent.py", "icon/…") — lấy hết.
+        kieu_github = any("/vm/" in t for t in cac_ten)
+        for muc in goi.infolist():
+            if muc.is_dir():
+                continue
+            ten = muc.filename.replace("\\", "/")
+            if kieu_github:
+                if "/vm/" not in ten:
+                    continue
+                rel = ten.split("/vm/", 1)[1]
+            else:
+                rel = ten[3:] if ten.startswith("vm/") else ten
+            if not rel:
+                continue
+            goc_ten = os.path.basename(rel)
+            if (goc_ten in _BO_TEP
+                    or goc_ten.startswith(("ke-hoach-", "cho-bao-"))
+                    or goc_ten.endswith((".log", ".pid"))
+                    or rel.split("/")[0] in _BO_THU):
+                continue
+            dich = os.path.join(goc_vm, rel.replace("/", os.sep))
+            os.makedirs(os.path.dirname(dich) or goc_vm, exist_ok=True)
+            with goi.open(muc) as nguon, open(dich, "wb") as ra:
+                ra.write(nguon.read())
+            so += 1
+    return so
+
+
+#: Soi gương của luật loại trừ bên trạm (`core/chi_so_ytb/tram._tep_goi_vm`)
+#: — sửa một bên thì sửa cả bên kia, có test so hai bên cho bằng nhau.
+_BO_TEP = {"config.json", "cai-dat-tool.json", "agent.pid",
+           "agent.log", "trang-thai.json"}
+_BO_THU = {"__pycache__", "logs", "tien-ich", "tokens",
+           "clients", "replied", "transcripts", "goi-vps"}
+
+
+def dau_van_cuc_bo(goc_vm=None):
+    """Dấu vân MÃ đang có trên máy này — so với `goi_vm` trạm trả trong
+    /trang-thai: khác nhau nghĩa là máy nhà có bản mới, tự cập nhật."""
+    import hashlib
+    bam = hashlib.sha1()
+    tm = goc_vm or GOC
+    for goc_tm, thu_muc, cac_tep in os.walk(tm):
+        thu_muc[:] = sorted(t for t in thu_muc if t not in _BO_THU)
+        for ten in sorted(cac_tep):
+            if (ten in _BO_TEP or ten.startswith(("ke-hoach-", "cho-bao-"))
+                    or ten.endswith((".log", ".pid"))):
+                continue
+            duong = os.path.join(goc_tm, ten)
+            bam.update(os.path.relpath(duong, tm).replace("\\", "/")
+                       .encode("utf-8"))
+            try:
+                with open(duong, "rb") as tep:
+                    bam.update(tep.read())
+            except OSError:
+                continue
+    return bam.hexdigest()[:16]
+
+
+def _may_dang_ban(thu_log, gan_day_giay=600):
+    """Máy đăng/cmt có vẻ ĐANG LÀM VIỆC không — nhìn log còn nóng không.
+
+    Lúc làm việc hai con in log liên tục; lúc ngủ (3 tiếng / 12 tiếng một
+    nhịp) log nguội. Tự cập nhật chỉ diễn ra lúc log nguội — không giết
+    một lượt đăng đang dở giữa chừng."""
+    for ten in ("dang.log", "cmt.log"):
+        try:
+            if time.time() - os.path.getmtime(os.path.join(thu_log, ten)) < gan_day_giay:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def da_dung_mytool_vps(goc_vm=None):
+    """Máy này đã dùng MyTool ở "chế độ VPS" chưa — dấu hiệu là `vps.json`
+    trong một thư mục `MyTool` ANH EM của `vm/` (`..\\MyTool\\vps.json`,
+    xem `core/che_do_vps.py` bên MyTool).
+
+    Có dấu ấy nghĩa là MyTool đã tự nuôi ba con này rồi
+    (`core/giam_sat_vm.py`) — bảng Tkinter ở đây đứng ra thêm chỉ tổ có HAI
+    người cùng nhắm một khoá cổng (8767/8768/8769: người tới sau luôn thua,
+    khoá một-mình không hỏng gì) mà không được tích sự gì, lại còn cắm thêm
+    lối tắt/dọn lối tắt đời cũ (`cam_loi_tat`) một cách vô nghĩa. Máy VM một-
+    kênh CŨ (không có MyTool cạnh nó) thì `vps.json` không tồn tại — hàm này
+    trả `False`, mọi thứ y nguyên như trước.
+    """
+    goc = goc_vm or GOC
+    return os.path.isfile(os.path.join(os.path.dirname(goc), "MyTool", "vps.json"))
+
+
+def mot_minh_gui():
+    """Chỉ một bảng điều khiển — cổng khoá kiểu agent, chết là HĐH nhả."""
+    import socket
+    global _O_KHOA_GUI
+    try:
+        _O_KHOA_GUI = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _O_KHOA_GUI.bind(("127.0.0.1", 8766))
+        _O_KHOA_GUI.listen(1)
+        return True
+    except OSError:
+        return False
+
+
+class BangDieuKhien:
+    def __init__(self):
+        self.tt = {k: None for k, _t, _f, _l in CAC_CON}      # Popen từng con
+        self.luc = {k: 0.0 for k, _t, _f, _l in CAC_CON}      # mở lúc nào
+        self.mo_lai_luc = {k: 0.0 for k, _t, _f, _l in CAC_CON}
+        self.cong_tac = doc_cong_tac()
+        self._cac_kenh = _danh_sach_kenh_may()
+        self._che_do_phien = _che_do_phien_hieu_luc()
+        self._nhip = 0
+        self._dang_cap_nhat = False
+        self._co_ban_moi = False       # luồng soi nền bật cờ, vòng chính áp
+        self._ban_moi_nhat = ""        # số bản mới nhất mà lần soi thấy
+
+        self.cua = tk.Tk()
+        self.cua.title("MyTool VM — {0} — bản {1}".format(
+            self._ten_kenh(), doc_phien_ban()))
+        try:
+            self.cua.iconbitmap(os.path.join(GOC, "logo.ico"))
+        except Exception:
+            pass
+        self.cua.configure(bg=NEN)
+        self.cua.geometry("1000x600")
+        self.cua.protocol("WM_DELETE_WINDOW", self.dong)
+
+        dau = tk.Frame(self.cua, bg=NEN)
+        dau.pack(fill="x", padx=10, pady=(8, 2))
+        self.den = {}
+        for khoa, ten, _tep, _log in CAC_CON:
+            nhan = tk.Label(dau, text="● " + ten.replace("&&", "&") + ": …",
+                            font=("Consolas", 10, "bold"), fg=VANG, bg=NEN)
+            nhan.pack(side="left", padx=(2, 14))
+            self.den[khoa] = nhan
+
+        # Máy MỘT kênh (nếp cũ): hai công tắc chung ngay trên đầu, y hệt
+        # trước — không đổi gì cho những máy đang chạy ổn.
+        # Máy NHIỀU kênh (tới 5, một VPS cùng niche): mỗi kênh một hàng
+        # riêng (bảng nhỏ bên dưới) — công tắc chung không còn đủ nghĩa vì
+        # mỗi kênh có thể bật/tắt khác nhau.
+        self.o_dang = self.o_cmt = None
+        self._vars_kenh = {}
+        self._nhan_quet_kenh = {}
+        if len(self._cac_kenh) <= 1:
+            self.o_dang = tk.BooleanVar(value=self.cong_tac["tu_dang"])
+            self.o_cmt = tk.BooleanVar(value=self.cong_tac["tu_tra_loi_cmt"])
+            tk.Checkbutton(dau, text="Tự đăng", variable=self.o_dang,
+                           command=self.doi_cong_tac, bg=NEN, fg=CHU,
+                           selectcolor=NEN_O, activebackground=NEN,
+                           font=("Segoe UI", 9, "bold")).pack(side="right", padx=4)
+            tk.Checkbutton(dau, text="Tự trả lời cmt", variable=self.o_cmt,
+                           command=self.doi_cong_tac, bg=NEN, fg=CHU,
+                           selectcolor=NEN_O, activebackground=NEN,
+                           font=("Segoe UI", 9, "bold")).pack(side="right", padx=4)
+        else:
+            bang = tk.Frame(self.cua, bg=NEN)
+            bang.pack(fill="x", padx=10, pady=(0, 4))
+            dong_dau = tk.Frame(bang, bg=NEN)
+            dong_dau.pack(fill="x")
+            for chu, rong in (("Kênh", 16),
+                             ("Phiên kế" if self._che_do_phien else "Quét cuối", 20)):
+                tk.Label(dong_dau, text=chu, width=rong, anchor="w",
+                        font=("Segoe UI", 8, "bold"), fg=VANG,
+                        bg=NEN).pack(side="left")
+            for kenh in self._cac_kenh:
+                cong = doc_cong_tac_kenh(kenh)
+                hang = tk.Frame(bang, bg=NEN)
+                hang.pack(fill="x")
+                tk.Label(hang, text=kenh, width=16, anchor="w", fg=CHU,
+                        bg=NEN, font=("Consolas", 9)).pack(side="left")
+                nhan_quet = tk.Label(hang, text="…", width=20, anchor="w",
+                                     fg=CHU, bg=NEN, font=("Consolas", 9))
+                nhan_quet.pack(side="left")
+                self._nhan_quet_kenh[kenh] = nhan_quet
+                v_dang = tk.BooleanVar(value=cong["tu_dang"])
+                v_cmt = tk.BooleanVar(value=cong["tu_tra_loi_cmt"])
+                self._vars_kenh[kenh] = (v_dang, v_cmt)
+                tk.Checkbutton(hang, text="Tự đăng", variable=v_dang,
+                               command=lambda k=kenh: self._doi_cong_tac_kenh(k),
+                               bg=NEN, fg=CHU, selectcolor=NEN_O,
+                               activebackground=NEN,
+                               font=("Segoe UI", 9)).pack(side="left", padx=4)
+                tk.Checkbutton(hang, text="Tự trả lời cmt", variable=v_cmt,
+                               command=lambda k=kenh: self._doi_cong_tac_kenh(k),
+                               bg=NEN, fg=CHU, selectcolor=NEN_O,
+                               activebackground=NEN,
+                               font=("Segoe UI", 9)).pack(side="left", padx=4)
+
+        hang_nut = tk.Frame(self.cua, bg=NEN)
+        hang_nut.pack(fill="x", padx=10, pady=(0, 6))
+        for chu_nut, lenh, mau in (
+                ("↻ Chạy lại tất cả", self.chay_lai_het, "#89b4fa"),
+                ("🔑 Lấy token cmt", self.lay_token, VANG),
+                ("⬇ Cập nhật từ tool", self.cap_nhat, CAM)):
+            tk.Button(hang_nut, text=chu_nut, command=lenh, bg=mau, fg=NEN,
+                      font=("Segoe UI", 9, "bold"), relief="flat",
+                      padx=8).pack(side="left", padx=3)
+        self.dong_tt = tk.Label(hang_nut, text="", font=("Consolas", 9),
+                                fg=VANG, bg=NEN)
+        self.dong_tt.pack(side="right", padx=6)
+
+        than = tk.Frame(self.cua, bg=NEN)
+        than.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.o_log = {}
+        for i, (khoa, ten, _tep, _log) in enumerate(CAC_CON):
+            than.columnconfigure(i, weight=1)
+            tk.Label(than, text=ten.upper(), font=("Segoe UI", 9, "bold"),
+                     fg=CHU, bg=NEN).grid(row=0, column=i, sticky="w")
+            o = tk.Text(than, bg=NEN_O, fg=CHU, font=("Consolas", 8),
+                        relief="flat", wrap="none")
+            o.grid(row=1, column=i, sticky="nsew",
+                   padx=(0 if i == 0 else 5, 0))
+            self.o_log[khoa] = o
+        than.rowconfigure(1, weight=1)
+
+        cam_loi_tat()
+        self.chay_lai_het()
+        self.lam_moi()
+        self.cua.after(30000, self._thu_nho)
+        self.cua.mainloop()
+
+    # ------------------------------------------------------------------
+    def _ten_kenh(self):
+        cac = self._cac_kenh if hasattr(self, "_cac_kenh") else _danh_sach_kenh_may()
+        if len(cac) > 1:
+            return "{0} (+{1} kênh khác)".format(cac[0], len(cac) - 1)
+        try:
+            du = json.load(open(os.path.join(GOC, "config.json"),
+                                encoding="utf-8"))
+            return str(du.get("kenh") or "?")
+        except Exception:
+            return "?"
+
+    def _phien_ke_kenh(self, kenh):
+        """"HH:MM" mục tiêu phiên hôm nay của MỘT kênh + dấu kết quả lần
+        chạy gần nhất (✓ xong, ⚠ có bước lỗi/quá hạn) — cột "Phiên kế" khi
+        chế độ phiên đang bật (18/09 — xem vm/KE-HOACH.md)."""
+        try:
+            tt = json.load(open(os.path.join(GOC, "trang-thai.json"),
+                                encoding="utf-8"))
+        except Exception:
+            tt = {}
+        hom_nay = time.strftime("%Y-%m-%d")
+        muc_tieu = tt.get("phien_muc_tieu@{0}@{1}".format(kenh, hom_nay)) or "…"
+        if tt.get("phien_cuoi@" + kenh) != hom_nay:
+            return muc_tieu
+        kq = tt.get("phien_ket_qua@" + kenh) or {}
+        chu = " ".join(str(kq.get(k, "")) for k in
+                       ("quet_studio", "quet_trang_chu", "dang", "cmt"))
+        hong = ("lỗi" in chu) or ("QUÁ HẠN" in chu) or ("không mở được" in chu)
+        return "{0} {1}".format(muc_tieu, "⚠" if hong else "✓")
+
+    def _quet_cuoi_kenh(self, kenh):
+        """Lần quét gần nhất của MỘT kênh — mốc mới nhất trong các khe
+        `quet_cuoi@<kênh>@<khe>` của `trang-thai.json` cạnh agent."""
+        try:
+            du = json.load(open(os.path.join(GOC, "trang-thai.json"),
+                                encoding="utf-8"))
+        except Exception:
+            return "chưa có"
+        tien_to = "quet_cuoi@{0}@".format(kenh)
+        moc = sorted(v for k, v in du.items()
+                    if isinstance(k, str) and k.startswith(tien_to) and v)
+        return moc[-1] if moc else "chưa có"
+
+    def _thu_nho(self):
+        try:
+            self.cua.iconify()
+        except Exception:
+            pass
+
+    def _duoc_bat(self, khoa):
+        if khoa == "agent":
+            return True
+        if self._che_do_phien:
+            # Chế độ phiên: agent tự mở may_dang.py/may_cmt.py MỘT LƯỢT
+            # ("--kenh X --mot-lan") ngay trong phiên của từng kênh — bảng
+            # KHÔNG tự mở chúng chạy nền 24/7 nữa (hai người giữ cửa 8768/
+            # 8769 cùng lúc là vô nghĩa, khoá một-mình sẽ chỉ để MỘT sống).
+            return False
+        return bool(self.cong_tac.get(khoa, True))
+
+    # ------------------------------------------------------------------
+    def doi_cong_tac(self):
+        """Gạt núm trên bảng — phải DÍNH, không bị tool ở nhà đè lại.
+
+        02/09, chủ dự án: *"tao tắt việc đăng và trả lời bình luận, mở lên
+        nó vẫn bật"* — vì thiết lập tool đẩy xuống mỗi nhịp tim THẮNG và đè
+        ngược. Chữa tận gốc: gạt ở đây là (1) ghi cục bộ, (2) ghi đè luôn
+        tệp thiết-lập-tool để 12 giây sau không tự lật, (3) BÁO VỀ TOOL sửa
+        nguồn sự thật (POST /thiet-lap-vm) — hai bên cùng một giá trị.
+        """
+        d, c = bool(self.o_dang.get()), bool(self.o_cmt.get())
+        luu_cong_tac(d, c)
+        try:
+            duong = os.path.join(GOC, "cai-dat-tool.json")
+            du = (json.load(open(duong, encoding="utf-8"))
+                  if os.path.isfile(duong) else {})
+            du["tu_dang"], du["tu_tra_loi_cmt"] = d, c
+            with open(duong + ".tmp", "w", encoding="utf-8") as tep:
+                json.dump(du, tep, ensure_ascii=False, indent=1)
+            os.replace(duong + ".tmp", duong)
+        except Exception:
+            pass
+        self.cong_tac["tu_dang"], self.cong_tac["tu_tra_loi_cmt"] = d, c
+        import threading
+        threading.Thread(target=self._bao_cong_tac, args=(d, c),
+                         daemon=True).start()
+        for khoa in ("tu_dang", "tu_tra_loi_cmt"):
+            if not self.cong_tac[khoa] and self._song(khoa):
+                giet(self.tt[khoa])
+                self.tt[khoa] = None
+
+    def _bao_cong_tac(self, d, c):
+        """(luồng nền) báo núm về tool để nguồn sự thật đổi theo — trạm tắt
+        thì thôi, bản cục bộ đã ghi; khi tool mở lại nó sẽ đẩy giá trị cũ
+        xuống, nên nối được lúc nào báo lúc đó là quan trọng."""
+        tram = self._tram()
+        if not tram:
+            return
+        try:
+            import urllib.request
+            du = json.dumps({"kenh": self._ten_kenh(), "tu_dang": d,
+                             "tu_tra_loi_cmt": c}).encode("utf-8")
+            urllib.request.urlopen(urllib.request.Request(
+                tram.rstrip("/") + "/thiet-lap-vm", data=du,
+                headers={"Content-Type": "application/json"}),
+                timeout=10).read()
+        except Exception:
+            pass
+
+    def _doi_cong_tac_kenh(self, kenh):
+        """Gạt núm của MỘT kênh (bảng nhiều-kênh) — cùng luật DÍNH như
+        `doi_cong_tac`: ghi cục bộ trước, rồi báo về tool bằng đúng `kenh`
+        này (không còn ngầm định kênh đầu)."""
+        v_dang, v_cmt = self._vars_kenh[kenh]
+        d, c = bool(v_dang.get()), bool(v_cmt.get())
+        _ghi_cong_tac_kenh_cuc_bo(kenh, d, c)
+        import threading
+        threading.Thread(target=_goi_thiet_lap_vm,
+                         args=(self._tram(), kenh, d, c), daemon=True).start()
+        # Một kênh tắt không được giết con dang/cmt nếu kênh KHÁC còn bật —
+        # con tự bỏ qua từng kênh tắt bên trong nó (_tu_dang_bat/…).
+        self.cong_tac = doc_cong_tac()
+
+    def chay_lai_het(self):
+        for khoa, _ten, tep, log in CAC_CON:
+            giet(self.tt[khoa])
+            self.tt[khoa] = None
+        time.sleep(0.5)
+        for khoa, _ten, tep, log in CAC_CON:
+            if self._duoc_bat(khoa) and os.path.isfile(os.path.join(GOC, tep)):
+                self.tt[khoa] = mo_ngam(tep, log)
+                self.luc[khoa] = time.time()
+
+    def lay_token(self):
+        """Mở 'may_cmt.py setup' trong console HIỆN để bấm chọn tài khoản."""
+        giet(self.tt.get("tu_tra_loi_cmt"))
+        self.tt["tu_tra_loi_cmt"] = None
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        subprocess.Popen([tim_python(), "-X", "utf8",
+                          os.path.join(GOC, "may_cmt.py"), "setup"],
+                         cwd=GOC, creationflags=CREATE_NEW_CONSOLE, env=env)
+
+    def _tram(self):
+        try:
+            return str(json.load(open(os.path.join(
+                GOC, "cai-dat-tool.json"), encoding="utf-8")).get("tram") or "")
+        except Exception:
+            return ""
+
+    def _soi_ban_moi(self):
+        """(luồng nền) Có bản mới không — hỏi GitHub như MyTool; VM chỉ có
+        IPv6 không với tới GitHub thì hỏi TRẠM (nó biết VERSION của kho)."""
+        moi = ""
+        try:
+            moi = _tai(URL_PHIEN_BAN, cho=10).decode("utf-8",
+                                                     "replace").strip()
+            if len(moi) > 20 or "<" in moi:   # trang 404 HTML, không phải số
+                moi = ""
+        except Exception:
+            moi = ""
+        if not moi:
+            tram = self._tram()
+            if tram:
+                try:
+                    import urllib.request
+                    with urllib.request.urlopen(
+                            tram.rstrip("/") + "/trang-thai", timeout=10) as t:
+                        moi = str(json.load(t).get("phien_ban") or "").strip()
+                except Exception:
+                    moi = ""
+        if moi:
+            self._ban_moi_nhat = moi
+            self._co_ban_moi = (moi != doc_phien_ban())
+
+    def cap_nhat(self):
+        """Thay bản mới rồi mở lại bảng — nguồn theo thứ tự khôn:
+
+        1. GitHub thẳng (VM có đường IPv4/đường ra GitHub)
+        2. GitHub sau khi BẬT IPv4 tạm (VM chỉ IPv6 — chiêu của tool cũ),
+           tắt IPv4 lại ngay dù thành hay bại
+        3. Gói từ TRẠM của máy nhà (/goi-vm) — không cần Internet
+
+        Giữ nguyên: config.json, log, token/dữ liệu — gói không đè chúng.
+        """
+        if not CHO_PHEP_CAP_NHAT:
+            # Chặn ở ĐÂY chứ không chỉ ở nhánh tự động: nút "⬇ Cập nhật từ
+            # tool" gọi thẳng hàm này, và đây là chỗ duy nhất thật sự giải
+            # nén đè lên thư mục đang chạy.
+            self.dong_tt.config(
+                text="cập nhật từ GitHub: đã tắt (giữ bản {0})".format(
+                    doc_phien_ban()))
+            return
+        if self._dang_cap_nhat:
+            return
+        self._dang_cap_nhat = True
+        self.dong_tt.config(text="đang tải bản mới…")
+        self.cua.update_idletasks()
+        du = b""
+        try:
+            try:
+                du = _tai(URL_GOI_GITHUB, cho=120)
+            except Exception:
+                self.dong_tt.config(text="GitHub chưa với tới — bật IPv4 tạm…")
+                self.cua.update_idletasks()
+                _bat_ipv4(True)
+                try:
+                    du = _tai(URL_GOI_GITHUB, cho=180)
+                except Exception:
+                    du = b""
+                finally:
+                    _bat_ipv4(False)
+            if not du:
+                tram = self._tram()
+                if tram:
+                    self.dong_tt.config(text="lấy gói qua trạm máy nhà…")
+                    self.cua.update_idletasks()
+                    du = _tai(tram.rstrip("/") + "/goi-vm", cho=60)
+            if not du:
+                raise RuntimeError("không tải được từ GitHub lẫn trạm")
+            for khoa, _ten, _tep, _log in CAC_CON:
+                giet(self.tt[khoa])
+                self.tt[khoa] = None
+            so = _giai_nen_goi_vm(du, GOC)
+            if not so:
+                raise RuntimeError("gói rỗng — không thay gì")
+            if getattr(self, "_ban_moi_nhat", ""):
+                _ghi_phien_ban(self._ban_moi_nhat)
+            # mở lại bảng bằng mã MỚI; bảng cũ tự thoát
+            subprocess.Popen([tim_python(), os.path.join(GOC, "giao_dien.py")],
+                             cwd=GOC, creationflags=CREATE_NO_WINDOW)
+            self.cua.destroy()
+            os._exit(0)
+        except Exception as loi:  # noqa: BLE001 — nói thật rồi chạy tiếp bản cũ
+            self.dong_tt.config(text="cập nhật lỗi: {0}".format(str(loi)[:60]))
+            self._dang_cap_nhat = False
+            self.chay_lai_het()
+
+    # ------------------------------------------------------------------
+    def _song(self, khoa):
+        tt = self.tt.get(khoa)
+        return tt is not None and tt.poll() is None
+
+    def lam_moi(self):
+        try:
+            self._nhip += 1
+            bay_gio = time.time()
+            # Tự cập nhật kiểu MyTool: soi NGAY khi mở (nhịp 2 ~ 5 giây) và
+            # ~30 phút một lần. Thấy bản mới -> chờ máy đăng/cmt NGUỘI rồi
+            # tự thay — "mở lên là có phiên bản mới" (02/09).
+            # TẮT từ 21/09/2026 — xem `CHO_PHEP_CAP_NHAT` ở đầu tệp.
+            if not CHO_PHEP_CAP_NHAT and self._nhip in (2,):
+                self.dong_tt.config(
+                    text="bản {0} · cập nhật từ GitHub: đã tắt".format(
+                        doc_phien_ban()))
+            if CHO_PHEP_CAP_NHAT and (self._nhip in (2,) or self._nhip % 720 == 0):
+                import threading
+                threading.Thread(target=self._soi_ban_moi, daemon=True).start()
+            if CHO_PHEP_CAP_NHAT and self._co_ban_moi and not self._dang_cap_nhat:
+                if not _may_dang_ban(THU_LOG):
+                    self._co_ban_moi = False
+                    self.cap_nhat()
+                    return
+                self.dong_tt.config(
+                    text="bản {0} · CÓ BẢN {1} — tự thay khi máy rảnh".format(
+                        doc_phien_ban(), self._ban_moi_nhat))
+            elif not self._dang_cap_nhat and self._ban_moi_nhat:
+                self.dong_tt.config(
+                    text="bản {0} · mới nhất".format(doc_phien_ban()))
+            # Thiết lập tool đẩy xuống — đọc lại ~12 giây/lần, đổi là theo ngay
+            if self._nhip % 5 == 2:
+                che_do_moi = _che_do_phien_hieu_luc()
+                if che_do_moi != self._che_do_phien:
+                    self._che_do_phien = che_do_moi
+                    if che_do_moi:
+                        # Vừa bật phiên — hai con tự lặp cũ (nếu đang chạy)
+                        # phải nhường cổng 8768/8769 cho agent tự one-shot.
+                        for khoa in ("tu_dang", "tu_tra_loi_cmt"):
+                            if self._song(khoa):
+                                giet(self.tt[khoa])
+                                self.tt[khoa] = None
+                moi = doc_cong_tac()
+                if moi != self.cong_tac:
+                    self.cong_tac = moi
+                    if self.o_dang is not None:      # máy MỘT kênh (nếp cũ)
+                        self.o_dang.set(moi["tu_dang"])
+                        self.o_cmt.set(moi["tu_tra_loi_cmt"])
+                    for khoa in ("tu_dang", "tu_tra_loi_cmt"):
+                        if not moi[khoa] and self._song(khoa):
+                            giet(self.tt[khoa])
+                            self.tt[khoa] = None
+                # Máy NHIỀU kênh: mỗi kênh tự đọc lại công tắc + mốc quét
+                # cuối của MÌNH — một kênh đổi không phải vẽ lại cả bảng.
+                for kenh, (v_dang, v_cmt) in self._vars_kenh.items():
+                    cong = doc_cong_tac_kenh(kenh)
+                    if bool(v_dang.get()) != cong["tu_dang"]:
+                        v_dang.set(cong["tu_dang"])
+                    if bool(v_cmt.get()) != cong["tu_tra_loi_cmt"]:
+                        v_cmt.set(cong["tu_tra_loi_cmt"])
+                    nhan = self._nhan_quet_kenh.get(kenh)
+                    if nhan is not None:
+                        nhan.config(text=(self._phien_ke_kenh(kenh)
+                                          if self._che_do_phien
+                                          else self._quet_cuoi_kenh(kenh)))
+            for khoa, ten, tep, log in CAC_CON:
+                song = self._song(khoa)
+                bat = self._duoc_bat(khoa)
+                # con chết mà đáng lẽ đang bật -> mở lại (chờ 20s tránh xoay vòng)
+                if (bat and not song and os.path.isfile(os.path.join(GOC, tep))
+                        and bay_gio - self.mo_lai_luc[khoa] > 20):
+                    self.tt[khoa] = mo_ngam(tep, log)
+                    self.luc[khoa] = bay_gio
+                    self.mo_lai_luc[khoa] = bay_gio
+                    song = True
+                ten_hien = ten.replace("&&", "&")
+                if song:
+                    phut = int((bay_gio - self.luc[khoa]) // 60)
+                    self.den[khoa].config(
+                        text="● {0}: CHẠY {1}h{2:02d}".format(
+                            ten_hien, phut // 60, phut % 60), fg=XANH)
+                elif not bat:
+                    self.den[khoa].config(text="● {0}: TẮT".format(ten_hien),
+                                          fg=VANG)
+                else:
+                    self.den[khoa].config(text="● {0}: DỪNG".format(ten_hien),
+                                          fg=DO)
+                o = self.o_log[khoa]
+                cuoi = True
+                try:
+                    cuoi = o.yview()[1] > 0.93
+                except Exception:
+                    pass
+                o.config(state="normal")
+                o.delete("1.0", "end")
+                o.insert("1.0", duoi_log(os.path.join(THU_LOG, log))[-20000:])
+                if cuoi:
+                    o.see("end")
+                o.config(state="disabled")
+        except Exception:
+            pass
+        finally:
+            self.cua.after(2500, self.lam_moi)
+
+    def dong(self):
+        for khoa, _ten, _tep, _log in CAC_CON:
+            giet(self.tt[khoa])
+        try:
+            self.cua.destroy()
+        except Exception:
+            pass
+        os._exit(0)
+
+
+if __name__ == "__main__":
+    if da_dung_mytool_vps():
+        # Chế độ VPS: MyTool cạnh đây đã tự nuôi cả ba con — không cắm lối
+        # tắt, không tự mở gì, chỉ nói một câu rồi thoát.
+        try:
+            import tkinter.messagebox as mb
+            an = tk.Tk()
+            an.withdraw()
+            mb.showinfo(
+                "Đã dùng MyTool",
+                "Máy này đã dùng MyTool (chế độ VPS) — mở MyTool.")
+            an.destroy()
+        except Exception:
+            pass
+        os._exit(0)
+    if not mot_minh_gui():
+        try:
+            import tkinter.messagebox as mb
+            an = tk.Tk()
+            an.withdraw()
+            mb.showinfo("Đang chạy rồi",
+                        "MyTool VM đang chạy (chỉ một bảng). Không mở thêm.")
+            an.destroy()
+        except Exception:
+            pass
+        os._exit(0)
+    BangDieuKhien()

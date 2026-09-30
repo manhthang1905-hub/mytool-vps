@@ -1,0 +1,193 @@
+"""Thiết lập máy ảo của một kênh — NẰM TRÊN TOOL, máy ảo chỉ nhận.
+
+Chủ dự án, 02/09/2026: *"cần ở tool này thiết lập ví dụ là quét studio như
+nào — tức những cái ở vm thì ở tool có thể điều chỉnh được, kiểm soát được"*.
+
+Nguyên tắc: máy ảo là tay chân, mọi núm vặn ở tool. Thiết lập lưu tại
+`CHANNEL/<kênh>/may-ao.json`; trạm ĐÍNH KÈM nó vào phản hồi mỗi lượt agent
+hỏi việc (`GET /viec`) — tức chỉnh trên tool là máy ảo nhận trong một nhịp
+tim (≤30 giây), không phải mở Remote Desktop sửa config tay.
+
+`config.json` bên máy ảo chỉ còn giữ những thứ THUỘC VỀ CÁI MÁY ấy: địa chỉ
+trạm, mã kênh, đường Chrome, đường tool đăng. Các khoá đó cố ý KHÔNG nằm
+trong :data:`KHOA_DIEU_KHIEN` — trạm là cổng không mật khẩu trong mạng nhà,
+không bao giờ để nó đẩy được "đường chương trình sẽ chạy" xuống máy khác.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import Dict
+
+from .kenh import duong_kenh
+
+__all__ = ["MAC_DINH", "KHOA_DIEU_KHIEN", "TEP", "doc", "luu", "dong_goi_vm"]
+
+TEP = "may-ao.json"
+
+#: Mặc định — khớp với `vm/config.example.json` để hai bên không cãi nhau.
+MAC_DINH: Dict[str, object] = {
+    # "" = tắt; nhiều khe cách nhau dấu phẩy. Hai khe mặc định (02/09):
+    # sáng bắt sóng quét-trang-chủ giờ 12–13 sau giờ đăng 18h JP, tối chốt
+    # số cuối ngày — số phân tích thật nằm ở mốc 24/48/72h extension tự chụp.
+    "gio_quet": "07:30,19:30",
+    "quet_trang_chu_hang_ngay": True,
+    "cho_quet_giay": 480,
+    "cho_trang_chu_giay": 300,
+    "dong_chrome_sau_quet": True,
+    # Chrome phải BẬT thì extension mới sống mà tự chụp theo mốc giờ — nên
+    # agent nuôi Chrome: chết là mở lại (chủ dự án 02/09: "tool kiểm soát
+    # all"). Bật sẵn; tắt cho máy nào chủ động đóng mở tay.
+    "giu_chrome_mo": False,
+    # Hai núm cho GUI tool đăng trên máy ảo (chủ dự án 02/09: "chỉ cần
+    # setting để nó không tự đăng và trả lời cmt... ví dụ giờ chưa cần đăng
+    # thì có thể tắt"). Agent chép xuống vm/cai-dat-tool.json, GUI đọc và
+    # bật/tắt hai con dang/cmt theo đó.
+    # 02/09 chủ dự án: "cứ để mặc định là tắt" — đăng tự động chỉ bật khi
+    # chủ kênh gạt công tắc ở tab Quản lý kênh (đường đăng TAY đang là chính).
+    "tu_dang": False,
+    "tu_tra_loi_cmt": True,
+    # ── LẤY LỜI THOẠI QUA TRÌNH DUYỆT KÊNH (22/09/2026) ────────────────────
+    # Đêm 22/09/2026 cả ba kênh chết ở khâu ĐẦU của sản xuất: nó cần lời thoại
+    # video đối thủ, mà YouTube chặn `yt-dlp`/`youtube-transcript-api` theo ĐỊA
+    # CHỈ MẠNG của VPS (`IpBlocked`, *"IP belonging to a cloud provider"*) và
+    # chặn nặng dần theo số lượt hỏi. Trình duyệt của kênh thì vào bình thường
+    # từ đúng địa chỉ ấy, nên phiên hằng ngày mở trang `watch` hút bảng phụ đề
+    # về kho (`core/loi_thoai.py`) cho lượt sản xuất 02:00 hôm sau đọc.
+    #
+    # BẬT sẵn — khác `tu_dang`: bước này không đăng gì, không sửa gì trên kênh,
+    # chỉ mở vài trang xem như một khán giả, và nếu tắt thì khâu đầu lại phải
+    # đi xin YouTube (đúng đường đã chết). Tắt cho máy nào chủ kênh muốn trình
+    # duyệt tuyệt đối không mở thêm tab nào ngoài Studio.
+    "lay_loi_thoai": True,
+    # 0 = tự tính theo số video trạm giao (`agent.CHO_MOI_VIDEO_LOI_THOAI_GIAY`
+    # × số video). Điền số cứng khi muốn chặn hẳn thời gian bước phụ này.
+    "cho_loi_thoai_giay": 0,
+    # Chế độ PHIÊN (5 kênh/1 VPS — bước A, 18/09/2026, xem vm/KE-HOACH.md):
+    # mỗi kênh MỘT phiên/ngày (mở trình duyệt → quét → đăng kênh đó → trả lời
+    # cmt kênh đó → đóng), thay vì giữ browser sống 24/7. None = TỰ ĐỘNG theo
+    # số kênh của máy (agent.che_do_phien_bat: >=2 kênh thì BẬT, máy một-kênh
+    # cũ giữ nếp giu_chrome/gio_quet như trước — VM đang sống KHÔNG tự đổi
+    # hành vi); true/false = chủ dự án ép tay từ tool.
+    "che_do_phien": None,
+    # Phiên chạy trước giờ đăng bao nhiêu phút (đủ để quét + đăng + trả lời
+    # cmt xong TRƯỚC khi video lên sóng thật).
+    "phien_truoc_phut": 60,
+    # Giờ phiên khi kênh KHÔNG có gì đăng hôm nay (vẫn quét + trả lời cmt).
+    "gio_phien": "07:30",
+    # ── MÁY ĐĂNG DOM/CDP (29/09/2026, thay đường dò ảnh — xem workspace/
+    # THIET-KE-MAY-DANG-DOM.md) ────────────────────────────────────────────
+    # "anh" = đường PyAutoGUI cũ (dò ảnh, `vm/may_dang.py`), "dom" = máy mới
+    # qua DevTools/DOM (`vm/may_dang_dom.py`) thuần, "tu_dong" = thử DOM
+    # trước, DOM báo "không dùng được TRƯỚC khi chạm kênh" (mã thoát 3) thì
+    # tự lùi sang đường ảnh. Mặc định GIAI ĐOẠN CHUYỂN là "anh" (quyết định
+    # 6, 29/09/2026) tới khi đăng thử TL1-T7-0007 xác nhận đạt — đừng tự đổi
+    # ở đây, chủ dự án gạt bằng tool sau khi xem kết quả đăng thử.
+    "cach_dang": "anh",
+    # ── MÁY BÌNH LUẬN DOM (29/09/2026, `vm/may_cmt_dom.py`) ──────────────────
+    # Bình luận mồi (1-binh-luan.txt) + GHIM + trả lời bình luận mới ngay trong
+    # Chrome kênh đã đăng nhập — không cần OAuth (chưa kênh nào có token cho
+    # `may_cmt.py`). Chỉ chạy cho kênh đang `tu_dang`; kênh có token OAuth thì
+    # `may_cmt.py` (API) chạy như cũ. Tắt: đặt false.
+    "binh_luan_dom": True,
+    # Số bình luận mới tối đa máy DOM trả lời cho một kênh trong MỘT phiên.
+    "cmt_toi_da_phien": 10,
+    # Quyết định chủ dự án 29/09/2026: YouTube chặn GHIM bình luận tới khi
+    # kênh xác minh số điện thoại (mỗi lần chạy đều bật hộp xác minh, phải
+    # bấm Huỷ, ghi tay `can-ghim.md`). Bình luận được thì cứ bình luận —
+    # ghim để dành tối ưu sau. Mặc định TẮT bước ghim; `binh_luan_dom`
+    # (đăng mồi + trả lời) không đổi, vẫn chạy như cũ.
+    "ghim_dom": False,
+}
+
+#: Những khoá tool được phép đẩy xuống máy ảo. Agent cũng lọc lại đúng danh
+#: sách này (phòng trạm lạ) — thêm khoá mới thì thêm CẢ HAI ĐẦU, có test canh.
+KHOA_DIEU_KHIEN = tuple(MAC_DINH)
+
+
+def _duong(goc: str, kenh: str) -> str:
+    return os.path.join(duong_kenh(goc, str(kenh)), TEP)
+
+
+def doc(goc: str, kenh: str) -> Dict[str, object]:
+    """Thiết lập của kênh, đã đắp mặc định — luôn đủ khoá cho bên nhận."""
+    ra = dict(MAC_DINH)
+    try:
+        with open(_duong(goc, kenh), "r", encoding="utf-8") as tep:
+            du_lieu = json.load(tep)
+        if isinstance(du_lieu, dict):
+            for khoa in KHOA_DIEU_KHIEN:
+                if khoa in du_lieu:
+                    ra[khoa] = du_lieu[khoa]
+    except (OSError, ValueError):
+        pass
+    return ra
+
+
+def luu(goc: str, kenh: str, **thay_doi) -> None:
+    """Ghi thiết lập — chỉ nhận khoá trong danh sách, ghi nguyên tử."""
+    cai = doc(goc, kenh)
+    for khoa, gia_tri in thay_doi.items():
+        if khoa in KHOA_DIEU_KHIEN:
+            cai[khoa] = gia_tri
+    duong = _duong(goc, kenh)
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    tam = duong + ".tmp"
+    with open(tam, "w", encoding="utf-8") as tep:
+        json.dump(cai, tep, ensure_ascii=False, indent=1)
+    os.replace(tam, duong)
+
+
+def dong_goi_vm(goc: str, kenh: str, ung_vien, *, thu_muc_vm: str = "") -> str:
+    """Điền sẵn `vm/config.json` để thư mục vm/ chép đi là chạy được luôn.
+
+    Chủ dự án, 02/09/2026: *"bên tool chỉ cần setup để thư mục vm chuẩn —
+    ấn cái gì — sau đó copy sang bên vm là được kết nối"*. Đúng vậy: thư mục
+    vm/ nằn sẵn TRÊN máy tool, thì tool ghi luôn địa chỉ của chính nó và mã
+    kênh vào đó trước khi người dùng chép đi — bên máy ảo không phải dò,
+    không phải chờ, không phải gõ.
+
+    Ghi NHIỀU địa chỉ ứng viên (`tram_ung_vien`): máy ảo cạnh nhà với được
+    địa chỉ mạng trong, VPS thuê ngoài phải đi địa chỉ IPv6 toàn cầu —
+    agent tự thử lần lượt (`vm/agent.chay` → `chon_tram`). Tên máy để
+    trống cho agent lấy tên máy THẬT lúc chạy.
+
+    `thu_muc_vm`: nơi ghi `config.json` (mặc định `<goc>/vm`, như trước).
+    `core/goi_vps.py` truyền một thư mục khác (bản nháp trong `vm/goi-vps/`
+    hay một thư mục tạm lúc kiểm thử) để KHÔNG đụng `vm/config.json` thật
+    của máy đang chạy tool — hàm này vẫn đọc `goc/VERSION` như cũ.
+    """
+    thu_muc_vm = thu_muc_vm or os.path.join(goc, "vm")
+    duong = os.path.join(thu_muc_vm, "config.json")
+    cau_hinh = {
+        # Hai khoá cho MÁY ĐĂNG (vm/may_dang.py — gốc là dang.py của kho
+        # upload): nguồn kế hoạch là TOOL, và mã kênh cho khổ dòng cũ.
+        "NGUON": "tool",
+        "CHANNEL_CODE": str(kenh or "").strip(),
+        "tram": "",
+        # Chặn trên 12 ứng viên: mỗi cái chết tốn 4 giây thử bên máy ảo —
+        # danh sách dài là bộ cài câm lặng hàng phút, người dùng tưởng treo.
+        "tram_ung_vien": [str(d) for d in (ung_vien or []) if d][:12],
+        "kenh": str(kenh or "").strip(),
+        "ten_may": "",
+        "chrome": "",
+        "studio_url": "https://studio.youtube.com",
+        "tool_dang": "",
+    }
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    tam = duong + ".tmp"
+    with open(tam, "w", encoding="utf-8") as tep:
+        json.dump(cau_hinh, tep, ensure_ascii=False, indent=4)
+    os.replace(tam, duong)
+    # Số bản đi kèm gói — bảng VM hiện nó trên tiêu đề và so với GitHub
+    # (kiểu MyTool: mở lên là biết mình bản mấy, có bản mới thì tự thay).
+    try:
+        with open(os.path.join(goc, "VERSION"), encoding="utf-8") as tep:
+            ban = tep.read().strip()
+        with open(os.path.join(thu_muc_vm, "phien-ban.txt"), "w",
+                  encoding="utf-8") as tep:
+            tep.write(ban)
+    except OSError:
+        pass
+    return duong

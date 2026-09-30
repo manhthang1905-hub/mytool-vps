@@ -1,0 +1,669 @@
+"""Trạm nhận số liệu kênh — khoá đúng những chỗ đã hỏng thật.
+
+Mỗi bài dưới đây ứng với một sự cố đo được, không phải bài viết cho đủ số.
+"""
+from __future__ import annotations
+
+import io
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+
+import pytest
+
+from core.chi_so_ytb import tram as T
+
+
+def test_bang_tom_tat_chay_mot_lan_sau_goi_cuoi(tmp_path, monkeypatch):
+    """Gói cấp kênh đến cuối chùm vẫn phải được parser nhìn thấy."""
+    from core import chi_so_ytb as cs
+
+    tram = T.Tram(goc=str(tmp_path))
+    tram.TRE_TOM_TAT_IM_GIAY = 0.04
+    goi = []
+    monkeypatch.setattr(cs, "xuat_tom_tat",
+                        lambda kenh, goc=None: goi.append((kenh, goc)))
+    tram._lam_moi_tom_tat("TL3-T7")
+    time.sleep(0.02)
+    tram._lam_moi_tom_tat("TL3-T7")  # gói cuối phải dời đồng hồ
+    time.sleep(0.09)
+    assert goi == [("TL3-T7", os.path.join(str(tmp_path), "CHANNEL"))]
+    tram.tat()
+
+
+def test_tat_tram_huy_hen_lam_bang(tmp_path, monkeypatch):
+    from core import chi_so_ytb as cs
+
+    tram = T.Tram(goc=str(tmp_path))
+    tram.TRE_TOM_TAT_IM_GIAY = 0.08
+    goi = []
+    monkeypatch.setattr(cs, "xuat_tom_tat", lambda *_a, **_kw: goi.append(1))
+    tram._lam_moi_tom_tat("TL3-T7")
+    tram.tat()
+    time.sleep(0.12)
+    assert goi == []
+
+
+# ───────────────────────────────────────────────────── chặn ngoài mạng nội bộ
+def test_dai_rieng_duoc_vao():
+    for ip in ("192.168.88.41", "10.0.0.5", "172.16.3.9", "127.0.0.1", "::1", "fd00::1"):
+        assert T.trong_mang_nha(ip), ip
+
+
+def test_dia_chi_toan_cau_bi_chan():
+    """Máy dựng có IPv6 định tuyến toàn cầu do nhà mạng cấp, và tường lửa TẮT cả ba hồ sơ.
+
+    Đo 31/08/2026. Trạm không có mật khẩu và ghi file xuống đĩa, nên lớp chặn này hỏng là bất
+    kỳ ai trên Internet cũng ghi được file vào máy — không có tường lửa đỡ phía sau.
+
+    (Địa chỉ dưới đây dùng dải tài liệu `2001:db8::/32`, không phải địa chỉ thật của máy nào.)
+    """
+    for ip in ("2001:db8:1:2::111", "8.8.8.8", "1.1.1.1", "2606:4700::1111"):
+        assert not T.trong_mang_nha(ip), ip
+
+
+def test_khach_ipv4_qua_o_cam_hai_tang_khong_bi_chan_oan():
+    """Ổ cắm hai tầng trả địa chỉ khách IPv4 dưới dạng `::ffff:192.168.88.41`.
+
+    Không bóc phần ánh xạ ra trước khi so thì MỌI máy ảo đều bị chặn — tức tính năng chết
+    hoàn toàn trong khi log chỉ báo "ngoài mạng nội bộ".
+    """
+    assert T.trong_mang_nha("::ffff:192.168.88.41")
+    assert not T.trong_mang_nha("::ffff:8.8.8.8")
+
+
+def test_dia_chi_hong_khong_lam_sap():
+    for x in ("", "khong-phai-ip", None, "192.168.1"):
+        assert T.trong_mang_nha(x) is False
+
+
+# ───────────────────────────────────────────────────── không trèo ra khỏi thư mục
+def test_ten_tu_goi_mang_khong_treo_duoc_ra_ngoai():
+    """`id`, `label`, `ten` đều tới từ mạng và đều được ghép thẳng vào đường dẫn."""
+    for xau in ("../../etc/passwd", "..\\..\\Windows\\System32", "/tuyet/doi", "C:\\Windows"):
+        ra = T.an_toan(xau)
+        assert ".." not in ra and "/" not in ra and "\\" not in ra and not ra.startswith(".")
+
+
+def test_ma_kenh_la_dau_cham_khong_thanh_thu_muc_rong():
+    assert T.an_toan("..") == "x"
+    assert T.an_toan("") == "x"
+
+
+# ───────────────────────────────────────────────────── chọn thư mục kênh
+def test_kenh_khop_thi_nam_canh_prompt(tmp_path):
+    """Số liệu phải nằm trong thư mục kênh, cạnh `prompt/` — chỗ sẽ đọc nó để sửa lời nhắc."""
+    os.makedirs(tmp_path / "CHANNEL" / "TL4-T7" / "prompt")
+    ra = T.thu_muc_kenh("TL4-T7", str(tmp_path))
+    assert ra == os.path.join(str(tmp_path), "CHANNEL", "TL4-T7", "chi-so")
+
+
+def test_kenh_la_khong_de_bua_vao_CHANNEL(tmp_path):
+    """`CHANNEL/<tên>` là danh sách khuôn sản xuất.
+
+    Gõ nhầm mã kênh trong extension mà trạm tự tạo `CHANNEL/k1` thì lần sau người dùng thấy
+    một kênh ma trong ô chọn khuôn, và không biết nó ở đâu ra.
+    """
+    os.makedirs(tmp_path / "CHANNEL" / "TL4-T7")
+    ra = T.thu_muc_kenh("k1", str(tmp_path))
+    assert "_chi-so-chua-ro" in ra
+    assert not os.path.isdir(tmp_path / "CHANNEL" / "k1")
+
+
+# ───────────────────────────────────────────────────── lọc gói rác
+def test_bo_goi_lam_moi_tu_dong():
+    """Thẻ "Hoạt động mới nhất" tự gọi lại mỗi 10 giây, không mang chỉ số nào.
+
+    Đêm 28/08/2026 một tab Studio mở qua đêm đẻ ra 381 MB đúng loại gói này.
+    """
+    assert T.la_rac({"request": {"latestActivityCardConfig": {}}})
+
+
+def test_giu_goi_that_du_co_the_hoat_dong_moi_nhat():
+    """Gói thật thường xin NHIỀU thẻ một lượt, trong đó có cả thẻ hoạt động mới nhất.
+
+    Lọc theo "có chữ latestActivity thì bỏ" là vứt luôn gói chỉ số — đúng lỗi đã mắc một lần.
+    """
+    assert not T.la_rac({"request": {"latestActivityCardConfig": {}, "keyMetricCardConfig": {}}})
+    assert not T.la_rac({"request": {"keyMetricCardConfig": {}}})
+    assert not T.la_rac({})
+    assert not T.la_rac(None)
+
+
+# ───────────────────────────────────────────────────── chạy thật, gửi thật
+@pytest.fixture
+def tram_dang_chay(tmp_path):
+    os.makedirs(tmp_path / "CHANNEL" / "TL4-T7")
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    t.cong = t._may.server_address[1]          # cổng 0 = để hệ điều hành chọn
+    yield t
+    t.tat()
+
+
+def _post(cong, duong, than):
+    r = urllib.request.Request(f"http://127.0.0.1:{cong}{duong}",
+                               data=json.dumps(than).encode("utf-8"),
+                               headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(r, timeout=5) as f:
+        return f.status, f.read().decode("utf-8")
+
+
+def test_goi_that_roi_dung_thu_muc_kenh(tram_dang_chay, tmp_path):
+    ma, than = _post(tram_dang_chay.cong, "/capture", {
+        "kenh": "TL4-T7", "id": "v743d88cdfc", "label": "48h",
+        "ten": "20260830-005620_tab-overview.json",
+        "goi": {"url": "https://studio.youtube.com/youtubei/v1/yta_web/get_cards",
+                "request": {"keyMetricCardConfig": {}}, "response": {"cards": []}},
+    })
+    assert (ma, than) == (200, "ok")
+    p = (tmp_path / "CHANNEL" / "TL4-T7" / "chi-so" / "v743d88cdfc" / "48h" / "raw"
+         / "20260830-005620_tab-overview.json")
+    assert p.exists()
+    assert json.loads(io.open(p, encoding="utf-8").read())["request"] == {"keyMetricCardConfig": {}}
+
+
+def test_goi_rac_khong_ghi_file(tram_dang_chay, tmp_path):
+    ma, than = _post(tram_dang_chay.cong, "/capture", {
+        "kenh": "TL4-T7", "id": "v743d88cdfc", "label": "48h", "ten": "rac.json",
+        "goi": {"request": {"latestActivityCardConfig": {}}},
+    })
+    assert (ma, than) == (200, "skip")
+    assert not (tmp_path / "CHANNEL" / "TL4-T7" / "chi-so" / "v743d88cdfc").exists()
+
+
+def test_done_ghi_thong_tin_moc(tram_dang_chay, tmp_path):
+    _post(tram_dang_chay.cong, "/done", {
+        "kenh": "TL4-T7", "id": "v743d88cdfc", "label": "48h",
+        "tieu_de": "テスト", "thoi_luong": 910, "gio": 48,
+    })
+    p = tmp_path / "CHANNEL" / "TL4-T7" / "chi-so" / "v743d88cdfc" / "48h" / "_thong-tin.json"
+    assert json.loads(io.open(p, encoding="utf-8").read())["gio"] == 48
+
+
+def test_dang_xong_video_id_ghi_ca_ke_hoach_va_ho_so(tram_dang_chay, tmp_path):
+    """Việc C, 29/09/2026: `/dang-xong` với `video_id`/`lich` phải (a) ghi cột
+    "Video ID" của kế hoạch qua `ke_hoach_dang.danh_dau` và (b) gọi
+    `ho_so_video.ghi_video_id` — nối id TRỰC TIẾP vào hồ sơ, không chờ so
+    khớp tiêu đề."""
+    from core import ke_hoach_dang, ho_so_video
+
+    goc = str(tmp_path)
+    cot = list(ke_hoach_dang.COT)
+    hang = [["TL4-T7-0007", "", "", "Tiêu đề", "Mô tả", "", "", "", "", "", "x", "", ""]]
+    ke_hoach_dang.luu_bang(goc, "TL4-T7", hang, cot)
+
+    ma, than = _post(tram_dang_chay.cong, "/dang-xong", {
+        "kenh": "TL4-T7", "ma": "TL4-T7-0007", "trang_thai": "ĐÃ ĐĂNG",
+        "video_id": "abcDEF123", "lich": "30/09/2026 20:00",
+    })
+    assert (ma, than) == (200, json.dumps({"ok": True}))
+
+    cot2, hang2 = ke_hoach_dang.doc_bang(goc, "TL4-T7")
+    assert "Video ID" in cot2
+    dong = next(d for d in hang2 if d[cot2.index("Mã gói")] == "TL4-T7-0007")
+    assert dong[cot2.index("Trạng thái đăng")] == "ĐÃ ĐĂNG"
+    assert dong[cot2.index("Video ID")] == "abcDEF123"
+
+    ho_so = ho_so_video.doc_ho_so(goc, "TL4-T7", "TL4-T7-0007")
+    assert ho_so is not None
+    assert ho_so["video_id"] == "abcDEF123"
+    assert ho_so["lich_dang"] == "30/09/2026 20:00"
+
+
+def test_dang_xong_khong_video_id_van_chay_nhu_truoc(tram_dang_chay, tmp_path):
+    """Trạm đời cũ/`may_dang.py` (đường ảnh) không gửi `video_id`/`lich` —
+    hành vi phải y hệt trước Việc C: chỉ đổi Trạng thái đăng, không đụng cột
+    Video ID, không cần hồ sơ nào tồn tại."""
+    from core import ke_hoach_dang
+
+    goc = str(tmp_path)
+    cot = list(ke_hoach_dang.COT)
+    hang = [["TL4-T7-0008", "", "", "Tiêu đề", "Mô tả", "", "", "", "", "", "x", "", ""]]
+    ke_hoach_dang.luu_bang(goc, "TL4-T7", hang, cot)
+
+    ma, than = _post(tram_dang_chay.cong, "/dang-xong", {
+        "kenh": "TL4-T7", "ma": "TL4-T7-0008", "trang_thai": "ĐÃ ĐĂNG",
+    })
+    assert (ma, than) == (200, json.dumps({"ok": True}))
+
+    cot2, hang2 = ke_hoach_dang.doc_bang(goc, "TL4-T7")
+    dong = next(d for d in hang2 if d[cot2.index("Mã gói")] == "TL4-T7-0008")
+    assert dong[cot2.index("Trạng thái đăng")] == "ĐÃ ĐĂNG"
+    if "Video ID" in cot2:
+        assert dong[cot2.index("Video ID")] == ""
+
+
+def test_than_hong_tra_400_chu_khong_sap_tram(tram_dang_chay):
+    r = urllib.request.Request(f"http://127.0.0.1:{tram_dang_chay.cong}/capture",
+                               data=b"{khong phai json", headers={"Content-Type": "application/json"})
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(r, timeout=5)
+    assert e.value.code == 400
+    # trạm vẫn sống sau gói hỏng
+    assert _post(tram_dang_chay.cong, "/capture",
+                 {"kenh": "TL4-T7", "id": "x", "label": "1h", "ten": "a.json", "goi": {}})[0] == 200
+
+
+def test_nghe_duoc_ca_ipv4_lan_ipv6(tram_dang_chay):
+    """Máy ảo hôm nay chỉ có IPv4; ổ cắm hai tầng để mai có IPv6 thì không phải sửa gì."""
+    with urllib.request.urlopen(f"http://127.0.0.1:{tram_dang_chay.cong}/", timeout=5) as f:
+        assert f.read() == b"ok"
+    try:
+        with urllib.request.urlopen(f"http://[::1]:{tram_dang_chay.cong}/", timeout=5) as f:
+            assert f.read() == b"ok"
+    except OSError:
+        pytest.skip("máy này tắt IPv6")
+
+
+def test_bat_tat_lai_duoc(tmp_path):
+    """Người dùng bật/tắt nhiều lần trong một phiên — cổng phải nhả ra được."""
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    cong = t._may.server_address[1]
+    assert t.dang_chay
+    t.tat()
+    assert not t.dang_chay
+    t2 = T.Tram(cong=cong, goc=str(tmp_path))
+    t2.bat()          # cổng cũ phải dùng lại được ngay
+    try:
+        assert t2.dang_chay
+    finally:
+        t2.tat()
+
+
+def test_dia_chi_khong_goi_y_ipv6_toan_cau():
+    """Địa chỉ toàn cầu chạy được, nhưng gợi ý nó là gợi ý người dùng phơi cổng ra Internet."""
+    for d in T.dia_chi_may(8765):
+        ip = d.split("//", 1)[1].rsplit(":", 1)[0].strip("[]")
+        assert T.trong_mang_nha(ip), d
+
+
+# ───────────────────────────────────────────────────── bo doc hieu ca hai bo cuc
+def _dung_mot_lan_chup(goc, *phan):
+    p = os.path.join(str(goc), *phan, "raw")
+    os.makedirs(p)
+    io.open(os.path.join(p, "a.json"), "w", encoding="utf-8").write("{}")
+
+
+def test_bo_doc_hieu_bo_cuc_cua_tram(tmp_path):
+    """Tram do vao `CHANNEL/<kenh>/chi-so/<videoId>/`, thua mot cap so voi Tai xuong.
+
+    Khong hieu cap thua ay thi bo doc coi tung videoId la mot kenh, va bang ra rong trong
+    khi du lieu nam ngay do.
+    """
+    from core import chi_so_ytb as cs
+    _dung_mot_lan_chup(tmp_path, "CHANNEL", "TL4-T7", "chi-so", "v743d88cdfc", "48h")
+    goc = os.path.join(str(tmp_path), "CHANNEL")
+    assert cs.liet_ke_kenh(goc) == ["TL4-T7"]
+    assert cs.thu_muc_cua_kenh(goc, "TL4-T7").endswith(os.path.join("TL4-T7", "chi-so"))
+
+
+def test_bo_doc_van_hieu_bo_cuc_tai_xuong(tmp_path):
+    from core import chi_so_ytb as cs
+    _dung_mot_lan_chup(tmp_path, "chi-so-youtube", "k1", "v743d88cdfc", "48h")
+    goc = os.path.join(str(tmp_path), "chi-so-youtube")
+    assert cs.liet_ke_kenh(goc) == ["k1"]
+    assert cs.thu_muc_cua_kenh(goc, "k1").endswith("k1")
+
+
+def test_khuon_san_xuat_chua_chup_gi_khong_hien_ra(tmp_path):
+    """`CHANNEL/` con chua khuon cua moi nganh (openstory, timelapse...) chua he chup gi.
+
+    Liet ke tuot thi nguoi dung chon mot kenh roi nhan bang rong, va tuong tram nhan hong.
+    """
+    from core import chi_so_ytb as cs
+    _dung_mot_lan_chup(tmp_path, "CHANNEL", "TL4-T7", "chi-so", "v743d88cdfc", "48h")
+    os.makedirs(tmp_path / "CHANNEL" / "openstory" / "prompt")
+    os.makedirs(tmp_path / "CHANNEL" / "_KHUON")
+    assert cs.liet_ke_kenh(os.path.join(str(tmp_path), "CHANNEL")) == ["TL4-T7"]
+
+
+# ───────────────────────────────── giờ chụp phải sống sót khi dữ liệu đi qua mạng
+def test_gio_chup_doc_trong_goi_chu_khong_lay_mtime(tmp_path):
+    """Gói đi qua mạng thì mtime là GIỜ CHÉP, không phải giờ chụp.
+
+    Hỏng dây chuyền chứ không hỏng một ô: mọi lần chụp cùng `luc_chup` → `gio_dang()` suy
+    ngược ra cùng một giờ đăng → mốc bị tính lại thành giống nhau → khoá gộp `(video, mốc)`
+    trùng hết. Đo thật: 52 lần chụp có chỉ số gộp còn **5**, mỗi video một dòng, mất sạch
+    trục thời gian — tức mất luôn cách so hai video ở cùng mốc giờ.
+    """
+    from core.chi_so_ytb.gom import luc_chup
+    for moc, gio_utc in (("48h", "2026-08-29T14:26:00.000Z"), ("96h", "2026-08-29T13:35:00.000Z")):
+        d = tmp_path / moc / "raw"
+        d.mkdir(parents=True)
+        io.open(d / "a.json", "w", encoding="utf-8").write(
+            json.dumps({"captured_at": gio_utc, "url": "x", "response": {}}))
+    a, b = luc_chup(str(tmp_path / "48h")), luc_chup(str(tmp_path / "96h"))
+    assert a != b, "hai mốc chụp cách nhau gần một tiếng mà ra cùng giờ"
+
+
+def test_goi_cu_khong_co_captured_at_van_doc_duoc(tmp_path):
+    """Dữ liệu cũ vẫn phải đọc được — lùi về mtime chứ đừng trả rỗng."""
+    from core.chi_so_ytb.gom import luc_chup
+    d = tmp_path / "24h" / "raw"
+    d.mkdir(parents=True)
+    io.open(d / "a.json", "w", encoding="utf-8").write("{}")
+    assert len(luc_chup(str(tmp_path / "24h"))) == 16      # "YYYY-MM-DD HH:MM"
+
+
+# ───────────────────────────────── tuổi THẬT (captured_at − ngay_dang), không tin tên thư mục
+def test_tuoi_that_gio_tinh_dung_tu_captured_at_va_ngay_dang(tmp_path):
+    from core.chi_so_ytb.gom import tuoi_that_gio
+    d = tmp_path / "13h"
+    (d / "raw").mkdir(parents=True)
+    io.open(d / "raw" / "a.json", "w", encoding="utf-8").write(
+        json.dumps({"captured_at": "2026-09-14T23:00:00.000Z", "url": "x", "response": {}}))
+    io.open(d / "_thong-tin.json", "w", encoding="utf-8").write(
+        json.dumps({"tieu_de": "x", "ngay_dang": "2026-09-14T00:00:00.000Z"}))
+    assert tuoi_that_gio(str(d)) == pytest.approx(23.0)
+
+
+def test_tuoi_that_gio_khong_du_du_lieu_tra_none(tmp_path):
+    """Thiếu captured_at, hoặc thiếu _thong-tin.json/ngay_dang — trả `None`, KHÔNG suy từ
+    mtime (khác `luc_chup`): đây là con số quyết định có tin thư mục hay không, đoán ẩu ở
+    đây thì hỏng ngay chỗ nó phải chặn."""
+    from core.chi_so_ytb.gom import tuoi_that_gio
+    d1 = tmp_path / "khong-raw"
+    (d1 / "raw").mkdir(parents=True)
+    io.open(d1 / "raw" / "a.json", "w", encoding="utf-8").write("{}")   # không có captured_at
+    io.open(d1 / "_thong-tin.json", "w", encoding="utf-8").write(
+        json.dumps({"ngay_dang": "2026-09-14T00:00:00.000Z"}))
+    assert tuoi_that_gio(str(d1)) is None
+
+    d2 = tmp_path / "khong-thong-tin"
+    (d2 / "raw").mkdir(parents=True)
+    io.open(d2 / "raw" / "a.json", "w", encoding="utf-8").write(
+        json.dumps({"captured_at": "2026-09-14T23:00:00.000Z"}))
+    assert tuoi_that_gio(str(d2)) is None   # thiếu _thong-tin.json
+
+
+# ───────────────────────────────── mốc giờ lấy từ tên thư mục
+def test_moc_gio_lay_tu_ten_thu_muc():
+    """Số giờ sau khi đăng không có trong gói nào của Studio — nhưng tên thư mục thì có."""
+    from core.chi_so_ytb import _gio_tu_ten_moc
+    assert _gio_tu_ten_moc("48h") == 48
+    assert _gio_tu_ten_moc("159h") == 159
+    assert _gio_tu_ten_moc("tay-20260828") is None       # bản chụp tay không phải mốc
+    assert _gio_tu_ten_moc("kenh-20260826") is None
+    assert _gio_tu_ten_moc("") is None
+
+
+# ───────────────────────── dia chi tram nhan phai song sot qua lan cai lai
+def test_extension_di_kem_co_tep_cau_hinh():
+    """Go tien ich roi cai lai thi Chrome XOA SACH `chrome.storage.local`.
+
+    Dia chi tram nhan bay mat theo. Va khi o dia chi trong, tien ich KHONG bao loi — no
+    lang le quay ve ghi vao thu muc Tai xuong cua chinh may ao. Nhin tu ngoai moi thu van
+    chay, chi la khong goi nao ve toi noi can. Mat trang mot luot chup vi dung chuyen nay,
+    31/08/2026.
+
+    Tep nam trong thu muc tien ich nen song sot qua moi lan cai lai.
+    """
+    import json
+    goc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "core", "ytb_extension")
+    p = os.path.join(goc, "cau-hinh.json")
+    assert os.path.isfile(p), "thieu cau-hinh.json trong tien ich di kem"
+    assert "host" in json.load(io.open(p, encoding="utf-8"))
+
+    mf = json.load(io.open(os.path.join(goc, "manifest.json"), encoding="utf-8"))
+    war = mf.get("web_accessible_resources") or []
+    assert any("cau-hinh.json" in (r.get("resources") or []) for r in war), \
+        "service worker khong doc duoc cau-hinh.json neu no khong nam trong web_accessible_resources"
+
+    bg = io.open(os.path.join(goc, "background.js"), encoding="utf-8").read()
+    assert "napCauHinh" in bg and "cau-hinh.json" in bg
+    # chi dien khi o dang trong — nguoi dung tu sua thi lan cai sau khong duoc ghi de
+    # 02/09/2026: napCauHinh doc them ma_kenh (agent tren may ao dien san),
+    # van giu luat cu: chi dien khi o DANG TRONG, ai tu sua khong bi ghi de.
+    assert "!(await st('host', ''))" in bg
+    assert "!(await st('ma_kenh', ''))" in bg
+
+
+def test_ban_giao_khach_le_khong_kem_dia_chi_may_ai(tmp_path):
+    """Ban di kem cong cu phai de TRONG.
+
+    Ghi cung mot dia chi vao day la moi khach deu tro ve mot may khong phai cua ho.
+    """
+    import json
+    goc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "core", "ytb_extension")
+    assert json.load(io.open(os.path.join(goc, "cau-hinh.json"), encoding="utf-8"))["host"] == ""
+
+
+def test_bang_tom_tat_cho_nguoi(tmp_path):
+    """02/09: 'vào mục chi-so thấy mọi thứ lộn xộn' — cửa thư mục phải có
+    bảng cho NGƯỜI (Excel mở được) + tờ giải thích, kể cả khi chưa có gói."""
+    import os
+
+    from core import chi_so_ytb as cs
+
+    os.makedirs(tmp_path / "TL4-T7" / "chi-so" / "vid1" / "24h" / "raw")
+    duong = cs.xuat_tom_tat("TL4-T7", goc=str(tmp_path))
+    assert duong.endswith("bang-tom-tat.csv") and os.path.isfile(duong)
+    dau = open(duong, encoding="utf-8-sig").readline()
+    assert "Tiêu đề" in dau and "Tỷ lệ bấm" in dau
+    assert (tmp_path / "TL4-T7" / "chi-so" / "DOC-O-DAY.txt").is_file()
+    # gọi lại không hỏng, không nhân đôi
+    assert cs.xuat_tom_tat("TL4-T7", goc=str(tmp_path)) == duong
+
+
+def test_so_lieu_toan_kenh_khong_bi_vut(tmp_path):
+    """02/09: các bản ghi video_id='kenh' mang GIỜ XEM tổng (đơn vị tiền của
+    mốc YPP) mà bộ đọc cũ vứt đi — doc_kenh_tong phải nhặt lại được, và
+    bao_cao_cho_ai phải in khối TOÀN KÊNH khi được đưa."""
+    from core import chi_so_ytb as cs
+
+    tong = [{"luc_chup": "2026-09-01 15:33", "views": 968,
+             "watch_hours": 46.0, "subs": 15, "impressions": None,
+             "ctr": None, "unique_viewers": None, "thu_muc": ""}]
+    khoi = cs._khoi_kenh_tong(tong)
+    assert "TOÀN KÊNH" in khoi and "968" in khoi and "4.000 giờ" in khoi
+    bg = [cs.BanGhi(video_id="v1", tieu_de="t", ngay_dang="2026-09-01",
+                    moc_gio=24, luc_chup="2026-09-02", thoi_luong_giay=600,
+                    impressions=100, impressions_24h=None, ctr=5.0, views=10,
+                    unique_viewers=8, watch_hours=1.0, avd_giay=60,
+                    avd_pct=10.0, subs=1, traffic={}, thiet_bi={}, vung={},
+                    vung_tong_views=0, pool_so_nguon=0, pool_phu_pct=None,
+                    pool_top=[], retention=[], thu_muc="")]
+    bao = cs.bao_cao_cho_ai(bg, "TL4-T7", kenh_tong=tong)
+    assert "TOÀN KÊNH THEO LẦN CHỤP" in bao
+    bao2 = cs.bao_cao_cho_ai(bg, "TL4-T7")
+    assert "TOÀN KÊNH" not in bao2, "không đưa thì không in — gọi cũ vẫn chạy"
+
+
+def test_goi_ve_sau_khi_da_giai_ma_khong_bi_bo_quen(tmp_path, monkeypatch):
+    """02/09 dính thật: nhãn tay-<ngày> gom gói cả ngày; giải mã buổi sáng
+    xong thì gói buổi chiều về nằm chết cạnh tong-quan rỗng. Raw mới hơn
+    bản giải mã thì phải giải lại."""
+    import os
+    import time as t
+
+    from core import chi_so_ytb as cs
+
+    snap = tmp_path / "TL4-T7" / "chi-so" / "kenh" / "tay-x"
+    os.makedirs(snap / "raw")
+    (snap / "tong-quan.json").write_text('{"cu": true}', encoding="utf-8")
+    cu = t.time() - 3600
+    os.utime(snap / "tong-quan.json", (cu, cu))
+    # chưa có raw mới -> không đụng
+    cs._giai_ma_con_thieu(str(tmp_path / "TL4-T7" / "chi-so"))
+    assert "cu" in (snap / "tong-quan.json").read_text(encoding="utf-8")
+    # raw MỚI HƠN bản giải mã -> phải giải lại (tong-quan được viết mới)
+    (snap / "raw" / "goi.json").write_text("{}", encoding="utf-8")
+    cs._giai_ma_con_thieu(str(tmp_path / "TL4-T7" / "chi-so"))
+    assert "cu" not in (snap / "tong-quan.json").read_text(encoding="utf-8"), \
+        "gói chiều về phải được giải, không bị 'đã có tong-quan' chặn"
+
+
+def test_bang_tinh_trang_cham_theo_so_tay():
+    """02/09: 'thể hiện đúng để tao nắm bắt tình trạng video và kênh' — luật
+    chấm lấy từ sổ tay kênh: sống 20k · chết 1.500 · CTR 3,5 · AVD 25/35 ·
+    xem-lặp đo bằng lượt THẬT (luật 8) · luật 30 giờ."""
+    pytest.importorskip("PyQt5.QtWidgets", reason="máy chạy test không có giao diện")
+    import os as _os
+    _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from core.chi_so_ytb import BanGhi
+    from ui_qt.trang_chi_so_ytb import _tinh_trang
+
+    def bg(**thua):
+        goc = dict(video_id="v", tieu_de="t", ngay_dang="2026-09-01",
+                   moc_gio=48, luc_chup="", thoi_luong_giay=600,
+                   impressions=5000, impressions_24h=None, ctr=5.0,
+                   views=100, views_that=80, unique_viewers=60,
+                   watch_hours=1.0, avd_giay=200, avd_pct=33.0, subs=1,
+                   traffic={}, thiet_bi={}, vung={}, vung_tong_views=0,
+                   pool_so_nguon=0, pool_phu_pct=None, pool_top=[],
+                   retention=[], thu_muc="")
+        goc.update(thua)
+        return BanGhi(**goc)
+
+    assert "ĐANG SÓNG" in _tinh_trang(bg(impressions=22000))[0]
+    assert "CHỜ" in _tinh_trang(bg(moc_gio=24, impressions=60))[0]
+    assert "NGHẼN PHÂN PHỐI" in _tinh_trang(bg(moc_gio=76, impressions=900))[0]
+    assert "NGHẼN CỔNG BẤM" in _tinh_trang(bg(ctr=2.0))[0]
+    assert "NGHẼN GIỮ CHÂN" in _tinh_trang(bg(avd_pct=20.0))[0]
+    assert "KHOẺ" in _tinh_trang(bg(ctr=6.0, avd_pct=38.0))[0]
+    # Luật 8: 566 thật / 381 người = 1,5 -> SẠCH dù view công khai 906/381=2,4
+    assert "SỐ BẨN" not in _tinh_trang(
+        bg(views=906, views_that=566, unique_viewers=381, impressions=22000))[0]
+    assert "SỐ BẨN" in _tinh_trang(
+        bg(views=386, views_that=118, unique_viewers=46))[0]
+    # JP < 80% phải bị réo tên — nhưng CHỈ khi bảng nước đủ tin (>=3 nước)
+    day_du = {"JP": {"views": 60}, "VN": {"views": 25}, "US": {"views": 15}}
+    kq = _tinh_trang(bg(impressions=22000, vung=day_du, vung_tong_views=100))
+    assert "JP 60%" in kq[0]
+    # Bảng nước lèo tèo (dòng JP đứng im, Total nhảy — đo thật 02/09) thì
+    # KHÔNG được phán bừa: thà im còn hơn dẫn người ta quyết sai.
+    kq2 = _tinh_trang(bg(impressions=22000,
+                         vung={"JP": {"views": 60}}, vung_tong_views=100))
+    assert "JP" not in kq2[0]
+
+
+# ── 07/09/2026: hộp việc sống qua khởi động lại, trạng thái sống, cổng một chủ ──────────────
+
+
+def test_hop_viec_song_qua_khoi_dong_lai_va_tinh_trang(tmp_path):
+    """Chủ dự án bấm MỘT NÚT đúng lúc tool bị mở lại: lệnh phải còn; và tab phải nói được
+    máy ảo đã nhận việc chưa ("ấn 1 nút và chả hiểu chuyện gì sẽ xảy ra")."""
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    try:
+        so_studio, so_tc = t.giao_quet_day_du("TL4-T7")
+        tt = t.tinh_trang("TL4-T7")
+        assert tt["nhip_tim_giay"] is None and tt["may"] == ""
+        assert [v["id"] for v in tt["viec_cho"]] == [so_studio, so_tc]
+        assert tt["viec_dang"] == {}
+    finally:
+        t.tat()
+    # Mở lại tool: hộp nạp từ đĩa, số hiệu không quay về 1.
+    t2 = T.Tram(cong=0, goc=str(tmp_path))
+    t2.bat()
+    try:
+        assert [v["id"] for v in t2.viec_cho()] == [so_studio, so_tc]
+        v = t2.lay_viec("TL4-T7", "PC4", "2001:db8::4")
+        assert v["id"] == so_studio
+        tt = t2.tinh_trang("TL4-T7")
+        assert tt["may"] == "PC4" and tt["nhip_tim_giay"] is not None and tt["nhip_tim_giay"] < 5
+        assert tt["viec_dang"]["id"] == so_studio and tt["viec_dang"]["loai"] == "quet-studio"
+        assert [x["id"] for x in tt["viec_cho"]] == [so_tc]
+        t2.viec_xong("TL4-T7", so_studio, ket_qua="ok")
+        tt = t2.tinh_trang("TL4-T7")
+        assert tt["viec_dang"] == {} and tt["vua_xong"][-1]["id"] == so_studio
+        so_moi = t2.giao_viec("TL4-T7", "quet-trang-chu")
+        assert so_moi > so_tc, "số hiệu tiếp tục tăng sau khi mở lại"
+    finally:
+        t2.tat()
+    d = json.load(io.open(os.path.join(str(tmp_path), "CHANNEL", "hop-viec-may-ao.json"), encoding="utf-8"))
+    assert d["so_viec"] == so_moi and [v["id"] for v in d["viec"]] == [so_tc, so_moi]
+
+
+def test_cong_chi_mot_tram_duoc_nghe(tmp_path):
+    """Đêm 07/09: hai bản tool cùng nghe 8765, máy ảo gọi về trúng bản nào là ngẫu nhiên."""
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    try:
+        t2 = T.Tram(cong=t.cong, goc=str(tmp_path))
+        with pytest.raises(OSError):
+            t2.bat()
+    finally:
+        t.tat()
+
+
+def test_viec_dang_lam_qua_han_thi_khai_tu_khi_agent_hoi_lai(tmp_path):
+    """01:39 07/09: agent trên máy ảo bị mở lại giữa việc #2 → không ai báo xong; trạm phải tự khai
+    tử sau hạn thay vì để tab Đối thủ nói "đang làm" mãi."""
+    from datetime import datetime, timedelta
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    try:
+        so = t.giao_viec("TL4-T7", "quet-trang-chu")
+        assert t.lay_viec("TL4-T7", "PC4")["id"] == so
+        # Lùi mốc nhận việc về 16 phút trước (hạn quet-trang-chu là 15).
+        with t._khoa_viec:
+            t._viec_dang["TL4-T7"]["luc"] = (datetime.now() - timedelta(minutes=16)).isoformat(timespec="seconds")
+        assert t.lay_viec("TL4-T7", "PC4") is None      # agent mới hỏi việc → trạm dọn
+        tt = t.tinh_trang("TL4-T7")
+        assert tt["viec_dang"] == {}
+        assert tt["vua_xong"][-1]["id"] == so and "không báo xong" in tt["vua_xong"][-1]["loi"]
+        # Việc còn trong hạn thì giữ nguyên.
+        so2 = t.giao_viec("TL4-T7", "quet-studio")
+        t.lay_viec("TL4-T7", "PC4")
+        t.lay_viec("TL4-T7", "PC4")
+        assert t.tinh_trang("TL4-T7")["viec_dang"]["id"] == so2
+    finally:
+        t.tat()
+
+
+def test_agent_lay_viec_moi_khi_viec_cu_chua_xong_thi_viec_cu_ghi_la_mat(tmp_path):
+    """11:27 07/09: bấm Cập nhật trên máy ảo → agent mở lại giữa việc #7, bản mới lấy #8, #7 biến mất."""
+    t = T.Tram(cong=0, goc=str(tmp_path))
+    t.bat()
+    try:
+        so7, so8 = t.giao_quet_day_du("TL4-T7")
+        assert t.lay_viec("TL4-T7", "PC4")["id"] == so7
+        assert t.lay_viec("TL4-T7", "PC4")["id"] == so8      # agent mới, #7 chưa báo xong
+        tt = t.tinh_trang("TL4-T7")
+        assert tt["viec_dang"]["id"] == so8
+        assert tt["vua_xong"][-1]["id"] == so7 and "chưa báo xong" in tt["vua_xong"][-1]["loi"]
+    finally:
+        t.tat()
+
+
+# ───────────────────────────────── GET /tu-chay: sổ ngày của `tu_chay.py --tat-ca` ──────────
+
+
+def test_tu_chay_tra_ve_toi_da_7_so_ngay_gan_nhat(tram_dang_chay, tmp_path):
+    """Máy nhà mở tab là thấy VPS đêm qua đã làm gì — không phải SSH vào đọc
+    `workspace/tu-chay/*.json` bằng tay. Chỉ 7 sổ GẦN NHẤT, không phải cả kho."""
+    import datetime as _dt
+
+    from core.tu_chay import ghi_bao_cao_tat_ca
+
+    for i in range(9):
+        ngay = (_dt.date(2026, 9, 1) + _dt.timedelta(days=i)).isoformat()
+        ghi_bao_cao_tat_ca(str(tmp_path), ngay, {
+            "luc": ngay + "T02:00:00", "che_do": "that",
+            "ket_qua": [{"kenh": "K1", "ok": True, "tom_tat": "K1: xong", "loi": ""}],
+            "tong_uoc_vnd": 90000, "nhom_dong_bo": []})
+
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{tram_dang_chay.cong}/tu-chay", timeout=5) as f:
+        du = json.loads(f.read().decode("utf-8"))
+    assert len(du) == 7, "chỉ 7 sổ ngày gần nhất, không phải cả kho"
+    ngay_tra_ve = [d["ngay"] for d in du]
+    assert ngay_tra_ve == sorted(ngay_tra_ve)
+    assert ngay_tra_ve[-1] == "2026-09-09"       # ngày mới nhất phải có mặt
+    assert "2026-09-01" not in ngay_tra_ve        # ngày cũ nhất (thứ 9 tính lùi) bị bỏ
+    assert du[-1]["runs"][0]["ket_qua"][0]["tom_tat"] == "K1: xong"
+
+
+def test_tu_chay_chua_co_so_ngay_nao_thi_tra_danh_sach_rong(tram_dang_chay):
+    with urllib.request.urlopen(
+            f"http://127.0.0.1:{tram_dang_chay.cong}/tu-chay", timeout=5) as f:
+        du = json.loads(f.read().decode("utf-8"))
+    assert du == []

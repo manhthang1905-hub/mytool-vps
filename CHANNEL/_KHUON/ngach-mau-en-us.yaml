@@ -1,0 +1,65 @@
+# ============================================================================
+# KHUNG hồ sơ ngách — thị trường MỸ (tiếng Anh, America/New_York)
+# ============================================================================
+#
+# Chép vào CHANNEL/_NHOM/<nhóm>/ngach.yaml, mọi kênh của nhóm khai `nhom: "<nhóm>"` và
+# `ngon_ngu: en` trong kenh.yaml. Đây chỉ là KHUNG: điền ngách của bạn vào các chỗ <...>.
+# Bản có ví dụ đầy đủ: ngach-mau.yaml. Bản tham chiếu mọi khoá đang chạy thật: ngach-mau-ja-tam-ly.yaml.
+# Lời nhắc AI của tool viết bằng tiếng Việt; từ khoá/ví dụ trong tệp này viết bằng TIẾNG CỦA KÊNH
+# NGUỒN (tiếng Anh), vì chúng được so với tiêu đề video.
+# Từ khoá chỉ là ĐƯỜNG LÙI khi AI lỗi; AI chọn theo NGHĨA từ mo_ta_ngach/mo_ta_cho_loc_ai/luat_chon.
+
+mo_ta_ngach: "<một câu: ngách gì, tiếng Anh (Mỹ), dạng video nào>"
+ngon_ngu_nguon: en
+dang_thang: "<dạng video đang thắng của kênh>"
+
+mo_ta_cho_loc_ai: >-
+  Thuộc ngách: <mô tả theo ý>. Không thuộc ngách: <các thể loại gần mà KHÔNG phải>.
+  Khán giả thật: <tuổi/giới/thiết bị nếu đã có số Studio>.
+
+luat_chon:
+  - "<luật chọn nguồn theo nghĩa, một câu>"
+
+# ── Thị trường ───────────────────────────────────────────────────────────────────────────────
+thi_truong:
+  quoc_gia: US
+  ngon_ngu: en
+  mui_gio: America/New_York
+  # YouTube tiếng Anh hiển thị "1.2K" / "13K" / "1.2M" views.
+  bac_lam_tron_view:
+    - {duoi: 1000, bac: 1}
+    - {duoi: 10000, bac: 100}
+    - {duoi: 1000000, bac: 1000}
+    - {duoi: 10000000, bac: 100000}
+    - {bac: 1000000}
+
+# ── Đường lùi từ khoá (điền đủ bộ loại trừ — để trống là rơi về chữ Nhật) ─────────────────────
+tu_manh: []
+tu_yeu: []
+tu_loai_tru: ["<unrelated genre>"]
+ten_kenh_loai_tru: ["summary", "audiobook", "compilation", "clips"]
+handle_loai_tru: ["summary", "reupload", "compilation"]
+tu_kenh_hien_nhien: ["news", "sports", "music", "gaming"]
+handle_hien_nhien: ["news", "music", "gaming"]
+tu_tieu_de_hien_nhien: ["live stream", "reaction"]
+tu_tuoi: []
+chu_de_con_mac_dinh: false
+
+# ── Cụm chủ đề V7 ────────────────────────────────────────────────────────────────────────────
+cum:
+  <ma-cum>:
+    ten: "<tên cụm>"
+    tu: ["<word>", "<word>"]
+ngach:
+  tu: ["<words showing the source channel is in your niche>"]
+  tu_lac: ["<words showing it drifted to another niche>"]
+
+tep_khan_gia:
+  - ma: "1"
+    ten: "<tệp khán giả 1>"
+    ten_ngan: "<ngắn>"
+
+# ── Lời nhắc AI (để trống → câu trung tính theo mo_ta_ngach) ─────────────────────────────────
+mau_tieu_de: "kênh YouTube <ngách> tiếng Anh cho khán giả Mỹ"
+mo_ta_kenh_cho_ai: ""
+mo_ta_phan_cum: "tiếng Anh (ngách <ngách>)"

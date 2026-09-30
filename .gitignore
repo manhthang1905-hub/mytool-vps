@@ -1,0 +1,175 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  .gitignore kiểu DANH SÁCH TRẮNG (30/09/2026) — kho chung mytool-vps.
+#
+#  Mặc định CHẶN MỌI THỨ ở gốc, rồi mở từng lối cho mã + tài liệu + khuôn.
+#  Một tệp/thư mục mới ở gốc KHÔNG tự lên kho — phải được khai ở đây. Đây là
+#  chủ đích: kho dùng chung cho nhiều VPS (mỗi máy một ngách/quốc gia), mọi
+#  thứ riêng máy (cấu hình, khoá, dữ liệu kênh, nhật ký) phải ở lại máy.
+#
+#  Lớp kiểm thứ hai: `python -m core.dong_bo_git day` chạy
+#  `core/kiem_phat_hanh.py` + quét thêm (khoá, email, tên kênh thật, video id
+#  của máy) trước mỗi lần đẩy. Xem docs/PHAT-TRIEN-NHIEU-VPS.md.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── 1) Chặn mọi thứ ở gốc ──────────────────────────────────────────────────
+/*
+
+# ── 2) Mở: mã nguồn ────────────────────────────────────────────────────────
+!/.gitignore
+!/.gitattributes
+!/core/
+!/ui_qt/
+!/_sdk/
+!/tests/
+!/vm/
+!/tool-catalog/
+!/agent-skills/
+!/mau-capcut/
+!/mau-xoa-dau/
+
+# Tệp chạy ở gốc — khai TỪNG TÊN (tệp .py thử nghiệm ở gốc không tự lên kho).
+!/shopapi_studio_qt.py
+!/tu_chay.py
+!/tram_nen.py
+!/cap-nhat.py
+!/chay-den-khi-xong.py
+!/*.bat
+!/*.vbs
+!/*.ps1
+!/pytest.ini
+!/requirements*.txt
+
+# ── 3) Mở: tài liệu + khuôn ────────────────────────────────────────────────
+!/docs/
+!/chia-se/
+!/README*.md
+!/CHANGELOG.md
+!/VERSION
+!/LICENSE
+!/CLAUDE.md
+!/MOC-THAT-GIONG-DOC.md
+!/*.example.json
+!/*.example
+
+# CHANNEL/: CHỈ khuôn (_KHUON) + hồ sơ ngách dùng chung (_NHOM/*/ngach.yaml,
+# INSIGHT-CHON-CONTENT.md). Thư mục kênh thật (TL1-T7, K1, …) KHÔNG BAO GIỜ lên.
+!/CHANNEL/
+/CHANNEL/*
+!/CHANNEL/README.md
+!/CHANNEL/_KHUON/
+!/CHANNEL/_NHOM/
+/CHANNEL/_NHOM/*/*
+!/CHANNEL/_NHOM/*/ngach.yaml
+!/CHANNEL/_NHOM/*/INSIGHT-CHON-CONTENT.md
+
+# vm/: mã + khuôn; trạng thái/nhật ký/cấu hình máy thật thì không.
+/vm/*
+!/vm/*.py
+!/vm/*.bat
+!/vm/*.vbs
+!/vm/*.md
+!/vm/requirements*.txt
+!/vm/config.example.json
+!/vm/studio-selectors.json
+!/vm/phien-ban.txt
+!/vm/logo.ico
+# Ảnh mẫu nút bấm Studio — vm/may_dang.py dò màn hình bằng các ảnh này (mã chạy cần).
+!/vm/icon/
+# vm/tien-ich/: tệp khuôn nằm thẳng trong thư mục; thư mục con = cấu hình theo kênh.
+!/vm/tien-ich/
+/vm/tien-ich/*/
+/vm/CLAUDE.md
+# Bộ cài VPS ~1,5 GB (mã + dữ liệu kênh thật + Whisper) — đã bị `/vm/*` chặn,
+# khai lại cho rõ (tests/test_goi_vps.py).
+/vm/goi-vps/
+
+# ── 4) Chặn ở MỌI độ sâu (thắng các dòng mở ở trên) ─────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.claude/
+.vscode/
+CLAUDE.local.md
+NHAT-KY-PHAT-TRIEN.md
+NHAT-KY-KENH.md
+logs/
+*.log
+*.log.*
+*.lock
+*.pid
+*.pid.*
+*.tmp
+*.bak
+*.truoc-*
+*.orig
+
+# Cấu hình / trạng thái riêng máy — mẫu dùng chung là bản `*.example*`.
+config.json
+secrets.json
+secrets.json.*
+cai-dat.json
+cai-dat-tool.json
+trang-thai.json
+cap-nhat.json
+vps.json
+bao-dong.json
+vps-rieng.json
+mang-youtube.json
+hop-viec-may-ao.json
+may-ao.json
+
+# Bí mật theo TÊN (khớp tests/test_khong_day_tep_bi_mat.py).
+*.secret.*
+.env
+*.env
+tokens/
+token*.json
+creds*.json
+credentials*.json
+client_secret*.json
+*cookie*.txt
+*cookies*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*_deploy
+*_deploy.pub
+
+# Hồ sơ trình duyệt kênh (cấu trúc Chrome portable/GPM — vá A9 29/09).
+**/Data/profile/
+**/App/Chrome-bin/
+**/trinh-duyet/
+
+# Media — không lên kho (trừ ảnh nút vm/icon, logo giao diện, ảnh tài liệu docs/).
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.jpg
+*.jpeg
+*.png
+*.PNG
+*.webp
+*.gif
+*.zip
+*.7z
+*.exe
+*.dll
+*.npy
+*.onnx
+*.bin
+*.pt
+*.safetensors
+!/vm/icon/*.png
+!/vm/icon/*.PNG
+!/ui_qt/logo.png
+!/docs/**/*.png
+!/docs/**/*.jpg

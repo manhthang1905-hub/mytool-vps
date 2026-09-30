@@ -1,0 +1,16 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [],
+  "log": [
+   "  đang dùng công thức V7 vì V7 theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: v7).",
+   "  Công thức V7 hỏng (cong-thuc-v7.json dị dạng) — không có nguồn hôm nay (kênh đã có cấu hình V7, không rơi về bảng Một nút vì bảng đó không mang phán đoán của V7)."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": null,
+  "log": [
+   "  đang dùng công thức V7 vì V7 theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: v7).",
+   "  Công thức V7 hỏng (cong-thuc-v7.json dị dạng) — không có nguồn hôm nay (kênh đã có cấu hình V7, không rơi về bảng Một nút vì bảng đó không mang phán đoán của V7)."
+  ]
+ }
+}

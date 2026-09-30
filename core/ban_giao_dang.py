@@ -1,0 +1,409 @@
+"""Bàn giao lượt sản xuất DONE cho máy ảo đăng — nửa TRÊN TOOL của GĐ4.
+
+Chủ dự án, 01/09/2026: *"luồng mới nó nằm ở trên tool mà"* — đúng: máy ảo chỉ
+là tay đăng; còn *sản xuất xong → xuất gói → lên kế hoạch → duyệt* phải diễn
+ra ở tool. Tệp này là khâu XUẤT GÓI + LÊN KẾ HOẠCH:
+
+    PROJECTS/AUTO/<kênh>/<lượt>/          (lượt đã DONE của tab sản xuất)
+        8-video.mp4                        →  <done>/<mã gói>/8-video.mp4
+        3-phu-de.srt (8-phu-de.srt nếu có) →  <done>/<mã gói>/3-phu-de.srt
+        7-thumbnail/CHON-*.jpg             →  <done>/<mã gói>/<tên ảnh>
+        1-tieu-de.txt  (TITLE: …)          →  cột "Tiêu đề" của kế hoạch
+        1-seo.txt (DESCRIPTION:/KEYWORDS:) →  cột "Mô tả" / "Thẻ SEO"
+
+`<done>` là thư mục mà máy ảo nhìn thấy qua ổ chia sẻ Remote Desktop
+(`\\tsclient\\...\\AUTO\\done`) — đúng đường tệp mà tool đăng `D:\\upload`
+đang dùng, không đổi thứ đang chạy. Mã gói = `<kênh>-<lượt>`.
+
+Ba tệp mp4 + srt + ảnh là ĐÚNG bộ mà tool đăng kiểm (`has_required_files`);
+thiếu tệp nào thì DỪNG VÀ NÓI thiếu gì, không xuất gói cụt.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import datetime as _dt
+from typing import Dict, List, Optional, Tuple
+
+from . import ke_hoach_dang
+from . import qa_truoc_dang
+
+__all__ = ["ma_goi", "doc_gioi_thieu", "kiem_du_bo", "xuat_goi", "ban_giao",
+           "ghi_nhan_dang_tay", "danh_dau_dang_tay", "TRANG_THAI_DANG_TAY",
+           "TEP_VIDEO", "TEP_SRT", "TEP_BINH_LUAN"]
+
+#: Trạng thái ghi khi chủ kênh đăng TAY. Khác chuỗi "ĐÃ ĐĂNG" của máy một
+#: chút là cố ý: nhìn sổ biết ngay video nào máy đăng, video nào người đăng —
+#: và vòng dọn dẹp của tool đăng (so bằng đúng chuỗi "ĐÃ ĐĂNG") không đi xoá
+#: thư mục của một gói chưa từng được xuất.
+TRANG_THAI_DANG_TAY = "ĐÃ ĐĂNG (tay)"
+
+TEP_VIDEO = "8-video.mp4"
+TEP_SRT = "3-phu-de.srt"
+#: Phụ đề đã làm sạch theo trục video mới (khâu dựng theo phần, Việc 2).
+TEP_SRT_SACH = "8-phu-de.srt"
+#: Bình luận để ghim ngay sau khi đăng. Đi kèm gói nhưng KHÔNG nằm trong bộ
+#: bắt buộc: thiếu nó thì video vẫn đăng được như trước.
+TEP_BINH_LUAN = "1-binh-luan.txt"
+_THU_MUC_THUMB = "7-thumbnail"
+
+
+def ma_goi(kenh: str, luot: str) -> str:
+    """`TL4-T7` + `0004` → `TL4-T7-0004` — đọc là biết của ai, lượt nào."""
+    return "{0}-{1}".format(str(kenh).strip(), str(luot).strip())
+
+
+def _doc(duong: str) -> str:
+    try:
+        with open(duong, "r", encoding="utf-8", errors="replace") as tep:
+            return tep.read()
+    except OSError:
+        return ""
+
+
+def doc_gioi_thieu(thu_muc_luot: str) -> Dict[str, str]:
+    """Tiêu đề / mô tả / thẻ từ gói chữ của lượt — thiếu thì trả chuỗi rỗng.
+
+    `1-seo.txt` xếp theo mục `DESCRIPTION:` … `HASHTAGS:` … `KEYWORDS:` —
+    mô tả là cả khối dưới DESCRIPTION tới mục kế; thẻ là dòng sau KEYWORDS
+    (đã phân cách bằng dấu phẩy, đúng dạng ô thẻ của Studio).
+    """
+    ra = {"tieu_de": "", "mo_ta": "", "the": "", "binh_luan": ""}
+    ra["binh_luan"] = _doc(os.path.join(thu_muc_luot, TEP_BINH_LUAN)).strip()
+    for dong in _doc(os.path.join(thu_muc_luot, "1-tieu-de.txt")).splitlines():
+        if dong.startswith("TITLE:"):
+            ra["tieu_de"] = dong[len("TITLE:"):].strip()
+            break
+    seo = _doc(os.path.join(thu_muc_luot, "1-seo.txt"))
+    if seo:
+        muc: Dict[str, List[str]] = {}
+        dang: Optional[str] = None
+        for dong in seo.splitlines():
+            dau = dong.strip().upper()
+            if dau.startswith(("DESCRIPTION:", "HASHTAGS:", "KEYWORDS:")):
+                dang = dau.split(":", 1)[0]
+                duoi = dong.split(":", 1)[1].strip()
+                muc[dang] = [duoi] if duoi else []
+                continue
+            if dang:
+                muc.setdefault(dang, []).append(dong)
+        ra["mo_ta"] = "\n".join(muc.get("DESCRIPTION", [])).strip()
+        ra["the"] = " ".join(muc.get("KEYWORDS", [])).strip()
+    return ra
+
+
+def _tim_thumb(thu_muc_luot: str) -> str:
+    """Ảnh bìa ĐÃ CHỌN (`CHON-*`); chưa chọn thì lấy tấm đầu cho khỏi cụt bộ."""
+    thu_muc = os.path.join(thu_muc_luot, _THU_MUC_THUMB)
+    try:
+        ten = sorted(os.listdir(thu_muc))
+    except OSError:
+        return ""
+    anh = [t for t in ten
+           if os.path.splitext(t)[1].lower() in (".jpg", ".jpeg", ".png", ".webp")]
+    chon = [t for t in anh if t.startswith("CHON-")]
+    return os.path.join(thu_muc, (chon or anh)[0]) if (chon or anh) else ""
+
+
+def kiem_du_bo(thu_muc_luot: str) -> List[str]:
+    """Danh sách thứ còn THIẾU để bàn giao — rỗng nghĩa là đủ bộ."""
+    thieu = []
+    if not os.path.isfile(os.path.join(thu_muc_luot, TEP_VIDEO)):
+        thieu.append("video (" + TEP_VIDEO + ")")
+    if not os.path.isfile(os.path.join(thu_muc_luot, TEP_SRT)):
+        thieu.append("phụ đề (" + TEP_SRT + ")")
+    if not _tim_thumb(thu_muc_luot):
+        thieu.append("ảnh bìa (7-thumbnail/)")
+    return thieu
+
+
+def xuat_goi(thu_muc_luot: str, thu_muc_done: str, ma: str) -> str:
+    """Chép bộ mp4 + srt + ảnh bìa vào `<done>/<mã>`. Trả về đường thư mục gói.
+
+    Chép qua tên tạm rồi đổi tên từng tệp: tool đăng bên máy ảo có thể đang
+    liếc thư mục này — không được để nó vớ một tệp mp4 chép nửa chừng.
+    """
+    thieu = kiem_du_bo(thu_muc_luot)
+    if thieu:
+        raise RuntimeError("lượt chưa đủ bộ để bàn giao — thiếu: "
+                           + ", ".join(thieu))
+    dich = os.path.join(thu_muc_done, ma)
+    os.makedirs(dich, exist_ok=True)
+    # (nguồn, tên đích). Phụ đề: khâu dựng theo phần (Việc 2, 28/09/2026)
+    # ghi `8-phu-de.srt` — đã dời theo khoảng nghỉ bù, bỏ tiền tố `--- `,
+    # không câu nào nằm trong khoảng nghỉ — thì giao BẢN ĐÓ. Tên đích giữ
+    # nguyên `3-phu-de.srt`: QA và máy đăng bên máy ảo không phải đổi gì.
+    # Khâu dựng tự xoá `8-phu-de.srt` khi lùi về dựng kiểu cũ, nên có tệp này
+    # nghĩa là nó khớp đúng video đang nằm cạnh.
+    srt_sach = os.path.join(thu_muc_luot, TEP_SRT_SACH)
+    nguon = [(os.path.join(thu_muc_luot, TEP_VIDEO), TEP_VIDEO),
+             (srt_sach if os.path.isfile(srt_sach)
+              else os.path.join(thu_muc_luot, TEP_SRT), TEP_SRT)]
+    anh = _tim_thumb(thu_muc_luot)
+    nguon.append((anh, os.path.basename(anh)))
+    # Bình luận để GHIM sau khi đăng — đi CÙNG gói, không đi qua bảng kế hoạch.
+    # Bảng ấy có sẵn cột cố định mà cả tool đăng bên máy ảo lẫn giao diện đều
+    # đọc; thêm cột là sửa lược đồ đang chạy ở hai nơi. Đặt tệp cạnh mp4 thì ai
+    # đăng cũng thấy, và đăng tay cũng dùng được. Thiếu tệp KHÔNG chặn bàn giao:
+    # video vẫn đăng được, chỉ là không có sẵn câu để ghim.
+    bl = os.path.join(thu_muc_luot, TEP_BINH_LUAN)
+    if os.path.isfile(bl):
+        nguon.append((bl, TEP_BINH_LUAN))
+    for duong, ten in nguon:
+        ra = os.path.join(dich, ten)
+        tam = ra + ".tam"
+        # Video (`TEP_VIDEO`, 0,3–1,1 GB) là mục nặng nhất — nguồn
+        # (`PROJECTS/AUTO/...`) và đích (`thu_muc_done`) đều nằm trong MyTool,
+        # thường CÙNG một ổ đĩa NTFS. `os.link` (hardlink) trỏ một mục lục mới
+        # vào CÙNG khối dữ liệu trên đĩa — tức thời, 0 byte đọc/ghi thêm — thay
+        # vì `shutil.copy2` đọc rồi ghi lại toàn bộ nội dung. Chỉ áp cho VIDEO:
+        # các tệp khác (srt, ảnh bìa, bình luận) nhỏ, không đáng đổi, và giữ
+        # `copy2` cho chúng là không mở rộng diện rủi ro không cần thiết. Khác
+        # ổ đĩa thì `os.link` ném `OSError` — lùi về `copy2` như cũ, không hỏng
+        # gói. Vẫn giữ NGUYÊN cơ chế "ghi tệp tạm rồi os.replace": `os.link`
+        # tạo `tam` trước, `os.replace` sau, đúng cấu trúc cũ.
+        if ten == TEP_VIDEO:
+            try:
+                if os.path.exists(tam):
+                    os.remove(tam)  # rác lượt chạy dở trước — os.link báo lỗi
+                                    # "đã tồn tại" nếu còn tệp .tam cũ
+                os.link(duong, tam)
+            except OSError:
+                shutil.copy2(duong, tam)
+        else:
+            shutil.copy2(duong, tam)
+        os.replace(tam, ra)
+    return dich
+
+
+def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
+             ngay: str = "", gio: str = "") -> Tuple[str, bool]:
+    """Xuất gói + kiểm chất lượng + ghi một dòng kế hoạch.
+
+    Trả `(mã gói, có thêm dòng mới không)`.
+
+    Chạy hai lần cho cùng lượt là chuyện thường (bấm nhầm, chạy lại) — gói
+    được chép đè cho tươi, nhưng kế hoạch KHÔNG mọc dòng trùng: dòng cũ giữ
+    nguyên ngày giờ với trạng thái người ta đã đặt.
+
+    ═══ CỔNG QA (`core.qa_truoc_dang`), THÊM 26/09/2026 ═══
+
+    `Sẵn sàng` (và ngày/giờ đăng) chỉ được điền khi gói xuất ra QUA ĐƯỢC bộ
+    kiểm chất lượng cục bộ (đủ file, video mở được có tiếng đúng độ dài/độ
+    phân giải, phụ đề khớp, tiêu đề/ảnh bìa hợp lệ) — không phải cứ đủ file là
+    "x" như trước. QA fail thì: dòng MỚI để trống Sẵn sàng lẫn ngày giờ (máy
+    ảo bỏ qua), ghi lý do vào `qa-loi.txt` cạnh gói, và báo ra ngoài (Telegram
+    nếu có cấu hình, luôn có trong `workspace/tu-chay/tu-chay.log`). Dòng đã
+    có sẵn từ trước thì KHÔNG bị đụng vào (xem đoạn "chạy hai lần" ở trên) —
+    QA chỉ cập nhật `qa-loi.txt`, không tự ý xoá "Sẵn sàng" một dòng chủ dự án
+    đã tự tay duyệt.
+
+    Đây là điều kiện để sau này bật `tu_duyet: true` (tool tự điền giờ, không
+    ai duyệt lại) mà không phải giao thẳng con mắt người cho máy — xem
+    docstring đầu `core/qa_truoc_dang.py`.
+    """
+    from .auto import duong_luot  # noqa: PLC0415 — tránh vòng nhập
+
+    thu_muc_luot = duong_luot(goc, kenh, luot)
+    ma = ma_goi(kenh, luot)
+    xuat_goi(thu_muc_luot, thu_muc_done, ma)
+    thu_muc_goi = os.path.join(thu_muc_done, ma)
+    gt = doc_gioi_thieu(thu_muc_luot)
+
+    from .dung_video import tim_ffmpeg  # noqa: PLC0415 — tránh nạp khi không cần
+    from .kenh import doc_kenh  # noqa: PLC0415
+
+    k = doc_kenh(goc, kenh)
+    ket_qua_qa = qa_truoc_dang.kiem_thu_muc_goi(
+        thu_muc_goi, tieu_de=gt["tieu_de"], mo_ta=gt["mo_ta"],
+        phut_muc_tieu=k.phut_muc_tieu, chenh_cho_phep=k.chenh_cho_phep,
+        do_dai_tu_do=k.do_dai_tu_do, do_dai_theo_goc=k.do_dai_theo_goc,
+        do_phan_giai_mong_muon=qa_truoc_dang.do_phan_giai_mong_muon(goc, k),
+        ffmpeg=tim_ffmpeg(goc))
+    qa_truoc_dang.ghi_ket_qua(thu_muc_goi, ket_qua_qa)
+    if not ket_qua_qa.dat:
+        qa_truoc_dang.bao_qa_hong(goc, ma, ket_qua_qa)
+
+    cot, hang = ke_hoach_dang.doc_bang(goc, kenh)
+    o_ma = cot.index("Mã gói")
+    da_co_dong = any(d[o_ma].strip() == ma for d in hang)
+    if not da_co_dong:
+        dong = {ten: "" for ten in cot}
+        dong.update({"Mã gói": ma,
+                     "Ngày đăng": ngay if ket_qua_qa.dat else "",
+                     "Giờ đăng": gio if ket_qua_qa.dat else "",
+                     "Tiêu đề": gt["tieu_de"], "Mô tả": gt["mo_ta"],
+                     "Thẻ SEO": gt["the"], "Sẵn sàng": "x" if ket_qua_qa.dat else ""})
+        hang.append([dong.get(ten, "") for ten in cot])
+        ke_hoach_dang.luu_bang(goc, kenh, hang, cot)
+
+    # ═══ HỒ SƠ VIDEO (Việc 3, 28/09/2026) ═══
+    #
+    # Chụp lại NGAY LÚC NÀY — thư mục lượt còn đủ mọi tệp (kịch bản, hồ sơ
+    # chấm điểm, ảnh bìa…) — vào `CHANNEL/<kênh>/ho-so-video/`, nơi
+    # `core/don_dep*.py` không bao giờ đụng tới. Đây là NGUỒN DUY NHẤT còn lại
+    # để nối số liệu Studio (về sau vài ngày) với "tool đã chọn gì cho video
+    # này" một khi thư mục lượt AUTO bị dọn. Thuần đọc/ghi đĩa, 0 đồng — nhưng
+    # hỏng ở đây (đĩa đầy, quyền tệp…) TUYỆT ĐỐI không được làm hỏng cả lượt
+    # bàn giao đã xong xuôi phía trên.
+    try:
+        from . import ho_so_video  # noqa: PLC0415 — tránh vòng nhập
+        ho_so_video.tao_ho_so(goc, kenh, luot, ma)
+    except Exception as loi:  # noqa: BLE001
+        pass
+
+    return ma, not da_co_dong
+
+
+def danh_dau_dang_tay(goc: str, kenh: str, ma: str, *, ghi_chu: str = "",
+                      bay_gio: Optional[_dt.datetime] = None) -> bool:
+    """Đổi một dòng kế hoạch có sẵn thành **đã đăng thủ công**.
+
+    Ghi cả ngày/giờ THẬT lúc người dùng bấm, không chỉ đổi trạng thái. Mốc này
+    là thứ lịch hai ngày tính lượt kế tiếp và bộ dọn đĩa tính hạn ân xá. Xoá
+    ``Sẵn sàng`` để máy đăng không bao giờ nhặt lại dòng người đã đăng tay.
+    """
+    luc = bay_gio or _dt.datetime.now()
+    cot, hang = ke_hoach_dang.doc_bang(goc, kenh)
+    if "Mã gói" not in cot:
+        return False
+    o_ma = cot.index("Mã gói")
+    thay = False
+    for dong in hang:
+        if dong[o_ma].strip() != str(ma).strip():
+            continue
+        cap_nhat = {
+            "Ngày đăng": luc.strftime("%d/%m/%Y"),
+            "Giờ đăng": luc.strftime("%H:%M"),
+            "Sẵn sàng": "",
+            "Trạng thái đăng": TRANG_THAI_DANG_TAY,
+        }
+        if ghi_chu:
+            cap_nhat["Ghi chú"] = ghi_chu
+        for ten, gia_tri in cap_nhat.items():
+            if ten in cot:
+                dong[cot.index(ten)] = gia_tri
+        thay = True
+    if thay:
+        ke_hoach_dang.luu_bang(goc, kenh, hang, cot)
+    return thay
+
+
+def ghi_nhan_dang_tay(goc: str, kenh: str, luot: str,
+                      ghi_chu: str = "", *,
+                      bay_gio: Optional[_dt.datetime] = None) -> Tuple[str, bool]:
+    """Chủ kênh vừa ĐĂNG TAY một lượt — ghi vào sổ kế hoạch cho tool biết.
+
+    Chủ dự án, 01/09/2026: *"tool edit xong vẫn còn 1 bước nữa là tao làm thủ
+    công đưa vào CapCut ghép nhạc và xem lại, sau đó mới xuất ra rồi mới đưa
+    sang vm để đăng… tao sẽ edit hoàn thiện và đăng tay trước mắt — nên thiết
+    kế 1 kiểu gì đó tao đăng xong tao sẽ tự cập nhật trạng thái tool"*.
+
+    Đây là cái nút ấy. KHÔNG xuất gói, KHÔNG đòi đủ bộ (bản đăng thật đã đi
+    qua CapCut, tool không giữ nó): chỉ ghi một dòng sổ — tiêu đề/mô tả/thẻ
+    lấy từ lượt để sổ tự đọc được, ngày giờ là LÚC GHI NHẬN, `Sẵn sàng` để
+    trống và trạng thái là :data:`TRANG_THAI_DANG_TAY` nên máy ảo không bao
+    giờ đụng vào dòng này. Lượt từng được bàn giao rồi thì chỉ đổi trạng thái,
+    không mọc dòng mới.
+
+    Sổ này về sau là trí nhớ của bộ não chu kỳ (GĐ6): đề tài nào đã đăng —
+    tay hay máy — đều nằm một chỗ.
+    """
+    from .auto import duong_luot  # noqa: PLC0415 — tránh vòng nhập
+
+    ma = ma_goi(kenh, luot)
+    cot, hang = ke_hoach_dang.doc_bang(goc, kenh)
+    o_ma = cot.index("Mã gói")
+    if any(d[o_ma].strip() == ma for d in hang):
+        danh_dau_dang_tay(goc, kenh, ma, ghi_chu=ghi_chu, bay_gio=bay_gio)
+        return ma, False
+    luc = bay_gio or _dt.datetime.now()
+    gt = doc_gioi_thieu(duong_luot(goc, kenh, luot))
+    dong = {ten: "" for ten in cot}
+    dong.update({"Mã gói": ma,
+                 "Ngày đăng": luc.strftime("%d/%m/%Y"),
+                 "Giờ đăng": luc.strftime("%H:%M"),
+                 "Tiêu đề": gt["tieu_de"], "Mô tả": gt["mo_ta"],
+                 "Thẻ SEO": gt["the"],
+                 "Trạng thái đăng": TRANG_THAI_DANG_TAY,
+                 "Ghi chú": ghi_chu})
+    hang.append([dong.get(ten, "") for ten in cot])
+    ke_hoach_dang.luu_bang(goc, kenh, hang, cot)
+    return ma, True
+
+
+# ═══ TỰ MỞ KHOÁ GÓI KẸT QA (30/09/2026) ═══════════════════════════════════════
+#
+# Cổng độ dài đã đổi thành CHỈ CẢNH BÁO, nhưng gói kẹt từ trước (còn
+# `qa-loi.txt`) không tự được kiểm lại. `kiem_lai_goi_ket` = logic của
+# `workspace/cong-cu-dieu-phoi/mo_khoa_qa.py`, đưa vào tool để `core.gac_tong`
+# gọi định kỳ — "video đã xong thì cứ đăng", không cần người bấm.
+
+
+def liet_ke_goi_ket(goc: str, kenh: str) -> List[str]:
+    """Mã các gói trong `thu_muc_done` của kênh còn `qa-loi.txt` (chỉ đọc đĩa)."""
+    from .kenh import doc_kenh  # noqa: PLC0415
+    try:
+        k = doc_kenh(goc, kenh)
+    except Exception:  # noqa: BLE001 — kênh hỏng cấu hình: coi như không có gì
+        return []
+    if not k.thu_muc_done or not os.path.isdir(k.thu_muc_done):
+        return []
+    return sorted(m for m in os.listdir(k.thu_muc_done)
+                  if os.path.isfile(os.path.join(k.thu_muc_done, m, qa_truoc_dang.TEN_TEP_KET_QUA)))
+
+
+def kiem_lai_goi_ket(goc: str, ma_kenh: str, *, kiem=None, toi_da: int = 0) -> List[Dict[str, object]]:
+    """Chạy lại QA cho gói kẹt của một kênh; ĐẠT thì điền Sẵn sàng + khe trống
+    sớm nhất và xoá `qa-loi.txt`. Bỏ qua dòng Ghi chú bắt đầu "Bỏ", dòng đã có
+    "Trạng thái đăng", dòng đã Sẵn sàng, gói không có dòng kế hoạch.
+
+    `kiem(goc, kenh, ma) -> KetQuaQA` (mặc định `qa_truoc_dang.kiem_goi`, chạy
+    FFmpeg — nơi gọi phải giữ khe "nang"). `toi_da` > 0: chỉ kiểm tối đa ngần
+    ấy gói (chặn một lượt gác chạy quá lâu). Trả danh sách
+    `{"ma", "ket_qua": "mo"|"chua_dat"|"bo_qua", "loi": [...], "ngay", "gio"}`.
+    """
+    from . import xep_lich  # noqa: PLC0415
+    from .kenh import doc_kenh  # noqa: PLC0415
+
+    kiem = kiem or qa_truoc_dang.kiem_goi
+    ds = liet_ke_goi_ket(goc, ma_kenh)
+    if not ds:
+        return []
+    k = doc_kenh(goc, ma_kenh)
+    cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
+    if "Mã gói" not in cot or "Sẵn sàng" not in cot:
+        return []
+    o = {t: cot.index(t) for t in ("Mã gói", "Ngày đăng", "Giờ đăng", "Sẵn sàng")}
+    o_tt = cot.index("Trạng thái đăng") if "Trạng thái đăng" in cot else -1
+    o_gc = cot.index("Ghi chú") if "Ghi chú" in cot else -1
+    dung = xep_lich.khe_da_dung(goc, ma_kenh)
+    ra: List[Dict[str, object]] = []
+    doi, da_kiem = False, 0
+    for ma in ds:
+        dong = next((d for d in hang if d[o["Mã gói"]].strip() == ma), None)
+        if dong is None or (o_tt >= 0 and dong[o_tt].strip()) \
+                or (o_gc >= 0 and dong[o_gc].strip().lower().startswith("bỏ")) \
+                or dong[o["Sẵn sàng"]].strip():
+            ra.append({"ma": ma, "ket_qua": "bo_qua", "loi": []})
+            continue
+        if toi_da and da_kiem >= toi_da:
+            continue
+        da_kiem += 1
+        kq = kiem(goc, ma_kenh, ma)
+        if not kq.dat:
+            ra.append({"ma": ma, "ket_qua": "chua_dat", "loi": list(kq.loi)})
+            continue
+        ngay, gio = xep_lich.khe_trong_som_nhat(goc, ma_kenh, k, da_dung=dung)
+        if not ngay:  # chưa có khe: chưa đổi gì, lần sau thử lại
+            ra.append({"ma": ma, "ket_qua": "bo_qua", "loi": ["chưa có khe trống"]})
+            continue
+        dung.add((ngay, gio))
+        qa_truoc_dang.ghi_ket_qua(os.path.join(k.thu_muc_done, ma), kq)
+        dong[o["Ngày đăng"]], dong[o["Giờ đăng"]], dong[o["Sẵn sàng"]] = ngay, gio, "x"
+        doi = True
+        ra.append({"ma": ma, "ket_qua": "mo", "loi": [], "ngay": ngay, "gio": gio})
+    if doi:
+        ke_hoach_dang.luu_bang(goc, ma_kenh, hang, cot)
+    return ra

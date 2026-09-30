@@ -1,0 +1,19 @@
+{
+ "mo_ta": "Công thức VPH ném lỗi → log 'VPH hỏng' + 'không có ứng viên đột biến', rơi về Một nút. Kênh không thuộc nhóm → không cộng anh em.",
+ "kenh": "GV3",
+ "kenh_yaml": ["ma: \"GV3\"", "ngon_ngu: \"ja\""],
+ "cong_thuc_v7": null,
+ "bang_nhom": false,
+ "co_v7_truoc": false,
+ "loai_tru": [],
+ "da_lam_tieu_de": [],
+ "vph": null,
+ "vph_loi": "sổ content hỏng: dòng 12",
+ "mot_nut": {
+  "moi": [
+   {"link": "https://youtu.be/mnAAAAAAA01", "tieu_de": "賢い人の特徴", "kenh": "Z1", "view": 80000, "vuot": 3.0, "tang": 100, "diem": 0},
+   {"link": "https://youtu.be/mnBBBBBBB01", "tieu_de": "頭がいい人の口癖", "kenh": "Z2", "view": 120000, "vuot": 1.5, "tang": 0, "diem": 0}
+  ]
+ },
+ "v7": null
+}

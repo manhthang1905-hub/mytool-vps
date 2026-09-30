@@ -1,0 +1,382 @@
+"""Điểm vào **duy nhất** của ShopAPI Studio.
+
+Bản tkinter (`shopapi_studio.py`, thư mục `ui/`) đã xoá 12/08/2026 theo quyết
+định của chủ dự án: *"tao chỉ dùng bản có giao diện đẹp thôi, mày dọn dẹp đi để
+trên github với ở đây sạch"*. Giữ hai bản song song chỉ có nghĩa trong lúc
+chuyển; chuyển xong mà vẫn giữ thì mỗi sửa đổi phải làm hai lần, và bản không ai
+dùng lặng lẽ mục ra.
+
+═══ VÌ SAO CHỖ NÀY PHẢI TỰ BÁO ĐƯỢC LỖI ═══
+
+Khách chạy bằng `CHAY-GON.vbs` → `pythonw.exe`, tức **không có cửa sổ đen nào**.
+Ở lối đó `sys.stdout` là `None`: `print()` in vào hư không. Hỏng lúc khởi động —
+thiếu thư viện, mã nguồn lỗi — thì khách nhấp đúp và **không thấy gì cả**, không
+một dấu hiệu nào để đoán chuyện gì đã xảy ra.
+
+Nên có bốn đường báo, thử lần lượt:
+
+    1. còn console   → in ra rồi chờ Enter
+    2. hộp thoại tkinter — có sẵn trong mọi bản Python, KHÔNG cài bằng pip
+    3. hộp thoại Qt  — khi tkinter bị lược bỏ khỏi bản Python của máy
+    4. không dựng nổi hộp nào → ghi `LOI-KHOI-DONG.txt` cạnh tool
+
+Thứ tự tkinter TRƯỚC Qt là điểm mấu chốt, không phải sở thích: lý do số một
+khiến tool không khởi động được là **thiếu PyQt5**, nên một hộp thoại vẽ bằng Qt
+chắc chắn hỏng đúng lúc cần nó nhất. Bản trước đúng là như vậy, và khách nhấp
+đúp thì không thấy gì cả.
+
+Đường thứ tư là manh mối cuối cùng còn lại, và nó phải luôn còn.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+for _duong in (BASE_DIR, os.path.join(BASE_DIR, "_sdk")):
+    if _duong not in sys.path:
+        sys.path.insert(0, _duong)
+
+
+def _co_cua_so_den() -> bool:
+    """Tool có đang chạy kèm một console để mà in ra không?
+
+    Chạy bằng `pythonw.exe` thì `sys.stdout` là `None`, hoặc là một đối tượng
+    không gắn với terminal nào. In vào đó là in vào hư không.
+    """
+    dong_ra = getattr(sys, "stdout", None)
+    if dong_ra is None:
+        return False
+    try:
+        return bool(dong_ra.fileno() >= 0) and dong_ra.isatty()
+    except Exception:  # noqa: BLE001 — stdout bị thay bằng thứ không có fileno
+        return False
+
+
+def _die(tieu_de: str, chi_tiet: str) -> None:
+    """Báo lỗi rồi thoát. Dùng khi chưa dựng nổi cửa sổ chính.
+
+    Xem ba đường báo ở đầu file. Không đường nào được phép ném lỗi tiếp — đây là
+    lúc tool đang cố báo lỗi, hỏng ở đây là khách mất sạch manh mối.
+    """
+    if _co_cua_so_den():
+        print("\n" + "=" * 66)
+        print("  " + tieu_de)
+        print("=" * 66)
+        print(chi_tiet)
+        print()
+        try:
+            input("Nhấn Enter để đóng… ")
+        except EOFError:
+            pass
+        sys.exit(1)
+
+    # Hộp thoại dựng bằng **tkinter**, không phải Qt.
+    #
+    # Bản trước dựng bằng `QMessageBox`, và nó hỏng đúng ở lần cần nhất: lý do
+    # số một khiến tool không khởi động được là **thiếu PyQt5**, mà đó chính là
+    # thứ dùng để vẽ hộp thoại báo "thiếu PyQt5". Nên khách nhấp đúp
+    # CHAY-GON.vbs rồi không thấy gì cả — không cửa sổ, không báo lỗi, chỉ có
+    # một file .txt lặng lẽ hiện ra mà không ai nghĩ tới chuyện mở.
+    #
+    # tkinter đi kèm sẵn mọi bản Python trên Windows và tool KHÔNG cài nó, nên
+    # nó còn sống kể cả khi mọi thứ cài bằng pip đều hỏng. (Cùng tính chất ấy
+    # làm nó vô dụng khi đem đi *kiểm tra* xem giao diện cài được chưa — xem
+    # SETUP.bat. Vô dụng để hỏi, hoàn hảo để cấp cứu.)
+    for dung_hop in (_hop_tkinter, _hop_qt):
+        try:
+            if dung_hop(tieu_de, chi_tiet):
+                sys.exit(1)
+        except Exception:  # noqa: BLE001 — còn đường sau, không được ném tiếp
+            pass
+
+    # Cả hai đều không dựng nổi: ghi file. Manh mối cuối cùng, phải luôn còn.
+    try:
+        with open(os.path.join(BASE_DIR, "LOI-KHOI-DONG.txt"), "w",
+                  encoding="utf-8") as tep:
+            tep.write(tieu_de + "\n\n" + chi_tiet + "\n")
+    except OSError:
+        pass
+    sys.exit(1)
+
+
+def _hop_tkinter(tieu_de: str, chi_tiet: str) -> bool:
+    from tkinter import Tk, messagebox
+
+    goc = Tk()
+    goc.withdraw()          # chỉ cần hộp thoại, không cần cửa sổ nền
+    try:
+        messagebox.showerror(tieu_de, chi_tiet)
+    finally:
+        goc.destroy()
+    return True
+
+
+def _hop_qt(tieu_de: str, chi_tiet: str) -> bool:
+    from PyQt5.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    QMessageBox.critical(None, tieu_de, chi_tiet)
+    del app
+    return True
+
+
+def _doc_ban() -> str:
+    """Số hiệu bản đang chạy, để nhật ký nói được lỗi ở bản nào."""
+    try:
+        with open(os.path.join(BASE_DIR, "VERSION"), encoding="utf-8") as tep:
+            return tep.read().strip()
+    except OSError:
+        return ""
+
+
+def _ep_hien_that_su(cua_so) -> None:
+    """Ép Windows BẬT LẠI cờ hiển thị của cửa sổ chính, phòng phiên RDP "quên hiện".
+
+    ═══ ĐO ĐƯỢC TRÊN VPS 19/09/2026 ═══
+
+    `cua_so.show()` chạy xong, vòng lặp sự kiện Qt sống khoẻ (`py-spy dump` thấy
+    `MainThread` nằm yên trong `app.exec_()`, không kẹt, không văng lỗi) — nhưng
+    cờ `WS_VISIBLE` của HWND thật KHÔNG được bật, nên Windows không vẽ gì lên
+    màn hình dù bên trong Qt tin là đã hiện xong. Gọi `cua_so.raise_()` +
+    `activateWindow()` (đường Qt bình thường) KHÔNG sửa được — vì Qt đã đánh
+    dấu nội bộ là "đã show", nên hai hàm đó chỉ lo đổi thứ tự Z / focus chứ
+    không phát lại lệnh `ShowWindow`. Cách duy nhất đo được là gọi THẲNG
+    `user32.ShowWindow(hwnd, SW_SHOW)` qua `ctypes`, bỏ qua sổ sách nội bộ của
+    Qt — đúng cách một tiến trình khác (PowerShell) đã ép thành công lúc chẩn
+    đoán sự cố này.
+
+    Gọi lại vài lần ở các mốc trễ khác nhau (không chỉ một lần ngay sau
+    `show()`) vì chưa rõ đây là lỗi CHỈ xảy ra ngay lúc cửa sổ vừa dựng (đường
+    hiển thị RDP chưa kịp "tỉnh") hay có thể tái phát muộn hơn — bắn vài phát
+    trong vài giây đầu, tốn kém không đáng kể, đổi lại chắc ăn hơn bắn một phát.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import ctypes
+
+        from PyQt5.QtCore import QTimer
+
+        hwnd = int(cua_so.winId())
+
+        def _ban() -> None:
+            try:
+                ctypes.windll.user32.ShowWindow(hwnd, 5)  # SW_SHOW
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+            except OSError:
+                pass
+
+        for tre_ms in (0, 300, 1500, 4000):
+            QTimer.singleShot(tre_ms, _ban)
+    except Exception:  # noqa: BLE001 — ép hiện hỏng không được chặn tool mở
+        pass
+
+
+def main() -> int:
+    try:
+        from PyQt5.QtWidgets import QApplication
+    except ImportError:
+        _die("Thiếu thư viện giao diện",
+             "Tool cần PyQt5 mà máy chưa có.\n\n"
+             "Bạn nhấp đúp SETUP.bat một lần để cài, rồi mở lại tool.\n\n"
+             "Hoặc mở cửa sổ lệnh và chạy:\n"
+             "    python -m pip install PyQt5")
+        return 1
+
+    # ═══ THIẾU GÌ THÌ CÀI, TRƯỚC KHI NHẬP THỨ CẦN NÓ ═══
+    #
+    # Đường cập nhật chỉ tráo thư mục rồi mở lại tool — nó không chạy `pip` một
+    # lần nào. Nên bản nào cần thêm thư viện thì khách bấm Cập nhật xong nhận
+    # về một tool **không mở lên được**, kèm một hộp thoại bảo họ đi nhấp đúp
+    # `SETUP.bat` — thứ họ chạy đúng một lần lúc mới cài và không nhớ nữa.
+    #
+    # Chủ dự án, 16/08/2026: *"có cách nào update mà cài luôn cho khách không,
+    # để khách mở là dùng được"*.
+    #
+    # Chỗ cắm phải là **đúng đây**, không sớm hơn không muộn hơn:
+    #   - sau khi `PyQt5` nhập được, vì cửa sổ tiến trình vẽ bằng Qt;
+    #   - trước khi nhập `core`/`ui_qt`, vì đó chính là chỗ sẽ nổ nếu thiếu.
+    #
+    # Máy đã đủ đồ thì hàm này chỉ đọc một tệp rồi băm một lần — vài phần
+    # nghìn giây, và đó là đường chạy của gần như mọi lần mở tool.
+    try:
+        from ui_qt.cua_so_tu_du import bao_dam_du
+
+        bao_dam_du(BASE_DIR)
+    except Exception:  # noqa: BLE001 — tự cài hỏng không được chặn tool
+        pass
+
+    try:
+        import core  # noqa: F401 — tự tìm SDK shopapi
+
+        from ui_qt import logo
+        from ui_qt.app import CuaSoChinh
+        from ui_qt.theme import QSS
+    except Exception as loi:  # noqa: BLE001
+        import traceback
+
+        _die("Tool không khởi động được",
+             "{0}: {1}\n\n{2}".format(type(loi).__name__, loi,
+                                      traceback.format_exc()[-1500:]))
+        return 1
+
+    # Ghi lại mọi tiến trình tool chạy, vào `workspace/tien-trinh.log`.
+    #
+    # Có vì một sự cố không tái hiện được: máy khách báo tool mở kèm một cửa sổ
+    # Claude Code, còn máy dựng tool đo ba cách đều không thấy tiến trình nào.
+    # Khi hai bên nhìn thấy hai thứ khác nhau, thứ cần không phải thêm một giả
+    # thuyết nữa mà là bản ghi từ chính máy đó. Bật sớm nhất có thể — trước cả
+    # lúc dựng cửa sổ — để không bỏ sót lệnh nào.
+    try:
+        from core import nhat_ky_tien_trinh
+
+        nhat_ky_tien_trinh.bat_ghi(BASE_DIR)
+    except Exception:  # noqa: BLE001 — nhật ký hỏng không được chặn tool
+        pass
+
+    # ═══ DẤU PHIÊN: BẮT CÁI CHẾT CÂM ═══
+    #
+    # `core/hung_su_co.py` bắt được mọi lỗi Python. Nhưng thư viện mã máy —
+    # `ctranslate2` của bộ nghe, bộ giải mã của Qt, trình điều khiển đồ hoạ —
+    # chết bằng cách gọi thẳng `abort()`: không ngoại lệ, không đi qua
+    # `sys.excepthook`, không kịp ghi một chữ. Với kiểu chết ấy `su-co.log`
+    # rỗng trơn, mà một tệp rỗng thì không phân biệt được với "chưa từng lỗi".
+    #
+    # Khách báo 18/08/2026: *"cứ mở lên 5 phút lại tự tắt"*. Không ghi được lúc
+    # chết thì ghi TRƯỚC, rồi xoá khi đóng tử tế — lần chạy sau nhặt được dấu
+    # ấy là biết lần trước chết, chết sau bao lâu, và đang làm gì.
+    #
+    # Đặt ngay sau nhật ký tiến trình và TRƯỚC mọi thứ có thể chết.
+    try:
+        from core import nhat_ky
+
+        nhat_ky.bat_dau_phien(BASE_DIR, _doc_ban())
+        nhat_ky.don_dep(BASE_DIR)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # ═══ MÁY ĐANG KHOÁ THÌ DỌN NGAY LÚC MỞ ═══
+    #
+    # Chặn từ giờ trở đi là chưa đủ với người vừa cập nhật lên bản này: khoá
+    # shopapi mà bản 2.11.x cắm vào `~/.claude/settings.json` vẫn nằm nguyên
+    # đó, và extension Claude trong VS Code vẫn bỏ gói Max mà đi qua nó — không
+    # có dấu hiệu gì trên màn hình.
+    #
+    # Chỉ chạy khi khách đã tự bật khoá cứng, và chỉ gỡ đúng những khoá Studio
+    # từng đặt (`go_khoi_may` trả lại cả khoá riêng đã cất tạm). Không đụng gì
+    # khác trong tệp.
+    try:
+        from core.claude_code import go_khoi_may, khong_duoc_cam_khoa
+
+        if khong_duoc_cam_khoa():
+            go_khoi_may()
+    except Exception:  # noqa: BLE001 — dọn hỏng không được chặn tool
+        pass
+
+    # Khai TRƯỚC khi dựng QApplication. Windows chốt nhóm thanh tác vụ cho tiến
+    # trình ở cửa sổ đầu tiên; khai sau đó thì nút dưới thanh tác vụ vẫn đeo
+    # icon của `pythonw.exe`, dù cửa sổ đã mang logo của tool.
+    logo.khai_bao_voi_windows()
+
+    app = QApplication(sys.argv)
+
+    # ═══ HỨNG LỖI LÚC ĐANG CHẠY ═══
+    #
+    # Khách báo 14/08/2026: *"tool tự đẩy ra, khoảng 5-10 phút tự thoát"* —
+    # không hộp thoại, không báo gì. Đó không phải tool tự tắt: PyQt5 từ bản
+    # 5.5 gọi `qFatal()` (tức `abort()`) khi một lỗi Python chưa ai bắt ném ra
+    # từ trong một slot — một nút bấm, một lần vẽ lại, một nhịp hẹn giờ. Cắm
+    # `sys.excepthook` là Qt thôi giết tiến trình; đã đo được cả hai chiều, xem
+    # đầu `core/hung_su_co.py`.
+    #
+    # Đặt NGAY SAU `QApplication` chứ không sớm hơn (hộp thoại cần nó) và
+    # không muộn hơn (dựng cửa sổ chính cũng có thể ném lỗi).
+    try:
+        from core import hung_su_co
+
+        hung_su_co.bat(BASE_DIR)
+    except Exception:  # noqa: BLE001 — thiếu bộ hứng lỗi không được chặn tool
+        pass
+
+    app.setStyleSheet(QSS)
+    logo.gan_cho(app)
+
+    # ═══ CHỈ MỘT BẢN TOOL ĐƯỢC MỞ ═══
+    #
+    # Đêm 07/09/2026: hai bản tool mở cùng lúc (00:41 và 00:53), cả hai cùng chiếm cổng
+    # nhận 8765. Máy ảo gọi về trúng bản nào là ngẫu nhiên — chủ dự án bấm MỘT NÚT ở bản
+    # này, máy ảo hỏi việc ở bản kia và nhận tay không: *"tao ấn 1 nút… vào vm xem cũng
+    # chả có con khỉ gì"*. Khoá tệp trong thư mục tool: bản thứ hai nói thật rồi thoát.
+    khoa = None
+    if not os.environ.get("SHOPAPI_STUDIO_CHAY_THU"):
+        try:
+            from PyQt5.QtCore import QLockFile
+            from PyQt5.QtWidgets import QMessageBox
+
+            khoa = QLockFile(os.path.join(BASE_DIR, ".dang-mo.lock"))
+            if not khoa.tryLock(200):
+                # 01:26 cùng đêm: bản cũ là bản tôi mở từ dòng lệnh, cửa sổ chủ dự án không thấy,
+                # mà khoá thì chặn họ mở — *"tao có mở được tool đâu"*. Không được chặn suông:
+                # cho họ nút tắt bản cũ ngay tại đây. Bản cũ chết → khoá tự mở → mở tiếp.
+                _ok, pid, _host, _app = khoa.getLockInfo()
+                hop = QMessageBox(QMessageBox.Question, "My Tool đang mở rồi",
+                                  "Tool đã mở ở một cửa sổ khác (tiến trình {0}). Nếu không thấy cửa sổ đó, "
+                                  "bấm “Tắt bản cũ, mở bản này”.\n\nKhông mở hai bản cùng lúc: máy ảo sẽ gọi "
+                                  "về nhầm bản, việc giao đi không tới.".format(pid))
+                nut_tat = hop.addButton("Tắt bản cũ, mở bản này", QMessageBox.AcceptRole)
+                hop.addButton("Thôi", QMessageBox.RejectRole)
+                hop.setDefaultButton(nut_tat)
+                hop.exec_()
+                if hop.clickedButton() is not nut_tat:
+                    return 0
+                try:
+                    import subprocess
+
+                    subprocess.run(["taskkill", "/PID", str(int(pid)), "/T", "/F"], capture_output=True,
+                                   timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                except Exception:  # noqa: BLE001 — không giết được thì vẫn thử cầm khoá
+                    pass
+                khoa.removeStaleLockFile()
+                if not khoa.tryLock(3000):
+                    QMessageBox.warning(None, "My Tool", "Chưa tắt được bản cũ. Khởi động lại máy rồi mở lại tool.")
+                    return 0
+        except Exception:  # noqa: BLE001 — không khoá được thì vẫn mở, đừng chặn tool
+            khoa = None
+    cua_so = CuaSoChinh(BASE_DIR)
+    cua_so._khoa_mot_ban = khoa  # giữ tham chiếu: khoá sống cùng cửa sổ
+    cua_so.show()
+    _ep_hien_that_su(cua_so)
+
+    # ═══ CHẾ ĐỘ VPS: BẬT TRẠM + NUÔI BA CON vm/ CÙNG MyTool ═══
+    #
+    # Chỉ có tác dụng khi máy này có `vps.json` cạnh tool (VPS 5 kênh/1 máy,
+    # xem `vm/KE-HOACH-5-KENH.md` bước E) — máy thường thì hàm này không làm
+    # gì. Móc nhỏ, mọi việc thật nằm ở `core/khoi_dong_vps.py`.
+    try:
+        from core import khoi_dong_vps
+
+        khoi_dong_vps.gan_vao_cua_so(cua_so, BASE_DIR)
+    except Exception:  # noqa: BLE001 — chế độ VPS hỏng không được chặn tool
+        pass
+    if os.environ.get("SHOPAPI_STUDIO_CHAY_THU"):
+        # Cửa thoát để test chạy thật file này rồi dừng.
+        from PyQt5.QtCore import QTimer
+
+        QTimer.singleShot(1200, app.quit)
+    ma = app.exec_()
+    # Đóng tử tế thì xoá dấu phiên. Thiếu dòng này là MỌI lần chạy đều bị ghi
+    # nhầm thành "chết đột ngột", và nhật ký thành ra vô dụng vì lúc nào cũng
+    # kêu.
+    try:
+        from core import nhat_ky
+
+        nhat_ky.ket_thuc_phien(BASE_DIR)
+    except Exception:  # noqa: BLE001
+        pass
+    return ma
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

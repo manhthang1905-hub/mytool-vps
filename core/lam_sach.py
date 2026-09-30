@@ -1,0 +1,891 @@
+"""Xoá dấu nguồn gốc AI **trong phần thông tin của tệp**.
+
+═══ ĐỌC HẾT MỤC NÀY TRƯỚC KHI TIN TÍNH NĂNG NÀY LÀM ĐƯỢC GÌ ═══
+
+Chủ dự án, 16/08/2026: *"youtube hạn chế hiển thị rất nhiều các nội dung AI vì
+các nội dung AI sẽ có watermarks nên tao muốn có thể xoá các cái đó"*.
+
+Tôi đã đo trên chính kết quả thật (`PROJECTS/AUTO/TL1-T1/L01`, 16/08/2026):
+
+    ảnh cảnh    (không tải lên)  c2pa, "Made with Google AI", SynthID
+    ẢNH BÌA     (CÓ tải lên)     c2pa, "Made with Google AI", SynthID
+    clip        (không tải lên)  c2pa, SynthID
+    VIDEO CUỐI  (CÓ tải lên)     sạch
+    giọng đọc                    sạch
+
+Ba điều rút ra, và cả ba đều ngược với điều người ta hay tưởng:
+
+**1. Video cuối vốn đã sạch.** Khâu dựng cho mọi thứ đi qua FFmpeg, và mã hoá
+lại thì phần thông tin của tệp gốc mất hết. Tức thứ khách tải lên YouTube từ
+trước tới nay **chưa bao giờ mang dấu C2PA nào**.
+
+**2. Chỗ hở thật là ẢNH BÌA.** Nó cũng được tải lên YouTube, mà nó là tệp nhà
+cung cấp trả về gần như nguyên vẹn — đủ cả `c2pa`, `"Made with Google AI"` và
+lời khai `"Applied imperceptible SynthID watermark."`. Đây là chỗ duy nhất
+tính năng này thật sự thay đổi được điều gì.
+
+**3. Cái không xoá được: SynthID.** Nó nằm **trong chính điểm ảnh**, không nằm
+trong phần thông tin tệp. Xoá metadata chỉ bỏ đi *lời khai* rằng có SynthID,
+chứ không đụng tới bản thân dấu — máy dò của Google vẫn đọc ra. Không mô-đun
+nào ở đây, và không công cụ xoá metadata nào nói chung, làm được việc đó.
+
+═══ VÀ NÓ KHÔNG GỠ ĐƯỢC HẠN CHẾ CỦA YOUTUBE ═══
+
+Phải nói thẳng, vì tin nhầm chỗ này thì mất kênh chứ không mất công:
+
+- Nhãn "nội dung tổng hợp" trên YouTube là **cái ô người đăng tự tích** trong
+  Studio. Nó không đọc metadata của tệp để quyết định.
+- YouTube nói rõ tích ô đó **không làm giảm** lượt hiển thị hay khả năng bật
+  kiếm tiền.
+- Không khai mới là chỗ nguy: cảnh cáo → khoá kiếm tiền 90 ngày → gỡ khỏi YPP
+  vĩnh viễn. Và YouTube có quyền tự dán nhãn mà người đăng không gỡ được.
+
+Nên mô-đun này là **vệ sinh tệp**, đúng như mọi trình nén ảnh vẫn làm với EXIF.
+Nó không phải và không được quảng cáo là đường lách khai báo.
+
+Rủi ro thật của kênh làm bằng AI nằm ở chỗ khác hẳn: nội dung sản xuất hàng
+loạt, lặp lại. Đó là chuyện nội dung, không phải chuyện thẻ dữ liệu.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import unicodedata
+from typing import Dict, List, Optional, Tuple
+
+__all__ = [
+    "go_dinh_dang", "go_boc_tool_gia", "go_cach_cjk",
+    "DAU_KY_THUAT", "go_ghi_chu_ky_thuat", "ghi_chu_ky_thuat_con_lai",
+    "nhan_ghi_chu_con_lai",
+    "DAU_AI", "KY_TU_AN", "dau_ai_trong", "lam_sach_anh", "lam_sach_video",
+    "lam_sach_chu", "lam_sach_tep",
+    "CENT_DOI", "co_doi_cao_do", "loc_doi_cao_do", "doi_cao_do",
+]
+
+#: Chuỗi nhận dạng dấu nguồn gốc AI, dò thẳng trên byte thô của tệp.
+#:
+#: Dò thô chứ không đọc bằng thư viện đọc metadata: mỗi nhà cung cấp cất ở một
+#: khối khác nhau (C2PA trong `jumb`, IPTC trong khối Photoshop, XMP trong
+#: `APP1`), và thư viện nào cũng chỉ biết vài khối. Tìm chuỗi thì không sót.
+#:
+#: Dùng để **kiểm chứng**, không dùng để xoá — xoá thì bỏ nguyên cả phần thông
+#: tin, không đi vá từng chuỗi.
+DAU_AI: Tuple[bytes, ...] = (
+    b"c2pa",                        # chuẩn Content Credentials
+    b"Made with Google AI",         # IPTC, nhà cung cấp ảnh đang dùng
+    b"SynthID",                     # lời khai "ảnh này có SynthID"
+    b"trainedAlgorithmicMedia",     # mã IPTC nghĩa là "máy sinh ra"
+    b"openai.com",                  # C2PA của DALL-E
+)
+
+#: Ký tự vô hình hay bị nhét vào chữ do AI viết.
+#:
+#: Phần lớn là rác vô hại (dấu nối không ngắt dòng, khoảng trắng hẹp), nhưng
+#: chúng cũng là thứ dùng để giấu dấu trong văn bản — và bỏ đi thì không mất gì
+#: cả, vì chúng vốn không hiện lên màn hình.
+#:
+#: **Không** đụng tới `\n` và `\t`: chúng vô hình nhưng có việc.
+KY_TU_AN = (
+    "​"    # zero width space
+    "‌"    # zero width non-joiner
+    "‍"    # zero width joiner
+    "⁠"    # word joiner
+    "﻿"    # byte order mark
+    "᠎"    # mongolian vowel separator
+    "؜"    # arabic letter mark
+    "‎‏"          # dấu chiều viết
+    "‪‫‬‭‮"    # nhúng chiều viết
+    "⁦⁧⁨⁩"          # cô lập chiều viết
+)
+
+
+def dau_ai_trong(tep: str) -> List[str]:
+    """Những dấu nguồn gốc AI còn nằm trong tệp. Rỗng nghĩa là sạch.
+
+    Có hàm này để **kiểm lại sau khi xoá**, chứ không phải để trang trí. Bài
+    học ghi ở `BOC-TACH.md` mục B1: đừng tin là xong, đo lại.
+    """
+    try:
+        with open(tep, "rb") as mo:
+            tho = mo.read()
+    except OSError:
+        return []
+    return [d.decode("utf-8", "replace") for d in DAU_AI if d in tho]
+
+
+#: Khối JPEG được giữ lại. Mọi khối `APPn` khác và khối chú thích đều bỏ.
+#:
+#: Giữ `APP0` vì đó là khối JFIF chuẩn — bỏ nó thì vài trình xem cũ không mở
+#: được ảnh, mà nó chẳng chứa gì về nguồn gốc.
+#:
+#: Bỏ: `APP1` (EXIF, XMP), `APP2` (ICC), `APP11` (JUMBF — chỗ C2PA nằm),
+#: `APP13` (khối Photoshop, chỗ IPTC `"Made with Google AI"` nằm), `COM`.
+_JPEG_GIU_APP0 = 0xE0
+_JPEG_BO = set(range(0xE1, 0xF0)) | {0xFE}      # APP1..APP15 và COM
+
+#: Khối PNG được giữ. Bỏ hết phần còn lại — `iTXt`/`tEXt`/`zTXt` chứa chữ,
+#: `eXIf` chứa EXIF, `caBX` là chỗ C2PA nằm trong PNG.
+_PNG_GIU = {b"IHDR", b"PLTE", b"IDAT", b"IEND", b"tRNS", b"gAMA", b"cHRM",
+            b"sRGB", b"iCCP", b"sBIT", b"pHYs", b"acTL", b"fcTL", b"fdAT"}
+
+
+def _cat_khoi_jpeg(tho: bytes) -> Optional[bytes]:
+    """Bỏ khối thông tin khỏi JPEG mà **không đụng tới dữ liệu ảnh**."""
+    if not tho.startswith(b"\xff\xd8"):
+        return None
+    ra = [b"\xff\xd8"]
+    i = 2
+    het = len(tho)
+    while i < het - 1:
+        if tho[i] != 0xFF:
+            return None                 # tệp hỏng — đừng đoán, trả về không làm
+        ma = tho[i + 1]
+        if ma == 0xD9:                  # hết ảnh
+            ra.append(tho[i:])
+            return b"".join(ra)
+        if ma == 0xDA:                  # bắt đầu dữ liệu nén — copy tới hết
+            ra.append(tho[i:])
+            return b"".join(ra)
+        if ma in (0x01,) or 0xD0 <= ma <= 0xD8:
+            ra.append(tho[i:i + 2])     # khối không có phần độ dài
+            i += 2
+            continue
+        if i + 4 > het:
+            return None
+        dai = int.from_bytes(tho[i + 2:i + 4], "big")
+        if dai < 2 or i + 2 + dai > het:
+            return None
+        if ma not in _JPEG_BO:
+            ra.append(tho[i:i + 2 + dai])
+        i += 2 + dai
+    return None
+
+
+def _cat_khoi_png(tho: bytes) -> Optional[bytes]:
+    """Bỏ khối phụ khỏi PNG. Dữ liệu ảnh (`IDAT`) không bị đụng tới."""
+    dau = b"\x89PNG\r\n\x1a\n"
+    if not tho.startswith(dau):
+        return None
+    ra = [dau]
+    i = len(dau)
+    het = len(tho)
+    while i + 8 <= het:
+        dai = int.from_bytes(tho[i:i + 4], "big")
+        loai = tho[i + 4:i + 8]
+        buoc = 12 + dai                 # độ dài + tên + dữ liệu + CRC
+        if dai > het or i + buoc > het:
+            return None
+        if loai in _PNG_GIU:
+            ra.append(tho[i:i + buoc])
+        i += buoc
+        if loai == b"IEND":
+            break
+    return b"".join(ra)
+
+
+def lam_sach_anh(tep: str) -> bool:
+    """Bỏ toàn bộ phần thông tin của một tấm ảnh, **không nén lại**.
+
+    ═══ KHÔNG ĐƯỢC NÉN LẠI, VÀ ĐÓ LÀ CHỖ DỄ SAI ═══
+
+    Cách hiển nhiên là mở ảnh bằng Pillow rồi lưu lại — thẻ tự mất. Nhưng ảnh
+    của nhà cung cấp là JPEG, và lưu lại JPEG là **nén lần thứ hai**: mất nét
+    thật để đổi lấy việc gỡ một thẻ dữ liệu. Đắt vô lý.
+
+    Đã thử `quality="keep"` của Pillow. Nó giữ được hệ số nén, nhưng **vẫn
+    chép khối chú thích sang tệp mới** — bài kiểm bắt được ngay lần chạy đầu.
+
+    Nên làm thẳng ở tầng byte: đọc cấu trúc khối của tệp, chép lại đúng những
+    khối cần, bỏ những khối chứa thông tin. Dữ liệu ảnh không bị đụng một byte
+    nào, nên "không nén lại" ở đây là đúng nghĩa đen chứ không phải gần đúng.
+
+    Trả về có đổi gì không. Không nhận ra định dạng, hoặc tệp hỏng, thì để
+    nguyên — đây là việc vệ sinh, không đáng làm hỏng một tấm ảnh đã trả tiền
+    để tạo ra.
+    """
+    if not os.path.isfile(tep):
+        return False
+    try:
+        with open(tep, "rb") as mo:
+            tho = mo.read()
+    except OSError:
+        return False
+
+    # Đi theo **byte đầu tệp**, không theo đuôi tệp: ảnh nhà cung cấp trả về
+    # tên là `.png` nhưng ruột là JPEG. Tin cái đuôi là cắt nhầm cấu trúc.
+    if tho.startswith(b"\xff\xd8"):
+        moi = _cat_khoi_jpeg(tho)
+    elif tho.startswith(b"\x89PNG\r\n\x1a\n"):
+        moi = _cat_khoi_png(tho)
+    else:
+        return False
+    if moi is None or moi == tho:
+        return False
+
+    tam = tep + ".sach"
+    try:
+        with open(tam, "wb") as ghi:
+            ghi.write(moi)
+        _kiem_con_mo_duoc(tam)
+        os.replace(tam, tep)
+        return True
+    except Exception:  # noqa: BLE001 — hỏng thì giữ ảnh cũ, đúng
+        try:
+            os.remove(tam)
+        except OSError:
+            pass
+        return False
+
+
+def _kiem_con_mo_duoc(tep: str) -> None:
+    """Ném lỗi nếu tệp vừa cắt không còn mở ra được.
+
+    Cắt byte là việc chính xác nhưng không tha thứ: cắt nhầm một khối là ảnh
+    hỏng hẳn. Mở thử trước khi tráo đè lên bản gốc thì sai lầm ấy không bao giờ
+    tới được tay khách.
+    """
+    from PIL import Image  # noqa: PLC0415
+
+    with Image.open(tep) as anh:
+        anh.load()
+
+
+def lam_sach_video(ffmpeg: str, tep: str) -> bool:
+    """Bỏ phần thông tin của một tệp video/tiếng, **không mã hoá lại**.
+
+    `-map_metadata -1` bỏ mọi thẻ, `-c copy` chép nguyên luồng hình và tiếng
+    sang tệp mới. Không có khung hình nào bị nén lại, nên không mất một chút
+    nét nào — chạy vài giây cho cả video mười phút.
+
+    Không đụng tới dấu nằm trong điểm ảnh. Xem mục đầu tệp này.
+    """
+    if not ffmpeg or not os.path.isfile(tep):
+        return False
+    goc, duoi = os.path.splitext(tep)
+    tam = goc + ".sach" + (duoi or ".mp4")
+    try:
+        xong = subprocess.run(
+            [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", tep,
+             "-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy",
+             "-movflags", "+faststart", tam],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            timeout=900)
+        if xong.returncode != 0 or not os.path.isfile(tam) \
+                or os.path.getsize(tam) <= 0:
+            raise RuntimeError("ffmpeg không tạo được tệp sạch")
+        os.replace(tam, tep)
+        return True
+    except Exception:  # noqa: BLE001
+        try:
+            os.remove(tam)
+        except OSError:
+            pass
+        return False
+
+
+# ── Đổi nhẹ cao độ giọng đọc ─────────────────────────────────────────────────
+#
+# ═══ ĐÂY LÀ THỨ KHÁC HẲN PHẦN TRÊN ═══
+#
+# Mọi thứ phía trên chỉ bỏ **thẻ dữ liệu** — vỏ tệp. Phần này đụng vào chính
+# **âm thanh**, nên nó có một cái công tắc riêng và mặc định cũng tắt.
+#
+# ═══ VÌ SAO LÀM ĐƯỢC ═══
+#
+# Cổng giọng nói nhúng **SynthID vào chính âm thanh** (dấu chìm do Google
+# DeepMind làm), và từ tháng 7/2026 nó phủ gần như mọi lượt đọc.
+#
+# SynthID audio đổi sóng thành **ảnh phổ**, nhúng dấu vào ảnh phổ đó, rồi dựng
+# lại sóng. Nên thứ phá được nó là thứ làm méo ảnh phổ.
+#
+# Nghiên cứu hệ thống (SoK, arXiv 2503.19176) kết luận: *mọi* hệ watermark âm
+# thanh đều gãy trước phép **dịch cao độ**, độ chính xác nhận dạng tụt dưới
+# 0.6 — mà vẫn giữ được chất lượng nghe. Bài về tấn công lệch đồng bộ đo được
+# một phép dịch **55 cent** đã đẩy tỉ lệ lỗi bit lên 50%.
+#
+# ═══ NHƯNG CHƯA AI Ở ĐÂY KIỂM CHỨNG ĐƯỢC ═══
+#
+# Máy dò SynthID không công khai, nên tool **không tự kiểm được** là dấu đã mất
+# hay chưa. Mọi con số trên là của người khác đo. Đừng viết vào giao diện một
+# lời hứa chắc chắn — nhà cung cấp giọng có công cụ dò công khai, để khách tự
+# kiểm rồi tự quyết.
+
+#: Dịch bao nhiêu **cent** (1 nốt nhạc = 100 cent).
+#:
+#: 60 cent là hơn nửa nốt một chút — nằm trong vùng mà nghiên cứu đo được là
+#: đủ phá dấu, mà với giọng kể chuyện thì không ai nghe ra. Nhạc công mới phân
+#: biệt được nửa nốt; người nghe kể chuyện thì không có gì để so.
+CENT_DOI = 60
+
+#: Hạ trước bao nhiêu dB để chừa chỗ.
+#:
+#: **Đừng bỏ.** Đo thật 16/08/2026 trên giọng của kênh: dịch cao độ đẩy đỉnh
+#: tiếng từ -1,3 dB lên **0,0 dB — tức vỡ tiếng** ở những chỗ đọc to. Dịch cao
+#: độ dồn năng lượng sang tần số khác, và chỗ dồn vào có thể tràn.
+CHUA_CHO_DB = 2.0
+
+_NHO_RB: Dict[str, bool] = {}
+
+
+def co_doi_cao_do(ffmpeg: str) -> bool:
+    """Bản FFmpeg này có `rubberband` không.
+
+    `rubberband` phải được biên dịch vào lúc dựng FFmpeg, nên hai bản cùng số
+    hiệu vẫn có thể một bản có một bản không. Từ 28/08/2026 `tim_ffmpeg` ưu
+    tiên bản trong thư mục tool (bản đi kèm `imageio-ffmpeg` hoặc bản tool tự
+    tải), nên phần lớn máy sẽ có; nhưng bản trên PATH của máy khách vẫn có thể
+    được dùng khi hai bản kia vắng, và bản ấy thì không đoán được.
+
+    Thiếu thì vẫn dịch được bằng đường lui, chỉ kém hơn — xem `doi_cao_do`.
+    """
+    if not ffmpeg:
+        return False
+    if ffmpeg in _NHO_RB:
+        return _NHO_RB[ffmpeg]
+    co = False
+    try:
+        xong = subprocess.run([ffmpeg, "-hide_banner", "-filters"],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, encoding="utf-8", errors="replace",
+                              check=False, timeout=30)
+        co = " rubberband " in (xong.stdout or "")
+    except (OSError, subprocess.SubprocessError):
+        co = False
+    _NHO_RB[ffmpeg] = co
+    return co
+
+
+def loc_doi_cao_do(cent: int = CENT_DOI, *, co_rubberband: bool = True) -> str:
+    """Chuỗi lọc FFmpeg dịch cao độ mà **giữ nguyên độ dài**.
+
+    Giữ nguyên độ dài là điều kiện không đổi được: phụ đề và bảng cảnh đều bám
+    mốc thời gian tuyệt đối của tệp tiếng này. Dài ra một giây là mọi cảnh phía
+    sau lệch một giây.
+
+    Thuần tính toán — dựng chuỗi chữ, không chạy gì, nên test kiểm được.
+
+    Đường lui khi thiếu `rubberband`: đổi tốc độ phát (`asetrate`) để kéo cao
+    độ lên, rồi `atempo` kéo tốc độ về cũ. Cách kinh điển, có ở mọi bản FFmpeg,
+    nghe kém hơn `rubberband` một chút nhưng vẫn dùng được.
+    """
+    ti_le = 2.0 ** (float(cent) / 1200.0)
+    chua = "volume=-{0:.1f}dB".format(CHUA_CHO_DB)
+    # `alimiter` chặn đỉnh ở -1 dBFS. Chừa chỗ trước rồi chặn đỉnh sau: chỉ
+    # chừa chỗ thì chỗ dồn năng lượng vẫn có thể tràn.
+    chan = "alimiter=limit=0.891"
+    if co_rubberband:
+        return "{0},rubberband=pitch={1:.6f},{2}".format(chua, ti_le, chan)
+    # Chốt về 44.1 kHz trước để `asetrate` tính được: nó cần một con số cụ thể,
+    # mà tệp vào có thể ở tần số nào cũng được.
+    return ("{0},aformat=sample_rates=44100,asetrate={1},aresample=44100,"
+            "atempo={2:.6f},{3}".format(
+                chua, int(round(44100 * ti_le)), 1.0 / ti_le, chan))
+
+
+def doi_cao_do(ffmpeg: str, tep: str, cent: int = CENT_DOI) -> bool:
+    """Dịch nhẹ cao độ một tệp tiếng, ghi đè tại chỗ.
+
+    Đây là **phép mã hoá lại có mất mát** — khác hẳn mọi hàm khác trong tệp
+    này. Không tránh được: đổi âm thanh thì phải dựng lại tệp. Dùng 192 kbps,
+    cao hơn bản gốc nhà cung cấp trả về, để lần nén này không thấy được.
+
+    Hỏng thì giữ nguyên tệp cũ. Giọng đọc là thứ đắt nhất trong cả lượt chạy —
+    thà không dịch còn hơn mất.
+    """
+    if not ffmpeg or not os.path.isfile(tep):
+        return False
+    goc, duoi = os.path.splitext(tep)
+    tam = goc + ".caodo" + (duoi or ".mp3")
+    loc = loc_doi_cao_do(cent, co_rubberband=co_doi_cao_do(ffmpeg))
+    try:
+        xong = subprocess.run(
+            [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", tep,
+             "-af", loc, "-b:a", "192k", tam],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+            timeout=1800)
+        if xong.returncode != 0 or not os.path.isfile(tam) \
+                or os.path.getsize(tam) <= 0:
+            raise RuntimeError("ffmpeg không dịch được cao độ")
+        os.replace(tam, tep)
+        return True
+    except Exception:  # noqa: BLE001
+        try:
+            os.remove(tam)
+        except OSError:
+            pass
+        return False
+
+
+def lam_sach_chu(chu: str) -> str:
+    """Bỏ ký tự vô hình khỏi một đoạn chữ. Không đổi một chữ nào người đọc thấy.
+
+    Cố ý **không** viết lại câu cú. Kho `watermarks-remover` có thêm tầng "viết
+    lại bằng AI" để phá dấu thống kê, và chính họ ghi là nó *"làm hỏng bản
+    chữ"* — đổi cách dùng từ của người viết. Với kịch bản khách đã duyệt thì
+    cái giá ấy quá đắt cho một cái lợi không ai đo được.
+
+    Ở đây chỉ bỏ thứ vốn không hiện lên: bỏ đi thì bản chữ y nguyên.
+    """
+    if not chu:
+        return chu
+    bo = set(KY_TU_AN)
+    ra = []
+    for c in chu:
+        if c in bo:
+            continue
+        # `Cf` là nhóm "ký tự định dạng" — vô hình gần hết. Giữ lại xuống dòng
+        # và tab (chúng thuộc nhóm `Cc` nên không lọt vào đây, nhưng ghi rõ cho
+        # người đọc sau khỏi phải tra).
+        if unicodedata.category(c) == "Cf":
+            continue
+        ra.append(c)
+    return "".join(ra)
+
+
+def lam_sach_tep(tep: str, ffmpeg: str = "") -> bool:
+    """Làm sạch một tệp, tự chọn cách theo đuôi tệp.
+
+    Trả về **có đụng vào tệp hay không**. Tệp lạ thì trả `False` và để nguyên,
+    chứ không đoán bừa: xử nhầm một tệp là hỏng một thứ khách đã trả tiền.
+    """
+    duoi = os.path.splitext(tep)[1].lower()
+    if duoi in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
+        return lam_sach_anh(tep)
+    if duoi in (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a", ".aac"):
+        return lam_sach_video(ffmpeg, tep)
+    if duoi in (".txt", ".srt", ".md"):
+        try:
+            with open(tep, "r", encoding="utf-8") as mo:
+                cu = mo.read()
+        except (OSError, ValueError):
+            return False
+        moi = lam_sach_chu(cu)
+        if moi == cu:
+            return False
+        try:
+            tam = tep + ".sach"
+            with open(tam, "w", encoding="utf-8") as ghi:
+                ghi.write(moi)
+            os.replace(tam, tep)
+            return True
+        except OSError:
+            return False
+    return False
+
+
+#: Dấu định dạng markdown trong lời đọc.
+#:
+#: ═══ VÌ SAO PHẢI GỠ ═══
+#:
+#: Kịch bản đi thẳng từ tệp `.txt` vào bộ đọc giọng nói. Lời nhắc đã dặn *"xuất
+#: dạng file txt để chạy voice"*, nhưng AI vẫn hay in đậm mấy chữ nó
+#: cho là quan trọng. Đo trên sáu lượt chạy thật ngày 19/08/2026: bốn lượt sạch,
+#: hai lượt còn **86** và **98** dấu sao.
+#:
+#: Bộ đọc gặp `**強く働いてる**` thì hoặc đọc luôn dấu sao, hoặc vấp — và khách
+#: chỉ nghe ra là "giọng đọc bị lỗi", không đoán được vì sao. Tệp kịch bản cũng
+#: là thứ khách mở ra đọc, nên để dấu ở đó chỉ tổ rác mắt.
+#:
+#: `lam_sach_chu` cố ý KHÔNG làm việc này — nó chỉ bỏ ký tự vô hình và hứa
+#: "không đổi một chữ nào người đọc thấy". Dấu sao thì người đọc thấy, nên nó
+#: phải là một hàm riêng, gọi ở chỗ riêng.
+_DAM = re.compile(r"\*\*(.+?)\*\*|__(.+?)__", re.DOTALL)
+#: Nghiêng: `*chữ*`. KHÔNG dùng lookaround kiểu chữ Latin — tiếng Nhật
+#: không có ranh giới từ, nên `*本当に*ですか` sẽ trượt. Thay bằng luật
+#: chặt hơn: không khoảng trắng ngay bên trong, không xuống dòng, không
+#: chứa dấu sao. Nhờ vậy `2 * 3` và `a * b` không bị đụng tới.
+_NGHIENG = re.compile(r"\*(?!\s)([^*\n]+?)(?<!\s)\*")
+_TIEU_DE = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
+
+
+def go_dinh_dang(chu: str) -> str:
+    """Gỡ dấu markdown khỏi lời đọc, giữ nguyên chữ.
+
+    Chỉ gỡ **dấu**, không gỡ chữ: `**mạnh**` thành `mạnh`, không thành rỗng.
+    Dòng tiêu đề `## Phần 1` thành `Phần 1` — chữ ấy vẫn là lời đọc, chỉ có
+    mấy dấu thăng là không.
+    """
+    if not chu:
+        return chu
+    chu = _DAM.sub(lambda m: m.group(1) or m.group(2) or "", chu)
+    chu = _NGHIENG.sub(r"\1", chu)
+    return _TIEU_DE.sub("", chu)
+
+
+#: Dấu hiệu của "vỏ gọi công cụ giả" — mô hình in ra thay vì trả thẳng lời đọc.
+_DAU_VO_TOOL: Tuple[str, ...] = (
+    "write_file", "</function", "```bash", "```sh", "mkdir", "/tmp/",
+    "tool_call", "functions.",
+)
+#: Bắt một trường JSON `"content": "…"` (có xử lý ký tự escape bên trong).
+_TRUONG_CONTENT = re.compile(r'"content"\s*:\s*("(?:[^"\\]|\\.)*")', re.DOTALL)
+
+
+def go_boc_tool_gia(chu: str) -> str:
+    """Bóc lớp vỏ "gọi công cụ" giả, lấy đúng lời đọc bên trong.
+
+    Có lượt mô hình không trả thẳng lời đọc mà "diễn" một pha ghi tệp:
+
+        ```bash
+        mkdir -p /tmp/out
+        ```
+        name write_file
+        {"path": "/tmp/out/x.txt", "content": "金曜日の夜…\\n\\n今日…"}
+        </function_results>
+
+    Lời đọc thật nằm trong trường JSON ``"content"`` (đã escape ``\\n``). Để
+    nguyên thì bộ đọc giọng đọc cả vỏ này — người dùng nghe ra "んてんてん…" và
+    đủ thứ rác — còn bước đo độ dài thì đếm cả vỏ. Bóc ra, `json.loads` tự trả
+    lại ``\\n`` thành xuống dòng thật.
+
+    Chỉ bóc khi **chắc** là vỏ giả: phải có trường ``"content"`` JSON *và* một
+    dấu hiệu vỏ (``write_file``, ```` ```bash ````, ``</function``, ``mkdir``,
+    ``/tmp/``…). Thiếu một trong hai thì trả nguyên văn — kịch bản sạch tình cờ
+    có chữ "content" không bị đụng tới. Có nhiều trường ``"content"`` thì lấy
+    cái DÀI nhất: đó là lời đọc, không phải "path" hay nhãn ngắn.
+    """
+    if not chu or '"content"' not in chu:
+        return chu
+    if not any(d in chu for d in _DAU_VO_TOOL):
+        return chu
+    ung_vien: List[str] = []
+    for m in _TRUONG_CONTENT.finditer(chu):
+        try:
+            gia_tri = json.loads(m.group(1))
+        except ValueError:
+            continue
+        if isinstance(gia_tri, str) and gia_tri.strip():
+            ung_vien.append(gia_tri)
+    if not ung_vien:
+        return chu
+    return max(ung_vien, key=len).strip()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# GHI CHÚ KỸ THUẬT LẪN VÀO KỊCH BẢN
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Khách báo 28/08/2026: kịch bản đem đi đọc có lẫn **lời AI tả việc nó vừa
+# làm** — "Dưới đây là kịch bản đã rà soát:", "Ghi chú: đã chèn 32 thẻ cảm
+# xúc", "(4.850 ký tự)". Máy đọc giọng nói không phân biệt được, nên nó đọc
+# luôn cả mấy câu ấy vào video.
+#
+# Có sẵn hai chốt, và cả hai đều lọt:
+#
+#   `go_boc_tool_gia`      chỉ bắt lúc AI "diễn" một pha ghi tệp JSON.
+#   `_go_loi_dan_dau`      chỉ chạy với tiếng viết chữ KHÔNG Latinh, và chỉ
+#   (core/auto_khau.py)    cắt phần ĐẦU. Kênh tiếng Việt/Anh không có gì cả.
+#
+# Nên bộ lọc này: không phụ thuộc thứ tiếng, cắt cả đầu lẫn đuôi, và cái gì
+# không cắt chắc tay được thì để `ghi_chu_ky_thuat_con_lai` báo lên cho khâu
+# rà soát chặn — thà dừng còn hơn đem đi đọc.
+#
+# ═══ LUẬT CHUNG: THÀ SÓT CÒN HƠN GIẾT NHẦM ═══
+#
+# Cắt nhầm một câu của bài là hỏng thứ khách đã trả tiền để viết, mà không có
+# dòng lỗi nào báo. Nên mọi phép dò ở đây đều đòi **hai dấu hiệu**, không phải
+# một. Ví dụ rõ nhất: kênh `story-mau-nuoc` kể chuyện ngôi thứ nhất bằng tiếng
+# Anh, câu mở đầu hay nhất của nó là kiểu *"I've been married eleven years…"*
+# hay *"Here's what she did."* — trùng đúng cái mẫu "lời dẫn của AI". Nên chỉ
+# coi là lời dẫn khi câu ấy CÒN nhắc tới chính bản kịch bản ("script", "kịch
+# bản", "file"…). Một mình "I've been" thì không đụng tới.
+
+#: Dấu KHÔNG THỂ nằm trong lời đọc — thấy là chắc chắn ghi chú kỹ thuật.
+#:
+#: Chuỗi thứ hai là tên cổng giọng nói — nó chỉ xuất hiện trong LỜI NHẮC
+#: (`prompt/3-sua.md`), không bao giờ trong lời đọc. AI nhại lại câu dặn ấy là
+#: lỗi hay gặp nhất, và người xem thì nghe thấy nguyên cái tên đó.
+DAU_KY_THUAT: Tuple[str, ...] = (
+    "```", "elevenlabs", "write_file", "</function", "tool_call",
+    "functions.", "1-kich-ban", ".txt",
+)
+
+#: Ô lời nhắc chưa được điền, kiểu `<<DRAFT>>` — AI chép nguyên cái ô ra.
+_O_CHUA_DIEN = re.compile(r"<<[A-Z][A-Z0-9_]{1,30}>>")
+
+#: Nhãn mở đầu một dòng nói **về** bài thay vì **là** bài. Phải có dấu hai
+#: chấm ngay sau: "Ghi chú:" là ghi chú, còn "ghi chú của bà cụ để lại" là
+#: lời kể.
+#:
+#: Cố ý KHÔNG có "lưu ý" và "chú thích": chúng là lời kể bình thường của
+#: truyện thiếu nhi — *"Lưu ý: đừng bao giờ mở cửa cho người lạ."* là câu kết
+#: thật của một truyện, không phải ghi chú của AI. Nhãn nào cũng có thể là câu
+#: kể thì bỏ khỏi danh sách, đừng nới luật dò.
+_NHAN_GHI_CHU: Tuple[str, ...] = (
+    "ghi chú", "nhận xét", "tóm tắt",
+    "thay đổi", "các thay đổi", "những thay đổi", "chỗ đã sửa",
+    "đã sửa", "đã rà soát", "đã chèn", "đã hoàn thiện",
+    "số ký tự", "độ dài", "số câu", "số từ",
+    "note", "notes", "summary", "changes", "changes made", "edits",
+    "revisions", "character count", "word count",
+)
+
+#: Câu mở/đóng kiểu "đây là kết quả" — chỉ tính khi đi KÈM `_TU_VE_BAI`.
+_LOI_DAN: Tuple[str, ...] = (
+    "dưới đây là", "sau đây là", "trên đây là", "đây là", "đó là",
+    "tôi đã", "tôi sẽ", "tôi vừa", "mình đã", "mình sẽ", "xin gửi",
+    "đã rà soát", "đã sửa", "đã chèn", "đã hoàn thiện", "đã xong", "hoàn tất",
+    "here is", "here's", "here are", "below is", "above is",
+    "i'll", "i will", "i have", "i've", "let me", "this is the",
+    "as requested", "certainly", "understood", "sure",
+)
+
+#: Từ chỉ **chính bản kịch bản** — dấu hiệu câu đang nói về bài.
+_TU_VE_BAI: Tuple[str, ...] = (
+    "kịch bản", "bản sửa", "bản rà soát", "bản hoàn thiện", "bản cuối",
+    "bản đã", "văn bản", "lời đọc", "tệp", "file",
+    "script", "transcript", "draft", "version", "narration",
+    "voice-over", "voiceover",
+)
+
+_TRANG_TRI = re.compile(r"^[\s>#*_]+")
+_TIEU_DE_MD = re.compile(r"^\s{0,3}#{1,6}\s")
+#: Một dòng chỉ có rào mã, kèm hoặc không kèm tên thứ tiếng (```txt).
+_DONG_RAO = re.compile(r"^\s*`{3,}\s*[A-Za-z0-9_+-]*\s*$")
+#: Gạch đầu dòng hoặc đánh số — kiểu liệt kê "các chỗ đã sửa".
+_DONG_LIET_KE = re.compile(r"^\s*([-*•]|\d+[.)])\s")
+#: Đường kẻ ngang ngăn phần.
+_DONG_VACH = re.compile(r"^\s*([-*_=–—]\s*){3,}$")
+
+#: Trần cho khối ghi chú cắt được ở mỗi đầu. Ghi chú thật bao giờ cũng ngắn;
+#: cắt quá ngần này là đang cắt vào bài, nên thà để nguyên cho khâu rà soát
+#: chặn còn hơn.
+TOI_DA_DONG_GHI_CHU = 12
+TOI_DA_KY_TU_GHI_CHU = 1500
+#: …và không bao giờ quá ngần này phần của cả bài. Sàn 400 ký tự đi kèm: bài
+#: ngắn (kênh để độ dài tự do, sàn 1.500 ký tự) mà cứ đòi đúng tỉ lệ thì một
+#: khối ghi chú hai dòng cũng vượt, và cái đáng cắt nhất lại không cắt được.
+PHAN_TOI_DA_GHI_CHU = 0.30
+SAN_KY_TU_GHI_CHU = 400
+
+
+def _bo_trang_tri(dong: str) -> str:
+    """Bỏ dấu markdown mở đầu dòng rồi hạ chữ thường, để so cho dễ."""
+    return _TRANG_TRI.sub("", dong or "").replace("**", "").strip().lower()
+
+
+def _la_nhan_ghi_chu(dong: str) -> bool:
+    """Dòng mở bằng một nhãn ghi chú rồi tới dấu hai chấm.
+
+    Đòi cả hai: mở đúng nhãn **và** có dấu hai chấm ở gần đầu dòng. Đoạn
+    trước dấu hai chấm phải ngắn như một cái nhãn — `"Ghi chú:"`,
+    `"Tóm tắt thay đổi:"`, `"Note:"` — chứ không phải cả một câu kể. Nhờ vậy
+    `"Mèo con nói: Chào bạn!"` và `"Đã sửa xong cái mái nhà rồi bà nhé"` đều
+    không bị tính là ghi chú.
+    """
+    goc = _bo_trang_tri(dong)
+    if not any(goc.startswith(nhan) for nhan in _NHAN_GHI_CHU):
+        return False
+    # Dòng tiêu đề markdown (`## Ghi chú`) là nhãn dù không có dấu hai chấm —
+    # chính cái dấu thăng đã nói nó là tiêu đề, không phải câu kể.
+    if _TIEU_DE_MD.match(dong or ""):
+        return True
+    cat = min((goc.find(d) for d in (":", "：") if d in goc), default=-1)
+    return 0 <= cat <= 60
+
+
+def _la_loi_dan(dong: str) -> bool:
+    """Dòng "đây là bản kịch bản…" — HAI dấu hiệu, xem luật chung ở trên."""
+    goc = _bo_trang_tri(dong)
+    if not goc or len(goc) > 300:
+        return False
+    if not any(goc.startswith(m) for m in _LOI_DAN):
+        return False
+    return any(t in goc for t in _TU_VE_BAI)
+
+
+def _la_dau_ky_thuat(dong: str) -> bool:
+    """Dòng chứa thứ không thể là lời đọc."""
+    thap = (dong or "").lower()
+    return (any(d in thap for d in DAU_KY_THUAT)
+            or bool(_O_CHUA_DIEN.search(dong or "")))
+
+
+def _la_ghi_chu(dong: str) -> bool:
+    """Dòng này nói VỀ bài, không phải là bài."""
+    return (_la_nhan_ghi_chu(dong) or _la_loi_dan(dong)
+            or _la_dau_ky_thuat(dong))
+
+
+def _khoi_toan_ghi_chu(khoi: List[str]) -> bool:
+    """Cả khối này chỉ là ghi chú, và có ít nhất một dòng nhãn rõ ràng.
+
+    ═══ VÌ SAO GẠCH ĐẦU DÒNG CHỈ TÍNH KHI ĐÃ CÓ NHÃN Ở TRÊN ═══
+
+    Khối ghi chú cuối bài thường là *"Ghi chú:"* rồi mấy gạch đầu dòng liệt kê
+    chỗ đã sửa. Nhưng truyện thiếu nhi tiếng Việt cũng hay để **lời thoại**
+    trên dòng riêng mở bằng gạch ngang: `- Chúc ngủ ngon nhé!`.
+
+    Hai thứ nhìn giống hệt nhau. Cái phân biệt được là **thứ tự**: gạch đầu
+    dòng của ghi chú bao giờ cũng đứng SAU cái nhãn. Nên duyệt từ trên xuống,
+    và chỉ nhận gạch đầu dòng khi trong khối đã gặp một dòng nhãn trước đó.
+    Lời thoại cuối truyện không có nhãn nào ở trên, nên khối không hợp lệ và
+    không có gì bị cắt.
+    """
+    thay_nhan = False
+    for d in khoi:
+        if _la_ghi_chu(d):
+            thay_nhan = True
+            continue
+        if not d.strip() or _DONG_VACH.match(d) or _DONG_RAO.match(d):
+            continue
+        if thay_nhan and _DONG_LIET_KE.match(d):
+            continue
+        return False
+    return thay_nhan
+
+
+def _vua_tam(khoi: List[str], ca_bai: int) -> bool:
+    """Khối cắt có nằm trong trần không — xem `TOI_DA_DONG_GHI_CHU`."""
+    dai = len("\n".join(khoi))
+    return (len(khoi) <= TOI_DA_DONG_GHI_CHU
+            and dai <= TOI_DA_KY_TU_GHI_CHU
+            and dai <= max(SAN_KY_TU_GHI_CHU, ca_bai * PHAN_TOI_DA_GHI_CHU))
+
+
+def go_ghi_chu_ky_thuat(chu: str) -> str:
+    """Cắt khối ghi chú kỹ thuật ở đầu và cuối kịch bản, giữ nguyên lời đọc.
+
+    Ba việc, theo thứ tự:
+
+      1. Bóc rào mã bọc cả bài (```` ```txt … ``` ````) — và bỏ mọi dòng chỉ
+         có rào mã, ở đâu cũng vậy: một dòng như thế không bao giờ là lời đọc.
+      2. Cắt khối ghi chú ở ĐẦU: lời dẫn "Dưới đây là kịch bản đã rà soát:".
+      3. Cắt khối ghi chú ở CUỐI: "Ghi chú:" kèm danh sách chỗ đã sửa.
+
+    Không đụng vào giữa bài. Ghi chú lọt vào giữa thì không có cách nào cắt mà
+    chắc tay được, nên để `ghi_chu_ky_thuat_con_lai` báo lên và khâu rà soát
+    chặn cả lượt — xem `core/auto_khau._kiem_ban_sach`.
+    """
+    if not chu or not chu.strip():
+        return chu
+    dong = [d for d in chu.splitlines() if not _DONG_RAO.match(d)]
+    ca_bai = max(1, len("\n".join(dong)))
+
+    # Đầu bài: lấy khối DÀI NHẤT còn hợp lệ.
+    for h in range(min(len(dong) - 1, TOI_DA_DONG_GHI_CHU), 0, -1):
+        khoi = dong[:h]
+        if _vua_tam(khoi, ca_bai) and _khoi_toan_ghi_chu(khoi):
+            dong = dong[h:]
+            break
+
+    ra = "\n".join(_cat_duoi(dong, ca_bai)).strip()
+    return ra or chu.strip()
+
+
+#: Ghi chú cuối bài nằm SÁT đuôi. Trong ngần này dòng cuối thì thấy một dòng
+#: nhãn là cắt từ đó xuống hết, **không cần đọc hiểu mấy dòng sau nó**.
+#:
+#: ═══ VÌ SAO PHẢI CÓ LUẬT THỨ HAI NÀY ═══
+#:
+#: Luật đầu (`_khoi_toan_ghi_chu`) đòi MỌI dòng trong khối phải nhận ra được.
+#: Bài kiểm chạy thật `test_kich_ban_sach_truoc_voice` đâm ngay vào chỗ hụt
+#: của nó — khối thật kết thúc bằng:
+#:
+#:     Ghi chú: đã chèn 32 thẻ cảm xúc v3.
+#:     - Sửa 3 chỗ lệch tiếng
+#:     - Tách câu ở đoạn 4
+#:     Tổng: 4.850 ký tự.          ← "tổng" không có trong danh sách nhãn
+#:
+#: Một dòng lạ là cả khối trượt, không cắt được gì, và tên cổng giọng nói đi
+#: thẳng tới chốt chặn — biến một ca chữa được thành một lượt chạy bị dừng.
+#:
+#: Danh sách nhãn sẽ **không bao giờ đủ**: AI viết ghi chú bằng vô số cách.
+#: Nên đừng cố kể hết. Cái chắc chắn hơn nhiều là **vị trí**: ghi chú bao giờ
+#: cũng nằm ở đuôi, và đã bắt đầu thì chạy tới hết bài. Thấy dòng nhãn trong
+#: mấy dòng cuối thì cắt từ đó xuống, khỏi phân loại từng dòng.
+DONG_DUOI_SAT_CUOI = 6
+
+
+def _cat_duoi(dong: List[str], ca_bai: int) -> List[str]:
+    """Cắt khối ghi chú ở cuối bài. Hai luật, thử luật chặt trước.
+
+    1. **Cả khối là ghi chú** — bắt được dạng "Ghi chú:" kèm gạch đầu dòng,
+       dài tới `TOI_DA_DONG_GHI_CHU` dòng.
+    2. **Dòng nhãn nằm sát đuôi** — xem `DONG_DUOI_SAT_CUOI`.
+
+    Không luật nào cắt thì trả nguyên: thà để chốt chặn dừng lượt còn hơn cắt
+    mò vào bài.
+    """
+    # Luật 1 — `t` chạy từ trên xuống nên khối lấy được là khối dài nhất.
+    for t in range(max(1, len(dong) - TOI_DA_DONG_GHI_CHU), len(dong)):
+        khoi = dong[t:]
+        if _vua_tam(khoi, ca_bai) and _khoi_toan_ghi_chu(khoi):
+            return dong[:t]
+
+    # Luật 2 — dòng nhãn đầu tiên trong mấy dòng cuối, rồi lùi lên nuốt nốt
+    # dòng trống và đường kẻ ngang đứng ngay trước nó (`---` ở cuối bài không
+    # còn ngăn cách gì nữa).
+    # Cố ý KHÔNG nhận `_la_loi_dan` ở đây: "Đây là kịch bản…" là chuyện của
+    # ĐẦU bài, còn ở cuối bài nó nuốt mất một câu kể thật. Luật 1 vẫn bắt được
+    # một dòng lời dẫn đứng lẻ ở đuôi, nên không mất gì.
+    for t in range(max(1, len(dong) - DONG_DUOI_SAT_CUOI), len(dong)):
+        if not (_la_nhan_ghi_chu(dong[t]) or _la_dau_ky_thuat(dong[t])):
+            continue
+        while t > 1 and (not dong[t - 1].strip()
+                         or _DONG_VACH.match(dong[t - 1])
+                         or _DONG_RAO.match(dong[t - 1])):
+            t -= 1
+        return dong[:t] if _vua_tam(dong[t:], ca_bai) else dong
+    return dong
+
+
+def ghi_chu_ky_thuat_con_lai(chu: str) -> List[str]:
+    """Dấu kỹ thuật còn sót sau khi đã cắt. Rỗng nghĩa là đem đi đọc được.
+
+    Gọi SAU `go_ghi_chu_ky_thuat`: cái gì còn lại tới đây là nằm giữa bài,
+    lẫn vào lời đọc — không cắt được mà đoán, nên trả về để chỗ gọi dừng lượt
+    thay vì đem đi tạo giọng nói và hàng trăm tấm ảnh.
+    """
+    thap = (chu or "").lower()
+    thay = [d for d in DAU_KY_THUAT if d in thap]
+    o = _O_CHUA_DIEN.search(chu or "")
+    if o:
+        thay.append(o.group(0))
+    return thay
+
+
+def nhan_ghi_chu_con_lai(chu: str) -> List[str]:
+    """Dòng NHÃN ghi chú còn sót, để **cảnh báo** chứ không để chặn.
+
+    Khác `ghi_chu_ky_thuat_con_lai` ở mức chắc chắn: một dòng `"Tóm tắt:"`
+    giữa bài gần như chắc là ghi chú, nhưng "gần như" không đủ để vứt cả một
+    kịch bản đã trả tiền viết. Nên nó chỉ đi vào nhật ký, để chủ kênh mở tệp
+    ra xem — còn `ghi_chu_ky_thuat_con_lai` mới là cái chặn.
+    """
+    return [d.strip()[:80] for d in (chu or "").splitlines()
+            if _la_nhan_ghi_chu(d)]
+
+
+#: Thứ tiếng KHÔNG chèn khoảng trắng giữa các từ (viết dính liền tự nhiên).
+#: Tiếng Hàn (`ko`) DÙNG khoảng trắng giữa từ nên KHÔNG nằm đây.
+_TIENG_KHONG_CACH: Tuple[str, ...] = (
+    "ja", "zh", "th", "lo", "km", "my", "yue",
+)
+#: Vùng ký tự CJK/Nhật/Thái… — dùng để chỉ bỏ khoảng trắng CHẠM vào chúng.
+_CHU_DINH_LIEN = (
+    r"　-〿぀-ヿ㐀-䶿一-鿿"
+    r"豈-﫿＀-￯฀-๿຀-໿က-႟"
+)
+_CACH_QUANH_CJK = re.compile(
+    r"(?<=[{0}])\s+|\s+(?=[{0}])".format(_CHU_DINH_LIEN))
+
+
+def go_cach_cjk(chu: str, ngon_ngu: str = "") -> str:
+    """Bỏ khoảng trắng thừa mà YouTube chèn giữa các từ tiếng dính liền.
+
+    Phụ đề `json3` của YouTube tách từng "từ" bằng khoảng trắng — với tiếng
+    Nhật/Trung/Thái (vốn viết liền không cách) thì "日曜日 の 夕方" phình ~60%
+    số ký tự so với "日曜日の夕方" thật. Đo độ dài trên bản phình là sai thước:
+    lấy nó làm mục tiêu thì bài viết ra dài gấp rưỡi.
+
+    Chỉ dọn khi `ngon_ngu` thuộc nhóm tiếng viết liền, và chỉ bỏ khoảng trắng
+    **chạm vào** ký tự dính liền — cụm La-tinh nhúng trong câu ("YouTube",
+    "AI model") giữ nguyên khoảng cách của nó.
+    """
+    if not chu or ngon_ngu.split("-")[0].lower() not in _TIENG_KHONG_CACH:
+        return chu
+    return _CACH_QUANH_CJK.sub("", chu)

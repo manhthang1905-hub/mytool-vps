@@ -1,0 +1,28 @@
+{
+  "_ghi_chu": [
+    "Chep tep nay thanh cap-nhat.json (khong dau '.example') roi sua theo may.",
+    "cap-nhat.json KHONG len kho (.gitignore) - moi may tu cau hinh rieng.",
+    "kho: 'owner/repo' tren GitHub. De trong '' = KHONG cap nhat gi (an toan mac dinh).",
+    "nhanh: nhanh Git doc manifest/tep, mac dinh 'main'.",
+    "kenh: 'on-dinh' hoac 'thu' - chon manifest phat-hanh/<kenh>/manifest.json nao.",
+    "chinh_sach: 'hoi' (chi bao co ban moi, khong tu ap) | 'khung_an_toan' (duoc tu ap, nhung chi khi core.an_toan_khoi_dong.kiem_tra() dong y) | 'tat' (khong bao gio tu ap, ke ca khi duoc hoi).",
+    "Doc them: core/nguon_cap_nhat.py (module doc tep nay).",
+    "dong_bo_git: may cai tu git clone (co .git) cap nhat qua core/dong_bo_git.py, KHONG qua manifest. Khi tu_keo=true thi duong manifest tu nhuong.",
+    "dong_bo_git.tu_keo: true = lich ShopAPI-DongBoGit duoc tu keo ban moi (gio vang 'gio'); false = lich co chay cung thoat ngay.",
+    "dong_bo_git.ma_may: ten ngan cua may (vd 'vps-jp1'), dung dat ten tep chia-se/bai-hoc/<ma_may>-<ngach>.json.",
+    "Doc them: docs/PHAT-TRIEN-NHIEU-VPS.md."
+  ],
+  "kho": "",
+  "nhanh": "main",
+  "kenh": "on-dinh",
+  "chinh_sach": "hoi",
+  "dong_bo_git": {
+    "tu_keo": false,
+    "gio": "03:40",
+    "ma_may": "",
+    "cho_toi_da_phut": 180,
+    "theo_doi_phut": 20,
+    "khoi_dong_lai": true,
+    "xuat_bai_hoc": true
+  }
+}

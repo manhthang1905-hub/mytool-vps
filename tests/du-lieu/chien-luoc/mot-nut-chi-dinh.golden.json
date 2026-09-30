@@ -1,0 +1,81 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [
+   {
+    "nguon": "mot_nut",
+    "ma": "mnTRINHO007",
+    "link": "https://youtu.be/mnTRINHO007",
+    "tieu_de": "物忘れが増えた人の脳で起きていること",
+    "kenh": "Z1",
+    "diem": 0,
+    "loai": "",
+    "view": 500000.0,
+    "ly_do": [
+     "500.000 view",
+     "vượt ×9.0 mức thường của kênh nguồn"
+    ]
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnDON000007",
+    "link": "https://youtu.be/mnDON000007",
+    "tieu_de": "部屋の片付けができない人の本当の理由",
+    "kenh": "Z2",
+    "diem": 0,
+    "loai": "",
+    "view": 20000.0,
+    "ly_do": [
+     "20.000 view",
+     "vượt ×4.0 mức thường của kênh nguồn",
+     "cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh anh em TL4-T7 (83%) — cộng 8.7 (trần 10.5 = cột cụm × tiên nghiệm 0.35, 0 video riêng đủ 48h)"
+    ],
+    "diem_anh_em": 8.7,
+    "anh_em": {
+     "kenh": "TL4-T7",
+     "cum": "don-dep",
+     "ten_cum": "Dọn dẹp / nhà cửa",
+     "chi_so": 0.833
+    }
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnKHAC00007",
+    "link": "https://youtu.be/mnKHAC00007",
+    "tieu_de": "賢い人の特徴",
+    "kenh": "Z3",
+    "diem": 0,
+    "loai": "",
+    "view": 30000.0,
+    "ly_do": [
+     "30.000 view",
+     "vượt ×2.0 mức thường của kênh nguồn",
+     "đang lên +10 view/ngày"
+    ]
+   }
+  ],
+  "log": [
+   "  đang dùng công thức MOT_NUT vì theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: mot_nut).",
+   "  1 ứng viên được cộng điểm anh em (cụm đang thắng ở kênh cùng nhóm), nhưng đầu bảng vẫn là ứng viên tự mạnh — tín hiệu anh em là gợi ý, không phải mệnh lệnh."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": {
+   "nguon": "mot_nut",
+   "ma": "mnTRINHO007",
+   "link": "https://youtu.be/mnTRINHO007",
+   "tieu_de": "物忘れが増えた人の脳で起きていること",
+   "kenh": "Z1",
+   "diem": 0,
+   "loai": "",
+   "view": 500000.0,
+   "ly_do": [
+    "500.000 view",
+    "vượt ×9.0 mức thường của kênh nguồn"
+   ]
+  },
+  "log": [
+   "  đang dùng công thức MOT_NUT vì theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: mot_nut).",
+   "  1 ứng viên được cộng điểm anh em (cụm đang thắng ở kênh cùng nhóm), nhưng đầu bảng vẫn là ứng viên tự mạnh — tín hiệu anh em là gợi ý, không phải mệnh lệnh."
+  ]
+ }
+}

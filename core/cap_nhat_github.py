@@ -1,0 +1,243 @@
+"""Cập nhật tool từ kho GitHub công khai.
+
+═══ VÌ SAO LẤY TỪ GITHUB CHỨ KHÔNG TỪ MÁY CHỦ ═══
+
+Tool này là mã nguồn mở và miễn phí; thứ bán là API. Nên kho công khai là **một
+nguồn sự thật duy nhất**: chủ dự án đẩy bản mới lên GitHub, và cùng lúc đó cả
+người tải mới lẫn người đã cài đều nhận được đúng bản đó. Không có khâu ký, không
+có hạ tầng phát hành riêng, không có chuyện web và tool lệch phiên bản nhau.
+
+Đường cũ (`core/update_client.py` — manifest có chữ ký từ máy chủ) chắc chắn hơn
+về mặt mật mã, nhưng nó đòi một khoá công khai đi kèm bản cài (`update-public-key.txt`)
+mà **chưa bao giờ được phát hành**, cộng thêm khâu ký ở máy chủ chưa dựng. Một
+đường bảo mật hơn nhưng không chạy thì bảo vệ được đúng số không người dùng.
+
+═══ TIN VÀO CÁI GÌ ═══
+
+Nói thẳng: ở đây **không có chữ ký**. Niềm tin đặt vào HTTPS tới `github.com` —
+đúng bằng mức tin khi khách bấm tải trên web. Đổi lại, mọi lớp bảo vệ *sau khi
+tải* vẫn giữ nguyên, và chúng mới là thứ chặn thiệt hại thật:
+
+* giải nén có kiểm đường dẫn thoát (`..`, đường tuyệt đối), có trần số file và
+  trần dung lượng bung — chặn zip bomb;
+* bản mới phải qua `_healthcheck_tree` trước khi được tráo vào;
+* thay xong mà hỏng thì **tự trả lại bản cũ** (`apply_tai_cho`);
+* dữ liệu của khách được giữ lại theo `safe_update.PRESERVE`.
+
+═══ SO PHIÊN BẢN Ở ĐÂU ═══
+
+Đọc thẳng file `VERSION` ở nhánh chính qua `raw.githubusercontent.com` thay vì
+gọi API Releases: nó không dính hạn mức 60 lượt/giờ của API GitHub cho máy chưa
+đăng nhập, và không bắt chủ dự án phải tạo một Release cho mỗi lần sửa. Đẩy lên
+là xong — đúng như cách làm việc thật.
+
+**`raw` có cache khoảng 5 phút** — và cái đệm ấy đã cắn thật. Đo ngày
+12/08/2026: API GitHub trả `0.1.1` ngay trong khi `raw` còn trả `0.1.0`. Lúc đó
+kết luận là "khách nhận bản mới chậm vài phút, đổi lấy không tốn hạn mức —
+đáng". Sai ở chỗ: tool không nói "chưa biết", nó nói **"Đã mới nhất (2.12.2)"**.
+Khách bấm lại mấy lần, nhận đúng câu ấy, rồi kết luận nút cập nhật hỏng —
+15/08/2026 đúng như vậy.
+
+Nên giờ hỏi kèm một tham số đổi mỗi lần (`_url_version_khong_dem`) cộng header
+`Cache-Control: no-cache`. Vẫn `raw`, vẫn không tốn hạn mức, nhưng hỏi là tới
+nơi. Riêng gói ZIP thì để đệm nguyên — cùng một bản thì nội dung không đổi.
+
+Module này **không import Qt và không tự gọi mạng**: mọi lối ra ngoài đi qua tham
+số `tai`, nên test chạy được không cần mạng.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import time
+import re
+from typing import Callable, Optional, Tuple
+
+from .safe_update import UpdateError, stage_update
+
+__all__ = [
+    "KHO", "NHANH", "url_version", "url_zip", "doc_so", "hop_le", "moi_hon",
+    "kiem_ban_moi", "tai_ve_va_dung_san", "TRAN_ZIP",
+]
+
+#: Kho công khai của tool — GIÁ TRỊ MẶC ĐỊNH DỰ PHÒNG khi nơi gọi không
+#: truyền `kho` riêng, KHÔNG còn là nguồn sự thật duy nhất từ Đợt 5.2
+#: (29/09/2026). Nguồn sự thật thật sự là `cap-nhat.json` ở gốc tool, đọc qua
+#: `core.nguon_cap_nhat.doc_cau_hinh` — kho cũ `shopapivn/youtube` không còn
+#: dùng nữa, và một dòng hằng số ở đây không đủ để đổi kho mà không phát hành
+#: bản mới trước. Giữ nguyên chuỗi này (đừng đổi) — nó chỉ còn tác dụng khi
+#: TEST hay một nơi gọi cũ chưa kịp truyền `kho` (import `KHO` ở đây vẫn hoạt
+#: động, chỉ là không còn ai nên tin nó nói đúng kho hiện dùng).
+KHO = "shopapivn/youtube"
+
+#: Nhánh phát hành mặc định dự phòng — cùng vai trò dự phòng như `KHO`.
+NHANH = "main"
+
+#: Trần dung lượng file tải về. Bản tool hiện khoảng 1,6 MB; 80 MB là rộng rãi
+#: gấp nhiều chục lần mà vẫn chặn được việc tải nhầm một thứ khổng lồ về máy khách.
+TRAN_ZIP = 80 * 1024 * 1024
+
+_SO = re.compile(r"\d+")
+
+#: Dạng số hiệu chấp nhận được: `1`, `0.2`, `0.2.10`, `0.2.10-beta1`.
+#:
+#: Phải kiểm dạng chứ không chỉ moi số ra: khi sai kho, sai nhánh, hoặc file
+#: `VERSION` chưa có, `raw.githubusercontent.com` trả về **trang HTML 404** —
+#: và chuỗi `"<!DOCTYPE html>404"` moi ra số 404, lớn hơn mọi phiên bản thật.
+#: Tool sẽ mời khách cập nhật lên "bản 404" rồi tải nguyên trang lỗi về máy.
+_DANG_SO_HIEU = re.compile(r"\A\d+(\.\d+){0,3}([.-][0-9A-Za-z]{1,12})?\Z")
+
+
+def don(chuoi: str) -> str:
+    """Dọn chuỗi phiên bản trước khi soi: bỏ khoảng trắng **và dấu BOM**.
+
+    ═══ MỘT KÝ TỰ VÔ HÌNH LÀM TẮT CẢ ĐƯỜNG CẬP NHẬT (đo 05/09/2026) ═══
+
+    `str.strip()` KHÔNG bỏ `\\ufeff` — Python không coi nó là khoảng trắng. Mà
+    `_DANG_SO_HIEU` neo ở đầu chuỗi (`\\A`), nên một tệp `VERSION` lưu bằng
+    UTF-8-BOM là `hop_le` trả False, `moi_hon` trả False, và tool **im lặng**
+    kết luận không có bản mới.
+
+    Chuyện đã xảy ra thật: từ bản 2.115.0 tới 2.119.2 — **mười lăm bản** — tệp
+    `VERSION` mang BOM (PowerShell `Set-Content -Encoding utf8` trên Windows
+    thêm vào), và không một máy khách nào được mời cập nhật. Không có lỗi, không
+    có dòng nhật ký; nhìn từ ngoài thì y hệt "đang dùng bản mới nhất".
+
+    Nên dọn ở đây, chỗ duy nhất mọi đường đều đi qua — đừng trông vào việc ai
+    cũng nhớ lưu tệp không BOM.
+    """
+    return (chuoi or "").lstrip("﻿").strip()
+
+
+def hop_le(chuoi: str) -> bool:
+    """Chuỗi này trông có phải một số hiệu phiên bản không?
+
+    >>> hop_le("0.2.10")
+    True
+    >>> hop_le("0.2.10-beta1")
+    True
+    >>> hop_le("<!DOCTYPE html>404")
+    False
+    >>> hop_le("404: Not Found")
+    False
+    >>> hop_le("\\ufeff2.119.2")
+    True
+    """
+    return bool(_DANG_SO_HIEU.match(don(chuoi)))
+
+
+def url_version(kho: str = KHO, nhanh: str = NHANH) -> str:
+    return "https://raw.githubusercontent.com/{0}/{1}/VERSION".format(kho, nhanh)
+
+
+def url_zip(kho: str = KHO, nhanh: str = NHANH) -> str:
+    """URL gói ZIP qua `github.com/.../archive/...` — CHỈ dùng được từ máy có
+    IPv4 (đo 18/09/2026: `github.com`/`codeload.github.com` không với tới từ
+    VPS chỉ có IPv6). Đường mặc định cho máy NHÀ; VPS dùng
+    `core.nguon_cap_nhat` (manifest qua `raw.githubusercontent.com`)."""
+    return "https://github.com/{0}/archive/refs/heads/{1}.zip".format(kho, nhanh)
+
+
+def doc_so(chuoi: str) -> Tuple[int, ...]:
+    """`"0.2.10"` → `(0, 2, 10)`. Phần không phải số thì bỏ qua.
+
+    So bằng số chứ không so bằng chữ: `"0.10.0" > "0.9.0"` là đúng, còn so chuỗi
+    thì `"0.10.0" < "0.9.0"` — bản mới sẽ không bao giờ được đề nghị cài.
+
+    >>> doc_so("0.2.10")
+    (0, 2, 10)
+    >>> doc_so(" v1.3 ")
+    (1, 3)
+    >>> doc_so("")
+    ()
+    """
+    return tuple(int(x) for x in _SO.findall(chuoi or ""))
+
+
+def moi_hon(tren_kho: str, dang_dung: str) -> bool:
+    """Bản trên kho có mới hơn bản đang chạy không?
+
+    Không đọc được số ở một trong hai bên thì trả `False` — thà im lặng còn hơn
+    mời khách cài đè một thứ mình không hiểu.
+
+    >>> moi_hon("0.2.0", "0.1.9")
+    True
+    >>> moi_hon("0.1.0", "0.1.0")
+    False
+    >>> moi_hon("0.1.0", "0.2.0")
+    False
+    >>> moi_hon("khong-phai-so", "0.1.0")
+    False
+    >>> moi_hon("<!DOCTYPE html>404", "0.1.0")
+    False
+    """
+    if not hop_le(tren_kho) or not hop_le(dang_dung):
+        return False
+    a, b = doc_so(tren_kho), doc_so(dang_dung)
+    if not a or not b:
+        return False
+    return a > b
+
+
+def kiem_ban_moi(dang_dung: str, tai: Callable[[str], bytes], *,
+                 kho: str = KHO, nhanh: str = NHANH) -> Optional[str]:
+    """Trả về số hiệu bản mới trên kho, hoặc `None` nếu đang là bản mới nhất.
+
+    Lỗi mạng **không** được ném ra ngoài: đây là việc chạy ngầm lúc khởi động,
+    và mất mạng thì tool vẫn phải mở lên làm việc bình thường. Chỉ hỏng lặng lẽ
+    đúng ở khâu này.
+
+    `kho`/`nhanh`: nơi gọi (`ui_qt/cap_nhat.py`) tự đọc từ `cap-nhat.json`
+    (`core.nguon_cap_nhat.doc_cau_hinh`) rồi truyền vào — mặc định `KHO`/
+    `NHANH` chỉ còn là dự phòng, xem ghi chú đầu tệp.
+    """
+    try:
+        # `don` chứ không phải `.strip()`: tệp VERSION lưu bằng UTF-8-BOM từng
+        # tắt cả đường cập nhật trong mười lăm bản — xem `don`.
+        chu = don(tai(_url_version_khong_dem(kho, nhanh)).decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001 — mất mạng là chuyện thường, không phải lỗi
+        return None
+    return chu if chu and moi_hon(chu, dang_dung) else None
+
+
+def _url_version_khong_dem(kho: str = KHO, nhanh: str = NHANH) -> str:
+    """Địa chỉ VERSION kèm một tham số đổi mỗi lần hỏi.
+
+    CDN của GitHub đệm theo **địa chỉ đầy đủ**, tham số truy vấn tính cả vào
+    khoá đệm. Thêm một tham số luôn khác nhau là chắc chắn hỏi tới nơi, không
+    nhận lại bản đã đệm.
+
+    Chỉ dùng cho việc **hỏi số hiệu** — thứ phải luôn mới. Gói ZIP thì ngược
+    lại: đệm nó là tốt, vì cùng một bản thì nội dung không đổi.
+    """
+    return "{0}?t={1}".format(url_version(kho, nhanh), int(time.time()))
+
+
+def tai_ve_va_dung_san(phien_ban: str, thu_muc_dung: str,
+                       tai: Callable[[str], bytes], *,
+                       kho: str = KHO, nhanh: str = NHANH) -> str:
+    """Tải bản mới về, giải nén ra chỗ dựng sẵn. Trả về đường dẫn đã dựng.
+
+    Chưa tráo vào bản đang chạy — việc đó là của `cap-nhat.py`, chạy **sau khi**
+    tool đã thoát. Tráo thư mục đang có tiến trình Python chạy bên trong là hỏng
+    nửa chừng, và trên Windows thì file đang mở còn không xoá được.
+
+    `sha256` tự tính từ chính bytes vừa tải: nó **không** chứng minh gói không bị
+    can thiệp (không có chữ ký để đối chiếu), mà để `stage_update` chắc chắn thứ
+    nó giải nén đúng là thứ vừa tải xong, không phải một file đứt giữa chừng.
+
+    `kho`/`nhanh`: xem `kiem_ban_moi` — cùng nguồn `cap-nhat.json`.
+    """
+    goi = tai(url_zip(kho, nhanh))
+    if not goi:
+        raise UpdateError("Tải về rỗng — mạng đứt giữa chừng, thử lại sau.")
+    if len(goi) > TRAN_ZIP:
+        raise UpdateError(
+            "Gói tải về {0:.0f} MB, lớn bất thường so với bản tool (~2 MB). "
+            "Dừng lại cho chắc.".format(len(goi) / 1024 / 1024))
+    manifest = {
+        "version": phien_ban,
+        "size": len(goi),
+        "sha256": hashlib.sha256(goi).hexdigest(),
+    }
+    return str(stage_update(goi, manifest, thu_muc_dung))

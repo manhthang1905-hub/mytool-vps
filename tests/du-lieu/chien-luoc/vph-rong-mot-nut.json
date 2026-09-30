@@ -1,0 +1,31 @@
+{
+ "mo_ta": "VPH chỉ còn dòng bị loại (loai_tru) → rơi về Một nút trong CÙNG lượt. Một nút gộp moi/vuot/but (khử trùng link), loại theo mã + tiêu đề, xếp bậc view → vượt → tăng → view, rồi cộng 1 bit anh em trong cùng bậc view.",
+ "kenh": "GV2",
+ "kenh_yaml": ["ma: \"GV2\"", "ngon_ngu: \"ja\"", "nhom: \"tam-ly-nhat\"", "tep: \"nguoi-trung-nien-thu-gon-doi-song\"", "cong_thuc_chon: \"vph\""],
+ "cong_thuc_v7": null,
+ "bang_nhom": true,
+ "co_v7_truoc": false,
+ "loai_tru": ["vphLOAI0002", "mnLOAI00001"],
+ "da_lam_tieu_de": [["嫌われる人が気づいていない口癖", "video GV2-0003"]],
+ "vph": [
+  {"nguon": "vph", "ma": "vphLOAI0002", "link": "https://www.youtube.com/watch?v=vphLOAI0002", "tieu_de": "静かな人の特徴", "kenh": "心理B", "diem": 88, "loai": "", "vph": 300.0, "dot_bien": 9.1, "tuoi_gio": 30.0, "view": 9000, "ly_do": ["đột biến"]}
+ ],
+ "mot_nut": {
+  "moi": [
+   {"link": "https://www.youtube.com/watch?v=mnTRINHO001", "tieu_de": "物忘れが増えた人の脳で起きていること", "kenh": "Z1", "view": 500000, "vuot": 9.0, "tang": 1200, "diem": 0},
+   {"link": "https://www.youtube.com/watch?v=mnDON000001", "tieu_de": "部屋の片付けができない人の本当の理由", "kenh": "Z2", "view": 200000, "vuot": 4.0, "tang": 800, "diem": 0},
+   {"link": "https://www.youtube.com/watch?v=mnNHO000001", "tieu_de": "繊細な人の特徴", "kenh": "Z3", "view": 40000, "vuot": 30.0, "tang": 50, "diem": 3}
+  ],
+  "vuot": [
+   {"link": "https://www.youtube.com/watch?v=mnTRINHO001", "tieu_de": "trùng link — không đè dòng moi", "kenh": "Z9", "view": 1, "vuot": 1, "tang": 1, "diem": 0},
+   {"link": "https://www.youtube.com/watch?v=mnLOAI00001", "tieu_de": "孤独な人の特徴", "kenh": "Z4", "view": 90000, "vuot": 6.0, "tang": 0, "diem": 0},
+   {"link": "https://www.youtube.com/watch?v=mnDALAM0001", "tieu_de": "嫌われる人が気づいていない口癖", "kenh": "Z5", "view": 150000, "vuot": 3.0, "tang": 0, "diem": 0},
+   {"link": "https://www.youtube.com/watch?v=mnTRUNGTD01", "tieu_de": "【心理学】繊細な人の特徴", "kenh": "Z6", "view": 90000, "vuot": 8.0, "tang": 0, "diem": 0}
+  ],
+  "but": [
+   {"link": "https://www.youtube.com/watch?v=mnBUT000001", "tieu_de": "優しい人の特徴", "kenh": "Z7", "view": 60000, "vuot": 2.0, "tang": 3000, "diem": 0},
+   {"link": "  ", "tieu_de": "link rỗng — bỏ", "kenh": "Z8", "view": 1, "vuot": 0, "tang": 0, "diem": 0}
+  ]
+ },
+ "v7": null
+}

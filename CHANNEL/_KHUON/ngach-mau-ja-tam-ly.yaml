@@ -1,0 +1,511 @@
+# MẪU ngách tâm lý học tiếng Nhật = BẢN SAO ngày 30/09/2026 của CHANNEL/_NHOM/tam-ly-nhat/ngach.yaml
+# (bản sống, đã đồng bộ với hằng số mặc định trong mã). Tham chiếu ĐẦY ĐỦ mọi khoá hồ sơ ngách.
+
+# ============================================================================
+# Hồ sơ ngách — nhóm "tam-ly-nhat" (tâm lý học / khoa học não bộ tiếng Nhật)
+# ============================================================================
+#
+# 30/09/2026 (Đợt 4 áp lên bản sống): MÃ ĐỌC TỆP NÀY cho mọi luật ngách/thị trường — từ khoá lọc,
+# cụm V7, cổng tuổi, tệp khán giả, lời nhắc AI, bậc làm tròn view (core/ho_so_ngach.py). Với nhóm
+# này mọi khoá là BẢN SAO ĐÚNG hằng số mặc định trong core/*.py, nên đọc tệp không đổi một điểm số
+# nào; tests/test_ngach_tam_ly_khop_ma.py canh điều đó (sửa hằng số trong mã mà quên tệp này, hoặc
+# ngược lại, là test đỏ).
+#
+# Muốn đổi luật CỤM của một kênh cụ thể: sửa CHANNEL/<kênh>/nghien-cuu/cong-thuc-v7.json (tệp kênh
+# đè lên mặc định). Tệp này chỉ là mặc định của CẢ NHÓM, và là khuôn cho kênh mới trong nhóm.
+# Ngách/quốc gia khác: chép CHANNEL/_KHUON/ngach-mau*.yaml.
+
+mo_ta_ngach: "Tâm lý học / khoa học não bộ tiếng Nhật — remake content dạng chân dung một kiểu người"
+ngon_ngu_nguon: ja
+dang_thang: 'chân dung một kiểu người — "người như thế này thì thật ra…"'
+
+# Mô tả ngách THEO NGHĨA cho AI lọc (trang chủ, chốt đối thủ, biên tập). Viết bằng ý, không bằng
+# từ khoá — AI đọc đoạn này để phán "video/kênh này có thuộc ngách không".
+mo_ta_cho_loc_ai: >-
+  Thuộc ngách: video kể về MỘT KIỂU NGƯỜI, một cảm xúc, một thói quen hay một nét tính cách, và
+  giải thích nó bằng tâm lý học / não bộ để người xem tự hiểu mình ("người thích ở một mình thật ra…",
+  "tâm lý của người giàu không phô trương", "vì sao người hay nói お願いします ở quầy…"). Đề tài có thể
+  là tiền bạc, nhà cửa, tuổi tác, thú cưng, sở thích — miễn TRỌNG TÂM là tâm lý con người. Kênh tự gọi
+  mình là 雑学 vẫn thuộc ngách nếu video của nó là chân dung tâm lý (nhiều đối thủ thật như thế).
+  Khán giả thật YouTube đang phát ngách này tới: người Nhật 45–65+ (55+ chiếm ~60%), xem nhiều trên TV.
+  KHÔNG thuộc ngách: tin tức, thể thao, giải trí, nhạc, game, anime, phim; nấu ăn, mẹo vặt thuần tuý;
+  dạy đầu tư/kiếm tiền; sức khoẻ thể chất/y khoa; chuyện người nổi tiếng; tạp học trôi nổi không nói gì
+  về tâm lý con người; trò chơi trắc nghiệm 心理テスト; tóm tắt sách, đọc sách, cắt clip, tổng hợp 2ch;
+  Shorts.
+# ---- Lọc trang chủ / ứng viên đối thủ (core/trang_chu.py) ----
+tu_manh:
+- 心理
+- メンタル
+- 脳科学
+- HSP
+- 内向
+- 自己肯定感
+- 生きづらい
+- 繊細さん
+- 繊細
+- 考えすぎ
+- 劣等感
+- 承認欲求
+- アドラー
+- ユング
+- 認知
+- うつ
+- 不安障害
+- 愛着
+tu_yeu:
+- 人間関係
+- 孤独
+- 感情
+- 不安
+- ストレス
+- 性格
+- 幸せ
+- 人生
+- 疲れ
+- 一人
+- 1人
+- ひとり
+- 習慣
+- 自分を
+- 強い人
+- 特徴
+- 理由
+tu_loai_tru:
+- 漫画
+- アニメ
+- 速報
+- 野球
+- サッカー
+- ゲーム
+- 反応集
+- スカッと
+- 2ch
+- ゆっくり
+- ドラマ
+- BGM
+- 音楽
+- 料理
+- ホラー
+- ニュース
+- 政治
+- 海外の反応
+- 恋愛
+- 雑学
+ten_kenh_loai_tru:
+- 要約
+- まとめ
+- 朗読
+- オーディオブック
+- 名言集
+- ゆっくり解説
+- 切り抜き
+handle_loai_tru:
+- zatsugaku
+- zatugaku
+- zatsu
+- trivia
+- matome
+- 2ch
+- 5ch
+- youyaku
+- yoyaku
+- summary
+- booktuber
+- book_tuber
+- book-tuber
+
+# ---- Cổng tuổi (core/phan_tuyen.py, core/cong_thuc_v7.py, core/chot_doi_thu.py) ----
+tu_tuoi:
+- 年齢を重ね
+- 歳を重ね
+- 年を取
+- 歳を取
+- この歳
+- 中年
+- 熟年
+- 40代
+- 50代
+- 60代
+- 70代
+- 人生後半
+- 人生の後半
+- 老後
+- 定年
+- シニア
+- 高齢
+- 還暦
+
+# ---- Dạng chân dung người vs cách làm (core/cong_thuc_v7.py) ----
+tu_chan_dung:
+- 人
+- 特徴
+- 心理
+- 理由
+- 正体
+- 共通
+tu_cach_lam:
+- 方法
+- やり方
+- コツ
+- 手順
+- 裏ワザ
+- ステップ
+- 法則
+- ルール
+- 技術
+- 見分け方
+- 作り方
+- 鍛え方
+
+# ---- Cụm chủ đề chấm Công thức V7 (core/cong_thuc_v7.py) ----
+cum:
+  vat-chat:
+    ten: Người giàu / không ham vật chất
+    tu:
+    - 物欲
+    - 金持ち
+    - お金
+    - 高級
+    - ブランド
+    - 買わない
+    - 買い替え
+    - 贅沢
+    - 節約
+    - 貯金
+    - 見栄
+    - 質素
+    - 裕福
+    - 豊か
+    - 貧乏
+    - 浪費
+    - 資産
+    - 物を減ら
+    - 物を持たない
+    - モノを持たない
+    - 持たない暮らし
+    - 持たない生活
+    - ミニマリスト
+  tri-tue:
+    ten: Trí tuệ / IQ
+    tu:
+    - 知能
+    - 知性
+    - 知的
+    - IQ
+    - EQ
+    - 賢い
+    - 頭がいい
+    - 頭が良い
+    - 頭の良い
+    - 頭のいい
+    - 天才
+    - 地頭
+  # 29/09/2026: tách 精神年齢 khỏi tri-tue (TL4-T7 trượt 2 video 精神年齢 trong khi cụm IQ thắng).
+  tinh-than-tuoi:
+    ten: Tuổi tinh thần (精神年齢)
+    tu:
+    - 精神年齢
+  mot-minh:
+    ten: Một mình
+    tu:
+    - 一人
+    - 1人
+    - １人
+    - ひとり
+    - 孤独
+    - ぼっち
+    - 群れな
+    - 友達が少な
+    - 友人が少な
+  don-dep:
+    ten: Dọn dẹp / nhà cửa
+    tu:
+    - 片付
+    - 掃除
+    - 散らか
+    - 断捨離
+    - 綺麗
+    - 部屋
+  cha-me-con:
+    ten: Cha mẹ – con
+    tu:
+    - 親
+    - 子ども
+    - 子供
+    - 母親
+    - 父親
+    - 実家
+    - 毒親
+  nao-thoi-quen:
+    ten: Trí nhớ / điện thoại
+    tu:
+    - 記憶
+    - スマホ
+    - 認知
+  doc-hai:
+    ten: Người độc hại
+    tu:
+    - 性格が悪い
+    - ずるい
+    - 関わってはいけない
+    - 無礼
+    - 見下
+    - 嫉妬
+    - 縁を切
+    - 幼稚
+
+# ---- Ngách của KÊNH NGUỒN — cửa 5 Công thức V7 (core/cong_thuc_v7.py, khoá "ngach") ----
+ngach:
+  tu:
+  - 心理
+  - 脳科学
+  - 脳
+  - 性格
+  - 特徴
+  - IQ
+  - 知能
+  - 頭がいい
+  - 頭が良い
+  - 頭の良い
+  - 賢い
+  - 人の
+  - 人ほど
+  - 正体
+  - 共通
+  - 本音
+  - 本性
+  tu_lac:
+  - 法則
+  - 習慣
+  - 方法
+  - やり方
+  - コツ
+  - ルール
+  - 技術
+  - ステップ
+  - 作り方
+  - 鍛え
+  - 成功する
+  - 人生を変え
+  - 努力
+  - 見分け方
+
+# ---- Tệp khán giả (core/trung_tam.py, core/tuyen_noi_dung.py, core/tuyen_con.py) ----
+tep_khan_gia:
+  - ma: '1'
+    ten: Sống lệch nhịp số đông
+    ten_ngan: Lệch nhịp
+  - ma: '2'
+    ten: Bị đánh giá thấp hơn năng lực
+    ten_ngan: Bị đánh giá thấp
+  - ma: '3'
+    ten: Tò mò mình là kiểu người nào
+    ten_ngan: Tò mò
+  - ma: '4'
+    ten: Trung niên thu gọn đời sống
+    ten_ngan: Trung niên
+  - ma: '8'
+    ten: Cảnh giác kẻ độc hại
+    ten_ngan: Cảnh giác
+
+# ---- Tiền lọc rẻ: ca HIỂN NHIÊN (core/trang_chu.py) ----
+tu_kenh_hien_nhien:
+- 要約
+- まとめ
+- 朗読
+- オーディオブック
+- 名言集
+- ゆっくり解説
+- 切り抜き
+- ニュース
+- 速報
+- 野球
+- サッカー
+- ゲーム実況
+- 実況
+- アニメ
+- BGM
+- 音楽
+- 歌ってみた
+- 料理
+- ホラー
+- 政治
+- ドラマ
+- 反応集
+- 海外の反応
+- '2ch'
+- '5ch'
+- ゆっくり
+- スカッと
+handle_hien_nhien:
+- matome
+- '2ch'
+- '5ch'
+- youyaku
+- yoyaku
+- summary
+- booktuber
+- book_tuber
+- book-tuber
+- news
+- music
+- gaming
+tu_tieu_de_hien_nhien:
+- 速報
+- 反応集
+- 海外の反応
+- ゲーム実況
+- 歌ってみた
+- 作業用BGM
+- スカッと
+- '2ch'
+- '5ch'
+# Kênh nguồn tự gắn thẻ tuổi già (trang_chu, chỉ ghi cờ để trừ điểm).
+dau_moc_tuoi_kenh:
+- '50代'
+- '60代'
+- '70代'
+- 老後
+- 定年
+- シニア
+- 高齢
+- 中年
+- 熟年
+- 還暦
+- 年金
+
+# ---- V7: từ nhắm người già CỘNG THÊM ngoài tu_tuoi (cong-thuc-v7.json khoá "tu_tuoi") ----
+tu_tuoi_them:
+- '1950年代'
+- '1960年代'
+- 昭和
+- 孫
+- 年金
+- 介護
+- 老い
+- 老け
+- 晩年
+# Từ ghép có chữ "người" nhưng không phải chân dung người (gỡ khỏi tiêu đề trước khi dò tu_chan_dung).
+tu_ghep_khong_phai_nguoi:
+- 人生
+- 日本人
+- 大人
+- 他人
+- 人間
+- 人類
+- 人気
+- 人口
+- 個人
+- 恋人
+- 本人
+- 芸人
+- 人材
+- 人数
+
+# ---- Chốt đối thủ (core/chot_doi_thu.py) ----
+# Tên kênh tự khai đúng ngách — đủ để theo dõi dù tiêu đề mới nhất chưa dính từ khoá tuyến.
+ten_kenh_dung_ngach:
+- 心理
+- 脳科学
+- こころ
+- 心の
+- ココロ
+- メンタル
+- 才能
+# Từ khoá tuyến chính của nguồn (mặc định khi nơi gọi không truyền regex riêng). Nối bằng "|".
+tu_khop_nguon:
+- 一人
+- ひとり
+- 独り
+- ぼっち
+- 孤独
+- 友達
+- 友人
+- 群れ
+- 人付き合い
+- 人間関係が苦手
+- SNS
+- 付き合わない
+- 合わせない
+- 内向
+- 無趣味
+- 家から出ない
+- 外に出ない
+- 飲み会
+- 雑談
+- 一人でいる
+- ソロ
+- 人と関わらない
+- 人混み
+- 連絡しない
+- 誘われない
+- 集まり
+- 静かな人
+- 話さない
+- 口数が少ない
+- 群れない
+- 独り言
+- スポーツに興味
+- 家にいたい
+- 家が好き
+- 家を愛
+# Khuôn "gỡ tội" — tiêu đề hứa nhẹ lòng thay vì hứa việc làm.
+tu_go_toi:
+- 実は
+- 本当は
+- 本当の
+- 強い
+- 賢い
+- 才能
+- 隠された
+- 特徴
+- なぜ
+- 理由
+- 優秀
+- すごい
+- 凄い
+- 意外
+
+# ---- Tuyến con (core/tuyen_con.py) ----
+# true = dùng bảng chủ đề con dựng sẵn trong mã (CHU_DE — của đúng ngách này). Ngách khác để false:
+# không có bảng thì cột "Chủ đề" để trống, không khớp nhầm.
+chu_de_con_mac_dinh: true
+
+# ---- Thị trường (quốc gia/ngôn ngữ). Thứ tự ưu tiên: kenh.yaml > ngach.yaml > mặc định mã ----
+thi_truong:
+  quoc_gia: JP
+  ngon_ngu: ja
+  mui_gio: Asia/Tokyo
+  # Bậc làm tròn lượt xem YouTube hiển thị (「5.9万」「13.5万」): view < duoi thì bậc là bac.
+  # Dòng cuối không có duoi = mọi view còn lại. Dùng ở cong_thuc_vph (lọc nhiễu tốc độ).
+  bac_lam_tron_view:
+  - {duoi: 10000, bac: 10}
+  - {duoi: 1000000, bac: 1000}
+  - {bac: 10000}
+  # Các khoá dưới CHƯA có mã đọc — để trống, đừng khai (kênh sẽ tưởng đã có tác dụng):
+  # khung_gio_dang, phut_muc_tieu, bia_toi_da_ky_tu, ctr_trang_chu_muc_tieu, mua_vu
+
+# ---- Luật chọn nguồn theo NGHĨA, cho biên tập viên AI (core/bien_tap_content đọc qua nc.ngach) ----
+luat_chon:
+- 'Chỉ là TÂM LÝ / CHÂN DUNG CON NGƯỜI mới đúng ngách. Sức khoẻ, ăn uống, thuốc, mẹo vặt, tiền hưu/thuế thuần "cách làm", tin tức, người nổi tiếng, truyện đọc → lệch ngách dù cùng khán giả 55+.'
+- 'Cụm đã trượt ở kênh anh em (vd 精神年齢, 物欲が減った) chỉ được chọn khi có lý do rất mạnh ghi rõ; cụm đang thắng (お金持ち…) ghép với tệp mình là hướng ưu tiên.'
+
+# ---- Phân cụm theo nghĩa (core/phan_cum_ai.py) ----
+mo_ta_phan_cum: "tiếng Nhật (ngách tâm lý)"
+nhan_the_loai_mau: "【心理学】【脳科学】【雑学】"
+vi_du_phan_cum: "(「他人に興味を持たない」 không phải chuyện tiền; 「精神年齢」 không phải IQ trừ khi có cụm riêng)"
+
+# ---- Lời nhắc AI ----
+# Chèn vào auto_khau.de_bai_nan_khuon (core/auto_khau.py:3636 gốc):
+# "Bạn đặt tiêu đề cho một {mau_tieu_de}."
+mau_tieu_de: "kênh YouTube tâm lý tiếng Nhật"
+# Câu mở đầu cong_thuc_v7_ai.de_bai_kenh (core/cong_thuc_v7_ai.py) — mô tả kênh cho AI đọc
+# catalogue kênh nguồn.
+mo_ta_kenh_cho_ai: "Kênh của tôi làm lại (remake) content tâm lý / não khoa học cho khán giả Nhật."
+# Cụm từ "dạng video đang thắng" trong đề bài đọc catalogue kênh nguồn (cong_thuc_v7_ai.de_bai_kenh).
+dang_thang_cho_ai: 'CHÂN DUNG MỘT KIỂU NGƯỜI — "người như thế này thì thật ra…"'
+# Ba mức ngách của KÊNH NGUỒN trong cùng đề bài đó.
+luat_kenh_nguon:
+  dung: 'cùng nghề với tôi — mổ xẻ tâm lý/não bộ của một kiểu người.'
+  gan: 'có chạm tâm lý nhưng lẫn nhiều thứ khác.'
+  lac: 'nghề khác. Ví dụ: tự lực/phát triển bản thân (dạy thói quen, quy tắc, cách làm, động lực), tin tức, chính trị, kinh doanh, sức khoẻ, giải trí, review. Một kênh tự lực có thể có vài video tiêu đề nghe rất tâm lý — vẫn là "lac".'

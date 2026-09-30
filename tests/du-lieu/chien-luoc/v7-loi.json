@@ -1,0 +1,14 @@
+{
+ "mo_ta": "Kênh V7, cham_v7 ném lỗi → log 'V7 hỏng' và trả [] (không lùi).",
+ "kenh": "GV6",
+ "kenh_yaml": ["ma: \"GV6\"", "ngon_ngu: \"ja\"", "cong_thuc_chon: \"v7\""],
+ "cong_thuc_v7": {},
+ "bang_nhom": false,
+ "co_v7_truoc": false,
+ "loai_tru": [],
+ "da_lam_tieu_de": [],
+ "vph": null,
+ "mot_nut": {"moi": [{"link": "https://youtu.be/mnKHONGDUNG", "tieu_de": "賢い人の特徴", "kenh": "Z1", "view": 900000, "vuot": 9.0, "tang": 100, "diem": 0}]},
+ "v7": null,
+ "v7_loi": "cong-thuc-v7.json dị dạng"
+}

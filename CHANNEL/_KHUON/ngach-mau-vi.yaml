@@ -1,0 +1,65 @@
+# ============================================================================
+# KHUNG hồ sơ ngách — thị trường VIỆT NAM (tiếng Việt, Asia/Ho_Chi_Minh, giờ ICT = UTC+7)
+# ============================================================================
+#
+# Chép vào CHANNEL/_NHOM/<nhóm>/ngach.yaml, mọi kênh của nhóm khai `nhom: "<nhóm>"` trong
+# kenh.yaml. Đây chỉ là KHUNG: điền ngách của bạn vào các chỗ <...>. Bản có ví dụ đầy đủ từng khoá
+# (ngách nấu ăn): ngach-mau.yaml. Bản tham chiếu mọi khoá đang chạy thật: ngach-mau-ja-tam-ly.yaml.
+#
+# Nhớ: kenh.yaml của từng kênh vẫn phải có `ngon_ngu: vi` — tệp này không thay khoá đó.
+# Từ khoá chỉ là ĐƯỜNG LÙI khi AI lỗi; AI chọn theo NGHĨA từ mo_ta_ngach/mo_ta_cho_loc_ai/luat_chon.
+
+mo_ta_ngach: "<một câu: ngách gì, tiếng Việt, dạng video nào>"
+ngon_ngu_nguon: vi
+dang_thang: "<dạng video đang thắng của kênh>"
+
+mo_ta_cho_loc_ai: >-
+  Thuộc ngách: <mô tả theo ý>. Không thuộc ngách: <các thể loại gần mà KHÔNG phải>.
+  Khán giả thật: <tuổi/giới/thiết bị nếu đã có số Studio>.
+
+luat_chon:
+  - "<luật chọn nguồn theo nghĩa, một câu>"
+
+# ── Thị trường ───────────────────────────────────────────────────────────────────────────────
+thi_truong:
+  quoc_gia: VN
+  ngon_ngu: vi
+  mui_gio: Asia/Ho_Chi_Minh
+  # YouTube tiếng Việt hiển thị "1,2 N" / "13 N" / "1,2 Tr" lượt xem.
+  bac_lam_tron_view:
+    - {duoi: 1000, bac: 1}
+    - {duoi: 10000, bac: 100}
+    - {duoi: 1000000, bac: 1000}
+    - {duoi: 10000000, bac: 100000}
+    - {bac: 1000000}
+
+# ── Đường lùi từ khoá (điền đủ bộ loại trừ — để trống là rơi về chữ Nhật) ─────────────────────
+tu_manh: []
+tu_yeu: []
+tu_loai_tru: ["<thể loại khác hẳn>"]
+ten_kenh_loai_tru: ["tóm tắt", "reup", "tổng hợp"]
+handle_loai_tru: ["reup", "vietsub", "compilation"]
+tu_kenh_hien_nhien: ["tin tức", "bóng đá", "nhạc", "game"]
+handle_hien_nhien: ["news", "music", "gaming"]
+tu_tieu_de_hien_nhien: ["trực tiếp", "livestream"]
+tu_tuoi: []
+chu_de_con_mac_dinh: false
+
+# ── Cụm chủ đề V7 (mỗi cụm vài từ; từ quá chung thì chấm nhầm) ───────────────────────────────
+cum:
+  <ma-cum>:
+    ten: "<tên cụm>"
+    tu: ["<từ>", "<từ>"]
+ngach:
+  tu: ["<từ cho thấy kênh nguồn cùng nghề>"]
+  tu_lac: ["<từ cho thấy kênh nguồn lạc nghề>"]
+
+tep_khan_gia:
+  - ma: "1"
+    ten: "<tệp khán giả 1>"
+    ten_ngan: "<ngắn>"
+
+# ── Lời nhắc AI (để trống → câu trung tính theo mo_ta_ngach) ─────────────────────────────────
+mau_tieu_de: "kênh YouTube <ngách> tiếng Việt"
+mo_ta_kenh_cho_ai: ""
+mo_ta_phan_cum: "tiếng Việt (ngách <ngách>)"

@@ -1,0 +1,89 @@
+# Nhật ký phát hành
+
+Rút gọn từ `NHAT-KY-PHAT-TRIEN.md` (nhật ký chi tiết máy — mỗi mục có ngày,
+lý do sửa, tệp đụng tới, kết quả test). Tệp này chỉ ghi TÍNH NĂNG CHÍNH, cho
+người cần biết "bản mới có gì" mà không cần đọc hết nhật ký chi tiết.
+
+## [3.0.0-dev] — 22/09/2026 – 29/09/2026
+
+Chuẩn bị phát hành v3.0 (sản phẩm nhiều VPS, nhiều ngách) — xem
+`workspace/LO-TRINH-PHAT-HANH-V3.md` cho lộ trình đầy đủ.
+
+### Giao diện & vận hành VPS
+
+- Thiết kế lại giao diện VPS: gộp 6 tab rời thành trang **Trung tâm**, sau
+  đó thành **Bảng điều khiển** — mở tool trả lời ngay ba câu "kênh có ổn
+  không / tôi cần làm gì / kết quả ra sao" (khối Việc của bạn, Dòng máy,
+  Thẻ kênh lớn theo từng kênh, xem `README-VPS.md`).
+- Gộp toàn bộ thư mục VPS về một `MyTool\` duy nhất (bỏ cấu trúc nhiều thư
+  mục rời rạc của bản trước).
+- Bảng điều khiển: cảnh báo Windows sắp hết hạn, sửa 5 lỗi phát hiện trên
+  dữ liệu thật sau khi khởi động lại máy.
+- Cài VPS từ bản clone git thẳng (`CAI-DAT-VPS.bat` + `vm/cai_dat_tu_kho.py`,
+  MỚI) — thay thế cho phải đóng gói `vm/goi-vps/` trên máy nhà rồi chép
+  sang; thêm `websocket-client` (từng thiếu, làm máy đăng DOM hỏng trên máy
+  sạch), lùi nguồn tải cho máy chỉ IPv6. Đi kèm `core/kiem_may.py` — bảng
+  OK/THIẾU kiểm máy đã sẵn sàng tự chạy chưa.
+- `.gitignore` vá lỗ lọt dữ liệu riêng máy/kênh (nhật ký kênh thật, hồ sơ
+  video, trạng thái `vm/`); đổi chặn hồ sơ trình duyệt kênh sang chặn THEO
+  CẤU TRÚC (`Data/profile`, `App/Chrome-bin`) thay vì theo tên `TL*`.
+- Tài liệu vận hành mới: `README-VPS.md`, `docs/THEM-KENH.md`,
+  `docs/DOI-CHU-DE.md`, `docs/BAN-DO-MODULE.md`.
+
+### Điều phối tài nguyên (nền tảng cho nhiều kênh/nhiều VPS)
+
+- Đo công suất thật của máy (`core/cong_suat.py`) trước khi sửa điều phối —
+  số nền để so sánh trước/sau.
+- Tách lớp song song **API** (gọi máy chủ, chạy song song nhiều làn) và
+  **nặng** (Chrome/FFmpeg/Whisper, độc quyền một lượt) — sửa nút thắt từng
+  ép mọi việc VPS về song song = 1, kéo dài khâu ảnh gấp nhiều lần.
+- Khe tài nguyên liên tiến trình + hàng đợi ưu tiên P0–P4 + đệm sổ job dùng
+  chung toàn máy (`core/khe.py`, `core/uu_tien.py`, `core/so_job_chung.py`,
+  `core/bang_thong.py`) — module mới, thuần, sẵn sàng để nối vào bộ điều
+  phối chính ở đợt kế tiếp.
+
+### Sản xuất & chất lượng nội dung
+
+- Sản xuất theo đúng nhịp đăng, tự ghi nhận khi có người đăng tay, tự phục
+  hồi khi lượt trước dở dang.
+- Một hàng đợi tuần tự cho toàn VPS — chặn hai lượt việc NẶNG chạy chồng
+  nhau (Chrome + FFmpeg cùng lúc từng làm máy đơ).
+- `core/bai_hoc_san_xuat.py` (MỚI) — vòng phản hồi: kênh tự học từ video đã
+  đăng để cải thiện lượt sau.
+- `core/qa_truoc_dang.py` (MỚI) — cổng kiểm chất lượng trước khi bàn giao
+  cho máy đăng, chặn video lỗi lọt lên kênh thật.
+- Hồ sơ video + vòng học chạy trước MỖI lượt sản xuất (không chỉ sau).
+- Khuôn ảnh bìa "thắng" + giám khảo AI tự chọn ảnh bìa tốt nhất trong nhiều
+  bản.
+- N bản tiêu đề mỗi video + chấm điểm CTR dự đoán; kiểm trùng Ý TƯỞNG bằng
+  LLM (không chỉ trùng chữ).
+- Kho nhạc nền chuẩn hoá tăng dần (`core/kho_nhac.py`), dựng video theo
+  PHẦN (nghỉ giữa phần, chuyển cảnh, nhạc đổi theo phần, phụ đề/mục lục
+  đồng bộ).
+- Chặn vượt cửa nhịp đăng + chống làm trùng nội dung theo TIÊU ĐỀ.
+
+### Đăng video & bình luận
+
+- **Máy đăng DOM/CDP** (MỚI) — đăng video qua Chrome DevTools Protocol thay
+  vì chỉ giả lập chuột/phím; nối vào phiên kênh (`vm/agent.py`), trạm nội
+  bộ, và kế hoạch đăng (`core/ke_hoach_dang.py`); đã thử đăng thật liên
+  tiếp trên kênh thật.
+- Máy đăng: dò ảnh đa tỉ lệ (sửa lỗi 0/1 mã im lặng), dẹp vật cản (hộp xin
+  quyền, lỗi End Screen), bỏ lệnh xoá đệ quy `%TEMP%` nguy hiểm.
+- Nhường phiên kênh cho `vm/agent.py` đúng trước giờ đăng — không để lượt
+  sản xuất nặng giữ máy tới lỡ giờ.
+- Tự nhận diện video đã đăng (không đứng im chờ mãi vì "quên" một gói).
+- Báo động Telegram bền vững khi có sự cố cần người can thiệp.
+- Bật tự động hoàn toàn cho các kênh đã qua thử nghiệm DOM đạt yêu cầu; hỗ
+  trợ tải lên bổ sung trong ngày (không chỉ một lượt cố định).
+
+### Dọn dẹp & xử lý sự cố
+
+- Dọn hậu quả sau khi bỏ thư mục khuôn `_KHUON`/`_MAU-GON`; mở rộng cơ chế
+  dọn đĩa (không chờ "đã đăng" mới dọn, có luật dọn sớm hơn).
+- Lượt sản xuất "kẹt" tự phát hiện và tự xử lý (bốn mức xử lý khác nhau
+  theo mức độ kẹt); sửa hai lỗi thật phát hiện sau khi triển khai.
+
+---
+
+Bản trước (2.x) — xem lịch sử `NHAT-KY-PHAT-TRIEN.md` trước ngày 22/09/2026.

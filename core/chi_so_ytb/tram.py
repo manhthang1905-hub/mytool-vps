@@ -1,0 +1,1885 @@
+"""Trạm nhận số liệu kênh — extension trong máy ảo gửi thẳng về thư mục của công cụ.
+
+═══ VÌ SAO CẦN TRẠM NHẬN, ĐÃ CÓ THƯ MỤC TẢI XUỐNG RỒI ═══
+
+Extension của Chrome chỉ ghi được vào thư mục Tải xuống **của chính máy chạy nó**. Khi
+Studio được mở trong một máy ảo — cách làm hiện tại, vì mỗi kênh cần một phiên đăng nhập
+riêng — thì số liệu nằm lại trong máy ảo đó, còn công cụ dựng nội dung lại chạy ở máy thật.
+Chép tay qua `\\tsclient` được một hai lần thì còn chịu được; mỗi ngày vài mốc giờ, nhiều
+kênh, thì không.
+
+Trạm này mở một cổng HTTP ngay trong công cụ. Extension đẩy từng gói về, và gói rơi thẳng
+vào `CHANNEL/<kênh>/chi-so/` — nằm ngay cạnh `prompt/` là chỗ sẽ đọc nó để sửa lời nhắc.
+
+═══ CHỈ NHẬN TỪ MẠNG NỘI BỘ ═══
+
+Máy chủ này **không có mật khẩu** và **ghi file xuống ổ đĩa**. Đó là đánh đổi có chủ ý: nó
+chỉ sống trong mạng nhà, và thêm một lớp đăng nhập vào đây là bắt người dùng cấu hình một
+thứ nữa mà không đổi được gì.
+
+Nhưng đánh đổi ấy chỉ đúng khi *thật sự* chỉ mạng nhà tới được. Nhiều máy ở Việt Nam có sẵn
+địa chỉ IPv6 **định tuyến toàn cầu** do nhà mạng cấp — dạng `2001:db8:1:2::111` — tức Internet
+gọi thẳng vào được, không qua NAT như IPv4. Kèm theo đó, tường lửa Windows nhiều máy đang tắt
+cả ba hồ sơ Domain/Private/Public. Hai thứ cộng lại: mở cổng ghi file lên đó là mở cho cả thế
+giới. Đã gặp đúng cấu hình này trên máy dựng, 31/08/2026.
+
+Nên trạm tự chặn ở tầng ứng dụng: chỉ nhận từ dải riêng (10/8, 172.16/12, 192.168/16, 127/8,
+::1, fc00::/7, fe80::/10). Không dựa vào tường lửa, vì tường lửa ở đây không bật.
+
+═══ NGHE CẢ IPv4 LẪN IPv6 ═══
+
+Máy ảo Proxmox thường **không được cấp IPv6** — đo trên mạng dựng 31/08/2026: 10 máy ảo chạy,
+0 máy trả lời IPv6 — nên hôm nay đường về vẫn là IPv4. Nhưng ổ cắm mở theo kiểu hai tầng
+(`AF_INET6` + tắt `IPV6_V6ONLY`) thì cả hai đều vào cùng một cổng, và ngày nào máy ảo có IPv6
+thì không phải sửa gì.
+"""
+
+from __future__ import annotations
+
+import base64
+import csv
+import io
+import ipaddress
+import json
+import os
+import re
+import shutil
+import socket
+import struct
+import sys
+import threading
+import time
+import zipfile
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Callable, List, Optional, Tuple
+
+__all__ = ["Tram", "CONG_MAC_DINH", "dia_chi_may", "thu_muc_kenh", "GOC"]
+
+CONG_MAC_DINH = 8765
+GOC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_DAI_RIENG = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+]
+
+
+#: Bận thì lùi tối đa ngần này cổng (8765 -> 8775) rồi mới chịu thua.
+SO_CONG_LUI = 10
+
+#: Mã lỗi "cổng đang bận" trên Windows và POSIX.
+_CONG_BAN = {10048, 10013, 98, 13}
+
+
+def _la_cong_ban(loi: BaseException) -> bool:
+    """Câu chữ cũng tính — Windows trả 10013 cho cả 'bận' lẫn 'cấm quyền'."""
+    chu = str(loi).lower()
+    return any(m in chu for m in ("10048", "10013", "address already in use",
+                                 "forbidden by its access permissions",
+                                 "normally permitted"))
+
+
+def ai_giu_cong(cong: int) -> str:
+    """Tên tiến trình đang nghe `cong`, dạng người đọc được. Rỗng thì "không rõ".
+
+    Bản cũ chỉ đoán *"chương trình khác giữ"*. Đoán sai làm khách đi tìm nhầm
+    chỗ: ca thật 07/09/2026 là chính `pytest` của tool đang giữ, không phải
+    phần mềm lạ nào.
+    """
+    try:
+        import subprocess  # noqa: PLC0415
+
+        if sys.platform != "win32":
+            return "một tiến trình khác"
+        ra = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                            capture_output=True, timeout=8,
+                            creationflags=0x08000000)
+        pid = ""
+        for d in ra.stdout.decode("utf-8", "replace").splitlines():
+            phan = d.split()
+            if len(phan) >= 5 and phan[3].upper() == "LISTENING"                     and phan[1].rsplit(":", 1)[-1] == str(cong):
+                pid = phan[4]
+                break
+        if not pid:
+            return "một tiến trình khác"
+        ten = subprocess.run(["tasklist", "/FI", "PID eq " + pid, "/NH", "/FO", "CSV"],
+                             capture_output=True, timeout=8,
+                             creationflags=0x08000000)
+        dong = ten.stdout.decode("utf-8", "replace").strip().strip('"')
+        ten_tt = dong.split('","')[0] if '","' in dong else dong
+        return "{0} (PID {1})".format(ten_tt or "tiến trình", pid)
+    except Exception:  # noqa: BLE001 — hỏi không được thì nói không rõ
+        return "một tiến trình khác"
+
+
+def tram_khac_dang_giu(cong: int) -> bool:
+    """Thứ đang nghe `cong` có phải MỘT TRẠM của tool không.
+
+    Hỏi thẳng bằng đúng gói dò mà máy ảo dùng. Trả `True` chỉ khi có tiếng
+    đáp đúng dạng — im lặng nghĩa là thứ khác, và lúc ấy lùi cổng là an toàn.
+    """
+    try:
+        o = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        o.settimeout(0.6)
+        try:
+            o.sendto(b"shopapi-tram?", ("127.0.0.1", cong))
+            goi, _ = o.recvfrom(256)
+        finally:
+            o.close()
+        return bool(json.loads(goi.decode("utf-8")).get("shopapi_tram"))
+    except Exception:  # noqa: BLE001 — không đáp = không phải trạm
+        return False
+
+
+def trong_mang_nha(ip: str) -> bool:
+    """Địa chỉ này có thuộc mạng nội bộ không.
+
+    IPv6 ánh xạ IPv4 (`::ffff:192.168.88.41`) là dạng ổ cắm hai tầng trả về cho khách IPv4 —
+    phải bóc ra trước khi so, nếu không mọi khách IPv4 đều bị chặn oan.
+    """
+    try:
+        a = ipaddress.ip_address(str(ip).split("%")[0])
+    except ValueError:
+        return False
+    if getattr(a, "ipv4_mapped", None):
+        a = a.ipv4_mapped
+    return any(a in m for m in _DAI_RIENG)
+
+
+def _thuan(ip) -> str:
+    """Một địa chỉ, một cách viết — để so sánh được với danh sách khách mời.
+
+    Cùng một máy có thể hiện ra là `[2001:db8::5]`, `2001:db8::5`,
+    `2001:DB8:0:0:0:0:0:5`, hay `::ffff:1.2.3.4` (IPv4 qua ổ hai tầng) —
+    đưa hết về dạng gọn của `ipaddress` rồi mới so, không thì mời một đằng
+    khách gõ cửa một nẻo.
+    """
+    s = str(ip or "").split("%")[0].strip().strip("[]")
+    try:
+        a = ipaddress.ip_address(s)
+    except ValueError:
+        return s
+    if getattr(a, "ipv4_mapped", None):
+        a = a.ipv4_mapped
+    return str(a)
+
+
+def an_toan(s) -> str:
+    """Tên thư mục/tệp lấy từ gói mạng — cắt sạch mọi thứ có thể trèo ra ngoài."""
+    s = re.sub(r"[^\w.-]+", "-", str(s or "")).strip("-.") or "x"
+    return s[:120]
+
+
+def dia_chi_may(cong: int = CONG_MAC_DINH) -> List[str]:
+    """Những địa chỉ dán được vào extension, thứ tự ưu tiên.
+
+    IPv6 toàn cầu bị bỏ ra khỏi danh sách: nó chạy được, nhưng gợi ý nó là gợi ý người dùng
+    phơi cổng ghi file ra Internet. Địa chỉ nội bộ mới là thứ nên dùng.
+    """
+    ra: List[str] = []
+    for gia_dinh in (socket.AF_INET, socket.AF_INET6):
+        try:
+            for m in socket.getaddrinfo(socket.gethostname(), None, gia_dinh):
+                ip = m[4][0]
+                if not trong_mang_nha(ip) or ip.startswith("127.") or ip == "::1":
+                    continue
+                if ip.startswith("169.254.") or ip.lower().startswith("fe80"):
+                    continue  # tự cấp / link-local: máy khác không dùng được
+                d = f"http://[{ip}]:{cong}" if gia_dinh == socket.AF_INET6 else f"http://{ip}:{cong}"
+                if d not in ra:
+                    ra.append(d)
+        except OSError:
+            pass
+    return ra
+
+
+#: Đồ RIÊNG của từng máy — không bao giờ nằm trong gói phát đi.
+_GOI_VM_BO_TEP = {"config.json", "cai-dat-tool.json", "agent.pid",
+                  "agent.log", "trang-thai.json"}
+#: ═══ MÓC "GÓI TRANG CHỦ ĐÃ VỀ" ═══
+#: Chủ dự án, 05/09/2026: *"ấn 1 nút là bên vm sẽ quét studio, quét trang chủ - rồi đưa về tool,
+#: tool … cập nhật đối thủ vào danh bạ - rồi lấy content"*. Nửa sau phải TỰ chạy khi nửa đầu về,
+#: không ai bấm nút thứ hai. Trạm là chỗ duy nhất biết gói đã về, nên trạm gọi. Extension 2.6.1 gửi
+#: ba gói cách nhau 1–2 phút (ba lượt tải), nên không gọi ngay: mỗi gói đặt lại đồng hồ, im đủ
+#: `TRE_HOOK_TRANG_CHU` giây mới gọi — một lần cho cả đợt. Hàm đăng ký nhận `ma_kenh`, chạy ở luồng
+#: của trạm: giao diện phải tự chuyển về luồng Qt (signal), không chạm widget trong hàm này.
+HOOK_TRANG_CHU: "List[Callable[[str], None]]" = []
+TRE_HOOK_TRANG_CHU = 150.0
+
+
+def dat_hook_trang_chu(ham: "Callable[[str], None]") -> None:
+    """Đăng ký một hàm chạy sau mỗi ĐỢT trang chủ. Đăng ký trùng thì thôi.
+
+    Đăng ký thì PHẢI gỡ — xem `go_hook_trang_chu`.
+    """
+    if ham not in HOOK_TRANG_CHU:
+        HOOK_TRANG_CHU.append(ham)
+
+
+def go_hook_trang_chu(ham: "Callable[[str], None]") -> None:
+    """Gỡ một hàm đã đăng ký. Chưa có thì thôi, không kêu.
+
+    ═══ VÌ SAO PHẢI CÓ HÀM NÀY: GIẾT CẢ TIẾN TRÌNH, KHÔNG PHẢI LỖI THƯỜNG ═══
+
+    `HOOK_TRANG_CHU` là danh sách TOÀN CỤC, còn thứ đăng ký vào đó là
+    `self._tin_trang_chu.emit` của trang Quản lý đối thủ — **một phương thức
+    gắn vào widget Qt**. Trang chết đi mà mục trong danh sách vẫn nằm lại, trỏ
+    tới một đối tượng C++ đã bị xoá. 150 giây sau `threading.Timer` gọi nó ở
+    luồng nền → `Windows fatal exception: access violation`.
+
+    Và `except Exception` ở `_goi_hook_trang_chu` **không bắt được** thứ đó:
+    access violation không phải ngoại lệ Python, nó giết thẳng tiến trình.
+    Triệu chứng đã trả giá: một lượt `pytest` sập ở ~97%, `faulthandler` đổ
+    ngăn xếp **150.773 lần** ra tệp **1,8 GB**, tiến trình treo — và cái xác
+    treo ấy giữ luôn cổng 8765, khiến lần mở tool sau báo *"chương trình khác
+    giữ"*. Chính là sự cố chủ dự án hỏi ngày 07/09/2026.
+    """
+    try:
+        HOOK_TRANG_CHU.remove(ham)
+    except ValueError:
+        pass
+
+
+#: `goi-vps` = bộ cài VPS (`core/goi_vps.py`): ~1,5 GB mã + dữ liệu kênh +
+#: Whisper — tuyệt đối không được lọt vào gói cập nhật vm/ (18/09/2026).
+_GOI_VM_BO_THU = {"__pycache__", "logs", "tien-ich", "tokens",
+                  "clients", "replied", "transcripts", "goi-vps"}
+
+
+def _tep_goi_vm(goc_vm: Optional[str] = None) -> List[tuple]:
+    """Các tệp MÃ của tool VM, xếp ổn định — nguồn chung cho gói phát đi
+    (/goi-vm) và dấu vân phiên bản (`dau_van_goi_vm`). Hai nơi phải cùng
+    một danh sách, không thì dấu vân nói "có bản mới" cho thứ không phát.
+    Bên máy ảo có bản soi gương (`giao_dien.dau_van_cuc_bo`) — sửa luật
+    loại trừ ở đây thì sửa cả bên đó."""
+    tm = goc_vm or os.path.join(GOC, "vm")
+    ra = []
+    for goc_tm, thu_muc, cac_tep in os.walk(tm):
+        thu_muc[:] = sorted(t for t in thu_muc if t not in _GOI_VM_BO_THU)
+        for ten in sorted(cac_tep):
+            if (ten in _GOI_VM_BO_TEP
+                    or ten.startswith(("ke-hoach-", "cho-bao-"))
+                    or ten.endswith((".log", ".pid"))):
+                continue
+            duong = os.path.join(goc_tm, ten)
+            ra.append((os.path.relpath(duong, tm).replace("\\", "/"), duong))
+    return ra
+
+
+def _phien_ban_kho() -> str:
+    """Số bản trong tệp VERSION của tool — cho máy ảo soi kiểu MyTool."""
+    try:
+        with io.open(os.path.join(GOC, "VERSION"), encoding="utf-8") as tep:
+            return tep.read().strip()
+    except OSError:
+        return ""
+
+
+def dau_van_goi_vm(goc_vm: Optional[str] = None) -> str:
+    """Phiên bản của gói tool VM — TỰ SINH từ nội dung mã, không ai phải
+    nhớ nâng số (chủ dự án 02/09/2026: "tự động thay đổi phiên bản nếu
+    biết có thay đổi"). Đổi một byte mã là đổi dấu vân; đổi config/log
+    của máy thì không."""
+    import hashlib  # noqa: PLC0415
+
+    bam = hashlib.sha1()
+    for rel, duong in _tep_goi_vm(goc_vm):
+        bam.update(rel.encode("utf-8"))
+        try:
+            with open(duong, "rb") as tep:
+                bam.update(tep.read())
+        except OSError:
+            continue
+    return bam.hexdigest()[:16]
+
+
+def dia_chi_dong_goi(cong: int = CONG_MAC_DINH) -> List[str]:
+    """Mọi địa chỉ máy này mà một máy ảo CÓ THỂ gọi về — cho bộ cài VM.
+
+    Khác `dia_chi_may` (chỉ gợi ý địa chỉ nội bộ cho người dán tay vào
+    extension): bộ cài máy ảo cần CẢ địa chỉ IPv6 toàn cầu, vì VPS thuê
+    ngoài chỉ với được đường đó — máy ảo của chủ dự án đa phần là loại này.
+    Ghi hết ra làm ứng viên, agent bên kia thử lần lượt cái nào đáp thì
+    dùng. Cổng chặn của trạm vẫn 403 máy lạ, nên liệt kê địa chỉ toàn cầu
+    ở đây không phải là mở cửa.
+    """
+    ra = list(dia_chi_may(cong))
+    # Địa chỉ toàn cầu ĐANG DÙNG — hỏi hệ điều hành "đi ra Internet thì đi
+    # bằng địa chỉ nào" (connect UDP không gửi gói nào, chỉ để HĐH chọn
+    # đường). KHÔNG liệt kê getaddrinfo: Windows đẻ địa chỉ IPv6 tạm mỗi
+    # ngày và giữ lại xác, máy chủ dự án đo được ~120 cái — nướng hết vào
+    # config là bên VM ngồi thử 4 giây × 120 = 8 phút câm lặng
+    # (02/09/2026: "sao rồi không thấy gì").
+    try:
+        o = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        try:
+            o.connect(("2001:4860:4860::8888", 53))
+            ip = str(o.getsockname()[0])
+        finally:
+            o.close()
+        if not trong_mang_nha(ip) and not ip.lower().startswith("fe80"):
+            d = f"http://[{ip}]:{cong}"
+            if d not in ra:
+                ra.append(d)
+    except OSError:
+        pass  # máy không có đường IPv6 ra ngoài — thôi, còn địa chỉ mạng trong
+    return ra
+
+
+def thu_muc_kenh(ma: str, goc: Optional[str] = None) -> str:
+    """Số liệu của kênh nào thì nằm trong thư mục kênh ấy.
+
+    Mã kênh do người dùng gõ vào ô "Mã kênh" của extension. Khớp tên thư mục trong `CHANNEL/`
+    thì vào thẳng đó — số liệu nằm cạnh `prompt/`, là chỗ sẽ đọc nó. Không khớp thì gom vào
+    một chỗ riêng chứ KHÔNG tự tạo thư mục kênh mới: `CHANNEL/<tên>` là khuôn sản xuất, đẻ
+    bừa vào đó thì lần sau người dùng thấy một kênh ma trong danh sách chọn khuôn.
+    """
+    goc = goc or GOC
+    ma = an_toan(ma)
+    tm = os.path.join(goc, "CHANNEL", ma)
+    if os.path.isdir(tm):
+        return os.path.join(tm, "chi-so")
+    return os.path.join(goc, "CHANNEL", "_chi-so-chua-ro", ma)
+
+
+def la_rac(goi) -> bool:
+    """Thẻ "Hoạt động mới nhất" tự gọi lại mỗi 10 giây và không mang chỉ số nào.
+
+    Extension từ v1.7.0 đã chặn tại nguồn. Chốt này để một máy ảo chưa kịp cập nhật không bơm
+    tiếp — đêm 28/08/2026 một tab Studio mở qua đêm đẻ ra 381 MB đúng loại gói này.
+    """
+    try:
+        rb = json.dumps((goi or {}).get("request") or {}, ensure_ascii=False)
+    except Exception:
+        return False
+    return "latestActivityCardConfig" in rb and "keyMetricCardConfig" not in rb
+
+
+class Tram:
+    """Cổng nhận, bật/tắt được từ giao diện.
+
+    Chạy trong luồng riêng vì giao diện Qt không được đứng chờ ổ cắm.
+    """
+
+    def __init__(self, cong: int = CONG_MAC_DINH, goc: Optional[str] = None,
+                 ghi: Optional[Callable[[str], None]] = None,
+                 nguon_khach: Optional[Callable[[], List[str]]] = None,
+                 nhip_gioi_thieu: float = 60.0,
+                 goi_van_ban: Optional[Callable[[str], str]] = None):
+        self.cong = int(cong)
+        self.goc = goc or GOC
+        self._ghi = ghi
+        # Danh sách địa chỉ VPS của chính chủ (tab VPS đã lưu) — trạm TỰ gọi
+        # sang giới thiệu mình định kỳ, người dùng không phải bấm gì và không
+        # phải canh giờ. Là hàm chứ không phải danh sách chết: mỗi nhịp đọc
+        # lại, thêm máy mới ở tab VPS là nhịp sau tự với tới.
+        self._nguon_khach = nguon_khach
+        # Nhận đề bài chữ từ máy ảo (POST /van-ban) — trả đoạn chữ, dùng key
+        # của tool. None = cửa đóng, trả 503 nói thật.
+        self._goi_van_ban = goi_van_ban
+        self._nhip_gioi_thieu = float(nhip_gioi_thieu)
+        self._nghi_goi = threading.Event()
+        #: Cổng bên VPS ngồi nghe lúc chạy bộ cài (CAI-DAT-VM.bat).
+        self.cong_khach = CONG_MAC_DINH
+        self._may: Optional[ThreadingHTTPServer] = None
+        self._luong: Optional[threading.Thread] = None
+        self.so_goi = 0
+        self.so_rac = 0
+        self.so_chan = 0
+        # Đếm RIÊNG bản ghi lời thoại, không cộng vào `so_goi`: `so_goi` là mốc
+        # để `viec_xong` phán "quét chạy trọn mà KHÔNG có gói số liệu nào về".
+        # Lời thoại tới từ một bước khác (phiên trình duyệt, không phải lượt
+        # quét Studio) — cộng vào đó là xoá mất đúng cái lưới an toàn ấy.
+        self.so_loi_thoai = 0
+        # ── Hộp việc cho agent trên máy ảo (vm/agent.py) ─────────────────────
+        #
+        # Chiều VỀ (extension đẩy số liệu) đã có. Chiều ĐI — tool ra lệnh cho
+        # máy ảo — đi qua hộp này: agent trong máy ảo tự GỌI VỀ hỏi việc
+        # (`GET /viec`), không phải mở cổng nào trên máy ảo. Lượt hỏi nào cũng
+        # được ghi làm nhịp tim, nên tool biết máy nào đang nối.
+        #
+        # Hộp nằm trong RAM: lệnh là thứ "bấm rồi chờ vài phút", tắt tool thì
+        # lệnh chưa giao coi như bỏ — người bấm lại một cái là xong, không
+        # đáng một tệp trạng thái. (Kế hoạch ĐĂNG VIDEO thì khác hẳn — nó nằm
+        # trên đĩa theo kênh, xem `vm/KE-HOACH.md`.)
+        self._khoa_viec = threading.Lock()
+        self._viec: List[dict] = []          # [{id, kenh, loai, tham_so, luc}]
+        self._so_viec = 0
+        self._nhip_tim: dict = {}            # (kenh, may) -> {ip, luc, viec_dang}
+        # Việc máy ảo ĐANG cầm: kênh -> {id, loai, may, luc}. Đặt lúc agent lấy, xoá lúc báo xong —
+        # để tab Đối thủ nói được "máy ảo đã nhận việc #3 lúc 01:05, đang quét Studio" thay vì
+        # bắt người bấm ngồi đoán (chủ dự án 07/09/2026: "ấn 1 nút và chả hiểu chuyện gì sẽ xảy ra").
+        self._viec_dang: dict = {}
+        self._luc_trang_chu: dict = {}       # kenh -> [mốc time.time() từng gói trang chủ]
+        self._hen_trang_chu: dict = {}       # kenh -> threading.Timer đang chờ gọi hook
+        self.tre_hook_trang_chu: float = TRE_HOOK_TRANG_CHU
+        self._ket_qua_viec: List[dict] = []  # 20 kết quả việc gần nhất
+        self._goi_moc: dict = {}             # id việc -> (loại, so_goi lúc giao)
+        # Lệnh cho TIỆN ÍCH (kênh -> lệnh, một lần lấy là hết): chủ dự án
+        # 02/09 — "tao đã ra lệnh thì nó cứ làm chứ". Lệnh tay quet-studio
+        # phải ÉP tiện ích chụp lại tất cả, bất kể mốc đã chụp; còn lượt
+        # theo lịch không đi qua đây nên luật chống chụp trùng vẫn giữ.
+        self._lenh_tien_ich: dict = {}
+        # Cờ "tiện ích đã cào hết hàng" cho lượt quét Studio ĐANG chạy (Đợt 2,
+        # 29/09/2026 — kiểm toán #10): kênh -> `time.time()` lúc nhận
+        # `POST /quet-xong`. `agent.py` hỏi `GET /quet-xong?kenh=` mỗi nhịp tim
+        # thay vì ngủ trọn `CHO_QUET_GIAY`; xoá cờ ngay lúc GIAO việc quét mới
+        # (`giao_viec`) để cờ CŨ của lượt trước không làm lượt SAU tưởng đã
+        # xong ngay lập tức. Tiện ích cũ không gọi route này thì cờ không bao
+        # giờ lên — agent lùi về chờ đủ `CHO_QUET_GIAY` như trước (tương thích
+        # ngược, đúng yêu cầu kiểm toán).
+        self._quet_xong: dict = {}
+        # Bảng tóm tắt phải chạy ở CUỐI chùm gói. Cơ chế cũ chạy ngay gói đầu
+        # rồi chặn 300 giây làm gói cấp kênh đến sau bị bỏ khỏi lượt giải mã.
+        self._khoa_tom_tat = threading.Lock()
+        self._hen_tom_tat: dict = {}          # kênh -> Timer đợi chùm gói im
+        # ── Khách mời: VPS của CHÍNH CHỦ, nằm ngoài mạng nội bộ ──────────────
+        #
+        # Chủ dự án, 02/09/2026: *"tool đang có cái vps tl4-t7 nó có ip của
+        # ipv6 mà"* — máy ảo đa phần là VPS IPv6 thuê ngoài, quảng bá UDP
+        # không với tới và `trong_mang_nha` chặn cửa. Cái van có kiểm soát
+        # (KE-HOACH.md từng để ngỏ "danh sách IP?") chính là đây: chỉ những
+        # địa chỉ tool ĐÃ LƯU ở tab VPS — tức máy của chính người dùng — mới
+        # được mời qua cổng chặn. Không mở toang cho cả Internet.
+        self.khach_moi: set = set()
+
+    # ------------------------------------------------------------------ ghi log
+    def ghi(self, m: str) -> None:
+        if self._ghi:
+            try:
+                self._ghi(m)
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------ bật/tắt
+    @property
+    def dang_chay(self) -> bool:
+        return self._may is not None
+
+    # ------------------------------------------------------------ khách mời VPS
+    def moi_khach(self, ip: str) -> str:
+        """Cho một địa chỉ ngoài mạng nội bộ (VPS của chính chủ) qua cổng chặn."""
+        s = _thuan(ip)
+        if s:
+            self.khach_moi.add(s)
+        return s
+
+    def cho_phep(self, ip: str) -> bool:
+        """Mạng nội bộ, hoặc khách đã mời — mọi cổng (HTTP lẫn tai UDP) tra đây."""
+        return trong_mang_nha(ip) or _thuan(ip) in self.khach_moi
+
+    def gioi_thieu(self, ip: str, cong_nghe: int = CONG_MAC_DINH,
+                   so_lan: int = 3) -> bool:
+        """Gọi sang máy ảo VPS: "trạm ở đây này" — chiều ngược của tai dò.
+
+        VPS ở mạng khác nên gói quảng bá của nó không tới được đây; nhưng tool
+        thì BIẾT địa chỉ VPS (tab VPS đã lưu). Vậy trạm gửi thẳng một gói UDP
+        sang đó — nội dung y hệt gói đáp của tai dò, agent bên kia lấy địa chỉ
+        NGUỒN làm địa chỉ trạm, không phải gõ gì. UDP có thể rơi gói dọc đường
+        nên gửi 3 phát; agent nhận trùng cũng không sao (gói nào cũng nói cùng
+        một điều). Địa chỉ được mời luôn vào `khach_moi` để lượt gọi HTTP về
+        ngay sau đó không bị cổng chặn đá ra.
+        """
+        s = self.moi_khach(ip)
+        if not s or not self.dang_chay:
+            return False
+        goi = json.dumps({"shopapi_tram": True,
+                          "cong": self.cong}).encode("utf-8")
+        gia_dinh = socket.AF_INET6 if ":" in s else socket.AF_INET
+        try:
+            o = socket.socket(gia_dinh, socket.SOCK_DGRAM)
+        except OSError:
+            return False
+        try:
+            for lan in range(max(1, int(so_lan))):
+                if lan:
+                    time.sleep(0.3)
+                o.sendto(goi, (s, int(cong_nghe)))
+        except OSError:
+            return False
+        finally:
+            try:
+                o.close()
+            except OSError:
+                pass
+        return True
+
+    # ------------------------------------------------------------------ tai dò
+    def _mo_tai_do(self) -> None:
+        """Tai UDP: máy ảo hú "trạm đâu?" là đáp — cài agent khỏi hỏi địa chỉ.
+
+        Chủ dự án, 02/09/2026: *"tao thấy nó phức tạp thế"* (về ba câu hỏi
+        lúc cài). Địa chỉ trạm là câu khó nhất với người không rành mạng —
+        nên để máy tự tìm nhau: agent phát một gói UDP quảng bá, trạm nghe
+        thấy thì đáp lại; agent lấy luôn địa chỉ NGUỒN của gói đáp làm địa
+        chỉ trạm. Chỉ đáp cho máy trong mạng nội bộ, và chỉ đáp — không nhận
+        lệnh gì qua đường này.
+        """
+        tram = self
+        tram._o_do = []
+
+        def mo(gia_dinh, dia_chi):
+            """Một cái tai. Máy ảo của chủ dự án CHỈ có IPv6 — nên phải mở
+            tai cả hai tầng, thiếu tầng IPv6 là máy ảo hú không ai đáp."""
+            try:
+                o = socket.socket(gia_dinh, socket.SOCK_DGRAM)
+                o.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if gia_dinh == socket.AF_INET6:
+                    # Tách riêng hẳn với tai IPv4 (không dùng ổ hai tầng):
+                    # gói quảng bá IPv4 không chui vào ổ IPv6 trên Windows.
+                    try:
+                        o.setsockopt(socket.IPPROTO_IPV6,
+                                     socket.IPV6_V6ONLY, 1)
+                    except OSError:
+                        pass
+                o.bind((dia_chi, tram.cong))
+                if gia_dinh == socket.AF_INET6:
+                    # Agent hú qua multicast ff02::1 ("mọi máy cùng dây") —
+                    # Windows chỉ đưa gói đó vào ổ đã GHI DANH nhóm, và phải
+                    # ghi danh trên từng cạc mạng một. Đo thật 02/09/2026:
+                    # thiếu bước này thì bind ("::") vẫn điếc hẳn.
+                    nhom = socket.inet_pton(socket.AF_INET6, "ff02::1")
+                    try:
+                        cac_nga = [i for i, _t in socket.if_nameindex()]
+                    except OSError:
+                        cac_nga = [0]
+                    for nga in cac_nga:
+                        try:
+                            o.setsockopt(socket.IPPROTO_IPV6,
+                                         socket.IPV6_JOIN_GROUP,
+                                         nhom + struct.pack("I", nga))
+                        except OSError:
+                            pass
+                o.settimeout(1.0)
+            except OSError:
+                return None
+            tram._o_do.append(o)
+            return o
+
+        def nghe(o):
+            while tram._may is not None:
+                try:
+                    goi, nguon = o.recvfrom(64)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    # Windows: gói dội "cổng đóng" nổ ngay trên recvfrom
+                    # (WinError 10054) — tai chưa hỏng, nghe tiếp.
+                    if tram._may is None:
+                        return
+                    continue
+                if goi.strip() == b"shopapi-tram?" and tram.cho_phep(nguon[0]):
+                    try:
+                        o.sendto(json.dumps({"shopapi_tram": True,
+                                             "cong": tram.cong}).encode("utf-8"),
+                                 nguon)
+                    except OSError:
+                        pass
+            try:
+                o.close()
+            except OSError:
+                pass
+
+        for gia_dinh, dia_chi in ((socket.AF_INET, "0.0.0.0"),
+                                  (socket.AF_INET6, "::")):
+            o = mo(gia_dinh, dia_chi)
+            if o is not None:
+                threading.Thread(target=nghe, args=(o,), daemon=True,
+                                 name="tram-do").start()
+
+    def bat(self) -> None:
+        if self._may:
+            return
+        tram = self
+        self._nap_hop_viec()
+
+        class _ImKhiKhachNgat:
+            """Khách ngắt giữa chừng thì im, đừng đổ vết Python ra màn hình.
+
+            `socketserver.BaseServer.handle_error` mặc định in **cả vết đổ**
+            ra stderr. Mà cửa sổ đen của tool chính là stderr, nên chủ dự án
+            đọc được nguyên một khối `Traceback … ConnectionResetError:
+            [WinError 10054] An existing connection was forcibly closed by the
+            remote host` và tưởng tool hỏng (05/09/2026).
+
+            Nó không hỏng. Ngắt nửa chừng là chuyện thường của một trạm HTTP:
+            tab Chrome đóng, máy ảo ngủ, mạng chớp. Việc đã nhận xong vẫn nằm
+            nguyên trên đĩa; lượt đẩy dở thì extension tự gửi lại.
+
+            Cùng lẽ với chỗ nuốt 10054 ở tai dò phía trên. Chỉ nuốt ĐÚNG nhóm
+            lỗi đường truyền — lỗi khác vẫn để nguyên, vì im lặng nuốt hết là
+            tự bịt mắt mình.
+            """
+
+            def handle_error(self, request, client_address):
+                loai = sys.exc_info()[0]
+                if loai is not None and issubclass(
+                        loai, (ConnectionResetError, ConnectionAbortedError,
+                               BrokenPipeError, TimeoutError)):
+                    return
+                super().handle_error(request, client_address)
+
+        class May(_ImKhiKhachNgat, ThreadingHTTPServer):
+            # Hai tầng: một ổ cắm IPv6 tắt V6ONLY nhận luôn cả khách IPv4.
+            address_family = socket.AF_INET6
+            daemon_threads = True
+            # Windows: SO_REUSEADDR cho phép HAI tiến trình cùng nghe một cổng — đêm 07/09/2026
+            # hai bản tool cùng chiếm 8765, máy ảo gọi về trúng bản nào là ngẫu nhiên. Cổng
+            # phải là của MỘT trạm: bản thứ hai bind hỏng → OSError → nói "cổng nhận đang tắt".
+            allow_reuse_address = sys.platform != "win32"
+
+            def server_bind(self):
+                try:
+                    self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+                except OSError:
+                    pass
+                if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    try:
+                        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                    except OSError:
+                        pass
+                super().server_bind()
+
+        class May4(_ImKhiKhachNgat, ThreadingHTTPServer):
+            daemon_threads = True
+            allow_reuse_address = True
+
+        def _mo(cong: int):
+            try:
+                return May(("::", cong), _lam_xu_ly(tram))
+            except OSError as loi:
+                # Máy tắt hẳn IPv6 thì lùi về IPv4 thuần, vẫn chạy được. Nhưng
+                # cổng BẬN thì cả hai đường đều hỏng — đừng nuốt, để nơi gọi
+                # phân xử.
+                if getattr(loi, "errno", None) in _CONG_BAN or _la_cong_ban(loi):
+                    raise
+                return May4(("0.0.0.0", cong), _lam_xu_ly(tram))
+
+        # ═══ CỔNG BẬN: PHẢI HỎI AI GIỮ RỒI MỚI QUYẾT ═══
+        #
+        # Hai ca khác hẳn nhau, và xử giống nhau là hỏng một trong hai:
+        #
+        #   · MỘT BẢN TOOL KHÁC đang giữ  -> ĐỪNG lùi cổng. Lùi là có hai trạm
+        #     cùng sống, máy ảo gọi về trúng bản nào là ngẫu nhiên — đúng sự cố
+        #     đêm 07/09/2026 đã đẻ ra `SO_EXCLUSIVEADDRUSE` ở trên.
+        #   · MỘT THỨ KHÁC giữ (bộ test đang chạy, một tiến trình treo, phần
+        #     mềm lạ) -> lùi sang cổng kế là xong. Máy ảo TÌM trạm bằng dò UDP
+        #     (`shopapi-tram?`) chứ không đóng đinh số 8765, nên đổi cổng không
+        #     làm gãy gì cả.
+        #
+        # Chủ dự án, 07/09/2026: *"máy này rất nhiều phần mềm chạy, có cách nào
+        # fix triệt để không"*. Ca thật hôm ấy: cổng bị chính `pytest` của tool
+        # giữ, và bản cũ chỉ báo "chương trình khác giữ" rồi bỏ cuộc.
+        try:
+            self._may = _mo(self.cong)
+        except OSError as loi:
+            if tram_khac_dang_giu(self.cong):
+                raise OSError(
+                    "cổng {0} đang có MỘT TRẠM KHÁC của tool nghe. Chỉ được một "
+                    "trạm: tắt bản tool kia rồi bật lại.".format(self.cong)) from loi
+            ai = ai_giu_cong(self.cong)
+            cu = self.cong
+            for buoc in range(1, SO_CONG_LUI + 1):
+                try:
+                    self._may = _mo(cu + buoc)
+                    break
+                except OSError:
+                    continue
+            else:
+                raise OSError(
+                    "cổng {0} đang bị {1} giữ, và {2} cổng kế tiếp cũng bận."
+                    .format(cu, ai, SO_CONG_LUI)) from loi
+            self.ghi("cổng {0} đang bị {1} giữ — chuyển sang cổng {2}. "
+                     "Máy ảo tự dò ra cổng mới, không phải sửa gì."
+                     .format(cu, ai, self._may.server_address[1]))
+
+        # cong=0 là "cổng ngẫu nhiên" (bộ test dùng) — chốt lại số thật trước
+        # khi tai dò và loa gọi dùng tới nó.
+        self.cong = self._may.server_address[1]
+        self._luong = threading.Thread(target=self._may.serve_forever, daemon=True)
+        self._luong.start()
+        self._mo_tai_do()
+        self._mo_loa_goi()
+        self.ghi(f"trạm nhận đang nghe cổng {self.cong} → {os.path.join(self.goc, 'CHANNEL')}")
+        for d in dia_chi_may(self.cong):
+            self.ghi(f"  dán vào extension: {d}")
+
+    def _mo_loa_goi(self) -> None:
+        """Loa gọi: trạm TỰ giới thiệu mình với các VPS đã lưu, định kỳ.
+
+        Bản đầu bắt người dùng bấm nút "Kết nối máy ảo VPS" đúng lúc bên VPS
+        đang ngồi chờ — chủ dự án (02/09/2026): *"mày đang thiết kế cái gì
+        thế - đơn giản hóa đi"*. Đúng: bắt hai bên canh giờ nhau là thiết kế
+        tồi. Giờ trạm cứ vài chục giây gọi sang một lượt (mỗi máy MỘT gói UDP
+        — vài chục byte, ai không nghe thì gói rơi vào im lặng, không hại
+        gì), nên bên VPS chạy bộ cài lúc nào cũng được: tool đang mở là tự
+        thấy nhau trong vòng một nhịp.
+
+        Dừng bằng `Event.wait` — nút tắt trạm tỉnh ngay, không ngủ dày.
+        """
+        if self._nguon_khach is None:
+            return
+        tram = self
+
+        def goi():
+            while tram._may is not None:
+                try:
+                    khach = list(tram._nguon_khach() or [])
+                except Exception:  # noqa: BLE001 — nguồn hỏng thì nhịp sau thử lại
+                    khach = []
+                for ip in khach:
+                    if tram._may is None:
+                        return
+                    tram.gioi_thieu(ip, cong_nghe=tram.cong_khach, so_lan=1)
+                if tram._nghi_goi.wait(tram._nhip_gioi_thieu):
+                    return
+
+        self._nghi_goi.clear()
+        threading.Thread(target=goi, daemon=True, name="tram-loa").start()
+
+    def tat(self) -> None:
+        # Huỷ hẹn giờ TRƯỚC mọi lối thoát. Hẹn gọi hook còn treo tới 150 giây
+        # sau khi trạm tắt: nó là luồng nền, tắt máy chủ không đụng tới nó, và
+        # lúc nó tỉnh dậy thì giao diện có thể đã chết — đúng đường sập chép ở
+        # `go_hook_trang_chu`. Đặt sau `if not self._may: return` là bỏ sót
+        # đúng ca hay gặp nhất: trạm nhận gói rồi tắt mà chưa từng `bat()`.
+        with self._khoa_viec:
+            hen = list(self._hen_trang_chu.values())
+            self._hen_trang_chu.clear()
+        with self._khoa_tom_tat:
+            hen += list(self._hen_tom_tat.values())
+            self._hen_tom_tat.clear()
+        for h in hen:
+            try:
+                h.cancel()
+            except Exception:  # noqa: BLE001 — huỷ hụt thì thôi, đừng chặn đường tắt
+                pass
+        if not self._may:
+            return
+        self._nghi_goi.set()
+        try:
+            self._may.shutdown()
+            self._may.server_close()
+        except Exception:
+            pass
+        self._may = None
+        self._luong = None
+        for o in (getattr(self, "_o_do", None) or []):
+            try:
+                o.close()
+            except OSError:
+                pass
+        self._o_do = []
+        self.ghi("trạm nhận đã dừng")
+
+    # ------------------------------------------------------------------ nhận gói
+    def nhan_capture(self, b: dict) -> str:
+        """Ghi một gói xuống đĩa. Trả về 'ok' hoặc 'skip'."""
+        if la_rac(b.get("goi")):
+            self.so_rac += 1
+            if self.so_rac % 50 == 1:
+                self.ghi(f"bỏ gói làm mới tự động (đã bỏ {self.so_rac} — hãy cập nhật extension)")
+            return "skip"
+
+        kd = thu_muc_kenh(b.get("kenh") or "kenh", self.goc)
+        vid = an_toan(b.get("id"))
+        tm = os.path.join(kd, vid, an_toan(b.get("label")), "raw")
+        os.makedirs(tm, exist_ok=True)
+        ten = an_toan(b.get("ten") or f"{datetime.now():%Y%m%d-%H%M%S}.json")
+        if not ten.endswith(".json"):
+            ten += ".json"
+        p = os.path.join(tm, ten)
+        io.open(p, "w", encoding="utf-8").write(json.dumps(b.get("goi"), ensure_ascii=False))
+        self.so_goi += 1
+        self.ghi(f"nhận {os.path.relpath(p, self.goc)} ({os.path.getsize(p) // 1024} KB)")
+
+        goi = b.get("goi") or {}
+        if "csv_export" in str(goi.get("url", "")):
+            self._bung_zip(goi, os.path.dirname(tm))
+        self._lam_moi_tom_tat(an_toan(b.get("kenh") or "kenh"))
+        return "ok"
+
+    #: Giữ ảnh của bao nhiêu mốc gần nhất mỗi video. Ảnh là để ĐỐI CHIẾU khi nghi số sai, không
+    #: phải kho lưu trữ: mốc cũ đã chốt sổ thì gói JSON là đủ. 10 mốc ≈ hai ngày đầu của một
+    #: video, đúng quãng mọi quyết định xảy ra.
+    GIU_ANH_MAY_MOC = 10
+
+    def nhan_anh(self, b: dict) -> str:
+        """Ghi bằng chứng nhìn được của một tab số liệu: ảnh, CHỮ trên trang, và lỗi (nếu có).
+
+        Chủ dự án, 05/09/2026: *"mày có thể yêu cầu extension chụp ảnh ở các tab dữ liệu để nếu
+        nó lỗi mày cũng biết"*. Gói JSON về đủ KHÔNG chứng minh số đúng — hôm ấy tìm ra bốn lỗi
+        giải mã mà mọi gói vẫn về đều đặn.
+
+        Ba thứ, ba việc khác nhau:
+        * `anh`  — để MẮT NGƯỜI soi; bắt được đăng xuất, trang trắng, hộp thoại chắn ngang.
+        * `chu`  — chữ Studio đang hiển thị. Đây mới là lưới an toàn thật: MÁY so được số trong
+          tệp với số trên trang, và nó vẫn về khi màn hình không vẽ (RDP ngắt, cửa sổ thu nhỏ).
+        * `loi`  — vì sao không chụp được ảnh. Không ghi lại thì lần sau vẫn mù đúng như hôm nay:
+          bản 2.5.0 lấy đủ mọi bảng mà không một tấm ảnh nào, và không có gì nói tại sao.
+
+        Thiếu ảnh KHÔNG phải lý do vứt chữ — đúng cảnh đang gặp.
+        """
+        kd = thu_muc_kenh(b.get("kenh") or "kenh", self.goc)
+        vid = an_toan(b.get("id"))
+        tm = os.path.join(kd, vid, an_toan(b.get("label")), "anh")
+        goc_ten = an_toan(b.get("ten") or f"{datetime.now():%Y%m%d-%H%M%S}")
+        for duoi in (".jpg", ".txt"):
+            if goc_ten.endswith(duoi):
+                goc_ten = goc_ten[: -len(duoi)]
+        da_ghi = []
+
+        raw = b""
+        try:
+            raw = base64.b64decode(str(b.get("anh") or ""), validate=True)
+        except Exception:
+            raw = b""
+        if raw and raw.startswith(b"\xff\xd8"):      # chỉ nhận JPEG thật
+            os.makedirs(tm, exist_ok=True)
+            io.open(os.path.join(tm, goc_ten + ".jpg"), "wb").write(raw)
+            da_ghi.append(f"ảnh {len(raw) // 1024} KB")
+
+        chu = str(b.get("chu") or "")
+        loi = str(b.get("loi") or "")
+        if chu or loi:
+            os.makedirs(tm, exist_ok=True)
+            than = chu
+            if loi:
+                than = f"[KHÔNG CHỤP ĐƯỢC ẢNH] {loi}\n\n{chu}"
+            io.open(os.path.join(tm, goc_ten + ".txt"), "w", encoding="utf-8").write(than)
+            da_ghi.append(f"chữ {len(chu)} ký tự" + (f" · LỖI ẢNH: {loi[:80]}" if loi else ""))
+
+        if not da_ghi:
+            return "anh la"
+        self.ghi(f"bằng chứng {vid}/{b.get('label')}/{goc_ten}: " + " · ".join(da_ghi))
+        self._don_anh_cu(os.path.join(kd, vid))
+        return "ok"
+
+    def _don_anh_cu(self, thu_muc_video: str) -> int:
+        """Xoá ảnh của các mốc cũ, giữ `GIU_ANH_MAY_MOC` mốc mới nhất. Trả về số thư mục đã dọn.
+
+        Không có vòng dọn thì 4 lượt/ngày × 6 video × 4 tab ≈ 10 MB mỗi ngày, và không ai để ý
+        cho tới lúc đĩa đầy — kênh này đã có tiền lệ với thư mục rác của nhà máy ảnh.
+        Chỉ xoá thư mục `anh/`; gói JSON và CSV KHÔNG bao giờ bị đụng tới.
+        """
+        try:
+            co = [d for d in os.listdir(thu_muc_video)
+                  if os.path.isdir(os.path.join(thu_muc_video, d, "anh"))]
+        except OSError:
+            return 0
+        if len(co) <= self.GIU_ANH_MAY_MOC:
+            return 0
+        co.sort(key=lambda d: os.path.getmtime(os.path.join(thu_muc_video, d, "anh")))
+        n = 0
+        for d in co[:-self.GIU_ANH_MAY_MOC]:
+            try:
+                shutil.rmtree(os.path.join(thu_muc_video, d, "anh"))
+                n += 1
+            except OSError:
+                pass
+        if n:
+            self.ghi(f"dọn ảnh cũ: {n} mốc (giữ {self.GIU_ANH_MAY_MOC} mốc mới nhất)")
+        return n
+
+    TRE_TOM_TAT_IM_GIAY = 15.0
+
+    def _lam_moi_tom_tat(self, kenh: str) -> None:
+        """Làm mới `bang-tom-tat.csv` — bảng cho NGƯỜI ở cửa thư mục chi-so.
+
+        Gói về theo chùm (một lượt quét = vài chục gói). Mỗi gói dời đồng hồ;
+        chỉ khi kênh im 15 giây mới giải mã đúng một lần. Đây phải là debounce
+        ở CUỐI chùm: chạy ở gói đầu rồi chặn 5 phút từng làm raw cấp kênh đã
+        về đủ nhưng `kenh-theo-ngay.csv` không bao giờ được tạo.
+        """
+        def lam():
+            with self._khoa_tom_tat:
+                self._hen_tom_tat.pop(kenh, None)
+            try:
+                from core import chi_so_ytb as _cs  # noqa: PLC0415
+                duong_kenh_goc = os.path.join(self.goc, "CHANNEL")
+                _cs.xuat_tom_tat(kenh, goc=duong_kenh_goc)
+            except Exception as loi:  # noqa: BLE001 — bảng phụ, hỏng không được chặn gói
+                self.ghi(f"làm bảng tóm tắt hỏng: {loi}")
+
+        moi = threading.Timer(self.TRE_TOM_TAT_IM_GIAY, lam)
+        moi.daemon = True
+        with self._khoa_tom_tat:
+            cu = self._hen_tom_tat.get(kenh)
+            if cu is not None:
+                cu.cancel()
+            self._hen_tom_tat[kenh] = moi
+        moi.start()
+
+    # ------------------------------------------------------------------ hộp việc
+    def giao_viec(self, kenh: str, loai: str, tham_so: Optional[dict] = None) -> int:
+        """Xếp một lệnh cho máy ảo của `kenh`. Trả về số hiệu việc."""
+        with self._khoa_viec:
+            self._so_viec += 1
+            viec = {"id": self._so_viec, "kenh": an_toan(kenh), "loai": str(loai),
+                    "tham_so": tham_so or {}, "luc": datetime.now().isoformat(timespec="seconds")}
+            self._viec.append(viec)
+            if str(loai) == "quet-studio":
+                # Ra lệnh là LÀM: dặn tiện ích chụp lại TẤT CẢ khi nó hỏi.
+                self._lenh_tien_ich[viec["kenh"]] = {"chup": "het"}
+                # Xoá cờ "đã xong" của lượt TRƯỚC — lượt quét MỚI này chưa ai
+                # báo xong cả (xem `_quet_xong` ở __init__).
+                self._quet_xong.pop(viec["kenh"], None)
+            self._luu_hop_viec()
+        self.ghi(f"xếp việc #{viec['id']} [{loai}] cho kênh {viec['kenh']}")
+        return viec["id"]
+
+    def giao_quet_day_du(self, kenh: str) -> Tuple[int, int]:
+        """MỘT nút = quét Studio rồi quét trang chủ, đúng thứ tự.
+
+        Chủ dự án, 05/09/2026: *"sao không để cái quét trang chủ làm cùng với cái quét studio
+        luôn… đồng bộ 1 nút đủ chức năng"*. Xếp hai việc liền nhau ở trạm — agent (kể cả bản
+        cũ trên máy ảo) làm tuần tự: Studio ~8 phút cho extension chụp, rồi trang chủ ~5 phút
+        cho 3 lượt tải. Không cần sửa gì bên máy ảo. Trả (số việc Studio, số việc trang chủ).
+        """
+        return self.giao_viec(kenh, "quet-studio"), self.giao_viec(kenh, "quet-trang-chu")
+
+    def lay_viec(self, kenh: str, may: str, ip: str = "") -> Optional[dict]:
+        """Agent hỏi việc: trả việc CŨ NHẤT của kênh đó (rồi rút khỏi hộp).
+
+        Lượt hỏi nào — kể cả tay không — cũng ghi nhịp tim, để tab Máy VM nói
+        được máy nào đang nối và lần cuối lên tiếng lúc nào.
+        """
+        kenh = an_toan(kenh)
+        with self._khoa_viec:
+            self._nhip_tim[(kenh, an_toan(may))] = {
+                "ip": str(ip), "luc": datetime.now().isoformat(timespec="seconds")}
+            self._khai_tu_viec_qua_han(kenh)
+            for i, viec in enumerate(self._viec):
+                if viec["kenh"] == kenh:
+                    # Ghi mốc số gói lúc GIAO — lúc báo xong mà số gói vẫn
+                    # y nguyên thì lượt quét đó không cào được gì.
+                    self._goi_moc[viec["id"]] = (viec["loai"], self.so_goi)
+                    viec = self._viec.pop(i)
+                    cu = self._viec_dang.get(kenh)
+                    if cu and cu.get("id") != viec["id"]:
+                        # 11:27 07/09: agent bị mở lại (bấm "Cập nhật" trên máy ảo) khi đang quét Studio
+                        # (#7); bản mới lấy #8 và ghi đè ô "đang làm" → #7 biến mất không dấu vết.
+                        self._goi_moc.pop(cu.get("id"), None)
+                        self._ket_qua_viec.append({
+                            "id": cu.get("id"), "kenh": kenh, "loai": cu.get("loai"), "ket_qua": "",
+                            "loi": "máy ảo lấy việc mới khi việc này chưa báo xong — agent bị mở lại giữa chừng",
+                            "canh_bao": "", "luc": datetime.now().isoformat(timespec="seconds")})
+                        del self._ket_qua_viec[:-20]
+                        self.ghi("máy ảo kênh {0}: việc #{1} MẤT — agent lấy #{2} khi chưa báo xong #{1}".format(
+                            kenh, cu.get("id"), viec["id"]))
+                    self._viec_dang[kenh] = {"id": viec["id"], "loai": viec["loai"], "may": an_toan(may),
+                                             "luc": datetime.now().isoformat(timespec="seconds")}
+                    self._luu_hop_viec()
+                    self.ghi(f"máy ảo {an_toan(may)} nhận việc #{viec['id']} [{viec['loai']}] kênh {kenh}")
+                    return viec
+        return None
+
+    #: Việc "đang làm" quá ngần này phút mà không báo xong = coi như mất (agent bị mở lại giữa chừng).
+    HAN_VIEC_PHUT = {"quet-studio": 20, "quet-trang-chu": 15}
+
+    def _khai_tu_viec_qua_han(self, kenh: str) -> None:
+        """Gọi trong `_khoa_viec`. 01:39 07/09/2026: chủ dự án mở cửa sổ agent trên máy ảo để xem,
+        bản mới "dọn agent cũ" đang làm việc #2 → việc chết không ai báo, tool ngồi chờ mãi."""
+        dang = self._viec_dang.get(kenh)
+        if not dang:
+            return
+        try:
+            phut = (datetime.now() - datetime.fromisoformat(str(dang.get("luc")))).total_seconds() / 60
+        except (TypeError, ValueError):
+            phut = 0
+        han = self.HAN_VIEC_PHUT.get(str(dang.get("loai")), 30)
+        if phut <= han:
+            return
+        self._viec_dang.pop(kenh, None)
+        self._goi_moc.pop(dang.get("id"), None)
+        loi = ("máy ảo không báo xong sau {0} phút — agent trên máy ảo bị mở lại giữa chừng? "
+               "Bấm MỘT NÚT lại nếu cần.".format(int(phut)))
+        self._ket_qua_viec.append({"id": dang.get("id"), "kenh": kenh, "loai": dang.get("loai"),
+                                   "ket_qua": "", "loi": loi, "canh_bao": "",
+                                   "luc": datetime.now().isoformat(timespec="seconds")})
+        del self._ket_qua_viec[:-20]
+        self._luu_hop_viec()
+        self.ghi("máy ảo kênh {0}: việc #{1} MẤT — {2}".format(kenh, dang.get("id"), loi))
+
+    # ── Hộp việc trên đĩa ────────────────────────────────────────────────────
+    #
+    # Trước 07/09/2026 hộp nằm trong RAM ("tắt tool thì lệnh chưa giao coi như bỏ"). Đêm ấy tool
+    # bị khởi động lại đúng lúc chủ dự án vừa bấm MỘT NÚT: lệnh mất không dấu vết, máy ảo không
+    # nhận gì, người bấm không hiểu chuyện gì xảy ra. Lệnh là thứ người ta chờ 15 phút — phải
+    # sống qua một lần mở lại tool.
+    def _tep_hop_viec(self) -> str:
+        return os.path.join(self.goc, "CHANNEL", "hop-viec-may-ao.json")
+
+    def _luu_hop_viec(self) -> None:
+        """Gọi trong `_khoa_viec`. Ghi hỏng thì thôi — hộp RAM vẫn đúng."""
+        try:
+            p = self._tep_hop_viec()
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with io.open(p, "w", encoding="utf-8") as tep:
+                json.dump({"so_viec": self._so_viec, "viec": self._viec, "viec_dang": self._viec_dang},
+                          tep, ensure_ascii=False, indent=1)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _nap_hop_viec(self) -> None:
+        try:
+            with io.open(self._tep_hop_viec(), "r", encoding="utf-8") as tep:
+                d = json.load(tep)
+        except Exception:  # noqa: BLE001 — chưa có tệp là bình thường
+            return
+        with self._khoa_viec:
+            self._so_viec = max(self._so_viec, int(d.get("so_viec") or 0))
+            self._viec = [v for v in (d.get("viec") or []) if isinstance(v, dict) and "id" in v]
+            self._viec_dang = {k: v for k, v in (d.get("viec_dang") or {}).items() if isinstance(v, dict)}
+        if self._viec or self._viec_dang:
+            self.ghi("hộp việc nạp lại từ đĩa: {0} việc chờ, {1} kênh có việc đang làm"
+                     .format(len(self._viec), len(self._viec_dang)))
+
+    def tinh_trang(self, kenh: str) -> dict:
+        """Một kênh: máy ảo nào, gọi về bao lâu rồi, việc nào chờ / đang làm / vừa xong.
+
+        Cho tab Đối thủ vẽ dòng trạng thái sống sau khi bấm MỘT NÚT. `nhip_tim_giay` = số giây
+        từ lần máy ảo gọi về gần nhất (None = chưa từng gọi từ lúc mở tool).
+        """
+        kenh = an_toan(kenh)
+        with self._khoa_viec:
+            may = [{"may": m, **v} for (k, m), v in self._nhip_tim.items() if k == kenh]
+            cho = [dict(v) for v in self._viec if v.get("kenh") == kenh]
+            dang = dict(self._viec_dang.get(kenh) or {})
+            xong = [dict(v) for v in self._ket_qua_viec if v.get("kenh") == kenh][-4:]
+        may.sort(key=lambda x: x.get("luc", ""), reverse=True)
+        giay = None
+        if may:
+            try:
+                giay = max(0, int((datetime.now() - datetime.fromisoformat(may[0]["luc"])).total_seconds()))
+            except (ValueError, TypeError):
+                giay = None
+        return {"may": may[0]["may"] if may else "", "nhip_tim_luc": may[0]["luc"] if may else "",
+                "nhip_tim_giay": giay, "viec_cho": cho, "viec_dang": dang, "vua_xong": xong}
+
+    def viec_xong(self, kenh: str, so: int, ket_qua: str = "", loi: str = "") -> None:
+        """Agent báo xong (hay hỏng) một việc — kể cho người, và GIỮ LẠI.
+
+        02/09/2026, đo thật: lệnh quét chạy trọn 7 phút, agent báo "xong",
+        nhưng `so_goi` đứng im — Chrome mở mà extension không gửi được gói
+        nào (chưa cài trong Chrome của kênh). Người ngồi ngoài chỉ thấy
+        "xong" là bị lừa. Nên: so mốc số gói lúc giao với lúc xong — quét
+        "xong" mà 0 gói về thì nói toạc ra, và cất 20 kết quả gần nhất cho
+        `/may-noi` trả — ra lệnh từ xa xong còn đọc được đầu đuôi.
+        """
+        canh_bao = ""
+        loai, moc = self._goi_moc.pop(so, ("", None))
+        # Lệnh ép còn nằm nguyên sau khi việc quét đã xong = tiện ích trong
+        # Chrome của máy ảo CHƯA HỎI lệnh lần nào → nó là bản cũ (agent tải
+        # bản mới về đĩa nhưng Chrome không tự nạp lại). Đo thật 02/09: lệnh
+        # nằm 15 phút không ai lấy. Nói toạc thay vì để người dùng ngồi đoán.
+        if loai == "quet-studio":
+            with self._khoa_viec:
+                con = an_toan(kenh) in self._lenh_tien_ich
+            if con:
+                canh_bao = ("tiện ích chưa hỏi lệnh ép chụp — bản trong "
+                            "Chrome còn cũ. Trên máy ảo mở chrome://extensions "
+                            "rồi bấm nút ↻ (Tải lại) ở tiện ích Chỉ số kênh, "
+                            "phiên bản phải là 2.4.1 trở lên.")
+        if (not loi and moc is not None and self.so_goi == moc
+                and loai in ("quet-studio", "quet-trang-chu")):
+            canh_bao = ("quét chạy trọn nhưng KHÔNG có gói số liệu nào về — "
+                        "extension đã cài trong Chrome của kênh chưa? "
+                        "(chrome://extensions → Tải tiện ích đã giải nén → "
+                        "thư mục vm/tien-ich)")
+        if loi:
+            self.ghi(f"máy ảo kênh {an_toan(kenh)}: việc #{so} HỎNG — {str(loi)[:200]}")
+        else:
+            self.ghi(f"máy ảo kênh {an_toan(kenh)}: việc #{so} xong. {str(ket_qua)[:200]}")
+        if canh_bao:
+            self.ghi(f"  ⚠ {canh_bao}")
+        with self._khoa_viec:
+            self._ket_qua_viec.append({
+                "id": so, "kenh": an_toan(kenh), "loai": loai,
+                "ket_qua": str(ket_qua)[:300], "loi": str(loi)[:300],
+                "canh_bao": canh_bao,
+                "luc": datetime.now().isoformat(timespec="seconds")})
+            del self._ket_qua_viec[:-20]
+            dang = self._viec_dang.get(an_toan(kenh))
+            if dang and int(dang.get("id") or -1) == int(so):
+                self._viec_dang.pop(an_toan(kenh), None)
+            self._luu_hop_viec()
+
+    # ── "Hết hàng" — tiện ích báo cào xong TRƯỚC khi hết CHO_QUET_GIAY ────────
+    #
+    # Đợt 2, 29/09/2026 (kiểm toán #10): trước đây agent NGỦ TRỌN
+    # `CHO_QUET_GIAY` (mặc định 480s) mỗi lượt quét Studio dù tiện ích đã cào
+    # xong sớm hơn nhiều — nhân với hàng chục kênh/ngày là hàng giờ ngủ oan.
+    # Tiện ích (`background.js`) tự biết lúc nào hết video để chụp; báo về
+    # đây thì `vm/agent.py` tỉnh sớm thay vì đoán mù thời lượng.
+
+    def bao_quet_xong(self, kenh: str) -> None:
+        """`POST /quet-xong` — tiện ích báo đã cào hết video của lượt này."""
+        kenh = an_toan(kenh)
+        with self._khoa_viec:
+            self._quet_xong[kenh] = time.time()
+        self.ghi(f"kênh {kenh}: tiện ích báo đã quét xong (hết hàng)")
+
+    def da_quet_xong(self, kenh: str) -> bool:
+        """`GET /quet-xong?kenh=` — agent hỏi mỗi nhịp tim trong lúc chờ.
+
+        Cờ bị XOÁ ngay lúc `giao_viec` giao việc quét MỚI (xem đó), nên có cờ
+        ở đây chắc chắn là của LƯỢT ĐANG CHỜ, không phải cờ cũ sót lại.
+        """
+        with self._khoa_viec:
+            return an_toan(kenh) in self._quet_xong
+
+    def may_dang_noi(self) -> List[dict]:
+        """Các máy ảo từng lên tiếng, mới nhất trước — cho tab Máy VM vẽ bảng."""
+        with self._khoa_viec:
+            ra = [{"kenh": k, "may": m, **v} for (k, m), v in self._nhip_tim.items()]
+        return sorted(ra, key=lambda x: x.get("luc", ""), reverse=True)
+
+    def viec_cho(self) -> List[dict]:
+        with self._khoa_viec:
+            return [dict(v) for v in self._viec]
+
+    def nhan_doi_thu(self, kenh: str, danh_sach: List[str]) -> int:
+        """Máy ảo quét trang chủ thấy kênh lạ → nối vào SỔ ĐỐI THỦ của kênh.
+
+        Logic của chủ dự án (01/09/2026): *"trang chủ là nơi có content được
+        đề xuất… cái đuôi để nắm không phải content mà là ĐỐI THỦ — nắm được
+        hết đối thủ là nắm được hết content"*. Sổ ở `nghien-cuu/doi-thu.txt`
+        — đúng chỗ tab Đối thủ đang đọc, thêm vào là lượt quét sau quét luôn.
+        """
+        from core import doi_thu_kenh as so  # noqa: PLC0415 — tránh vòng nhập
+
+        cu = so.doc_doi_thu(self.goc, kenh)
+        da_co = {d.strip() for d in cu.splitlines() if d.strip()}
+        moi = []
+        for d in danh_sach:
+            d = str(d).strip()
+            if d and d not in da_co:
+                moi.append(d)
+                da_co.add(d)    # trùng NGAY TRONG một gói cũng chỉ tính một
+        if moi:
+            so.luu_doi_thu(self.goc, kenh, (cu.strip() + "\n" if cu.strip() else "")
+                           + "\n".join(moi))
+            self.ghi(f"kênh {an_toan(kenh)}: +{len(moi)} đối thủ mới từ trang chủ")
+        return len(moi)
+
+    #: Cột của `nghien-cuu/trang-chu.csv` — mỗi video trên trang chủ một dòng, GHI NỐI
+    #: theo lượt quét để còn so hai ngày với nhau ("máy đang chiếu gì cho tệp này").
+    #: "Lượt tải": extension ≥ 2.6.1 tải lại trang chủ 2–3 lượt trong một đợt quét — cột này
+    #: đo thẳng giả thuyết của chủ dự án (*"mỗi lần load trang chủ có thể ra dữ liệu mới"*):
+    #: lượt 2, 3 ra thêm bao nhiêu video mới so với lượt 1. Phải trùng `core.trang_chu.COT`.
+    COT_TRANG_CHU = ("Lúc quét", "Vị trí", "Kệ", "Mã video", "Tiêu đề", "Kênh",
+                     "Link kênh", "Lượt xem", "Đăng", "Dài", "Short", "Bị loại", "Lượt tải")
+
+    def nhan_trang_chu(self, kenh: str, video: List[dict],
+                       danh_sach: Optional[List[str]] = None) -> Dict[str, int]:
+        """Máy ảo mở trang chủ YouTube của phiên kênh → extension gom TỪNG VIDEO được đề xuất.
+
+        Chủ dự án, 05/09/2026: *"ở VM tài khoản kênh trang chủ có các video đang xu hướng…
+        để tool cào trang chủ lấy thêm đối thủ, từ đó cào content đối thủ về"*. Bản trước chỉ
+        gom LINK KÊNH rồi nối thẳng vào hộp thư, không tên, không lọc — đúng đường mà hai kênh
+        雑学 (カップ麺を待つ間に見たい雑学 · 大人の心理雑学, 150 dòng) đã lọt vào sổ, và đúng
+        thứ khiến bảng phân tuyến sai (xem `phan_tuyen.ap_luat_cung`).
+
+        Ba việc, theo thứ tự:
+        1. Ghi cả danh sách video vào `trang-chu.csv` — kể cả video bị loại, đánh dấu cột
+           "Bị loại". Không mất gì; người xem sổ thấy máy đang chiếu gì cho tệp của kênh.
+        2. Lọc kênh nguồn bằng từ loại trừ (tên kênh, handle, tiêu đề video) và bỏ kênh chỉ
+           thấy qua Shorts — hai loại này chưa bao giờ là nguồn remake được.
+        3. Kênh còn lại → `nhan_doi_thu` (hộp thư, tự khử trùng) như cũ.
+
+        Trả `{"video": n, "kenh_moi": n, "bi_loai": n}` để extension ghi nhật ký cho đúng.
+        """
+        from core import doi_thu_kenh as so  # noqa: PLC0415 — tránh vòng nhập
+        from core.phan_tuyen import TU_LOAI_TRU  # noqa: PLC0415
+        from core.trang_chu import dung_tieng, kenh_bi_loai, ngon_ngu_kenh  # noqa: PLC0415
+
+        kenh = an_toan(kenh or "kenh")
+        lang = ngon_ngu_kenh(self.goc, kenh)
+        # 30/09/2026, Đợt 4 (A6): loại theo bộ từ của hồ sơ ngách (`trang_chu.bo_tu_ngach`); nhóm
+        # tam-ly-nhat là bản sao đúng hằng cũ, kênh không nhóm → hằng cũ. Tiến trình trạm đang chạy
+        # mà `trang_chu` còn bản cũ (chưa khởi động lại) → dùng hằng cũ, không vỡ.
+        try:
+            from core.trang_chu import bo_tu_ngach  # noqa: PLC0415
+
+            bo = bo_tu_ngach(self.goc, kenh)
+            tu_loai_tru_hl = bo["tu_loai_tru"]
+            loc_kenh = {k: bo[k] for k in ("tu_loai_tru", "ten_kenh_loai_tru", "handle_loai_tru")}
+        except Exception:  # noqa: BLE001
+            tu_loai_tru_hl, loc_kenh = TU_LOAI_TRU, {}
+        luc = datetime.now().strftime("%Y-%m-%d %H:%M")
+        tm = so.thu_muc_nghien_cuu(self.goc, kenh)
+        os.makedirs(tm, exist_ok=True)
+        duong = os.path.join(tm, "trang-chu.csv")
+        moi_tao = not os.path.exists(duong)
+        # Gói trang chủ cũng là gói số liệu: 09:21 07/09 việc #6 quét trang chủ xong bị gắn cảnh báo
+        # "KHÔNG có gói số liệu nào về" dù 290 video vừa về — vì chỉ /capture mới đếm `so_goi`.
+        self.so_goi += 1
+
+        kenh_sach: List[str] = []
+        kenh_loai = set()
+        dong_ghi = []
+        for i, v in enumerate(video or []):
+            if not isinstance(v, dict):
+                continue
+            tieu_de = str(v.get("tieu_de") or "").strip()
+            ten_kenh = str(v.get("ten_kenh") or "").strip()
+            link_kenh = str(v.get("link_kenh") or "").strip()
+            short = bool(v.get("short"))
+            ly_do = ""
+            if any(t in tieu_de for t in tu_loai_tru_hl) or kenh_bi_loai(ten_kenh, link_kenh, **loc_kenh):
+                ly_do = "từ loại trừ"
+            elif short:
+                ly_do = "short"
+            elif (tieu_de or ten_kenh) and not dung_tieng(tieu_de + " " + ten_kenh, lang):
+                # Kênh tiếng Nhật mà cả tiêu đề lẫn tên kênh không có chữ Nhật — lượt cào thật đầu
+                # tiên đã đổ 267 kênh Việt/Anh/Tây Ban Nha vào hộp thư vì thiếu đúng dòng này.
+                ly_do = "không đúng tiếng"
+            dong_ghi.append([luc, str(v.get("vi_tri", i + 1)), str(v.get("ke") or ""),
+                             str(v.get("ma") or ""), tieu_de, ten_kenh, link_kenh,
+                             str(v.get("luot_xem") or ""), str(v.get("dang") or ""),
+                             str(v.get("dai") or ""), "x" if short else "", ly_do,
+                             str(v.get("luot") or "")])
+            if link_kenh:
+                if ly_do:
+                    kenh_loai.add(link_kenh)
+                elif ten_kenh or tieu_de:
+                    kenh_sach.append(link_kenh)
+                # link mà không có tên/tiêu đề: chưa biết là ai → để `hoan_thien` tra bằng
+                # yt-dlp rồi mới quyết, không nối mù vào hộp thư
+        # Link kênh rời (bản extension cũ, hoặc kênh không kèm video) — không có tên để lọc
+        # theo tên, nhưng handle vẫn lọc được (雑学 hay nằm ngay trong handle).
+        for d in danh_sach or []:
+            d = str(d).strip()
+            if not d or d in kenh_sach or d in kenh_loai:
+                continue
+            if kenh_bi_loai("", d, **loc_kenh):
+                kenh_loai.add(d)
+            # link rời không tên (extension cũ, thanh bên): KHÔNG nối mù — chờ `hoan_thien` tra.
+            # Bản 2.4 nối thẳng chính là đường 雑学 và 267 kênh lạ đã đi vào sổ.
+        # kênh vừa sạch ở video này vừa bị loại ở video khác → loại (một dòng 雑学 là đủ)
+        kenh_sach = [k for k in dict.fromkeys(kenh_sach) if k not in kenh_loai]
+
+        if dong_ghi:
+            with open(duong, "a", encoding="utf-8-sig", newline="") as tep:
+                w = csv.writer(tep)
+                if moi_tao:
+                    w.writerow(list(self.COT_TRANG_CHU))
+                w.writerows(dong_ghi)
+        them = self.nhan_doi_thu(kenh, kenh_sach) if kenh_sach else 0
+        self.ghi(f"kênh {kenh}: trang chủ {len(dong_ghi)} video · +{them} đối thủ mới · "
+                 f"loại {len(kenh_loai)} kênh (雑学/loại trừ/Shorts)")
+        self._hen_hook_trang_chu(kenh)
+        return {"video": len(dong_ghi), "kenh_moi": them, "bi_loai": len(kenh_loai)}
+
+    def _hen_hook_trang_chu(self, kenh: str) -> None:
+        """Ghi mốc gói vừa về; đặt lại đồng hồ — im đủ `tre_hook_trang_chu` giây mới gọi hook."""
+        import threading  # noqa: PLC0415
+
+        with self._khoa_viec:
+            self._luc_trang_chu.setdefault(kenh, []).append(time.time())
+            cu = self._hen_trang_chu.pop(kenh, None)
+            if cu is not None:
+                cu.cancel()
+            if not HOOK_TRANG_CHU:
+                return
+            hen = threading.Timer(max(0.0, float(self.tre_hook_trang_chu)), self._goi_hook_trang_chu, args=(kenh,))
+            hen.daemon = True
+            self._hen_trang_chu[kenh] = hen
+            hen.start()
+
+    def _goi_hook_trang_chu(self, kenh: str) -> None:
+        with self._khoa_viec:
+            self._hen_trang_chu.pop(kenh, None)
+        for ham in list(HOOK_TRANG_CHU):
+            try:
+                ham(kenh)
+            except Exception as loi:  # noqa: BLE001 — hook của giao diện hỏng không giết trạm
+                self.ghi("hook trang chủ hỏng ({0}): {1}".format(kenh, str(loi)[:120]))
+
+    def goi_trang_chu_sau(self, kenh: str, luc: float) -> int:
+        """Bao nhiêu gói trang chủ của `kenh` đã về SAU mốc `luc` — để giao diện biết máy ảo có trả lời không."""
+        with self._khoa_viec:
+            return sum(1 for t in self._luc_trang_chu.get(an_toan(kenh), []) if t > luc)
+
+    # ── Kho lời thoại: trạm giao việc "cần lấy" và nhận chữ về ───────────────
+    #
+    # ═══ VÌ SAO CHIỀU NÀY PHẢI ĐI QUA TRẠM (22/09/2026) ═══
+    #
+    # Khâu đầu của sản xuất cần LỜI THOẠI video đối thủ, lấy qua
+    # `core.script_video.lay_script`. Đêm 22/09/2026 cả ba kênh chết ở đúng
+    # đó: `yt-dlp` và `youtube-transcript-api` đều bị YouTube chặn theo địa
+    # chỉ mạng của VPS này (`IpBlocked`, *"IP belonging to a cloud
+    # provider"*), và cái chặn nặng dần THEO SỐ LƯỢT HỎI — cookie, đổi
+    # `player_client`, nâng yt-dlp, proxy đều không cứu được đường tải tiếng.
+    #
+    # Thứ vẫn vào YouTube bình thường từ đúng địa chỉ ấy là TRÌNH DUYỆT KÊNH
+    # (phiên Chromium chống vân tay mà `vm/agent.py` mở mỗi sáng). Nên chữ đi
+    # đường ấy: trạm nói cho phiên biết CẦN LẤY video nào
+    # (`GET /loi-thoai/can-lay`), extension mở trang `watch` và hút bảng
+    # "Show transcript", rồi gửi về (`POST /loi-thoai`). Trạm cất vào kho dùng
+    # chung của nhóm (`core/loi_thoai.py`) và lúc 02:00 sản xuất chỉ ĐỌC kho.
+    #
+    # Trạm là chỗ duy nhất biết CẢ HAI đầu — bảng xếp hạng nguồn (trên đĩa của
+    # tool) và phiên trình duyệt (gọi về đây) — nên nó là chỗ duy nhất nối
+    # được hai đầu ấy. Máy ảo không được tự chọn video: nó không có bảng xếp
+    # hạng, và một pool tự chọn là một pool vòng chọn nguồn không bao giờ nhìn.
+
+    #: Mặc định trả bao nhiêu video mỗi lượt hỏi. 8 × (4–8 giây chờ giữa các
+    #: video) ≈ 30–65 giây một phiên — đủ để kho dày lên vài chục video một
+    #: tuần, đủ thưa để phiên trình duyệt đi như một người xem bình thường.
+    #: Cào dồn là cách nhanh nhất để mất luôn cái đường duy nhất còn sống.
+    K_CAN_LAY = 8
+
+    #: Chặn trên, kể cả khi ai đó gọi `?k=500`. Phiên chỉ chờ `K × 12` giây rồi
+    #: đi tiếp (xem `vm/agent.lay_loi_thoai`), nên danh sách dài hơn thế chỉ là
+    #: một lời hứa không giữ được.
+    K_CAN_LAY_TOI_DA = 30
+
+    def can_lay_loi_thoai(self, kenh: str, k: int = 0) -> dict:
+        """K video ĐẦU BẢNG xếp hạng của kênh mà kho CHƯA có lời thoại.
+
+        Dùng lại ĐÚNG bộ xếp hạng của vòng chọn nguồn
+        (`core.tu_chay.ung_vien_xep_hang` + `co_cau_hinh_v7`) — không viết bộ
+        thứ hai. Lệch hai bộ nghĩa là trình duyệt đi hút một pool video mà
+        02:00 sáng hôm sau vòng chọn nguồn không bao giờ chọn tới: tốn cả
+        phiên, kho vẫn rỗng đúng chỗ cần.
+
+        Trừ video MỌI KÊNH TRONG NHÓM đã remake (`nhom_kenh.video_da_lam_ca_nhom`,
+        gộp `da_lam` của từng thành viên) — đã làm rồi thì không ai đi lấy lời
+        thoại của nó nữa.
+
+        Trừ cả video ĐÃ HỎI mà không có bảng phụ đề (`loi_thoai.co_ban_ghi`, bản
+        ghi có cờ `khong_co`): hỏi lại là tiêu 4–8 giây phiên thật cho một câu
+        trả lời đã biết.
+
+        Trừ cả video nguồn đã bị kênh ANH EM GIÀNH (`core.nghien_cuu_nhom.
+        giu_nguon`, khoá O_EXCL ở `CHANNEL/_NHOM/<nhóm>/nghien-cuu/giu-nguon/
+        <mã>.json`, do G4 của `core.tu_chay` tạo) — trừ khi CHÍNH kênh đang
+        hỏi là kênh đã giành nó (`nguon_da_giu_boi_kenh_khac` đã tự loại
+        trường hợp đó). Kênh mình đi hút lời thoại của nguồn kênh khác đang
+        sản xuất là phí phiên: video đó tool KHÔNG BAO GIỜ chọn cho kênh này.
+
+        Kênh lạ / tool hỏng thì trả danh sách RỖNG kèm `loi` nói thật, mã 200 —
+        agent gọi cửa này mỗi phiên, và một lỗi 4xx ở bước PHỤ không được làm
+        cả phiên (quét, đăng, trả lời bình luận) vỡ.
+        """
+        from core import loi_thoai as kho_lt  # noqa: PLC0415 — tránh vòng nhập
+        from core import nghien_cuu_nhom  # noqa: PLC0415
+        from core import nhom_kenh  # noqa: PLC0415
+        from core import tu_chay  # noqa: PLC0415
+        from core.kenh import duong_kenh  # noqa: PLC0415
+
+        kenh = an_toan(kenh or "")
+        so_can = int(k or 0) or self.K_CAN_LAY
+        so_can = max(1, min(self.K_CAN_LAY_TOI_DA, so_can))
+        if not kenh or not os.path.isdir(os.path.join(duong_kenh(self.goc), kenh)):
+            return {"kenh": kenh, "video": [],
+                    "loi": "kênh “{0}” không có trong CHANNEL/".format(kenh)}
+        try:
+            loai_tru = set(nhom_kenh.video_da_lam_ca_nhom(self.goc, kenh))
+            ds = tu_chay.ung_vien_xep_hang(
+                self.goc, kenh, tu_chay.co_cau_hinh_v7(self.goc, kenh), loai_tru)
+        except Exception as loi:  # noqa: BLE001 — sổ nghiên cứu hỏng không được làm vỡ phiên
+            self.ghi("kênh {0}: xếp hạng nguồn cho lời thoại hỏng — {1}".format(
+                kenh, str(loi)[:200]))
+            return {"kenh": kenh, "video": [], "loi": str(loi)[:200]}
+        try:
+            giu_boi_khac = nghien_cuu_nhom.nguon_da_giu_boi_kenh_khac(self.goc, kenh)
+        except Exception:  # noqa: BLE001 — bước PHỤ, hỏng thì coi như không ai giành
+            giu_boi_khac = {}
+
+        ra: List[dict] = []
+        for d in ds:
+            ma = str(d.get("ma") or "")
+            if not kho_lt.ma_hop_le(ma) or kho_lt.co_ban_ghi(self.goc, kenh, ma):
+                continue
+            if ma in giu_boi_khac:
+                continue
+            ra.append({"video_id": ma,
+                       "link": str(d.get("link") or "")
+                               or "https://www.youtube.com/watch?v=" + ma,
+                       "tieu_de": str(d.get("tieu_de") or "")})
+            if len(ra) >= so_can:
+                break
+        if ra:
+            self.ghi("kênh {0}: giao {1} video cho phiên trình duyệt đi lấy lời thoại "
+                     "(đầu bảng xếp hạng, chưa có trong kho)".format(kenh, len(ra)))
+        # Kèm luôn số liệu KHO: agent chụp một bản TRƯỚC và một bản SAU bước hút
+        # rồi lấy hiệu để biết lượt vừa rồi được mấy cái — nó không tự đếm được
+        # (extension gửi thẳng về trạm, không qua agent), và một cửa riêng chỉ
+        # để đếm là một lượt gọi nữa cho cùng một câu hỏi.
+        try:
+            kho = kho_lt.dem(self.goc, kenh)
+        except Exception:  # noqa: BLE001 — đếm hỏng không được chặn danh sách
+            kho = {}
+        return {"kenh": kenh, "video": ra, "k": so_can, "kho": kho}
+
+    def nhan_loi_thoai(self, b: dict) -> Tuple[dict, int]:
+        """Ghi một bản ghi lời thoại vào kho. Trả `(gói JSON, mã HTTP)`.
+
+        Kiểm đầu vào vì gói này tới từ mạng (extension trong máy ảo) và mã
+        video đi thẳng vào TÊN TỆP — cùng lý do `an_toan()` tồn tại ở đầu tệp
+        này. Hai cửa:
+
+        * `video_id` phải ĐÚNG 11 ký tự `[A-Za-z0-9_-]` (`loi_thoai.ma_hop_le`);
+        * `text` rỗng chỉ được nhận khi có cờ `khong_co` — nghĩa là "đã mở
+          trang, video này KHÔNG có bảng phụ đề". Rỗng mà không có cờ là một
+          lượt hút hỏng, và cất nó vào kho thì khâu kịch bản đọc được một lời
+          thoại rỗng rồi đổ lỗi cho video.
+
+        Ghi nguyên tử (`.tam` + `os.replace`, trong `loi_thoai.ghi`): bên đọc
+        là lượt sản xuất 02:00 sáng hôm sau, một tệp JSON cắt dở là một khâu
+        chết không ai hiểu vì sao.
+        """
+        from core import loi_thoai as kho_lt  # noqa: PLC0415
+        from core.kenh import duong_kenh  # noqa: PLC0415
+
+        kenh = an_toan(b.get("kenh") or "")
+        if not kenh or not os.path.isdir(os.path.join(duong_kenh(self.goc), kenh)):
+            return {"ok": False, "loi": "kenh la"}, 400
+        ma = str(b.get("video_id") or "").strip()
+        if not kho_lt.ma_hop_le(ma):
+            return {"ok": False, "loi": "video_id la (phai dung 11 ky tu)"}, 400
+        text = str(b.get("text") or "")
+        khong_co = bool(b.get("khong_co"))
+        if not text.strip() and not khong_co:
+            return {"ok": False, "loi": "text rong ma khong co co khong_co"}, 400
+        duong = kho_lt.ghi(
+            self.goc, kenh, ma, text=text if not khong_co else "",
+            tieu_de=str(b.get("tieu_de") or ""),
+            ngon_ngu=str(b.get("ngon_ngu") or ""),
+            dai_giay=int(b.get("dai_giay") or 0) if str(b.get("dai_giay") or "").strip().isdigit() else 0,
+            nguon=str(b.get("nguon") or kho_lt.NGUON_TRINH_DUYET),
+            khong_co=khong_co)
+        self.so_loi_thoai += 1
+        if khong_co:
+            self.ghi("kênh {0}: video {1} KHÔNG có bảng phụ đề — ghi nhớ để thôi hỏi lại"
+                     .format(kenh, ma))
+        else:
+            self.ghi("kênh {0}: +lời thoại {1} ({2} ký tự{3}) → {4}".format(
+                kenh, ma, len(text),
+                ", " + str(b.get("ngon_ngu")) if b.get("ngon_ngu") else "",
+                os.path.relpath(duong, self.goc) if duong else "?"))
+        return {"ok": True, "khong_co": khong_co, "so_ky_tu": len(text)}, 200
+
+    def _bung_zip(self, goi: dict, snap: str) -> None:
+        """Studio trả bảng dưới dạng ZIP nén base64 — bung ra thành .csv đọc được.
+
+        Đặt tên theo DÒNG TIÊU ĐỀ chứ không theo tên tệp trong ZIP: tên tệp mang ngôn ngữ
+        giao diện ("Nguồn lưu lượng truy cập …") nên đổi theo từng máy, còn dòng tiêu đề
+        luôn là tiếng Anh.
+        """
+        zd = (goi.get("response") or {}).get("zippedData")
+        if not zd:
+            return
+        try:
+            z = zipfile.ZipFile(io.BytesIO(base64.urlsafe_b64decode(zd + "==")))
+        except Exception:
+            return
+        for n in z.namelist():
+            try:
+                data = z.read(n).decode("utf-8-sig", errors="replace")
+            except Exception:
+                continue
+            head = data.split("\n", 1)[0]
+            # Hai bảng nguồn khác nhau, dòng tiêu đề CHỈ khác nhau ở cột thứ hai:
+            #   "Traffic source,Source type,…"  → từng video nguồn (pool đề xuất)
+            #   "Traffic source,Impressions,…"  → theo LOẠI bề mặt (Trang chủ · Tiếp theo · …)
+            # Nhận nhầm là bảng này ghi đè bảng kia, và cả hai đều mất một nửa ý nghĩa. Bảng theo
+            # loại là chỗ DUY NHẤT có hiển thị + CTR tách theo bề mặt — thứ cần để biết cổng 1
+            # đang đói ở bề mặt nào.
+            ten = ("traffic-related.csv" if head.startswith("Traffic source,Source type")
+                   else "traffic-type.csv" if head.startswith("Traffic source,")
+                   else "geo.csv" if head.startswith(("Geography,", "Country,"))
+                   else "daily.csv" if head.startswith("Date,Views") else None)
+            if ten:
+                io.open(os.path.join(snap, ten), "w", encoding="utf-8").write(data)
+                self.ghi(f"  → {ten} ({data.count(chr(10))} dòng)")
+
+
+def _lam_xu_ly(tram: "Tram"):
+    class XuLy(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def _tra(self, than: bytes, kieu: str = "text/plain; charset=utf-8", ma: int = 200):
+            self.send_response(ma)
+            self.send_header("Content-Type", kieu)
+            self.send_header("Content-Length", str(len(than)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+            self.wfile.write(than)
+
+        def _duoc_vao(self) -> bool:
+            ip = self.client_address[0] if self.client_address else ""
+            if tram.cho_phep(ip):
+                return True
+            tram.so_chan += 1
+            if tram.so_chan % 20 == 1:
+                tram.ghi(f"CHẶN {ip}: ngoài mạng nội bộ (đã chặn {tram.so_chan} lượt)")
+            self._tra(b"forbidden", ma=403)
+            return False
+
+        def do_OPTIONS(self):
+            self._tra(b"", ma=204)
+
+        def do_GET(self):
+            if not self._duoc_vao():
+                return
+            if self.path.startswith("/trang-thai"):
+                return self._tra(json.dumps({
+                    "ok": True, "cong": tram.cong, "so_goi": tram.so_goi,
+                    # Bản ghi lời thoại đã nhận từ lúc bật trạm — bảng VM nhìn
+                    # một con số là biết phiên trình duyệt có đổ chữ về không.
+                    "so_loi_thoai": tram.so_loi_thoai,
+                    "thu_muc": os.path.join(tram.goc, "CHANNEL").replace("\\", "/"),
+                    # dấu vân gói tool VM — máy ảo so với bản của nó để TỰ
+                    # cập nhật khi tool nhà có mã mới
+                    "goi_vm": dau_van_goi_vm(),
+                    # số bản của kho — máy ảo chỉ-IPv6 không hỏi được GitHub
+                    # thì hỏi đây (bảng VM soi bản mới kiểu MyTool)
+                    "phien_ban": _phien_ban_kho(),
+                }, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            if self.path.startswith("/may-noi"):
+                # Nhìn từ ngoài vào: máy nào đang nối, việc nào đang chờ —
+                # để ra lệnh qua mạng xong còn biết lệnh đi tới đâu.
+                with tram._khoa_viec:
+                    ket_qua = list(tram._ket_qua_viec)
+                return self._tra(json.dumps({
+                    "may": tram.may_dang_noi(), "viec_cho": tram.viec_cho(),
+                    "ket_qua_gan_day": ket_qua,
+                }, ensure_ascii=False, default=str).encode("utf-8"),
+                    "application/json; charset=utf-8")
+            if self.path.startswith("/loi-thoai/can-lay"):
+                # Phiên trình duyệt hỏi: hôm nay cần đi lấy lời thoại video
+                # nào. Xem `Tram.can_lay_loi_thoai` — dùng lại ĐÚNG bộ xếp
+                # hạng của vòng chọn nguồn, không có bộ thứ hai.
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                return self._tra(json.dumps(
+                    tram.can_lay_loi_thoai((q.get("kenh") or [""])[0],
+                                           int((q.get("k") or ["0"])[0] or 0)
+                                           if (q.get("k") or ["0"])[0].isdigit() else 0),
+                    ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8")
+            if self.path.startswith("/lenh-tien-ich"):
+                # Tiện ích hỏi mỗi phút: có lệnh ÉP nào cho kênh này không.
+                # Một lần lấy là hết (một lệnh = một lượt chụp ép).
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh_hoi = an_toan((q.get("kenh") or [""])[0])
+                with tram._khoa_viec:
+                    lenh = tram._lenh_tien_ich.pop(kenh_hoi, None)
+                if lenh:
+                    tram.ghi(f"tiện ích kênh {kenh_hoi} nhận lệnh ép chụp")
+                tra = dict(lenh or {})
+                # Kèm NGÀY KÊNH BẮT ĐẦU LÀM NỘI DUNG vào mọi câu trả lời, không
+                # phải chỉ khi có lệnh: tiện ích hỏi đường này mỗi phút, nên đây
+                # là kênh liên lạc rẻ nhất đang có để đẩy một ô cấu hình xuống
+                # mắt cào mà không phải cài lại tiện ích. Nhờ nó mắt cào bỏ hẳn
+                # video của đời trước kênh — phần lớn thời gian cào mỗi phiên
+                # (TL4-T7 có 2/15 video là đồ chơi 2018; TL1-T7 có 22 video của
+                # khuôn khác). Lý do và bộ lọc phía tool: `loc_video.py`.
+                if kenh_hoi:
+                    try:
+                        from .loc_video import moc_cua_thu_muc  # noqa: PLC0415
+
+                        # `thu_muc_kenh` trả `<kênh>/chi-so`; `kenh.yaml` nằm ở
+                        # cấp trên. Mã lạ thì nó trả `_chi-so-chua-ro/<mã>`, cấp
+                        # trên không có `kenh.yaml` nên mốc rỗng — cào như cũ.
+                        moc = moc_cua_thu_muc(
+                            os.path.dirname(thu_muc_kenh(kenh_hoi, tram.goc)))
+                        if moc:
+                            tra["ngay_bat_dau"] = moc
+                    except Exception:  # noqa: BLE001 — thiếu mốc thì cào như cũ
+                        pass
+                return self._tra(json.dumps(tra).encode("utf-8"),
+                                 "application/json; charset=utf-8")
+            if self.path.startswith("/kenh"):
+                # Danh sách kênh của tool — bộ cài trên máy ảo hiện menu bấm
+                # số thay vì bắt ai gõ tên kênh.
+                from core.kenh import liet_ke_kenh  # noqa: PLC0415
+
+                return self._tra(json.dumps(liet_ke_kenh(tram.goc),
+                                            ensure_ascii=False).encode("utf-8"),
+                                 "application/json; charset=utf-8")
+            if self.path.startswith("/tien-ich"):
+                # Agent máy ảo tải EXTENSION về — để việc cài mắt cào không
+                # còn là bước tay. Chủ dự án 02/09/2026: *"sao không để tool
+                # xử lý"*. Nén thẳng từ thư mục đi kèm tool: bản phát ra luôn
+                # là bản đang có, không có chuyện zip đóng gói lệch nguồn.
+                tm = os.path.join(GOC, "core", "ytb_extension")
+                bo_nho = io.BytesIO()
+                with zipfile.ZipFile(bo_nho, "w", zipfile.ZIP_DEFLATED) as z:
+                    for goc_tm, _thu_muc, cac_tep in os.walk(tm):
+                        for ten in cac_tep:
+                            duong = os.path.join(goc_tm, ten)
+                            z.write(duong, os.path.relpath(duong, tm))
+                return self._tra(bo_nho.getvalue(), "application/zip")
+            if self.path.startswith("/goi-vm"):
+                # Tool VM tự cập nhật TỪ TRẠM: máy nhà cập nhật MyTool là
+                # vm/ ở đây mới — máy ảo tải về, không cần GitHub. Chỉ phát
+                # MÃ, không phát đồ của riêng cái máy (xem _tep_goi_vm).
+                bo_nho = io.BytesIO()
+                with zipfile.ZipFile(bo_nho, "w", zipfile.ZIP_DEFLATED) as z:
+                    for rel, duong in _tep_goi_vm():
+                        z.write(duong, rel)
+                tram.ghi("máy ảo tải gói tool VM mới")
+                return self._tra(bo_nho.getvalue(), "application/zip")
+            if self.path.startswith("/ke-hoach"):
+                # Máy ảo tải kế hoạch đăng của kênh về (giai đoạn 4 — xem
+                # vm/KE-HOACH.md). Trả nguyên văn CSV, máy ảo tự cất.
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                from core import ke_hoach_dang  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh = an_toan((q.get("kenh") or [""])[0])
+                chu = ke_hoach_dang.doc_van_ban(tram.goc, kenh) if kenh else ""
+                return self._tra(chu.encode("utf-8"),
+                                 "text/csv; charset=utf-8")
+            if self.path.startswith("/thu-muc-dang"):
+                # Máy ảo hỏi: gói video của kênh này ĐANG NẰM Ở ĐÂU trên đĩa
+                # thật (phát hiện 26/09/2026: `/ke-hoach` chỉ trả CSV mã +
+                # ngày giờ + tiêu đề — KHÔNG có đường thư mục nào cả, nên
+                # `vm/may_dang.py` không có cách nào biết `thu_muc_done` của
+                # kênh mà không đọc thẳng `kenh.yaml` — thứ nó cố tình KHÔNG
+                # làm để còn chạy được trên máy ảo trần không có `core/`).
+                # Nguồn sự thật DUY NHẤT là `kenh.yaml` qua `core.kenh.doc_kenh`
+                # — CÙNG một hàm mà `core/ban_giao_dang.py`/`core/tu_chay.py`
+                # dùng để biết bàn giao video vào đâu, nên không thể lệch.
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                from core.kenh import doc_kenh  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh = an_toan((q.get("kenh") or [""])[0])
+                duong = doc_kenh(tram.goc, kenh).thu_muc_done if kenh else ""
+                return self._tra(
+                    json.dumps({"thu_muc_done": duong}, ensure_ascii=False)
+                    .encode("utf-8"), "application/json; charset=utf-8")
+            if self.path.startswith("/viec"):
+                # Agent máy ảo hỏi việc: /viec?kenh=TL4-T7&may=vm-01
+                #
+                # Phản hồi kèm luôn THIẾT LẬP của kênh (giờ quét, quét trang
+                # chủ…): chỉnh trên tool là máy ảo nhận ngay ở nhịp tim kế,
+                # không tốn thêm lượt gọi nào — chủ dự án 02/09/2026: *"những
+                # cái ở vm thì ở tool điều chỉnh được, kiểm soát được"*.
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                from core import vm_cai_dat  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh = (q.get("kenh") or [""])[0]
+                may = (q.get("may") or ["?"])[0]
+                ip = self.client_address[0] if self.client_address else ""
+                viec = tram.lay_viec(kenh, may, ip) if kenh else None
+                cai = vm_cai_dat.doc(tram.goc, an_toan(kenh)) if kenh else {}
+                return self._tra(json.dumps(
+                    {"viec": viec, "cai_dat": cai}, ensure_ascii=False)
+                    .encode("utf-8"), "application/json; charset=utf-8")
+            if self.path.startswith("/quet-xong"):
+                # Đợt 2, kiểm toán #10: `vm/agent.py` hỏi mỗi nhịp tim trong
+                # lúc chờ quét Studio thay vì ngủ trọn `CHO_QUET_GIAY`.
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh = an_toan((q.get("kenh") or [""])[0])
+                return self._tra(
+                    json.dumps({"xong": tram.da_quet_xong(kenh) if kenh else False})
+                    .encode("utf-8"), "application/json; charset=utf-8")
+            if self.path.startswith("/tu-chay"):
+                # 7 sổ ngày GẦN NHẤT của `tu_chay.py --tat-ca` (sổ CHO CẢ MÁY,
+                # xem `core/tu_chay.chay_tat_ca` — khác sổ riêng từng kênh).
+                # Máy nhà mở tab là thấy đêm qua VPS đã làm gì, không phải
+                # SSH vào đọc `workspace/tu-chay/*.json` bằng tay.
+                from core.tu_chay import THU_MUC_BAO_CAO_TAT_CA  # noqa: PLC0415
+
+                thu_muc = os.path.join(tram.goc, THU_MUC_BAO_CAO_TAT_CA)
+                try:
+                    ten_tep = sorted(t for t in os.listdir(thu_muc) if t.endswith(".json"))
+                except OSError:
+                    ten_tep = []
+                so_ngay = []
+                for ten in ten_tep[-7:]:
+                    try:
+                        with io.open(os.path.join(thu_muc, ten), encoding="utf-8") as tep:
+                            so_ngay.append(json.load(tep))
+                    except (OSError, ValueError):
+                        continue
+                return self._tra(json.dumps(so_ngay, ensure_ascii=False).encode("utf-8"),
+                                 "application/json; charset=utf-8")
+            return self._tra(b"ok")
+
+        def do_POST(self):
+            if not self._duoc_vao():
+                return
+            n = int(self.headers.get("Content-Length", 0) or 0)
+            try:
+                b = json.loads(self.rfile.read(n).decode("utf-8"))
+            except Exception as e:
+                return self._tra(str(e).encode("utf-8"), ma=400)
+            try:
+                if self.path == "/capture":
+                    return self._tra(tram.nhan_capture(b).encode("utf-8"))
+                if self.path == "/anh":
+                    return self._tra(tram.nhan_anh(b).encode("utf-8"))
+                if self.path == "/viec-xong":
+                    tram.viec_xong(b.get("kenh") or "", int(b.get("id") or 0),
+                                   str(b.get("ket_qua") or ""),
+                                   str(b.get("loi") or ""))
+                    return self._tra(b"ok")
+                if self.path == "/quet-xong":
+                    # Tiện ích báo đã cào hết video của lượt quét Studio đang
+                    # chạy — xem `Tram.bao_quet_xong` (đợt 2, kiểm toán #10).
+                    tram.bao_quet_xong(b.get("kenh") or "")
+                    return self._tra(b"ok")
+                if self.path == "/dang-xong":
+                    # Tool đăng trên máy ảo báo một gói đã đăng (hoặc hỏng) —
+                    # ghi vào cột "Trạng thái đăng" của kế hoạch, tìm theo MÃ.
+                    #
+                    # `video_id`/`lich` (29/09/2026, máy đăng DOM — mục 4.4
+                    # bản thiết kế): `vm/nguon_tool.bao_dang(..., **them)` gửi
+                    # kèm khi có. Trạm đời cũ (không gửi hai trường này) vẫn
+                    # chạy y hệt trước — `dict.get` trả None/"" là vô hại.
+                    from core import ke_hoach_dang  # noqa: PLC0415
+
+                    kenh_b = an_toan(b.get("kenh") or "")
+                    ma_b = str(b.get("ma") or "")
+                    video_id = b.get("video_id") or None
+                    lich = str(b.get("lich") or "")
+                    duoc = ke_hoach_dang.danh_dau(
+                        tram.goc, kenh_b, ma_b,
+                        str(b.get("trang_thai") or "ĐÃ ĐĂNG"),
+                        video_id=video_id)
+                    if duoc and video_id:
+                        # Hồ sơ video (Việc 3) — nối id TRỰC TIẾP, hết lệ
+                        # thuộc so khớp tiêu đề. Phụ, không được chặn báo
+                        # "đã đăng" nếu hỏng (hồ sơ có thể chưa tồn tại,
+                        # gói cũ trước khi tệp này ra đời…).
+                        try:
+                            from core import ho_so_video  # noqa: PLC0415
+
+                            ho_so_video.ghi_video_id(
+                                tram.goc, kenh_b, ma_b, video_id, lich)
+                        except Exception as loi:  # noqa: BLE001
+                            tram.ghi("ghi video_id vào hồ sơ hỏng (kênh {0} "
+                                     "gói {1}): {2}".format(kenh_b, ma_b, loi))
+                    tram.ghi("kênh {0}: gói {1} → {2}{3}{4}".format(
+                        kenh_b, b.get("ma"),
+                        b.get("trang_thai") or "ĐÃ ĐĂNG",
+                        "" if duoc else " (KHÔNG thấy mã trong kế hoạch)",
+                        " · videoId {0}".format(video_id) if video_id else ""))
+                    return self._tra(json.dumps({"ok": duoc}).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/loi-thoai":
+                    # Extension vừa hút xong bảng phụ đề của MỘT video (hoặc
+                    # thấy video KHÔNG có bảng nào — cờ `khong_co`). Kiểm đầu
+                    # vào rồi ghi vào kho; xem `Tram.nhan_loi_thoai`.
+                    goi_tra, ma_http = tram.nhan_loi_thoai(b)
+                    return self._tra(json.dumps(goi_tra, ensure_ascii=False)
+                                     .encode("utf-8"),
+                                     "application/json; charset=utf-8", ma=ma_http)
+                if self.path == "/doi-thu":
+                    them = tram.nhan_doi_thu(b.get("kenh") or "",
+                                             list(b.get("danh_sach") or []))
+                    return self._tra(json.dumps({"them": them}).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/trang-chu":
+                    # Bản extension ≥ 2.6: từng video trên trang chủ, có tên kênh để lọc.
+                    kq = tram.nhan_trang_chu(b.get("kenh") or "",
+                                             list(b.get("video") or []),
+                                             list(b.get("danh_sach") or []))
+                    return self._tra(json.dumps(kq).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/giao-viec":
+                    # Xếp việc vào hộp QUA MẠNG — trước giờ chỉ nút bấm trong
+                    # GUI làm được. Mở cửa này để agent xây tool (02/09:
+                    # "mày ra lệnh nó chạy cào studio xem") và mai kia là
+                    # agent điều kênh tự ra lệnh. Chỉ loại việc đã có tay
+                    # làm; kênh phải có thật.
+                    from core.kenh import duong_kenh  # noqa: PLC0415
+
+                    kenh = an_toan(b.get("kenh") or "")
+                    loai = str(b.get("loai") or "")
+                    if loai not in ("quet-studio", "quet-trang-chu",
+                                    "dang-video"):
+                        return self._tra(b"loai viec la", ma=400)
+                    if not kenh or not os.path.isdir(
+                            os.path.join(duong_kenh(tram.goc), kenh)):
+                        return self._tra(b"kenh la", ma=400)
+                    so = tram.giao_viec(kenh, loai,
+                                        dict(b.get("tham_so") or {}))
+                    tram.ghi("việc #{0} [{1}] xếp cho {2} (qua mạng)".format(
+                        so, loai, kenh))
+                    return self._tra(json.dumps({"ok": True, "id": so})
+                                     .encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/thiet-lap-vm":
+                    # Người dùng gạt núm NGAY TRÊN BẢNG máy ảo (02/09: "tao
+                    # tắt việc đăng... mở lên nó vẫn bật" — vì thiết lập tool
+                    # đẩy xuống thắng và đè lại). Chữa tận gốc: gạt ở máy ảo
+                    # là báo về đây, tool sửa NGUỒN SỰ THẬT (may-ao.json) —
+                    # hai bên hết cãi nhau. Chỉ nhận đúng HAI núm bật/tắt;
+                    # kênh phải có thật, không đẻ kênh ma từ gói mạng.
+                    from core import vm_cai_dat  # noqa: PLC0415
+                    from core.kenh import duong_kenh  # noqa: PLC0415
+
+                    kenh = an_toan(b.get("kenh") or "")
+                    thay = {k: bool(b[k]) for k in ("tu_dang", "tu_tra_loi_cmt")
+                            if k in b}
+                    if not kenh or not os.path.isdir(
+                            os.path.join(duong_kenh(tram.goc), kenh)):
+                        return self._tra(b"kenh la", ma=400)
+                    if thay:
+                        vm_cai_dat.luu(tram.goc, kenh, **thay)
+                        tram.ghi("máy ảo {0} gạt núm: {1}".format(kenh, thay))
+                    return self._tra(json.dumps({"ok": True}).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/van-ban":
+                    # Máy ảo nhờ tool viết chữ (trả lời bình luận) bằng KEY
+                    # CỦA TOOL — chủ dự án 02/09: "cho nó dùng luôn api key
+                    # của tool, Gemini cũ để dự phòng". Key không bao giờ rời
+                    # máy này: máy ảo gửi đề bài, tool viết hộ, tiền trừ ví
+                    # tool. Mỗi lượt là một lần trừ tiền — cửa này chỉ mở cho
+                    # mạng nhà + khách mời như mọi cửa khác.
+                    if tram._goi_van_ban is None:
+                        return self._tra(json.dumps({
+                            "loi": "tool chưa nối nguồn viết chữ"
+                        }).encode("utf-8"), "application/json; charset=utf-8",
+                            ma=503)
+                    de_bai = str(b.get("de_bai") or "").strip()
+                    if not de_bai:
+                        return self._tra(b"thieu de_bai", ma=400)
+                    chu = tram._goi_van_ban(de_bai)
+                    tram.ghi("viết hộ máy ảo {0} ({1} chữ đề bài)".format(
+                        an_toan(b.get("kenh") or "?"), len(de_bai)))
+                    return self._tra(json.dumps({"chu": chu},
+                                                ensure_ascii=False).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                if self.path == "/done":
+                    kd = thu_muc_kenh(b.get("kenh") or "kenh", tram.goc)
+                    tm = os.path.join(kd, an_toan(b.get("id")), an_toan(b.get("label")))
+                    os.makedirs(tm, exist_ok=True)
+                    io.open(os.path.join(tm, "_thong-tin.json"), "w", encoding="utf-8").write(
+                        json.dumps(b, ensure_ascii=False, indent=1))
+                    tram.ghi(f"xong {b.get('id')} [{b.get('label')}]")
+                return self._tra(b"ok")
+            except Exception as e:
+                tram.ghi(f"LỖI: {e}")
+                return self._tra(str(e).encode("utf-8"), ma=500)
+
+        def log_message(self, *a):
+            pass
+
+    return XuLy

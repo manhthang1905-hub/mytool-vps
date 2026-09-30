@@ -1,0 +1,111 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [
+   {
+    "nguon": "mot_nut",
+    "ma": "mnDON000001",
+    "link": "https://www.youtube.com/watch?v=mnDON000001",
+    "tieu_de": "部屋の片付けができない人の本当の理由",
+    "kenh": "Z2",
+    "diem": 0,
+    "loai": "",
+    "view": 200000.0,
+    "ly_do": [
+     "200.000 view",
+     "vượt ×4.0 mức thường của kênh nguồn",
+     "đang lên +800 view/ngày",
+     "cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh anh em TL4-T7 (83%) — cộng 8.7 (trần 10.5 = cột cụm × tiên nghiệm 0.35, 0 video riêng đủ 48h)"
+    ],
+    "diem_anh_em": 8.7,
+    "anh_em": {
+     "kenh": "TL4-T7",
+     "cum": "don-dep",
+     "ten_cum": "Dọn dẹp / nhà cửa",
+     "chi_so": 0.833
+    }
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnTRINHO001",
+    "link": "https://www.youtube.com/watch?v=mnTRINHO001",
+    "tieu_de": "物忘れが増えた人の脳で起きていること",
+    "kenh": "Z1",
+    "diem": 0,
+    "loai": "",
+    "view": 500000.0,
+    "ly_do": [
+     "500.000 view",
+     "vượt ×9.0 mức thường của kênh nguồn",
+     "đang lên +1.200 view/ngày"
+    ]
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnNHO000001",
+    "link": "https://www.youtube.com/watch?v=mnNHO000001",
+    "tieu_de": "繊細な人の特徴",
+    "kenh": "Z3",
+    "diem": 3,
+    "loai": "",
+    "view": 40000.0,
+    "ly_do": [
+     "40.000 view",
+     "vượt ×30.0 mức thường của kênh nguồn",
+     "đang lên +50 view/ngày"
+    ]
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnBUT000001",
+    "link": "https://www.youtube.com/watch?v=mnBUT000001",
+    "tieu_de": "優しい人の特徴",
+    "kenh": "Z7",
+    "diem": 0,
+    "loai": "",
+    "view": 60000.0,
+    "ly_do": [
+     "60.000 view",
+     "vượt ×2.0 mức thường của kênh nguồn",
+     "đang lên +3.000 view/ngày"
+    ]
+   }
+  ],
+  "log": [
+   "  đang dùng công thức VPH vì theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: vph).",
+   "  VPH: không có ứng viên đột biến chưa làm — dùng bảng Một nút cho lượt này.",
+   "  loại mnDALAM0001 vì trùng tiêu đề với video GV2-0003 (giống 100%): “嫌われる人が気づいていない口癖”.",
+   "  KÉO NHAU: đầu bảng “部屋の片付けができない人の本当の理由” được cộng 8.7 điểm anh em — cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh TL4-T7 (83%) và ứng viên vẫn thuộc tệp “nguoi-trung-nien-thu-gon-doi-song” của kênh này."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": {
+   "nguon": "mot_nut",
+   "ma": "mnDON000001",
+   "link": "https://www.youtube.com/watch?v=mnDON000001",
+   "tieu_de": "部屋の片付けができない人の本当の理由",
+   "kenh": "Z2",
+   "diem": 0,
+   "loai": "",
+   "view": 200000.0,
+   "ly_do": [
+    "200.000 view",
+    "vượt ×4.0 mức thường của kênh nguồn",
+    "đang lên +800 view/ngày",
+    "cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh anh em TL4-T7 (83%) — cộng 8.7 (trần 10.5 = cột cụm × tiên nghiệm 0.35, 0 video riêng đủ 48h)"
+   ],
+   "diem_anh_em": 8.7,
+   "anh_em": {
+    "kenh": "TL4-T7",
+    "cum": "don-dep",
+    "ten_cum": "Dọn dẹp / nhà cửa",
+    "chi_so": 0.833
+   }
+  },
+  "log": [
+   "  đang dùng công thức VPH vì theo chỉ định chủ kênh (kenh.yaml cong_thuc_chon: vph).",
+   "  VPH: không có ứng viên đột biến chưa làm — dùng bảng Một nút cho lượt này.",
+   "  loại mnDALAM0001 vì trùng tiêu đề với video GV2-0003 (giống 100%): “嫌われる人が気づいていない口癖”.",
+   "  KÉO NHAU: đầu bảng “部屋の片付けができない人の本当の理由” được cộng 8.7 điểm anh em — cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh TL4-T7 (83%) và ứng viên vẫn thuộc tệp “nguoi-trung-nien-thu-gon-doi-song” của kênh này."
+  ]
+ }
+}

@@ -1,0 +1,114 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [
+   {
+    "nguon": "v7",
+    "ma": "v7TUTHANG01",
+    "link": "https://youtu.be/v7TUTHANG01",
+    "tieu_de": "物忘れが増えた人の脳で起きていること",
+    "kenh": "Z1",
+    "diem": 82,
+    "loai": "Làm ngay",
+    "diem_cum": 22.0,
+    "thua_huong": "",
+    "cum": [
+     "tri-nho"
+    ],
+    "view": 250000.0,
+    "ly_do": [
+     "cụm đang thắng"
+    ]
+   },
+   {
+    "nguon": "v7",
+    "ma": "v7DON000001",
+    "link": "https://youtu.be/v7DON000001",
+    "tieu_de": "部屋の片付けができない人の本当の理由",
+    "kenh": "Z2",
+    "diem": 70,
+    "loai": "Nên làm",
+    "diem_cum": 0.0,
+    "thua_huong": "",
+    "cum": [
+     "don-dep"
+    ],
+    "view": 120000.0,
+    "ly_do": [
+     "bảng đề xuất",
+     "cụm “Dọn dẹp / nhà cửa” đang thắng ở kênh anh em TL4-T7 (83%) — cộng 8.7 (trần 10.5 = cột cụm × tiên nghiệm 0.35, 0 video riêng đủ 48h)"
+    ],
+    "diem_anh_em": 8.7,
+    "anh_em": {
+     "kenh": "TL4-T7",
+     "cum": "don-dep",
+     "ten_cum": "Dọn dẹp / nhà cửa",
+     "chi_so": 0.833
+    }
+   },
+   {
+    "nguon": "v7",
+    "ma": "v7THUAHUONG",
+    "link": "https://youtu.be/v7THUAHUONG",
+    "tieu_de": "断捨離をした人の暮らしが変わる理由",
+    "kenh": "Z3",
+    "diem": 68,
+    "loai": "Nên làm",
+    "diem_cum": 0.0,
+    "thua_huong": "TL4-T7",
+    "cum": [
+     "don-dep"
+    ],
+    "view": 90000.0,
+    "ly_do": [
+     "thừa hưởng TL4-T7"
+    ]
+   },
+   {
+    "nguon": "v7",
+    "ma": "v7TULINK001",
+    "link": "https://youtu.be/v7TULINK001",
+    "tieu_de": "一人が好きな人だけに現れる5つの知的特徴",
+    "kenh": "Z8",
+    "diem": 61,
+    "loai": "Nên làm",
+    "diem_cum": 0.0,
+    "thua_huong": "",
+    "cum": [],
+    "view": 30000.0,
+    "ly_do": [
+     "nguồn nổ"
+    ]
+   }
+  ],
+  "log": [
+   "  đang dùng công thức V7 vì tự động: kênh đã có video thắng thật (qua ngưỡng chuyển V7).",
+   "  loại v7DALAM0001 vì trùng tiêu đề với video GV4-0002 (giống 100%): “嫌われる人が気づいていない口癖”.",
+   "  1 ứng viên được cộng điểm anh em (cụm đang thắng ở kênh cùng nhóm), nhưng đầu bảng vẫn là ứng viên tự mạnh — tín hiệu anh em là gợi ý, không phải mệnh lệnh."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": {
+   "nguon": "v7",
+   "ma": "v7TUTHANG01",
+   "link": "https://youtu.be/v7TUTHANG01",
+   "tieu_de": "物忘れが増えた人の脳で起きていること",
+   "kenh": "Z1",
+   "diem": 82,
+   "loai": "Làm ngay",
+   "diem_cum": 22.0,
+   "thua_huong": "",
+   "cum": [
+    "tri-nho"
+   ],
+   "view": 250000.0,
+   "ly_do": [
+    "cụm đang thắng"
+   ]
+  },
+  "log": [
+   "  đang dùng công thức V7 vì tự động: kênh đã có video thắng thật (qua ngưỡng chuyển V7).",
+   "  loại v7DALAM0001 vì trùng tiêu đề với video GV4-0002 (giống 100%): “嫌われる人が気づいていない口癖”.",
+   "  1 ứng viên được cộng điểm anh em (cụm đang thắng ở kênh cùng nhóm), nhưng đầu bảng vẫn là ứng viên tự mạnh — tín hiệu anh em là gợi ý, không phải mệnh lệnh."
+  ]
+ }
+}

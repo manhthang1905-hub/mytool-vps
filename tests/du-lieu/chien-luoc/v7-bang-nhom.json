@@ -1,0 +1,22 @@
+{
+ "mo_ta": "Kênh đã qua ngưỡng V7, có bảng nhóm. Lọc LAM_NGAY/NEN_LAM + bi_loai, loai_tru, trùng tiêu đề, rồi cộng điểm anh em (trần tự thắng; bỏ qua dòng thua_huong) và xếp lại.",
+ "kenh": "GV4",
+ "kenh_yaml": ["ma: \"GV4\"", "ngon_ngu: \"ja\"", "nhom: \"tam-ly-nhat\"", "tep: \"nguoi-trung-nien-thu-gon-doi-song\""],
+ "cong_thuc_v7": {},
+ "bang_nhom": true,
+ "co_v7_truoc": true,
+ "loai_tru": ["v7LOAI00001"],
+ "da_lam_tieu_de": [["嫌われる人が気づいていない口癖", "video GV4-0002"]],
+ "vph": null,
+ "mot_nut": {},
+ "v7": [
+  {"ma": "v7TUTHANG01", "link": "https://youtu.be/v7TUTHANG01", "tieu_de": "物忘れが増えた人の脳で起きていること", "kenh": "Z1", "diem": 82, "loai": "Làm ngay", "diem_cum": 22.0, "cum": ["tri-nho"], "view": 250000, "ly_do": ["cụm đang thắng"], "bi_loai": ""},
+  {"ma": "v7DON000001", "link": "https://youtu.be/v7DON000001", "tieu_de": "部屋の片付けができない人の本当の理由", "kenh": "Z2", "diem": 70, "loai": "Nên làm", "diem_cum": 0.0, "cum": ["don-dep"], "view": 120000, "ly_do": ["bảng đề xuất"], "bi_loai": ""},
+  {"ma": "v7THUAHUONG", "link": "https://youtu.be/v7THUAHUONG", "tieu_de": "断捨離をした人の暮らしが変わる理由", "kenh": "Z3", "diem": 68, "loai": "Nên làm", "diem_cum": 0.0, "thua_huong": "TL4-T7", "cum": ["don-dep"], "view": 90000, "ly_do": ["thừa hưởng TL4-T7"], "bi_loai": ""},
+  {"ma": "v7BILOAI001", "link": "https://youtu.be/v7BILOAI001", "tieu_de": "片付けられない人の特徴", "kenh": "Z4", "diem": 90, "loai": "Làm ngay", "diem_cum": 0.0, "ly_do": [], "bi_loai": "kênh nguồn lệch ngách"},
+  {"ma": "v7CANNHAC01", "link": "https://youtu.be/v7CANNHAC01", "tieu_de": "優しい人の特徴", "kenh": "Z5", "diem": 50, "loai": "Cân nhắc", "diem_cum": 0.0, "ly_do": [], "bi_loai": ""},
+  {"ma": "v7LOAI00001", "link": "https://youtu.be/v7LOAI00001", "tieu_de": "静かな人の特徴", "kenh": "Z6", "diem": 75, "loai": "Nên làm", "diem_cum": 0.0, "ly_do": [], "bi_loai": ""},
+  {"ma": "v7DALAM0001", "link": "https://youtu.be/v7DALAM0001", "tieu_de": "嫌われる人が気づいていない口癖", "kenh": "Z7", "diem": 74, "loai": "Nên làm", "diem_cum": 0.0, "ly_do": [], "bi_loai": ""},
+  {"ma": "", "link": "https://youtu.be/v7TULINK001", "tieu_de": "一人が好きな人だけに現れる5つの知的特徴", "kenh": "Z8", "diem": 61, "loai": "Nên làm", "diem_cum": 0.0, "view": 30000, "ly_do": ["nguồn nổ"], "bi_loai": ""}
+ ]
+}

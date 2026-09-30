@@ -1,0 +1,19 @@
+{
+ "mo_ta": "Chủ kênh chỉ định cong_thuc_chon: mot_nut (kể cả khi đã có V7) — bảng Một nút, nhóm có bảng → 1 bit anh em.",
+ "kenh": "GV7",
+ "kenh_yaml": ["ma: \"GV7\"", "ngon_ngu: \"ja\"", "nhom: \"tam-ly-nhat\"", "tep: \"nguoi-trung-nien-thu-gon-doi-song\"", "cong_thuc_chon: \"mot_nut\""],
+ "cong_thuc_v7": {},
+ "bang_nhom": true,
+ "co_v7_truoc": true,
+ "loai_tru": [],
+ "da_lam_tieu_de": [],
+ "vph": null,
+ "mot_nut": {
+  "moi": [
+   {"link": "https://youtu.be/mnTRINHO007", "tieu_de": "物忘れが増えた人の脳で起きていること", "kenh": "Z1", "view": 500000, "vuot": 9.0, "tang": 0, "diem": 0},
+   {"link": "https://youtu.be/mnDON000007", "tieu_de": "部屋の片付けができない人の本当の理由", "kenh": "Z2", "view": 20000, "vuot": 4.0, "tang": 0, "diem": 0},
+   {"link": "https://youtu.be/mnKHAC00007", "tieu_de": "賢い人の特徴", "kenh": "Z3", "view": 30000, "vuot": 2.0, "tang": 10, "diem": 0}
+  ]
+ },
+ "v7": null
+}

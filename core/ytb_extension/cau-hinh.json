@@ -1,0 +1,6 @@
+{
+  "host": "",
+  "ngay_bat_dau": "",
+  "_ghi_chu": "Dia chi tram nhan. Cong cu tu dien vao day khi ban bam 'Luu tien ich ra may'. De trong = ghi vao thu muc Tai xuong cua chinh may chay tien ich.",
+  "_ghi_chu_ngay": "ngay_bat_dau (YYYY-MM-DD): ngay kenh bat dau lam noi dung cua tool. Video dang TRUOC ngay nay khong duoc chup. De trong = chup het (net cu). Duong chinh la cau tra loi /lenh-tien-ich cua tram (doi o tren tool la mat cao biet trong mot phut); o day chi la duong du phong khi Chrome xoa storage."
+}

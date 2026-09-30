@@ -1,0 +1,64 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [
+   {
+    "nguon": "vph",
+    "ma": "vphSAO00001",
+    "link": "https://www.youtube.com/watch?v=vphSAO00001",
+    "tieu_de": "物忘れが増えた人の脳で起きていること",
+    "kenh": "心理A",
+    "diem": 92,
+    "loai": "",
+    "vph": 410.5,
+    "dot_bien": 13.8,
+    "tuoi_gio": 47.0,
+    "view": 19300,
+    "ly_do": [
+     "đột biến ×13,8 so với video cùng tuổi"
+    ]
+   },
+   {
+    "nguon": "vph",
+    "link": "https://www.youtube.com/watch?v=vphLINK0001",
+    "tieu_de": "一人が好きな人だけに現れる5つの知的特徴",
+    "kenh": "心理A",
+    "diem": 71,
+    "loai": "",
+    "vph": 120.25,
+    "dot_bien": 5.5,
+    "tuoi_gio": 60.0,
+    "view": 7215,
+    "ly_do": [
+     "đột biến ×5,5"
+    ],
+    "ma": "vphLINK0001"
+   }
+  ],
+  "log": [
+   "  đang dùng công thức VPH vì tự động: kênh chưa qua ngưỡng chuyển V7 — chọn theo đột biến đối thủ.",
+   "  loại vphDALAM001 vì trùng tiêu đề với video GV1-0001 (giống 100%): “【心理学】部屋の片付けができない人の本当の理由”."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": {
+   "nguon": "vph",
+   "ma": "vphSAO00001",
+   "link": "https://www.youtube.com/watch?v=vphSAO00001",
+   "tieu_de": "物忘れが増えた人の脳で起きていること",
+   "kenh": "心理A",
+   "diem": 92,
+   "loai": "",
+   "vph": 410.5,
+   "dot_bien": 13.8,
+   "tuoi_gio": 47.0,
+   "view": 19300,
+   "ly_do": [
+    "đột biến ×13,8 so với video cùng tuổi"
+   ]
+  },
+  "log": [
+   "  đang dùng công thức VPH vì tự động: kênh chưa qua ngưỡng chuyển V7 — chọn theo đột biến đối thủ.",
+   "  loại vphDALAM001 vì trùng tiêu đề với video GV1-0001 (giống 100%): “【心理学】部屋の片付けができない人の本当の理由”."
+  ]
+ }
+}

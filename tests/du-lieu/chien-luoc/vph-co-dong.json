@@ -1,0 +1,19 @@
+{
+ "mo_ta": "Kênh non (chưa qua ngưỡng V7), tu_dong → VPH có dòng. Có nhóm + bảng nhóm để chứng minh VPH KHÔNG cộng điểm anh em. Có loai_tru, trùng tiêu đề đã làm (nhãn 【】 đầu câu), trùng tiêu đề trong bảng, dòng thiếu 'ma' (lấy từ link).",
+ "kenh": "GV1",
+ "kenh_yaml": ["ma: \"GV1\"", "ngon_ngu: \"ja\"", "nhom: \"tam-ly-nhat\"", "tep: \"nguoi-trung-nien-thu-gon-doi-song\""],
+ "cong_thuc_v7": null,
+ "bang_nhom": true,
+ "co_v7_truoc": false,
+ "loai_tru": ["vphLOAI0001"],
+ "da_lam_tieu_de": [["部屋の片付けができない人の本当の理由", "video GV1-0001"]],
+ "vph": [
+  {"nguon": "vph", "ma": "vphSAO00001", "link": "https://www.youtube.com/watch?v=vphSAO00001", "tieu_de": "物忘れが増えた人の脳で起きていること", "kenh": "心理A", "diem": 92, "loai": "", "vph": 410.5, "dot_bien": 13.8, "tuoi_gio": 47.0, "view": 19300, "ly_do": ["đột biến ×13,8 so với video cùng tuổi"]},
+  {"nguon": "vph", "ma": "vphLOAI0001", "link": "https://www.youtube.com/watch?v=vphLOAI0001", "tieu_de": "静かな人の特徴", "kenh": "心理B", "diem": 88, "loai": "", "vph": 300.0, "dot_bien": 9.1, "tuoi_gio": 30.0, "view": 9000, "ly_do": ["đột biến"]},
+  {"nguon": "vph", "ma": "vphDALAM001", "link": "https://www.youtube.com/watch?v=vphDALAM001", "tieu_de": "【心理学】部屋の片付けができない人の本当の理由", "kenh": "心理B", "diem": 80, "loai": "", "vph": 250.0, "dot_bien": 7.0, "tuoi_gio": 40.0, "view": 10000, "ly_do": ["đột biến"]},
+  {"nguon": "vph", "link": "https://www.youtube.com/watch?v=vphLINK0001", "tieu_de": "一人が好きな人だけに現れる5つの知的特徴", "kenh": "心理A", "diem": 71, "loai": "", "vph": 120.25, "dot_bien": 5.5, "tuoi_gio": 60.0, "view": 7215, "ly_do": ["đột biến ×5,5"]},
+  {"nguon": "vph", "ma": "vphTRUNG001", "link": "https://www.youtube.com/watch?v=vphTRUNG001", "tieu_de": "物忘れが増えた人の脳で起きていること", "kenh": "心理C", "diem": 65, "loai": "", "vph": 100.0, "dot_bien": 5.1, "tuoi_gio": 50.0, "view": 5000, "ly_do": ["đột biến"]}
+ ],
+ "mot_nut": {"moi": [{"link": "https://www.youtube.com/watch?v=motNUT00001", "tieu_de": "未使用", "kenh": "Z", "view": 5, "vuot": 0, "tang": 0, "diem": 0}]},
+ "v7": null
+}

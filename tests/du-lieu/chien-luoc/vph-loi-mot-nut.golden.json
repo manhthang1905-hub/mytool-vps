@@ -1,0 +1,61 @@
+{
+ "ung_vien_xep_hang": {
+  "ds": [
+   {
+    "nguon": "mot_nut",
+    "ma": "mnBBBBBBB01",
+    "link": "https://youtu.be/mnBBBBBBB01",
+    "tieu_de": "頭がいい人の口癖",
+    "kenh": "Z2",
+    "diem": 0,
+    "loai": "",
+    "view": 120000.0,
+    "ly_do": [
+     "120.000 view",
+     "vượt ×1.5 mức thường của kênh nguồn"
+    ]
+   },
+   {
+    "nguon": "mot_nut",
+    "ma": "mnAAAAAAA01",
+    "link": "https://youtu.be/mnAAAAAAA01",
+    "tieu_de": "賢い人の特徴",
+    "kenh": "Z1",
+    "diem": 0,
+    "loai": "",
+    "view": 80000.0,
+    "ly_do": [
+     "80.000 view",
+     "vượt ×3.0 mức thường của kênh nguồn",
+     "đang lên +100 view/ngày"
+    ]
+   }
+  ],
+  "log": [
+   "  đang dùng công thức VPH vì tự động: kênh chưa qua ngưỡng chuyển V7 — chọn theo đột biến đối thủ.",
+   "  Công thức VPH hỏng (sổ content hỏng: dòng 12) — dùng bảng Một nút.",
+   "  VPH: không có ứng viên đột biến chưa làm — dùng bảng Một nút cho lượt này."
+  ]
+ },
+ "_chon_nguon": {
+  "nguon": {
+   "nguon": "mot_nut",
+   "ma": "mnBBBBBBB01",
+   "link": "https://youtu.be/mnBBBBBBB01",
+   "tieu_de": "頭がいい人の口癖",
+   "kenh": "Z2",
+   "diem": 0,
+   "loai": "",
+   "view": 120000.0,
+   "ly_do": [
+    "120.000 view",
+    "vượt ×1.5 mức thường của kênh nguồn"
+   ]
+  },
+  "log": [
+   "  đang dùng công thức VPH vì tự động: kênh chưa qua ngưỡng chuyển V7 — chọn theo đột biến đối thủ.",
+   "  Công thức VPH hỏng (sổ content hỏng: dòng 12) — dùng bảng Một nút.",
+   "  VPH: không có ứng viên đột biến chưa làm — dùng bảng Một nút cho lượt này."
+  ]
+ }
+}

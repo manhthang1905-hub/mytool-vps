@@ -1,0 +1,153 @@
+"""AI chấm ảnh vừa tạo so với ảnh tham chiếu — để hàng đợi tự làm lại tấm lệch.
+
+═══ VÌ SAO ═══
+
+Chủ dự án 25/08/2026, sau khi xem phim 85 cảnh: *"nhân vật tham chiếu lúc thì
+đúng lúc thì lại biến hoá thành nhân vật khác… con mèo có lúc lại là con mèo
+thường… cậu út và công chúa lại khác"*. Đo bằng chính bộ chấm này: dù đã khoá
+lời nhắc, mô hình ảnh vẫn vẽ lệch ~10–15% cảnh, và tạo thêm MỘT ứng viên rồi
+giữ tấm giống hơn cứu được phần lớn số đó (5 cảnh yếu → 3 cảnh lên 4–5 điểm).
+
+Một lượt chấm là một lời gọi chat nhìn hai ảnh (rẻ hơn một tấm ảnh 50 ₫);
+chỉ chấm khi job CÓ ảnh tham chiếu — không có tham chiếu thì không có gì để so.
+
+Thang 1–5: 5 = cùng thiết kế; 4 = khác chi tiết nhỏ; 3 = nhận ra nhưng vẽ lại
+rõ; 2 = gần như nhân vật khác; 1 = khác hẳn / vắng mặt. Ngưỡng làm lại:
+``NGUONG_LAM_LAI`` (≤ 3). Nhân vật vắng mặt vì máy quay đang ở chỗ khác thì
+giám khảo được bảo trả `0` = "không có gì để chấm", không làm lại.
+"""
+
+from __future__ import annotations
+
+import base64
+import os
+from typing import Tuple, Callable, List, Optional, Sequence
+
+__all__ = ["NGUONG_LAM_LAI", "LOI_NHAC_CHAM", "cham_anh", "dung_cham_anh", "data_url"]
+
+#: Điểm từ đây trở xuống thì hàng đợi tạo thêm một ứng viên và giữ tấm cao hơn.
+NGUONG_LAM_LAI = 3
+
+LOI_NHAC_CHAM = """The first {n} image(s) are REFERENCE designs of characters/places for a video.
+The last image is a scene generated for that video, which was told to use them.
+Judge THREE things, and take the WORST of them.
+
+(a) HEADCOUNT. The scene description below names who is in the picture. Every character it
+names must actually BE there, exactly once. A named character that is missing, or drawn twice,
+is the worst kind of failure — the picture no longer tells the story. Read the description,
+list who it says is present, then look for each one.
+
+(b) DESIGN. Each character that appears must have the SAME DESIGN as its reference — face
+shape, eyes, body proportions, fur/skin, clothing, hat, props, drawing style. Ignore pose,
+expression, camera distance and background. If the scene text explicitly says an outfit item
+is not yet worn, do not penalise its absence.
+
+(c) WHO DOES WHAT. When the description gives distinct postures or actions to named
+characters (one lies down, one stands; one speaks, one listens; one carries the thing), the
+SAME character must have that posture in the picture. Only judge a SWAP — the posture landing
+on the wrong named character. Do not judge how well the action is drawn, and if the description
+gives everyone the same posture, there is nothing to swap: skip (c).
+
+Score the scene with ONE number:
+5 = everyone the description names is present exactly once, and identical to its reference;
+4 = everyone present, same design, tiny differences;
+3 = everyone present but a character is clearly redrawn (proportions changed, an outfit item
+    missing or added);
+2 = A NAMED CHARACTER IS MISSING or drawn twice, or a character is mostly a different one,
+    or TWO CHARACTERS HAVE SWAPPED the postures the description gave them;
+1 = a different character entirely;
+0 = the description names nobody, or the camera is deliberately elsewhere (an insert of an
+    object, an empty landscape) — nothing to judge.
+Return JSON only: {{"diem": <0-5>, "khac": "<one short sentence>"}}
+
+Scene description (for context): {mo_ta}"""
+
+
+def data_url(duong: str) -> str:
+    duoi = os.path.splitext(duong)[1].lower().lstrip(".") or "png"
+    duoi = {"jpg": "jpeg"}.get(duoi, duoi)
+    with open(duong, "rb") as f:
+        return "data:image/{0};base64,{1}".format(duoi, base64.b64encode(f.read()).decode())
+
+
+def cham_anh(goi, anh: str, tham_chieu: Sequence[str], mo_ta: str = "") -> Optional[int]:
+    """`goi(noi_dung) -> str` gửi một tin nhắn đa phương thức; trả điểm 0–5 hoặc None.
+
+    `noi_dung` là danh sách khối theo chuẩn `core.goi_van_ban.khoi_anh`. Ảnh
+    thiếu trên đĩa hay AI trả rác → None (không chấm được, không làm lại).
+    """
+    from .goi_van_ban import khoi_anh, loc_json  # noqa: PLC0415
+
+    refs: List[str] = [p for p in tham_chieu if p and os.path.isfile(p)]
+    if not refs or not anh or not os.path.isfile(anh):
+        return None
+    noi_dung = [{"type": "text", "text": LOI_NHAC_CHAM.format(n=len(refs), mo_ta=str(mo_ta or "")[:600])}]
+    noi_dung += [khoi_anh(data_url(p)) for p in refs]
+    noi_dung.append(khoi_anh(data_url(anh)))
+    try:
+        d = loc_json(str(goi(noi_dung) or ""))
+        diem = int(d.get("diem"))
+    except Exception:  # noqa: BLE001 — chấm hỏng thì coi như không chấm
+        return None
+    return diem if 0 <= diem <= 5 else None
+
+
+LOI_NHAC_CHAN_DUNG = """This image is meant to be the REFERENCE PORTRAIT of a character in an animated film.
+Role in the story: {vai}.
+Intended description: {mo_ta}
+Judge whether the portrait shows THIS character as described, and whether a viewer would recognise the ROLE at first glance (a king must look like a king: crown, royal robe…).
+Two hard rules: (a) a reference portrait must show exactly ONE figure — a lineup, several copies, a before/after pair or a crowd scores 2 at most ("thieu": "ONE single figure only"); (b) if the description says the character has TRANSFORMED into another creature or form (a giant turned into a lion, a mouse), the portrait must show THAT new form alone — the old form standing next to a small animal scores 1 ("thieu": "show only the new form: …").
+Score: 5 = matches the description and the role is obvious; 4 = matches, one small detail off; 3 = the character is there but an important item is missing or wrong (no crown on a king, different colour outfit, extra items); 2 = mostly a different look, or more than one figure; 1 = a different character, the role is unrecognisable, or a transformation not shown.
+Return JSON only: {{"diem": <1-5>, "thieu": "<what is missing or wrong, as a short list to ADD to the drawing prompt, or empty>"}}"""
+
+
+def cham_chan_dung(goi, anh: str, mo_ta: str, vai: str = "") -> Tuple[Optional[int], str]:
+    """Chân dung tham chiếu có đúng mô tả và đúng VAI không? → (điểm 1–5 hoặc None, thiếu gì).
+
+    Đo 25/08/2026 (story-3d/0001): dàn tả vua chỉ có "râu bạc, mặt hồng, cười
+    tươi" — máy vẽ ra một ông già áo vá như ăn mày, và cả 30 cảnh cung vua đi
+    theo. Chân dung sai thì mọi cảnh sai; phải chấm ngay tấm đầu tiên.
+    """
+    from .goi_van_ban import khoi_anh, loc_json  # noqa: PLC0415
+
+    if not anh or not os.path.isfile(anh):
+        return None, ""
+    noi_dung = [{"type": "text", "text": LOI_NHAC_CHAN_DUNG.format(
+        vai=str(vai or "character")[:120], mo_ta=str(mo_ta or "")[:900])}, khoi_anh(data_url(anh))]
+    try:
+        d = loc_json(str(goi(noi_dung) or ""))
+        diem = int(d.get("diem"))
+        thieu = str(d.get("thieu") or "").strip()
+    except Exception:  # noqa: BLE001
+        return None, ""
+    return (diem if 1 <= diem <= 5 else None), thieu[:300]
+
+
+def dung_cham_anh(lay_client: Callable[[], object], *, mo_hinh: str = "claude-sonnet-5"):
+    """Hook cho `JobManager(cham_anh=…)`: `(record) -> điểm 0–5` hoặc None.
+
+    Chỉ chấm job ảnh có `params["tham_chieu_cuc_bo"]` (đường dẫn ảnh tham chiếu
+    TRÊN MÁY — cùng những ảnh đã tải lên làm `reference_images`).
+    """
+    def _hook(record) -> Optional[int]:
+        spec = getattr(record, "spec", None)
+        params = getattr(spec, "params", None) or {}
+        refs = [str(p) for p in (params.get("tham_chieu_cuc_bo") or []) if p]
+        files = list(getattr(record, "files", ()) or ())
+        if not refs or not files:
+            return None
+        try:
+            client = lay_client()
+        except Exception:  # noqa: BLE001
+            client = None
+        if client is None:
+            return None
+        from .goi_van_ban import goi_van_ban  # noqa: PLC0415
+
+        def goi(noi_dung):
+            return goi_van_ban(client, [{"role": "user", "content": noi_dung}],
+                               mo_hinh=mo_hinh, toi_da_token=200)
+
+        return cham_anh(goi, files[0], refs, getattr(spec, "content", ""))
+
+    return _hook
