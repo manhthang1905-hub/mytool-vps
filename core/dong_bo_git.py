@@ -722,7 +722,7 @@ def xuat_bai_hoc(goc: str = GOC, *, in_ra: Callable[[str], None] = print) -> Lis
                 continue
             theo_ngach.setdefault(ngach, []).append({
                 "truc": b.get("truc"), "cum": b.get("cum") or "", "cau": cau, "n": b.get("n"),
-                "dung_cho": b.get("dung_cho") or ["chon"]})
+                "dung_cho": b.get("dung_cho") or ["chon"], **({"khoa": b["khoa"]} if b.get("khoa") else {})})
     ra: List[str] = []
     os.makedirs(_thu_muc_chia_se(goc), exist_ok=True)
     for ngach, ds in sorted(theo_ngach.items()):

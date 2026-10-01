@@ -16,6 +16,8 @@ KHÔNG dời tệp nào — chỉ gộp các nguồn có sẵn thành một danh
         · điểm thoát (`diem_thoat`: `retention.xlsx` — đúng đường `BanGhi.retention` — nối về nguồn
           qua `ho_so_video.nguon_cua_goi`)
         · bảng thắng/trượt theo cụm của chính kênh (`cong_thuc_v7.video_cua_kenh`, ngưỡng kênh)
+        · khám nghiệm video (`giam-doc/bai-hoc.jsonl` qua `giam_doc.kham_nghiem.doc_bai_hoc`: gộp theo khoá,
+          n = video ủng hộ − video phản; mâu thuẫn hoặc bóng → không bơm)
         · mục tiêu CTR trang chủ (trung vị video thắng, lùi về trung vị kênh)
   nhóm  · `_NHOM/<nhóm>/INSIGHT-CHON-CONTENT.md` (từng mục) và bảng thắng/trượt theo cụm của các
           kênh anh em (`bang-nhom.csv`, so với trung vị của CHÍNH kênh anh em đó)
@@ -338,6 +340,37 @@ def _tu_danh_gia(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
             for x in (du.get("bai_hoc") or [])[-5:] if str(x).strip()]
 
 
+def _tu_kham_nghiem(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
+    """Bài học khám nghiệm video của kênh (`giam-doc/bai-hoc.jsonl`). Bài bóng (giám đốc chưa `tu_ap`) và bài
+    mâu thuẫn chỉ cho người đọc (`bom=False`); giám đốc `tu_ap` thì bài bóng tính như thật."""
+    from ..giam_doc import kham_nghiem as kn  # noqa: PLC0415
+    from ..kenh import TEP_KENH, doc_yaml  # noqa: PLC0415
+
+    cai = doc_yaml(os.path.join(_duong_kenh(goc, ma_kenh), TEP_KENH)) or {}
+    tu_ap = str(cai.get("giam_doc") or "").strip().lower() == "tu_ap"
+    ra = []
+    for b in kn.doc_bai_hoc(goc, ma_kenh, bo_bong=tu_ap):
+        if b["n"] <= 0:
+            continue
+        cau = "{0} (khám nghiệm {1} video{2})".format(b["cau"].rstrip(". "), b["ung"],
+                                                    ", {0} video phản".format(b["phan"]) if b["phan"] else "")
+        o = _bh("kenh", b["truc"], cau, b["n"], b["dung_cho"], cum=b["cum"], khoa=b["khoa"], bong=b["bong"],
+                video=b["video"], nguon="kham_nghiem")
+        o["bom"] = bool(b["bom"])
+        ra.append(o)
+    return ra
+
+
+def khoi_kham_nghiem(goc: str, ma_kenh: str, dung_cho: Any = "", toi_da: int = 5) -> str:
+    """Khối chữ CHỈ bài khám nghiệm bơm được (n ≥ 3, không mâu thuẫn, không bóng) cho khâu `dung_cho` —
+    `""` khi chưa có (nơi gọi giữ lời nhắc y hệt từng byte). Đọc riêng nguồn này, không dựng cả `_tat_ca`."""
+    try:
+        ds = _loc_dung_cho(_tu_kham_nghiem(goc, ma_kenh), dung_cho)
+    except Exception:  # noqa: BLE001
+        return ""
+    return "\n".join(["- " + b["cau"] for b in sorted(ds, key=lambda b: -b["n"]) if b["bom"]][:toi_da])
+
+
 def _tu_ket_qua(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
     from . import ket_qua  # noqa: PLC0415
 
@@ -483,7 +516,7 @@ def _tat_ca(goc: str, ma_kenh: str, bay_gio: Optional[_dt.datetime] = None) -> L
     kenh = (_an_toan(_muc_tieu_ctr, goc, ma_kenh, ds) + _an_toan(_tu_san_xuat, goc, ma_kenh)
             + _an_toan(_tu_ket_qua, goc, ma_kenh) + _an_toan(_cum_thang_truot_kenh, ds, nguong)
             + _an_toan(lambda: _bai_giu_chan(diem_thoat(goc, ma_kenh)))
-            + _an_toan(_tu_danh_gia, goc, ma_kenh))
+            + _an_toan(_tu_danh_gia, goc, ma_kenh) + _an_toan(_tu_kham_nghiem, goc, ma_kenh))
     # n của kênh trên từng trục; trục "insight_nhom" (cả kênh) = số video riêng đã đo 48h.
     n_kenh: Dict[Tuple[str, str], int] = {}
     for b in kenh:

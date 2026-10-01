@@ -714,4 +714,4 @@ def test_anh_bang_goi_du_khoa(tmp_path):
     assert "video_ke_tiep" in ra["kenh"][0]
     assert "video_gan_day" in ra["kenh"][0]
     assert isinstance(ra["viec"], list)
-    assert set(ra["may"]) == {"vi", "o_dia", "may_nen", "lich", "cong_suat", "chi_phi_that"}
+    assert set(ra["may"]) == {"vi", "o_dia", "may_nen", "lich", "cong_suat", "chi_phi_that", "cong_ty"}

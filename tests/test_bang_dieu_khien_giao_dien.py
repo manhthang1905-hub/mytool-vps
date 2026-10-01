@@ -328,6 +328,20 @@ def test_dong_may_bam_vi_mo_trang_he_thong(trang, qapp):
     assert app.trang_mo == ["he-thong"]
 
 
+def test_dong_may_o_cong_ty_an_khi_chua_hop_hien_khi_co_bao_cao(trang, qapp):
+    """01/10/2026: ô "Công ty" (tổng giám đốc) — chưa có báo cáo thì ẩn; có thì hiện, bấm = Báo cáo công ty."""
+    t, _app, _goc = trang
+    dm = t._dong_may
+    assert not dm._o_cong_ty.isVisibleTo(dm)
+    dm.nap({"cong_ty": {"cau": "Công ty (gợi ý) 05/10: 4 kênh · lên 1 · chững 2 · tụt 1 · 18 khe", "bao_cao": "x"}},
+           _goc, "", "")
+    assert dm._o_cong_ty.isVisibleTo(dm) and "4 kênh" in dm._o_cong_ty.text()
+    goi = []
+    t._mo_bao_cao_cong_ty = lambda: goi.append(1)
+    t._hanh_dong("bao_cao_cong_ty", {})
+    assert goi == [1]
+
+
 # ── Thẻ không dựng lại khi làm mới ────────────────────────────────────────────
 
 

@@ -68,7 +68,8 @@ def bang_so_chu(bs: BangSo, toi_da: int = TOI_DA_KY_TU_BANG) -> str:
             dau.append("Kênh {0}: {1} hiển thị · {2} giờ xem · {3} sub · {4} view".format(
                 ten, _s(h), _s(trong_khoang(bs, "gio_xem", tu, den), 1), _s(trong_khoang(bs, "sub", tu, den)),
                 _s(trong_khoang(bs, "xem", tu, den))))
-    bh = ["- " + b["cau"] for b in bs.bai_hoc if b.get("pham_vi") == "kenh" and int(b.get("n") or 0) >= 3][:10]
+    bh = ["- " + b["cau"] for b in bs.bai_hoc if b.get("pham_vi") == "kenh" and int(b.get("n") or 0) >= 3
+          and b.get("bom", True)][:10]
     cuoi = []
     if bh:
         cuoi.append("BÀI HỌC KÊNH (n ≥ 3):\n" + "\n".join(bh))

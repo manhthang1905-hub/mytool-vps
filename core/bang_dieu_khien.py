@@ -950,7 +950,18 @@ def dong_may(goc: str, anh: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] =
         # .lay_va_luu` là lượt gọi thật, do lịch/CLI riêng chạy). Chưa có sổ
         # (máy mới, hoặc lịch chưa chạy lần nào) thì rỗng, trang tự ẩn dòng đó.
         "chi_phi_that": _chi_phi_hom_qua(goc),
+        # 01/10/2026: một dòng tổng giám đốc (`giam_doc.tong.cau_the`) — {cau, bao_cao}; chưa họp thì rỗng.
+        "cong_ty": _cong_ty(goc),
     }
+
+
+def _cong_ty(goc: str) -> Dict[str, str]:
+    try:
+        from .giam_doc import tong  # noqa: PLC0415
+
+        return tong.cau_the(goc)
+    except Exception:  # noqa: BLE001 — dòng phụ
+        return {"cau": "", "bao_cao": ""}
 
 
 def _chi_phi_hom_qua(goc: str) -> Dict[str, Any]:

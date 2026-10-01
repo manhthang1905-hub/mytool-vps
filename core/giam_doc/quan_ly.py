@@ -3,6 +3,9 @@
     nghi(bs, quan_sat, thuc_don, thi_nghiem, ngan_sach, goi_chat, *, tuan) -> QuyetDinh
     doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da_tham_so) -> dict | None
     goi_chat_that(goc) -> hàm gọi AI qua ví (hỏi van ví trước) | None
+    goi_quyet(loai, loi_nhac, so_lieu, goi_chat, *, doc) -> {ket, mo_hinh, tho, loi}
+        MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán (giám đốc kênh, khám nghiệm, tổng giám đốc) —
+        hội đồng quyết định sau này chỉ thay thân hàm này. `so_lieu` = {khoá nguồn: số} LLM được trích.
 
 Luật: LLM CHỈ chọn id trong thực đơn (và viết chữ cho chỉ đạo / tiêu đề mới); giá trị tham số là của
 thực đơn, không phải của LLM. `gioi_han.kiem` còn soát lại lần nữa trước khi áp. LLM hỏng / trả lời
@@ -98,12 +101,20 @@ def loi_nhac(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[
     luot = ("LƯỢT TUẦN: kết luận thí nghiệm đủ mẫu, tối đa 2 thay đổi tham số, làm mới chỉ đạo (≤ 5 dòng)."
             if tuan else "LƯỢT NGÀY: chỉ việc gấp (cứu video, thí nghiệm tới hạn); tối đa 1 thay đổi tham số.")
     td = [_dong_thuc_don(d) for d in thuc_don] or ["(trống — không có việc nào qua giới hạn an toàn)"]
+    try:  # khám nghiệm video: chưa có bản khám nào thì không có khối — lời nhắc y hệt từng byte
+        from .kham_nghiem import khoi_gan_day  # noqa: PLC0415
+
+        kn = khoi_gan_day(bs.goc, bs.ma_kenh, ket_luan_cua={v["id"]: v.get("ket_luan") or ""
+                                                            for v in getattr(bs, "video", []) or []}) if bs.goc else ""
+    except Exception:  # noqa: BLE001
+        kn = ""
     return "\n\n".join([
         "Bạn là GIÁM ĐỐC KÊNH YouTube {0}: người làm nội dung giỏi — đọc số, chọn ÍT việc nhưng đúng cổng hỏng, "
         "rồi đo lại.\nMỤC TIÊU\n{1}".format(bs.ma_kenh, bs.muc_tieu),
         "TIÊU CHÍ\n" + TIEU_CHI,
         "BẢNG SỐ\n" + bang_so_chu(bs),
         "QUAN SÁT\n" + "\n".join(qs),
+    ] + ([kn] if kn else []) + [
         "THÍ NGHIỆM ĐANG MỞ\n" + "\n".join(tn),
         "NGÂN SÁCH\n" + ns + "\n" + luot,
         "THỰC ĐƠN (chỉ được chọn id trong đây; không có gì đáng làm thì \"chon\": [])\n" + "\n".join(td),
@@ -165,28 +176,45 @@ def nghi(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[Dict
     ln = loi_nhac(bs, quan_sat, thuc_don, thi_nghiem, ngan_sach, tuan=tuan)
     if goi_chat is None:
         return QuyetDinh(loi="không có hàm gọi AI (chế độ thử)", loi_nhac=ln)
-    from ..bien_tap_content import thang_mo_hinh  # noqa: PLC0415
-
     toi_da = min(int(ngan_sach.get("tham_so_con") or 0), 2 if tuan else 1)
     khoa = "giam-doc-{0}-{1}-{2}".format(bs.ma_kenh, bs.bay_gio.strftime("%Y%m%d%H"),
                                         hashlib.sha1(ln.encode("utf-8")).hexdigest()[:10])
+    cho = {v["id"] for v in getattr(bs, "video", []) or [] if not v.get("ket_luan")}
+    q = goi_quyet("giam_doc_kenh", ln, None, goi_chat, goc=bs.goc, ma=bs.ma_kenh, khoa=khoa, ghi=ghi,
+                  doc=lambda tho: doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da, cho))
+    if q["ket"] is not None:
+        return QuyetDinh(mo_hinh=q["mo_hinh"], loi_nhac=ln, tho=q["tho"], **q["ket"])
+    return QuyetDinh(loi=q["loi"], loi_nhac=ln)
+
+
+def goi_quyet(loai: str, loi_nhac: str, so_lieu: Optional[Dict[str, Any]], goi_chat: Optional[Callable[..., str]], *,
+              doc: Callable[[str], Optional[Dict[str, Any]]], goc: str = "", ma: str = "", khoa: str = "",
+              toi_da_token: int = TOI_DA_TOKEN, ghi: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
+    """MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán. Thang mô hình `bien_tap_content.thang_mo_hinh`;
+    mô hình hỏng hoặc `doc(tho)` trả None → thử bậc dưới. `loai` (giam_doc_kenh | kham_nghiem | tong_giam_doc)
+    và `so_lieu` ({khoá nguồn: số}; số LLM trích phải kèm khoá) để dành cho hội đồng quyết định kiểm lại.
+    Trả {ket (dict | None), mo_hinh, tho, loi}."""
+    if goi_chat is None:
+        return {"ket": None, "mo_hinh": "", "tho": "", "loi": "không có hàm gọi AI (chế độ thử)"}
+    from ..bien_tap_content import thang_mo_hinh  # noqa: PLC0415
+
+    nhan = "  [{0}] ".format("giám đốc" if loai == "giam_doc_kenh" else loai.replace("_", " "))
     loi = ""
-    for lan, mo_hinh in enumerate(thang_mo_hinh(bs.goc, bs.ma_kenh)[:SO_LUOT_TOI_DA], 1):
+    for lan, mo_hinh in enumerate(thang_mo_hinh(goc, ma)[:SO_LUOT_TOI_DA], 1):
         try:
-            tho = goi_chat(ln, mo_hinh=mo_hinh, khoa="{0}-{1}".format(khoa, lan), toi_da_token=TOI_DA_TOKEN)
+            tho = goi_chat(loi_nhac, mo_hinh=mo_hinh, khoa="{0}-{1}".format(khoa, lan), toi_da_token=toi_da_token)
         except Exception as e:  # noqa: BLE001 — mô hình hỏng thì thử bậc dưới
             loi = "{0}: {1}".format(mo_hinh, str(e)[:160])
             if ghi:
-                ghi("  [giám đốc] {0} hỏng — thử bậc dưới.".format(loi))
+                ghi(nhan + "{0} hỏng — thử bậc dưới.".format(loi))
             continue
-        kq = doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da,
-                         {v["id"] for v in getattr(bs, "video", []) or [] if not v.get("ket_luan")})
+        kq = doc(tho)
         if kq is not None:
-            return QuyetDinh(mo_hinh=mo_hinh, loi_nhac=ln, tho=tho, **kq)
+            return {"ket": kq, "mo_hinh": mo_hinh, "tho": tho, "loi": ""}
         loi = "{0}: trả lời không đọc được — {1}".format(mo_hinh, _gon(tho, 120))
         if ghi:
-            ghi("  [giám đốc] " + loi)
-    return QuyetDinh(loi=loi or "không mô hình nào trả lời", loi_nhac=ln)
+            ghi(nhan + loi)
+    return {"ket": None, "mo_hinh": "", "tho": "", "loi": loi or "không mô hình nào trả lời"}
 
 
 def vi_cho_phep(goc: str) -> str:
@@ -225,4 +253,5 @@ def goi_chat_that(goc: str, ghi: Optional[Callable[[str], None]] = None) -> Opti
         return goi_van_ban(hop["client"], tin_nhan_viet(de_bai), mo_hinh=mo_hinh, toi_da_token=int(toi_da_token),
                            khoa=khoa, on_log=ghi)
 
+    goi.that = True  # type: ignore[attr-defined] — AI thật: khám nghiệm được lấy bình luận (mạng, 0 đồng)
     return goi

@@ -279,6 +279,10 @@ class DongMay(QFrame):
         self._o_chi_phi = _OChiSoMay("Chi phí thật hôm qua")
         self._o_chi_phi.setVisible(False)
         hang.addWidget(self._o_chi_phi)
+        # 01/10/2026: dòng "công ty" của tổng giám đốc — bấm = Báo cáo công ty. Chưa họp lần nào thì ẩn.
+        self._o_cong_ty = _OChiSoMay("Công ty", lambda: self._on_hanh_dong("bao_cao_cong_ty", {}))
+        self._o_cong_ty.setVisible(False)
+        hang.addWidget(self._o_cong_ty)
 
     def nap(self, may: Dict[str, Any], duong_goc: str, may_bat_tu: str,
            quet_studio: str) -> None:
@@ -325,6 +329,10 @@ class DongMay(QFrame):
                              "Bấm để bật lịch.")
 
         self._ve_chi_phi(may.get("chi_phi_that") or {})
+        ct = may.get("cong_ty") or {}
+        self._o_cong_ty.setVisible(bool(ct.get("cau")))
+        if ct.get("cau"):
+            self._o_cong_ty.dat(str(ct["cau"]).split(": ", 1)[-1], bdk.TOT, str(ct["cau"]) + "\nBấm để mở Báo cáo công ty.")
 
     def _ve_chi_phi(self, cp: Dict[str, Any]) -> None:
         if not cp or not cp.get("tong_micro"):
@@ -811,6 +819,8 @@ class TrangBangDieuKhien(QWidget):
                                        "Tệp video của gói này không còn trên máy.")
         elif ma_hanh_dong == "bao_cao_giam_doc":
             self._mo_bao_cao_giam_doc(ma)
+        elif ma_hanh_dong == "bao_cao_cong_ty":
+            self._mo_bao_cao_cong_ty()
         elif ma_hanh_dong == "hen_gio":
             d = self._dong_ke_hoach(ma, ma_goi)
             if d is None:
@@ -1046,19 +1056,25 @@ class TrangBangDieuKhien(QWidget):
         goc = self._app.base_dir
         self._ghi_roi_lam_moi(lambda: bdk.doi_giam_doc(goc, ma, che_do))
 
-    def _mo_bao_cao_giam_doc(self, ma: str) -> None:
-        """Hộp chỉ đọc `CHANNEL/<ma>/giam-doc/BAO-CAO-TUAN.md`."""
-        duong = str(((self._kenh(ma) or {}).get("giam_doc") or {}).get("bao_cao") or "")
+    def _mo_bao_cao_cong_ty(self) -> None:
+        """Hộp chỉ đọc `workspace/tong-giam-doc/BAO-CAO-CONG-TY.md`."""
+        duong = os.path.join(self._app.base_dir, "workspace", "tong-giam-doc", "BAO-CAO-CONG-TY.md")
+        self._mo_bao_cao_giam_doc("", duong=duong, tieu_de="Báo cáo công ty — tổng giám đốc")
+
+    def _mo_bao_cao_giam_doc(self, ma: str, *, duong: str = "", tieu_de: str = "") -> None:
+        """Hộp chỉ đọc `CHANNEL/<ma>/giam-doc/BAO-CAO-TUAN.md` (hoặc `duong`)."""
+        if not duong:
+            duong = str(((self._kenh(ma) or {}).get("giam_doc") or {}).get("bao_cao") or "")
         if not duong:
             duong = bdk.giam_doc_the(self._app.base_dir, ma).get("bao_cao") or ""
         try:
             with open(duong, encoding="utf-8") as tep:
                 chu = tep.read()
         except OSError:
-            self._app.show_message("Chưa có báo cáo", "Giám đốc kênh {0} chưa ghi báo cáo nào.".format(ma))
+            self._app.show_message("Chưa có báo cáo", "Giám đốc {0} chưa ghi báo cáo nào.".format(ma or "công ty"))
             return
         hop = QDialog(self)
-        hop.setWindowTitle("Báo cáo tuần — giám đốc kênh {0}".format(ma))
+        hop.setWindowTitle(tieu_de or "Báo cáo tuần — giám đốc kênh {0}".format(ma))
         hop.resize(760, 620)
         v = QVBoxLayout(hop)
         o = QTextEdit()

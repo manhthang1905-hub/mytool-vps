@@ -3179,7 +3179,18 @@ def _khoi_khan_gia(bc: "BoiCanh", k: Kenh, d: str) -> Dict[str, str]:
                     st = (them + "\n" + st).strip()
         except Exception:  # noqa: BLE001
             st = ""
-    return {"BINH_LUAN_GOC": bl or "(không có)", "SU_THAT_KENH": st or "(chưa có)",
+    st = st or "(chưa có)"
+    try:  # 01/10/2026: bài học KHÁM NGHIỆM video (n ≥ 3, không bóng) nối cuối — chưa có bài thì y hệt từng byte
+        from .chien_luoc.bai_hoc import khoi_kham_nghiem  # noqa: PLC0415
+
+        ma, goc_bh = str(getattr(k, "ma", "") or ""), str(getattr(bc, "goc", "") or "")
+        bh = (khoi_kham_nghiem(goc_bh, ma, "kich_ban") or khoi_kham_nghiem(
+            goc_bh, re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), "kich_ban")) if ma and goc_bh else ""
+        if bh:
+            st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật, n ≥ 3 video):\n" + bh
+    except Exception:  # noqa: BLE001
+        pass
+    return {"BINH_LUAN_GOC": bl or "(không có)", "SU_THAT_KENH": st,
             "BAI_HOC": _khoi_bai_hoc_kich_ban(bc, k)}
 
 
