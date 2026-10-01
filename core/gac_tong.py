@@ -121,6 +121,8 @@ NGUONG_KHONG_VIDEO_MOI_GIO = 48.0
 
 #: "video hẹn lịch mà chưa tải lên" — kế hoạch ghi rõ "<12h".
 NGUONG_HEN_LICH_GIO = 12.0
+#: Dưới ngần này giờ tới giờ hẹn mà chưa tải lên thì mới là KHẨN.
+NGUONG_HEN_LICH_KHAN_GIO = 3.0
 
 #: "tải lên lỗi lặp" — `lan_tai_moi` (số lần tải LẠI trong CÙNG một ngày,
 #: `vm/may_dang_dom.py:813-818`) từ 3 trở lên coi là lặp đáng báo.
@@ -762,8 +764,11 @@ def _kiem_hen_lich_chua_tai(ma: str, snap: Dict[str, Any], bay_gio: _dt.datetime
             continue
         tieu_de = str(d.get("Tiêu đề") or d.get("Mã gói") or "").strip()
         qua_han = gio_con_lai < 0
+        # Máy đăng tải bổ sung theo khe nên video thường lên trước giờ hẹn 3–8 giờ;
+        # còn xa (>3 giờ) chỉ là THƯỜNG, sát giờ hoặc quá giờ mới KHẨN (01/10/2026).
+        muc = bao_dong.MUC_KHAN if gio_con_lai <= NGUONG_HEN_LICH_KHAN_GIO else bao_dong.MUC_THUONG
         ra.append(_su_co(
-            "hen_lich_chua_tai", bao_dong.MUC_KHAN, kenh=ma,
+            "hen_lich_chua_tai", muc, kenh=ma,
             chuyen_gi=("Video 「{0}」 của kênh {1} đã QUÁ giờ hẹn đăng {2:.1f} giờ mà "
                       "chưa thấy tải lên YouTube.".format(tieu_de, ma, abs(gio_con_lai))
                       if qua_han else
