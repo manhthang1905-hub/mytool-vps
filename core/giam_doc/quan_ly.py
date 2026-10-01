@@ -3,9 +3,10 @@
     nghi(bs, quan_sat, thuc_don, thi_nghiem, ngan_sach, goi_chat, *, tuan) -> QuyetDinh
     doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da_tham_so) -> dict | None
     goi_chat_that(goc) -> hàm gọi AI qua ví (hỏi van ví trước) | None
-    goi_quyet(loai, loi_nhac, so_lieu, goi_chat, *, doc) -> {ket, mo_hinh, tho, loi}
-        MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán (giám đốc kênh, khám nghiệm, tổng giám đốc) —
-        hội đồng quyết định sau này chỉ thay thân hàm này. `so_lieu` = {khoá nguồn: số} LLM được trích.
+    goi_quyet(loai, loi_nhac, so_lieu, goi_chat, *, doc) -> {ket, mo_hinh, tho, loi[, hoi_dong]}
+        MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán (giám đốc kênh, khám nghiệm, tổng giám đốc).
+        Hội đồng bật (`hoi_dong.bat`) → `hoi_dong.hop`: 3 chuyên gia → mã kiểm số → phản biện → chấm +
+        độ tin → cổng. Tắt (`hoi_dong=False` / env SHOPAPI_HOI_DONG=0 — test) → đường cũ một lượt.
 
 Luật: LLM CHỈ chọn id trong thực đơn (và viết chữ cho chỉ đạo / tiêu đề mới); giá trị tham số là của
 thực đơn, không phải của LLM. `gioi_han.kiem` còn soát lại lần nữa trước khi áp. LLM hỏng / trả lời
@@ -57,6 +58,7 @@ class QuyetDinh:
     loi: str = ""
     loi_nhac: str = ""
     tho: str = ""
+    hoi_dong: Dict[str, Any] = field(default_factory=dict)
 
 
 def _gon(x: Any, n: int) -> str:
@@ -171,8 +173,8 @@ def doc_ket_qua(tho: str, thuc_don: List[Dict[str, Any]], thi_nghiem: List[Dict[
 
 def nghi(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[Dict[str, Any]],
          thi_nghiem: List[Dict[str, Any]], ngan_sach: Dict[str, Any], goi_chat: Optional[Callable[..., str]], *,
-         tuan: bool = False, ghi: Optional[Callable[[str], None]] = None) -> QuyetDinh:
-    """Một lượt LLM theo thang mô hình; mô hình hỏng / trả lời không đọc được thì thử bậc dưới."""
+         tuan: bool = False, ghi: Optional[Callable[[str], None]] = None, luu: bool = True) -> QuyetDinh:
+    """Một lượt quyết (qua `goi_quyet` — hội đồng hoặc một lượt LLM theo thang mô hình)."""
     ln = loi_nhac(bs, quan_sat, thuc_don, thi_nghiem, ngan_sach, tuan=tuan)
     if goi_chat is None:
         return QuyetDinh(loi="không có hàm gọi AI (chế độ thử)", loi_nhac=ln)
@@ -180,23 +182,45 @@ def nghi(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[Dict
     khoa = "giam-doc-{0}-{1}-{2}".format(bs.ma_kenh, bs.bay_gio.strftime("%Y%m%d%H"),
                                         hashlib.sha1(ln.encode("utf-8")).hexdigest()[:10])
     cho = {v["id"] for v in getattr(bs, "video", []) or [] if not v.get("ket_luan")}
-    q = goi_quyet("giam_doc_kenh", ln, None, goi_chat, goc=bs.goc, ma=bs.ma_kenh, khoa=khoa, ghi=ghi,
-                  doc=lambda tho: doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da, cho))
+    try:
+        from .hoi_dong import so_lieu_kenh  # noqa: PLC0415
+
+        sl: Optional[Dict[str, Any]] = so_lieu_kenh(bs) or None
+    except Exception:  # noqa: BLE001
+        sl = None
+    n = sum(1 for v in getattr(bs, "video", []) or [] if v.get("ket_luan") in ("thang", "truot"))
+    q = goi_quyet("giam_doc_kenh", ln, sl, goi_chat, goc=bs.goc, ma=bs.ma_kenh, khoa=khoa, ghi=ghi, n=n,
+                  luu=bool(luu), doc=lambda tho: doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da, cho))
     if q["ket"] is not None:
-        return QuyetDinh(mo_hinh=q["mo_hinh"], loi_nhac=ln, tho=q["tho"], **q["ket"])
-    return QuyetDinh(loi=q["loi"], loi_nhac=ln)
+        return QuyetDinh(mo_hinh=q["mo_hinh"], loi_nhac=ln, tho=q["tho"], hoi_dong=q.get("hoi_dong") or {}, **q["ket"])
+    return QuyetDinh(loi=q["loi"], loi_nhac=ln, hoi_dong=q.get("hoi_dong") or {})
 
 
 def goi_quyet(loai: str, loi_nhac: str, so_lieu: Optional[Dict[str, Any]], goi_chat: Optional[Callable[..., str]], *,
               doc: Callable[[str], Optional[Dict[str, Any]]], goc: str = "", ma: str = "", khoa: str = "",
-              toi_da_token: int = TOI_DA_TOKEN, ghi: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
-    """MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán. Thang mô hình `bien_tap_content.thang_mo_hinh`;
-    mô hình hỏng hoặc `doc(tho)` trả None → thử bậc dưới. `loai` (giam_doc_kenh | kham_nghiem | tong_giam_doc)
-    và `so_lieu` ({khoá nguồn: số}; số LLM trích phải kèm khoá) để dành cho hội đồng quyết định kiểm lại.
-    Trả {ket (dict | None), mo_hinh, tho, loi}."""
+              toi_da_token: int = TOI_DA_TOKEN, ghi: Optional[Callable[[str], None]] = None,
+              hoi_dong: Optional[bool] = None, n: Optional[int] = None, luu: bool = True,
+              nhan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """MỘT cửa cho mọi lượt LLM ra quyết định / chẩn đoán. `loai` (giam_doc_kenh | kham_nghiem | tong_giam_doc),
+    `so_lieu` ({khoá nguồn: số}; số LLM trích phải kèm khoá — hội đồng kiểm bằng mã), `n` cỡ mẫu (cổng),
+    `luu=False` = không ghi biên bản / sổ (chế độ thử), `nhan` {video_id, moc} cho sổ chuyên gia.
+    Hội đồng hỏng ngoài dự kiến → đường cũ: thang mô hình `bien_tap_content.thang_mo_hinh`; mô hình hỏng
+    hoặc `doc(tho)` trả None → thử bậc dưới. Trả {ket (dict | None), mo_hinh, tho, loi[, hoi_dong]}."""
     if goi_chat is None:
         return {"ket": None, "mo_hinh": "", "tho": "", "loi": "không có hàm gọi AI (chế độ thử)"}
     from ..bien_tap_content import thang_mo_hinh  # noqa: PLC0415
+    from . import hoi_dong as hd  # noqa: PLC0415
+
+    if hoi_dong if hoi_dong is not None else hd.bat(goc):
+        try:
+            q = hd.hop(loai, loi_nhac, so_lieu, goi_chat, doc=doc, goc=goc, ma=ma, khoa=khoa or loai,
+                       toi_da_token=toi_da_token, ghi=ghi, n=n, luu=luu, nhan=nhan)
+            if q["ket"] is not None or q.get("hoi_dong", {}).get("chuyen_gia"):
+                return q
+        except Exception as e:  # noqa: BLE001 — hội đồng hỏng không được làm mất lượt quyết
+            if ghi:
+                ghi("  [hội đồng] hỏng ngoài dự kiến ({0}: {1}) — đi đường một lượt.".format(
+                    type(e).__name__, str(e)[:160]))
 
     nhan = "  [{0}] ".format("giám đốc" if loai == "giam_doc_kenh" else loai.replace("_", " "))
     loi = ""

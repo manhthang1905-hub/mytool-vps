@@ -626,12 +626,41 @@ PHUT_NANG_MOI_VIDEO_MAC_DINH = 65.0
 PHUT_QUET_MOI_KENH_NGAY = 15.0
 
 
-def doc_nhat_ky_khe(goc: str, tu_luc: float, den_luc: Optional[float] = None
-                    ) -> Dict[str, Any]:
+#: Việc "giữ" mà không bao giờ có "nha" (tiến trình chết giữa chừng) — 01/10/2026 đo được 3 lượt
+#: `san_xuat` mở từ 30/09 09:00–10:15 chưa đóng, cộng ~27 giờ/lượt vào làn API (lan TB 5,2 > 4 làn)
+#: → trần làn API 17,9 thay vì ~33. Giữ còn mở bị cắt ở lần "duoc" kế của CÙNG kênh + lớp + việc
+#: (tiến trình khác — kênh chạy tuần tự), không có thì tối đa ngần này phút.
+TRAN_GIU_MO_PHUT = 8 * 60.0
+
+#: Mốc thay đổi LỚN của dây chuyền (giờ máy, "YYYY-MM-DD HH:MM:SS") — lượt bắt đầu TRƯỚC mốc chạy mã
+#: cũ, không được đo chung với lượt sau mốc. Thêm mốc riêng máy: `workspace/cai-dat.json:
+#: cong_suat_moc_doi: ["…"]`. 30/09 19:15:20 = gỡ trần khâu ảnh (ảnh 143–210' → 48').
+MOC_DOI_LON = ("2026-09-30 19:15:20",)
+
+
+def moc_doi_gan_nhat(goc: str, den: float) -> Optional[float]:
+    """Mốc thay đổi lớn gần nhất ≤ `den` (epoch) | None."""
+    cai = _doc_json(os.path.join(goc, "workspace", "cai-dat.json")) or {}
+    them = cai.get("cong_suat_moc_doi") if isinstance(cai, dict) else None
+    ds = list(MOC_DOI_LON) + ([str(x) for x in them] if isinstance(them, list) else [])
+    ra: List[float] = []
+    for s in ds:
+        try:
+            ra.append(datetime.fromisoformat(str(s).strip().replace("T", " ")).timestamp())
+        except ValueError:
+            continue
+    ra = [x for x in ra if x <= den]
+    return max(ra) if ra else None
+
+
+def doc_nhat_ky_khe(goc: str, tu_luc: float, den_luc: Optional[float] = None,
+                    bo_truoc: Optional[float] = None) -> Dict[str, Any]:
     """Ghép cặp "duoc" → "nha" trong `workspace/khe/nhat-ky.jsonl` (và bản
     xoay vòng `.1`) theo (pid, lớp, việc) — trả phút giữ theo lớp/việc trong
     [tu_luc, den_luc], cắt phần nằm ngoài cửa sổ. Việc còn đang giữ (chưa có
-    "nha") được tính tới `den_luc`."""
+    "nha") được tính tới `den_luc` — nhưng cắt ở lần "duoc" kế của cùng kênh/lớp/việc
+    và tối đa `TRAN_GIU_MO_PHUT` (giữ "ma" của tiến trình chết). `bo_truoc`: bỏ hẳn
+    việc bắt đầu trước mốc này (lượt chạy mã cũ)."""
     den = den_luc if den_luc is not None else datetime.now().timestamp()
     dong: List[Dict[str, Any]] = []
     thu_muc = os.path.join(goc, "workspace", "khe")
@@ -659,12 +688,28 @@ def doc_nhat_ky_khe(goc: str, tu_luc: float, den_luc: Optional[float] = None
         if b > a and lop in phut:
             phut[lop][viec] = phut[lop].get(viec, 0.0) + (b - a) / 60.0
 
+    kenh_mo: Dict[Any, str] = {}
+    cu_mo: Dict[Any, Any] = {}
+    bo_khoang: List[Any] = []
     for m in dong:
         lop, viec, loai = str(m.get("lop") or ""), str(m.get("viec") or ""), m.get("viec_nk")
         khoa = (m.get("pid"), lop, viec)
         luc = float(m.get("luc") or 0)
         if loai == "duoc":
+            kenh = str(m.get("kenh") or "")
+            if kenh:  # giữ "ma" cùng kênh/lớp/việc của tiến trình khác → đóng ở đây
+                for k_cu in [k for k in mo if k[1:] == (lop, viec) and k != khoa and kenh_mo.get(k) == kenh]:
+                    bd = mo.pop(k_cu)
+                    cong(lop, viec, bd, min(luc, bd + TRAN_GIU_MO_PHUT * 60.0))
+                    kenh_mo.pop(k_cu, None)
+                for k_cu in [k for k in cu_mo if k[1:] == (lop, viec) and k != khoa and cu_mo[k][0] == kenh]:
+                    k_, a_ = cu_mo.pop(k_cu)
+                    bo_khoang.append((k_, a_, min(luc, a_ + TRAN_GIU_MO_PHUT * 60.0)))
+            if bo_truoc is not None and luc < bo_truoc:
+                cu_mo[khoa] = (kenh, luc)  # lượt mã cũ: không tính, nhớ khoảng để bỏ video của nó
+                continue
             mo[khoa] = luc
+            kenh_mo[khoa] = kenh
             if luc >= tu_luc and lop in so_lan:
                 so_lan[lop][viec] = so_lan[lop].get(viec, 0) + 1
                 try:
@@ -673,18 +718,25 @@ def doc_nhat_ky_khe(goc: str, tu_luc: float, den_luc: Optional[float] = None
                     pass
         elif loai == "nha" and khoa in mo:
             cong(lop, viec, mo.pop(khoa), luc)
+        elif loai == "nha" and khoa in cu_mo:
+            k_, a_ = cu_mo.pop(khoa)
+            bo_khoang.append((k_, a_, luc))
         elif loai == "vuot_han" and luc >= tu_luc:
             vuot_han += 1
     for (pid, lop, viec), bat_dau in mo.items():
-        cong(lop, viec, bat_dau, den)
+        cong(lop, viec, bat_dau, min(den, bat_dau + TRAN_GIU_MO_PHUT * 60.0))
     return {"phut": {lop: {v: round(x, 1) for v, x in d.items()} for lop, d in phut.items()},
             "so_lan": so_lan, "vuot_han": vuot_han,
+            "bo_khoang": bo_khoang + [(k_, a_, min(den, a_ + TRAN_GIU_MO_PHUT * 60.0)) for k_, a_ in cu_mo.values()],
             "cho_trung_vi_phut": round(statistics.median(cho_phut), 1) if cho_phut else None}
 
 
-def _video_ban_giao(goc: str, tu_luc: float) -> int:
+def _video_ban_giao(goc: str, tu_luc: float, bo_truoc: Optional[float] = None,
+                    bo_khoang: Sequence[Any] = ()) -> int:
     """Số video DỰNG XONG trong cửa sổ — khâu `dung` có `ket_thuc` ≥ tu_luc
-    (`PROJECTS/AUTO/*/*/trang-thai.json`, chỉ đọc)."""
+    (`PROJECTS/AUTO/*/*/trang-thai.json`, chỉ đọc). `bo_truoc`: bỏ lượt có khâu bắt đầu
+    trước mốc hoặc nằm trong khoảng giữ làn API của một tiến trình sinh trước mốc
+    (`bo_khoang` [(kênh, từ, tới)] — lượt sinh trước mốc có thể bắt đầu khâu đầu sau mốc)."""
     dem = 0
     for duong in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", "*", "*", "trang-thai.json")):
         try:
@@ -696,15 +748,31 @@ def _video_ban_giao(goc: str, tu_luc: float) -> int:
         muc = ((du or {}).get("khau") or {}).get("dung") if isinstance(du, dict) else None
         if isinstance(muc, dict) and isinstance(muc.get("ket_thuc"), (int, float)) \
                 and float(muc["ket_thuc"]) >= tu_luc and muc.get("trang_thai") == "xong":
+            if bo_truoc is not None:
+                bd = [float(m["bat_dau"]) for m in (du.get("khau") or {}).values()
+                      if isinstance(m, dict) and isinstance(m.get("bat_dau"), (int, float))]
+                kenh = str(du.get("ma_kenh") or "")
+                if bd and (min(bd) < bo_truoc or any(k_ == kenh and a_ <= min(bd) <= b_ for k_, a_, b_ in bo_khoang)):
+                    continue
             dem += 1
     return dem
 
+
 def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
                        bay_gio: Optional[float] = None) -> Dict[str, Any]:
-    """Máy đang dùng X% khe nặng, Y làn API; còn dư ≈ Z video/ngày → đề xuất."""
+    """Máy đang dùng X% khe nặng, Y làn API; còn dư ≈ Z video/ngày → đề xuất.
+
+    Cửa sổ `gio` giờ gần nhất, nhưng KHÔNG lùi qua mốc thay đổi lớn (`moc_doi_gan_nhat`): có mốc
+    trong cửa sổ thì cửa sổ bắt đầu từ mốc và bỏ lượt bắt đầu trước mốc (01/10/2026: đo 168 giờ
+    gồm phần lớn thời gian trước khi khâu ảnh nhanh gấp 4 → trần 17,9 sai)."""
     den = bay_gio if bay_gio is not None else datetime.now().timestamp()
     tu = den - gio * 3600.0
-    nk = doc_nhat_ky_khe(goc, tu, den)
+    moc = moc_doi_gan_nhat(goc, den)
+    moc = moc if moc is not None and moc > tu else None
+    if moc is not None:
+        tu = moc
+        gio = max(0.25, (den - tu) / 3600.0)
+    nk = doc_nhat_ky_khe(goc, tu, den, bo_truoc=moc)
     phut_nang = sum(nk["phut"]["nang"].values())
     phut_api = sum(nk["phut"]["api"].values())
     cai = _doc_json(os.path.join(goc, "workspace", "cai-dat.json")) or {}
@@ -713,7 +781,7 @@ def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
     except (TypeError, ValueError):
         lan = 2
     dp = _doc_json(os.path.join(goc, "workspace", "khe", "dieu-phoi.json")) or {}
-    video = _video_ban_giao(goc, tu)
+    video = _video_ban_giao(goc, tu, bo_truoc=moc, bo_khoang=nk["bo_khoang"])
     khe_cua_so = KHE_NGAY_PHUT * gio / 24.0
     pt_nang = round(100.0 * phut_nang / khe_cua_so, 1) if khe_cua_so else None
     lan_tb = round(phut_api / (gio * 60.0), 2)
@@ -741,7 +809,8 @@ def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
         de_xuat = "đã gần hết công suất ({0} là nút thắt)".format(nut)
     if not du_mau:
         de_xuat += " (ƯỚC theo mô hình lộ trình — chưa đủ mẫu điều phối)"
-    return {"luc": datetime.fromtimestamp(den).strftime("%Y-%m-%d %H:%M"), "cua_so_gio": gio,
+    return {"luc": datetime.fromtimestamp(den).strftime("%Y-%m-%d %H:%M"), "cua_so_gio": round(gio, 1),
+            "tu_moc_doi": datetime.fromtimestamp(moc).strftime("%Y-%m-%d %H:%M") if moc is not None else "",
             "du_mau": du_mau, "so_kenh_tu_chay": so_kenh,
             "phut_khe_nang": round(phut_nang, 1), "phan_tram_khe_nang": pt_nang,
             "phut_khe_nang_theo_viec": nk["phut"]["nang"], "gio_lan_api": round(phut_api / 60.0, 1),

@@ -268,6 +268,13 @@ def test_hop_tuan_thu_khong_ghi_tu_ap_doi_khe_va_nghi(tmp_path, monkeypatch):
     kq = tong.hop_tuan(goc, llm, thu=True, bay_gio=BAY)
     assert kq["se_lam"] and not os.path.exists(os.path.join(goc, tong.THU_MUC))
     assert "k:T1/da = 1.4" in kq["loi_nhac"] and kq["thuc_don"][0]["moi"]["nhip_dang"] == "00:00, 05:00, 12:00, 20:00"
+    # tu_ap nhưng chưa có thành tích chia khe (n < 10) → chỉ gợi ý (Đợt F: quyền tự áp theo độ chính xác)
+    from core.giam_doc import hoi_dong
+
+    kq = tong.hop_tuan(goc, llm, ep_che_do="tu_ap", bay_gio=BAY - _dt.timedelta(days=30))
+    assert not kq["da_lam"] and kq["se_lam"] and kq["quyen_chia_khe"] == "goi_y"
+    os.remove(os.path.join(goc, tong.THU_MUC, tong.TEP_SO))
+    monkeypatch.setattr(hoi_dong, "quyen", lambda g, m, l: "tu_ap")
     kq = tong.hop_tuan(goc, llm, ep_che_do="tu_ap", bay_gio=BAY)
     from core.kenh import doc_yaml
 

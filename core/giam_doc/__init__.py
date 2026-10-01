@@ -38,7 +38,8 @@ from .gioi_han import doc_chi_dao  # noqa: F401 — cửa công khai cho biên t
 
 _log = logging.getLogger(__name__)
 
-_KHONG_PHAI_VIEC = {"du_lieu", "so_thi_nghiem", "gioi_han", "quan_ly", "bao_cao", "kham_nghiem", "tong", "__main__"}
+_KHONG_PHAI_VIEC = {"du_lieu", "so_thi_nghiem", "gioi_han", "quan_ly", "bao_cao", "kham_nghiem", "tong", "hoi_dong",
+                    "__main__"}
 _THU_TU_GOC = ("suc_khoe", "cuu_ctr", "dan_cum", "muc_tieu_ypp", "do_dai")
 THU_MUC_KHOA = os.path.join("workspace", "giam-doc")
 KHOA_QUA_HAN_GIAY = 3 * 3600
@@ -180,7 +181,7 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
     if not kq.bao_dong and goi_chat is not None:
         qs = {v["ten"]: v["quan_sat"] for v in kq.viec if v["quan_sat"]}
         kq.quyet_dinh = quan_ly.nghi(bs, qs, [d for d in kq.thuc_don if d["duoc"]], kq.thi_nghiem,
-                                     gioi_han.ngan_sach(so_, bs.bay_gio), goi_chat, tuan=tuan, ghi=ghi)
+                                     gioi_han.ngan_sach(so_, bs.bay_gio), goi_chat, tuan=tuan, ghi=ghi, luu=viet)
     if not viet:
         return kq
 
@@ -207,12 +208,21 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
             else:
                 stn.dong(goc, ma, tn["id"], k["ket"], tn.get("_ket_luan_so"), ly_do=k["ly_do"], bay_gio=bs.bay_gio)
                 kq.da_lam.append({"viec": "ket_luan", "id": tn["id"], "ket": k["ket"]})
+        from . import hoi_dong  # noqa: PLC0415
+
         for d in qd.chon:
             if d["loai"] == "viec_studio":
                 kq.viec_cua_ban.append("Đổi tiêu đề video {0} “{1}” thành “{2}” ({3}).".format(
                     d["video_id"], (d.get("tieu_de_cu") or "")[:40], d.get("noi_dung"), d.get("ly_do_llm")))
                 continue
-            if cd != "tu_ap":
+            # quyền tự áp theo thành tích (`hoi_dong.do_chinh_xac`): đổi chiến lược lớn → chủ duyệt; đổi chuẩn
+            # chỉ tự áp khi loại "doi_chuan" đã ≥ 70% đúng trên n ≥ 10 — chưa thì như gợi ý
+            lon = hoi_dong.la_quyet_lon(d)
+            if cd == "tu_ap" and lon:
+                kq.viec_cua_ban.append("Quyết định lớn chờ bạn duyệt: {0} “{1}” → “{2}” ({3}).".format(
+                    d.get("khoa"), _gon_chu(d.get("gia_tri_cu"), 80), _gon_chu(d.get("gia_tri"), 80),
+                    _gon_chu(d.get("ly_do_llm"), 160)))
+            if cd != "tu_ap" or lon or (d["loai"] == "tham_so" and hoi_dong.quyen(goc, ma, "doi_chuan") != "tu_ap"):
                 stn.ghi_nhat_ky(goc, ma, viec="goi_y", sau=d.get("gia_tri") or d.get("noi_dung"), khoa=d.get("khoa"),
                                 ly_do_llm=d.get("ly_do_llm"), bay_gio=bs.bay_gio)
                 kq.se_lam.append({"id": d.get("id"), "loai": d.get("loai"), "khoa": d.get("khoa"),
@@ -234,7 +244,18 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
                        bao_dong=kq.bao_dong, loi_llm=(qd.loi if qd is not None else ""),
                        **({"ngay_tuan": bs.bay_gio.date().isoformat()} if tuan else {}), **_gom_goi_y(bs))
     bao_cao.ghi_tuan(goc, ma, kq)
+    try:  # sổ độ chính xác (đọc dự đoán + kết quả có sẵn) — bảng điều khiển đọc tệp này
+        from . import hoi_dong  # noqa: PLC0415
+
+        hoi_dong.do_chinh_xac(goc, ma)
+    except Exception as loi:  # noqa: BLE001
+        _log.warning("giam_doc: sổ độ chính xác %s hỏng: %s", ma, loi)
     return kq
+
+
+def _gon_chu(x: Any, n: int) -> str:
+    s = " ".join(str(x if x is not None else "").split())
+    return s if len(s) <= n else s[: n - 1] + "…"
 
 
 # ── nhịp (gác tổng gọi) ────────────────────────────────────────────────────

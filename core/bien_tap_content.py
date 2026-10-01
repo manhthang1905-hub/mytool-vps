@@ -996,12 +996,18 @@ def _khoi_chi_dao(goc: str, ma_kenh: str, bay_gio: _dt.datetime) -> str:
             "nhưng SỐ THẬT và luật ngách vẫn đứng trên:\n" + "\n".join(dong))
 
 
-def _chen_chi_dao(khuon: str, dau: str, chi_dao: str, *, mo: str, dong: str) -> str:
-    """Chèn khối chỉ đạo vào KHUÔN lời nhắc ngay trước dòng `dau` (đầu khối ỨNG VIÊN). Không có chỉ đạo
-    → trả nguyên khuôn."""
+#: 01/10/2026 (Đợt F) — 3 dòng ý kiến đội chuyên gia (`giam_doc.hoi_dong.y_kien_ung_vien`), đặt ngay trước
+#: khối ỨNG VIÊN; biên tập viên vẫn tự chấm như cũ. Không có ý kiến → lời nhắc y hệt từng byte (golden).
+TIEU_DE_Y_KIEN = "Ý KIẾN ĐỘI CHUYÊN GIA"
+
+
+def _chen_chi_dao(khuon: str, dau: str, chi_dao: str, *, mo: str, dong: str,
+                  tieu_de: str = TIEU_DE_CHI_DAO) -> str:
+    """Chèn khối chỉ đạo (hoặc khối `tieu_de` khác) vào KHUÔN lời nhắc ngay trước dòng `dau` (đầu khối
+    ỨNG VIÊN). Không có chữ → trả nguyên khuôn."""
     if not chi_dao or dau not in khuon:
         return khuon
-    khoi = mo + TIEU_DE_CHI_DAO + dong + "\n" + chi_dao.replace("{", "{{").replace("}", "}}") + "\n\n"
+    khoi = mo + tieu_de + dong + "\n" + chi_dao.replace("{", "{{").replace("}", "}}") + "\n\n"
     i = khuon.index(dau)
     return khuon[:i] + khoi + khuon[i:]
 
@@ -1325,6 +1331,8 @@ def _dung_loi_nhac_gon(boi_canh: Dict[str, str], uv: Sequence[Dict[str, Any]], s
     gt.setdefault("khoi_nhom", "")
     khuon = _chen_chi_dao(DE_BAI_GON_KHUON, "ỨNG VIÊN (thứ tự của công thức):", boi_canh.get("chi_dao") or "",
                           mo="", dong=":")
+    khuon = _chen_chi_dao(khuon, "ỨNG VIÊN (thứ tự của công thức):", boi_canh.get("_y_kien") or "",
+                          mo="", dong=":", tieu_de=TIEU_DE_Y_KIEN)
     return (khuon + tra_loi).format(so_uv=len(uv), so_chon=max(1, int(so_chon)),
                                     ung_vien=_khoi_ung_vien(uv), **gt)
 
@@ -1390,6 +1398,8 @@ def dung_loi_nhac(boi_canh: Dict[str, str], uv: Sequence[Dict[str, Any]], so_cho
         return _dung_loi_nhac_gon(boi_canh, uv, so_chon)
     khuon = _chen_chi_dao(DE_BAI, "═══ ỨNG VIÊN (thứ tự của công thức) ═══", boi_canh.get("chi_dao") or "",
                           mo="═══ ", dong=" ═══")
+    khuon = _chen_chi_dao(khuon, "═══ ỨNG VIÊN (thứ tự của công thức) ═══", boi_canh.get("_y_kien") or "",
+                          mo="═══ ", dong=" ═══", tieu_de=TIEU_DE_Y_KIEN)
     return khuon.format(so_uv=len(uv), so_chon=max(1, int(so_chon)), thang=_ngan_so(NGUONG_THANG_48H),
                         truot=_ngan_so(NGUONG_TRUOT_48H), ung_vien=_khoi_ung_vien(uv),
                         **{k: (v or "(trống)") for k, v in boi_canh.items() if not k.startswith("_") and k != "chi_dao"})
@@ -1832,6 +1842,15 @@ def _chon(goc, ma_kenh, ung_vien_top, goi_chat, *, so_chon, ghi, luu, bay_gio,
     boi_canh = dung_boi_canh(goc, ma_kenh, bay_gio=luc)
     ma_xem = set(filter(None, boi_canh.get("_ma_khan_gia_xem", "").split(",")))
     _lam_giau(goc, ma_kenh, uv, luc, ma_xem)
+    try:  # Đợt F: đội chuyên gia góp 3 dòng (chỉ kênh bật giám đốc + hội đồng bật; không có → y hệt bản cũ)
+        from .giam_doc import hoi_dong  # noqa: PLC0415
+
+        y_kien = hoi_dong.y_kien_ung_vien(goc, ma_kenh, uv, goi_chat, boi_canh=boi_canh, ghi=ghi)
+    except Exception as loi:  # noqa: BLE001 — chuyên gia hỏng không chặn biên tập
+        y_kien = ""
+        _ghi_log(ghi, "  [biên tập AI] ý kiến chuyên gia hỏng ({0}) — chấm như cũ.".format(str(loi)[:100]))
+    if y_kien:
+        boi_canh["_y_kien"] = y_kien
     loi_nhac = dung_loi_nhac(boi_canh, uv, so_chon)
     thang = thang_mo_hinh(goc, ma_kenh)
     _ghi_log(ghi, "  [biên tập AI] {0} ứng viên · lời nhắc {1:,} ký tự · mô hình {2}…".format(

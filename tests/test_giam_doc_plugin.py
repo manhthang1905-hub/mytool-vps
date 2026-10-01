@@ -300,7 +300,10 @@ def test_chay_kenh_thu_khong_ghi_gi(tmp_path):
     assert "QUYẾT ĐỊNH" in chu and "LỜI NHẮC" in chu
 
 
-def test_chay_kenh_tu_ap_ghi_so_va_kenh_yaml(tmp_path):
+def test_chay_kenh_tu_ap_ghi_so_va_kenh_yaml(tmp_path, monkeypatch):
+    from core.giam_doc import hoi_dong
+
+    monkeypatch.setattr(hoi_dong, "quyen", lambda g, m, l: "tu_ap")  # đã có thành tích (Đợt F: quyền theo độ chính xác)
     goc = str(tmp_path)
     dung_kenh_mau(goc)
     kq = giam_doc.chay_kenh(goc, "GD1", goi_chat=_llm_chon_het, tuan=True)

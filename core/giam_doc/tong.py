@@ -36,6 +36,10 @@ CHU_GIU_NGAY = 30
 QUAY_LUI_SAU_NGAY = 7
 TUT_QUAY_LUI = 0.30
 KHE_NANG_QUA_TAI = 90.0
+#: Cửa sổ đo công suất: 48 giờ gần, không lùi qua mốc thay đổi lớn (`cong_suat.MOC_DOI_LON`). 01/10/2026:
+#: đo 168 giờ (phần lớn trước khi khâu ảnh nhanh gấp 4) + 3 lượt giữ làn API "ma" → trần 17,9 → đề xuất
+#: cắt TL1–3 6→5 khe sai.
+GIO_CONG_SUAT = 48
 TEN_LOAI = {"len": "lên", "chung": "chững", "tut": "tụt"}
 
 
@@ -377,13 +381,14 @@ def hop_tuan(goc: str, goi_chat: Optional[Callable[..., str]], *, ep_che_do: Opt
     so_ = doc_so(goc)
     bang = bang_cong_ty(goc, bay_gio)
     try:
-        cs = cong_suat.cong_suat_hien_tai(goc, gio=168)
+        cs = cong_suat.cong_suat_hien_tai(goc, gio=GIO_CONG_SUAT)
     except Exception:  # noqa: BLE001
         cs = {}
     tran = tran_may(cs)
-    cs["cau"] = "7 ngày: {0} video ({1}/ngày) · khe nặng {2}% · làn API {3}/{4} · còn dư ≈ {5} video/ngày".format(
+    cs["cau"] = "{6} giờ gần{7}: {0} video ({1}/ngày) · khe nặng {2}% · làn API {3}/{4} · còn dư ≈ {5} video/ngày".format(
         cs.get("video_ban_giao", "?"), cs.get("video_ngay_do", "?"), cs.get("phan_tram_khe_nang", "?"),
-        cs.get("lan_api_trung_binh_dang_dung", "?"), cs.get("lan_api", "?"), cs.get("con_du_video_ngay", "?"))
+        cs.get("lan_api_trung_binh_dang_dung", "?"), cs.get("lan_api", "?"), cs.get("con_du_video_ngay", "?"),
+        cs.get("cua_so_gio", GIO_CONG_SUAT), " (từ mốc đổi {0})".format(cs["tu_moc_doi"]) if cs.get("tu_moc_doi") else "")
     td = thuc_don(goc, bang, tran, so_, bay_gio)
     kenh_moi = de_xuat_kenh_moi(goc, cs)
     sl = _so_lieu(bang, cs, tran)
@@ -405,14 +410,24 @@ def hop_tuan(goc: str, goi_chat: Optional[Callable[..., str]], *, ep_che_do: Opt
                 t["trang_thai"] = "giu"
     if goi_chat is not None:
         q = quan_ly.goi_quyet("tong_giam_doc", ln, sl, goi_chat, doc=lambda tho: doc_ket_qua(tho, td, sl), goc=goc,
-                              khoa="tong-{0:%Y%m%d}".format(bay_gio), ghi=ghi)
+                              khoa="tong-{0:%Y%m%d}".format(bay_gio), ghi=ghi, luu=not thu,
+                              n=sum(int(d.get("kl_28") or 0) for d in bang))
         kq["quyet"], kq["loi"], kq["mo_hinh"] = q["ket"], q["loi"], q["mo_hinh"]
+        kq["hoi_dong"] = q.get("hoi_dong") or {}
     else:
         kq["loi"] = "không gọi AI (chế độ thử / van ví chặn)"
+    if kq["quyet"] and kenh_moi and float(cs.get("con_du_video_ngay") or 0) >= 2:  # quyết định lớn: chủ duyệt
+        vcb = kq["quyet"].setdefault("viec_cua_ban", [])
+        vcb.append("Mở kênh mới (chỉ bạn quyết, máy còn dư ≈ {0} video/ngày): {1}".format(
+            cs.get("con_du_video_ngay"), " | ".join(kenh_moi[:2])))
+    from . import hoi_dong  # noqa: PLC0415
+
+    quyen_khe = hoi_dong.quyen(goc, "", "chia_khe") if cd == "tu_ap" and not thu else "goi_y"
+    kq["quyen_chia_khe"] = quyen_khe
     for t in (kq["quyet"] or {}).get("chon") or []:
         if not t["duoc"]:
             continue
-        if cd == "tu_ap" and not thu:
+        if cd == "tu_ap" and not thu and quyen_khe == "tu_ap":
             _ghi_kenh(goc, t["ma"], t["moi"])
             nen = {"tv_48h_14": next((d["tv_48h_14"] for d in bang if t["ma"] in d["cac_ma"]), None)}
             so_["thay_doi"].append({"id": "{0:%Y%m%d}-{1}".format(bay_gio, t["ma"]), "ma": t["ma"], "luc": kq["luc"],
@@ -450,6 +465,12 @@ def chu_bao_cao(kq: Dict[str, Any]) -> str:
     ra += ["", "**Máy:** {0} — trần ≈ {1} video/ngày, tổng khe ≤ 85%.".format((kq.get("may") or {}).get("cau") or "?", kq["tran"])]
     if q.get("chan_doan"):
         ra += ["", "**Chẩn đoán:** " + q["chan_doan"]]
+    hq = (kq.get("hoi_dong") or {}).get("quyet") or {}
+    if hq:
+        ra += ["", "**Hội đồng:** chọn phương án {0} · độ tin {1} · cổng {2}{3}".format(
+            hq.get("ten"), hq.get("do_tin"), kq["hoi_dong"].get("cong"),
+            " · chưa có quyền tự áp chia khe (cần ≥ 70% đúng trên ≥ 10 lần)"
+            if kq.get("che_do") == "tu_ap" and kq.get("quyen_chia_khe") == "goi_y" else "")]
     ra += ["", "## Đổi khe"]
     chon = {t["id"]: t for t in (q.get("chon") or [])}
     da = {t["id"] for t in kq["da_lam"]}

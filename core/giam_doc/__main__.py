@@ -53,7 +53,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not (a.thu or a.llm):
             p.error("--tong cần --thu hoặc --llm")
         kq = tong.hop_tuan(goc, quan_ly.goi_chat_that(goc, print) if a.llm else None, thu=True, ghi=print)
-        return _ra(a.ra, tong.chu_bao_cao(kq) + "\n\n=== LỜI NHẮC ===\n" + kq["loi_nhac"])
+        from .hoi_dong import in_bien_ban  # noqa: PLC0415
+
+        return _ra(a.ra, tong.chu_bao_cao(kq) + ("\n\n" + in_bien_ban(kq["hoi_dong"]) if kq.get("hoi_dong") else "")
+                   + "\n\n=== LỜI NHẮC ===\n" + kq["loi_nhac"])
     if not kenh or not (a.thu or a.llm):
         p.error("cần --kenh và --thu hoặc --llm")
     ra: List[str] = []
@@ -63,6 +66,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("{0}: van ví đang chặn — không gọi LLM".format(ma))
         kq = chay_kenh(goc, ma, che_do="thu", goi_chat=goi, tuan=a.tuan)
         ra.append(bao_cao.in_ket_qua(kq, ca_loi_nhac=a.llm))
+        if a.llm and kq.quyet_dinh is not None and kq.quyet_dinh.hoi_dong:
+            from .hoi_dong import in_bien_ban  # noqa: PLC0415
+
+            ra.append(in_bien_ban(kq.quyet_dinh.hoi_dong))
     return _ra(a.ra, "\n".join(ra))
 
 
@@ -83,6 +90,7 @@ def _kham(goc: str, vid: str, kenh: List[str], llm: bool) -> str:
     import json  # noqa: PLC0415
 
     from . import kham_nghiem as kn, quan_ly  # noqa: PLC0415
+    from .hoi_dong import in_bien_ban  # noqa: PLC0415
     from .du_lieu import moi_nhat, tom_tat  # noqa: PLC0415
 
     vid = vid.strip()
@@ -121,7 +129,7 @@ def _kham(goc: str, vid: str, kenh: List[str], llm: bool) -> str:
         "nhãn: " + json.dumps(ban.get("nhan") or {}, ensure_ascii=False),
         "bài học: " + json.dumps(k.get("bai_hoc"), ensure_ascii=False),
         "số dẫn: " + json.dumps(k.get("so_dan") or [], ensure_ascii=False),
-    ])
+    ] + ([in_bien_ban(ban["_hoi_dong"])] if ban.get("_hoi_dong") else []))
 
 
 if __name__ == "__main__":

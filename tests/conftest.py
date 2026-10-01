@@ -31,6 +31,10 @@ import pytest
 # treo hàng giờ). Ép 0 = cổng ngẫu nhiên: test vẫn chạy đủ, tool vẫn mở được.
 os.environ.setdefault("SHOPAPI_TRAM_CONG", "0")
 
+# Hội đồng quyết định (`core/giam_doc/hoi_dong.py`, 01/10/2026) gọi 5 lượt LLM thay 1 — bài kiểm cũ dùng LLM giả
+# trả MỘT câu cố định cho đường một lượt. Tắt mặc định; bài kiểm hội đồng tự bật (`monkeypatch.setenv`).
+os.environ.setdefault("SHOPAPI_HOI_DONG", "0")
+
 
 
 @pytest.fixture(autouse=True)

@@ -415,17 +415,22 @@ def kham_mot(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str, goi_cha
     hs = ho_so_kham(goc, ma, bs, v, moc, ban_chup=ban_chup)
     ln = loi_nhac(hs, bs.muc_tieu, ma)
     luc = bs.bay_gio.replace(microsecond=0).isoformat()
+    n = hs["so_lieu"].get("kenh/tv@{0}/n".format(moc))
     q = quan_ly.goi_quyet("kham_nghiem", ln, hs["so_lieu"], goi_chat, doc=lambda t: doc_ket_qua(t, hs["so_lieu"]),
                           goc=goc, ma=ma, khoa="kham-{0}-{1}-{2}".format(ma, v["id"], moc), toi_da_token=TOI_DA_TOKEN,
-                          ghi=ghi)
+                          ghi=ghi, n=int(n) if isinstance(n, (int, float)) else None, luu=ghi_tep,
+                          nhan={"video_id": v["id"], "moc": moc})
     ket = q["ket"]
+    hd = q.get("hoi_dong") or {}
     ban = {"video_id": v["id"], "moc": moc, "luc": luc, "mo_hinh": q["mo_hinh"], "loi": q["loi"],
+           **({"hoi_dong": {"quyet": hd.get("quyet"), "cong": hd.get("cong"),
+                            "loai_bo": [x["ma"] for x in hd.get("chuyen_gia") or [] if x.get("loai_bo")]}} if hd else {}),
            "bong": gioi_han.che_do(bs) != "tu_ap", "ket_luan": v.get("ket_luan") or "",
            "hien_thi_48h": v.get("hien_thi_48h"), "ket": ket,
-           "nhan": dict(ket["nhan"], **hs["nhan_ma"]) if ket else {}, "ho_so": hs, "loi_nhac": ln}
+           "nhan": dict(ket["nhan"], **hs["nhan_ma"]) if ket else {}, "ho_so": hs, "loi_nhac": ln, "_hoi_dong": hd}
     if ghi_tep and ket is not None:
         _ghi_json(os.path.join(thu_muc(goc, ma), "{0}-{1}.json".format(v["id"], moc)),
-                  {k: x for k, x in ban.items() if k != "loi_nhac"})
+                  {k: x for k, x in ban.items() if k != "loi_nhac" and not k.startswith("_")})
         bh = ket.get("bai_hoc")
         _ghi_bai_hoc(goc, ma, dict(bh, khoa="{0}|{1}|{2}|{3}".format(bh["truc"], bh["gia_tri"], bh["huong"], bh["cum"]),
                                    video_id=v["id"], moc=moc, so_dan=ket.get("so_dan") or [], bong=ban["bong"], luc=luc)
