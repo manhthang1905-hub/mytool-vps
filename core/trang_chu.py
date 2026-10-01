@@ -288,7 +288,17 @@ def luu(goc: str, kenh: str, dong: Sequence[Dict[str, str]]) -> None:
         w.writeheader()
         for d in dong:
             w.writerow({k: d.get(k, "") for k in COT})
-    os.replace(tam, p)
+    # Windows: tệp đích đang được tiến trình khác mở đọc (bảng điều khiển, trạm…) thì
+    # os.replace ném WinError 5 — đợi rồi thử lại thay vì làm hỏng cả lượt nghiên cứu (01/10/2026).
+    import time  # noqa: PLC0415
+    for lan in range(8):
+        try:
+            os.replace(tam, p)
+            return
+        except PermissionError:
+            if lan == 7:
+                raise
+            time.sleep(0.5 * (lan + 1))
 
 
 def _doc_tra(goc: str, kenh: str) -> Dict[str, dict]:
