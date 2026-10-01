@@ -15,6 +15,7 @@ import os
 from test_trung_tam import BAY_GIO, _ghi, _ghi_json, _ke_hoach, _kenh
 
 from core import bang_dieu_khien as bdk
+from core import vm_cai_dat
 from core.money import MICRO_PER_VND
 
 
@@ -283,6 +284,7 @@ def test_doc_can_ghim_va_bien_mat_khi_da_xong(tmp_path):
     _ghi(os.path.join(goc, "CHANNEL", "K1", "can-ghim.md"),
         "- [2026-09-29 20:05] **Video một** — https://www.youtube.com/watch?v=abc123\n"
         "  > Ghim bình luận mở đầu, hỏi khán giả thích cảnh nào nhất.\n")
+    vm_cai_dat.luu(goc, "K1", ghim_dom=True)       # việc ghim chỉ hiện khi kênh BẬT ghim
     pins = bdk.doc_can_ghim(goc, "K1")
     assert pins == [{"luc": "2026-09-29 20:05", "tieu_de": "Video một", "video_id": "abc123",
                      "ghi_chu": "Ghim bình luận mở đầu, hỏi khán giả thích cảnh nào nhất."}]
@@ -507,6 +509,7 @@ def test_viec_dong_4_ghim_chua_danh_dau(tmp_path):
     _ghi(os.path.join(goc, "CHANNEL", "K1", "can-ghim.md"),
         "- [2026-09-29 20:05] **Video một** — https://www.youtube.com/watch?v=abc123\n"
         "  > ghim mở đầu\n")
+    vm_cai_dat.luu(goc, "K1", ghim_dom=True)
     k1 = _k("K1")
     viec = bdk.viec_cua_ban(goc, anh=_anh([k1]), bay_gio=BAY_GIO)
     v = _muc_theo_khoa(viec, "ghim:")

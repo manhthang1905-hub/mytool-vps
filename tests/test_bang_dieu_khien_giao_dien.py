@@ -250,6 +250,8 @@ def test_nut_da_ghim_goi_danh_dau_xong(trang, monkeypatch, qapp):
 
     t, _app, goc = trang
     duong = os.path.join(goc, "CHANNEL", "K2", "can-ghim.md")
+    from core import vm_cai_dat
+    vm_cai_dat.luu(goc, "K2", ghim_dom=True)      # việc ghim chỉ hiện khi kênh BẬT ghim
     with open(duong, "w", encoding="utf-8") as tep:
         tep.write("- [2026-09-18 10:00] **Video cần ghim** — "
                   "https://www.youtube.com/watch?v=vidGhim\n"
@@ -267,6 +269,8 @@ def test_nut_da_ghim_goi_danh_dau_xong(trang, monkeypatch, qapp):
 def test_chep_link_dat_vao_clipboard(trang, monkeypatch, qapp):
     t, _app, goc = trang
     duong = os.path.join(goc, "CHANNEL", "K2", "can-ghim.md")
+    from core import vm_cai_dat
+    vm_cai_dat.luu(goc, "K2", ghim_dom=True)
     with open(duong, "w", encoding="utf-8") as tep:
         tep.write("- [2026-09-18 10:00] **Video cần ghim** — "
                   "https://www.youtube.com/watch?v=vidGhim2\n  > ghi chú\n")

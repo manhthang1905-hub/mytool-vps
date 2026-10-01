@@ -535,7 +535,16 @@ def _tat_ca(goc: str, ma_kenh: str, bay_gio: Optional[_dt.datetime] = None) -> L
         for b in _an_toan(_tu_ngoai, goc, nhom):
             if n_kenh.get((b["truc"], b["cum"]), 0) == 0:
                 ngoai_vao.append(b)
-    return kenh + nhom_vao + ngoai_vao
+    ra = kenh + nhom_vao + ngoai_vao
+    # Nút "Sai" trên Phòng điều hành: bài chủ kênh đã gạch thì không bao giờ vào lời nhắc.
+    try:
+        from ..bang_dieu_khien import khoa_bai_hoc_gach, ma_bai  # noqa: PLC0415
+        gach = khoa_bai_hoc_gach(goc, ma_kenh)
+        if gach:
+            ra = [b for b in ra if str(b.get("ma_bai") or ma_bai(b)) not in gach]
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
 
 
 def _loc_dung_cho(ds: List[Dict[str, Any]], dung_cho: Any) -> List[Dict[str, Any]]:

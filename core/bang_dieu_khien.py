@@ -1126,8 +1126,13 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 nut=[("Chạy lại", "chay_lai", {"ma": ma}),
                      ("Nhật ký", "nhat_ky", {"ma": ma})]))
 
-        # 4) ghim chưa đánh dấu.
-        for pin in doc_can_ghim(goc, ma):
+        # 4) ghim chưa đánh dấu — chỉ khi kênh BẬT ghim (chủ kênh 29/09: "ghim để sau").
+        try:
+            from . import vm_cai_dat  # noqa: PLC0415
+            ghim_bat = bool(vm_cai_dat.doc(goc, ma).get("ghim_dom", False))
+        except Exception:  # noqa: BLE001
+            ghim_bat = False
+        for pin in (doc_can_ghim(goc, ma) if ghim_bat else []):
             khoa = "ghim:" + pin["video_id"]
             if khoa in da_xong:
                 continue
@@ -1437,6 +1442,7 @@ def _thuat_ngu(chu: Any) -> str:
     s = _re.sub(r"\bCTR\b", "tỉ lệ bấm", s)
     s = _re.sub(r"\bAVD\b", "thời lượng xem TB", s)
     s = _re.sub(r"(?:giờ xem\s+)?gx_1k", "giờ xem/1k hiển thị", s)
+    s = _re.sub(r"(?<![\d.])(\d+)\.0\b", r"\1", s)        # 1709.0 → 1709
     return s
 
 
