@@ -1,0 +1,24 @@
+{
+  "_ghi_chu": "Kênh giả GD1 cho test giám đốc kênh. gio_truoc = số giờ trước LÚC CHẠY TEST (tuổi video); chup = mốc nhãn thư mục; kenh_theo_ngay: 26 ngày, đều 1.000 hiển thị/ngày (kênh khoẻ).",
+  "kenh_yaml": ["ma: \"GD1\"", "phut_muc_tieu: 15", "chien_luoc: \"v7:0.5, vph:0.5\"", "giam_doc: tu_ap", "tep: \"tep-mau\""],
+  "kenh_theo_ngay": {"so_ngay": 26, "hien_thi_moi_ngay": 1000, "xem_moi_ngay": 60, "gio_moi_ngay": 4.0, "sub_moi_ngay": 1},
+  "video": [
+    {"id": "GDvideo0001", "goi": "GD1-0001", "tieu_de": "【脳科学】賢い人の特徴5選", "gio_truoc": 300, "phut": 15.0,
+     "chup": {"48h": {"impressions": 20000, "ctr": 6.5, "views": 1300, "subs": 12, "watch_hours": 130, "avd_pct": 34},
+              "120h": {"impressions": 30000, "ctr": 6.2, "views": 1900, "subs": 18, "watch_hours": 190, "avd_pct": 33}}},
+    {"id": "GDvideo0002", "goi": "GD1-0002", "tieu_de": "【脳科学】頭がいい人の口癖", "gio_truoc": 250, "phut": 15.5,
+     "chup": {"48h": {"impressions": 15000, "ctr": 6.0, "views": 900, "subs": 9, "watch_hours": 95, "avd_pct": 33}}},
+    {"id": "GDvideo0003", "goi": "GD1-0003", "tieu_de": "【脳科学】一人が好きな人の正体", "gio_truoc": 220, "phut": 12.0,
+     "chup": {"48h": {"impressions": 2000, "ctr": 4.0, "views": 80, "subs": 0, "watch_hours": 6, "avd_pct": 30}}},
+    {"id": "GDvideo0004", "goi": "GD1-0004", "tieu_de": "【脳科学】孤独な人の強さ", "gio_truoc": 200, "phut": 12.5,
+     "chup": {"48h": {"impressions": 1500, "ctr": 3.8, "views": 57, "subs": 0, "watch_hours": 4, "avd_pct": 29}}},
+    {"id": "GDvideo0005", "goi": "GD1-0005", "tieu_de": "【脳科学】ひとり時間の効用", "gio_truoc": 150, "phut": 18.0,
+     "chup": {"48h": {"impressions": 1800, "ctr": 3.9, "views": 70, "subs": 1, "watch_hours": 7, "avd_pct": 24}}},
+    {"id": "GDvideo0006", "goi": "GD1-0006", "tieu_de": "【脳科学】お金持ちの静かな習慣", "gio_truoc": 60, "phut": 18.0,
+     "chup": {"48h": {"impressions": 2800, "ctr": 2.2, "views": 62, "subs": 0, "watch_hours": 9, "avd_pct": 26},
+              "56h": {"impressions": 3000, "ctr": 2.1, "views": 63, "subs": 0, "watch_hours": 10, "avd_pct": 26,
+                      "ctr_browse": 2.0}},
+     "tieu_de_cham": [{"ten": "bản 1", "tieu_de": "【脳科学】お金持ちの静かな習慣"},
+                      {"ten": "bản 2", "tieu_de": "【脳科学】本当のお金持ちが絶対にしないこと"}]}
+  ]
+}
