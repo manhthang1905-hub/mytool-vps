@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.140.1** — 2026-10-01 — `vps-jp1` — Phòng điều hành: ẩn việc ghim khi kênh tắt ghim; nút Sai loại bài học mọi nguồn khỏi lời nhắc; số 1709.0 → 1709
 - **2.140.0** — 2026-10-01 — `vps-jp1` — Bảng điều khiển: phòng điều hành công ty
 - **2.139.0** — 2026-10-01 — `vps-jp1` — Đội chuyên gia + hội đồng quyết định + sổ độ chính xác; sửa đo công suất cửa sổ gần
 - **2.138.0** — 2026-10-01 — `vps-jp1` — Công ty YouTube (gọn): khám nghiệm video + bài học + tổng giám đốc gợi ý
