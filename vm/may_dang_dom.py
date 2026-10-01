@@ -74,6 +74,13 @@ CHO_TAI_TRAN_GIAY = 75 * 60
 TUOI_48H_TOI_DA_GIO = 30.0
 #: Trạng thái sổ của gói có video đã lên kênh (nguồn nhập MHKT hợp lệ nếu `mhkt` = ok…).
 TT_SO_DA_LEN_KENH = ("xac-nhan", "da-len-lich", "lech-lich", "chua-xac-nhan")
+#: 01/10/2026 — BÙ MHKT video cũ (agent gọi `--bu-mhkt` giờ vắng): tối đa ngần này
+#: video/kênh/đêm; hỏng ngần này đêm liền thì thôi (vẫn nằm trong mhkt-thieu.json kèm lý do).
+BU_MHKT_TOI_DA_DEM = 3
+BU_MHKT_TOI_DA_LOI = 3
+#: YouTube chỉ cho màn hình kết thúc với video ≥25 giây; Shorts không có mục MHKT.
+MHKT_NGAN_NHAT_GIAY = 25
+SHORTS_TOI_DA_GIAY = 180
 
 MA_XONG, MA_HONG, MA_LUI, MA_CHAN = 0, 1, 3, 4
 
@@ -685,8 +692,10 @@ def doc_view_48h(thu_muc_chi_so: str) -> dict:
 
 
 def danh_sach_thieu_mhkt(so: dict) -> dict:
-    """Video ĐÃ lên kênh mà sổ ghi chưa có MHKT (`mhkt` không bắt đầu "ok") —
-    chủ kênh 30/09: ghi danh sách, CHƯA sửa lùi. Hàm thuần."""
+    """Video ĐÃ lên kênh mà sổ ghi chưa có MHKT (`mhkt` không bắt đầu "ok"). Hàm thuần.
+    01/10/2026: kèm kết quả BÙ MHKT gần nhất (`bu`, `ly_do`, `bu_loi_lan`) — video
+    `mhkt=khong-the` (không còn tồn tại / <25 giây / Shorts) vẫn liệt kê kèm lý do,
+    nhưng không vào hàng bù (:func:`hang_bu_mhkt`)."""
     ra = {}
     for k, m in sorted((so or {}).items()):
         if not isinstance(m, dict) or not m.get("video_id"):
@@ -696,7 +705,46 @@ def danh_sach_thieu_mhkt(so: dict) -> dict:
         if str(m.get("mhkt") or "").startswith("ok"):
             continue
         ra[k] = {"video_id": m.get("video_id"), "mhkt": m.get("mhkt") or "", "lich": m.get("lich") or ""}
+        if m.get("mhkt_bu_ket"):
+            ra[k].update(bu="{0} {1}".format(m.get("mhkt_bu_ket"), m.get("mhkt_bu_luc") or "").strip(),
+                         ly_do=m.get("mhkt_bu_ly_do") or "", bu_loi_lan=int(m.get("mhkt_bu_loi_lan") or 0))
     return ra
+
+
+def can_bu_mhkt(m, toi_da_loi: int = BU_MHKT_TOI_DA_LOI) -> bool:
+    """Mục sổ có vào hàng BÙ MHKT không: đã lên kênh, tải không hỏng, `mhkt` là
+    bo / lỗi / rỗng (không bắt đầu "ok", không "khong-the"), chưa hỏng đủ trần."""
+    if not isinstance(m, dict) or not m.get("video_id"):
+        return False
+    if m.get("trang_thai") not in TT_SO_DA_LEN_KENH or m.get("tai_xong") is False:
+        return False
+    mh = str(m.get("mhkt") or "")
+    if mh.startswith("ok") or mh.startswith("khong-the"):
+        return False
+    try:
+        return int(m.get("mhkt_bu_loi_lan") or 0) < int(toi_da_loi)
+    except (TypeError, ValueError):
+        return True
+
+
+def hang_bu_mhkt(so: dict, kenh: str, hom_nay: str, toi_da: int = BU_MHKT_TOI_DA_DEM,
+                 toi_da_loi: int = BU_MHKT_TOI_DA_LOI) -> list:
+    """Hàm THUẦN: [(khoá sổ, videoId)] của `kenh` cần BÙ MHKT đêm `hom_nay`
+    ("YYYY-MM-DD") — lịch cũ trước. Mỗi video thử tối đa một lần/đêm; video đã
+    THỬ THẬT đêm nay (kết quả ok/loi) trừ vào trần `toi_da`/kênh/đêm."""
+    da_thu, ds = 0, []
+    for k, m in (so or {}).items():
+        if not isinstance(m, dict) or not str(k).startswith(kenh + "/"):
+            continue
+        if m.get("mhkt_bu_ngay") == hom_nay:
+            if m.get("mhkt_bu_ket") in ("ok", "loi"):
+                da_thu += 1
+            continue
+        if not can_bu_mhkt(m, toi_da_loi):
+            continue
+        ds.append((phan_tich_ngay_gio(m.get("lich") or "") or datetime.max, str(k), str(m["video_id"])))
+    ds.sort()
+    return [(k, vid) for _l, k, vid in ds][:max(0, int(toi_da) - da_thu)]
 
 
 def doc_view_tong(thu_muc_chi_so: str) -> dict:
@@ -1420,6 +1468,156 @@ class MayDangDom:
         self.ngu(2)
         tb.ghi_bang_chung("mhkt-doc-lai-" + d["ma"])
         return kq if not tb.co("hop_mhkt") else "bo"
+
+    # ── BÙ MHKT video cũ (01/10/2026) ────────────────────────────────────
+    def _mo_trang_sua_bu(self, tb, vid: str) -> tuple:
+        """Mở trang sửa `vid` (bắt gói `get_creator_videos` nếu trang có). Trả
+        (có trang sửa, có bắt được gói nào, gói của đúng video này hoặc None)."""
+        url = self._url("sua", id=vid)
+        goi, bat_duoc, da_mo = None, False, False
+        bat = getattr(tb, "bat_json", None)
+        if callable(bat):
+            try:
+                ds = bat(url, "get_creator_videos", han=30) or []
+                da_mo = True
+                for g in ds:
+                    bat_duoc = True
+                    for v in ((g or {}).get("videos") or []):
+                        if str(v.get("videoId") or "") == vid:
+                            goi = v
+                            break
+                    if goi:
+                        break
+            except Exception as loi:  # noqa: BLE001 — lùi về mở trang thường
+                self.nk("bù MHKT {0}: bắt gói Studio lỗi: {1}".format(vid, str(loi)[:120]))
+        if not da_mo:
+            tb.mo(url, han=60)
+        return bool(tb.tim("tieu_de", han=40)), bat_duoc, goi
+
+    def _doc_phan_tu_mhkt(self, tb) -> list:
+        try:
+            ds = [chuan_hoa_tieu_de((x or {}).get("chu") or "") for x in (tb.doc_tat_ca("mhkt_phan_tu") or [])]
+        except Exception:  # noqa: BLE001
+            ds = []
+        ds = [x for x in ds if x]
+        return ds or ["(có thành phần)"]
+
+    def _doc_lai_mhkt(self, tb, vid: str, ma: str) -> list:
+        """ĐỌC LẠI sau khi lưu: tải lại trang sửa, mở trình soạn MHKT, đếm thành
+        phần (hàng `ytve-endscreen-row`), chụp bằng chứng rồi "Hủy thay đổi" (không
+        lưu gì). Trả danh sách chữ thành phần; [] nếu không thấy."""
+        tb.mo(self._url("sua", id=vid), han=60)
+        if not tb.tim("tieu_de", han=40) or not tb.tim("mhkt_mo_sua", han=20):
+            raise Exception("đọc lại: trang sửa / mục Màn hình kết thúc không hiện")
+        self._mhkt_mo(tb, "mhkt_mo_sua")
+        if tb.co("mhkt_chon_video") and tb.co("mhkt_dong_chon"):
+            tb.bam("mhkt_dong_chon")
+            self.ngu(1.5)
+        co = tb.tim("mhkt_phan_tu", han=15)
+        doc = self._doc_phan_tu_mhkt(tb) if co else []
+        self._dong_trinh_soan(tb, "bu-mhkt-doc-lai-" + ma)
+        return doc
+
+    def bu_mhkt_mot(self, khoa: str, vid: str) -> dict:
+        """BÙ màn hình kết thúc cho MỘT video đã đăng mà thiếu MHKT, qua TRANG SỬA:
+        nhập từ video của kênh ĐÃ CÓ MHKT (sổ `mhkt` = ok…), không có thì dựng mẫu
+        «1 video, 1 đăng ký» (20 giây cuối) → Lưu (nút Lưu của TRÌNH SOẠN) → ĐỌC LẠI
+        (mở lại trình soạn, đếm thành phần). Ghi sổ: ok → `mhkt=ok:bu`; video không
+        còn / <25 giây / Shorts → `mhkt=khong-the` + lý do; hỏng → giữ `mhkt`, tăng
+        `mhkt_bu_loi_lan` (đêm sau thử lại, trần `BU_MHKT_TOI_DA_LOI`)."""
+        ma = str(khoa).split("/", 1)[-1]
+        d = {"ma": ma, "tieu_de": self.tieu_de_theo_ma.get(ma, "")}
+        muc = self.so.lay(khoa)
+        self.vid_dang = vid
+        self.mhkt_nguon = ""
+
+        def ket(k, ly_do="", cach="", doc=None):
+            luc = self.bay_gio().strftime("%Y-%m-%d %H:%M:%S")
+            truong = {"mhkt_bu_ngay": luc[:10], "mhkt_bu_luc": luc, "mhkt_bu_ket": k,
+                      "mhkt_bu_ly_do": ly_do}
+            if k == "ok":
+                truong.update(mhkt="ok:bu", mhkt_bu_cach=cach, mhkt_bu_doc_lai=" | ".join(doc or [])[:300])
+                if self.mhkt_nguon:
+                    truong["mhkt_nguon"] = self.mhkt_nguon
+            elif k == "khong-the":
+                truong["mhkt"] = "khong-the"
+            else:
+                truong["mhkt_bu_loi_lan"] = int(muc.get("mhkt_bu_loi_lan") or 0) + 1
+            self.so.cap_nhat(khoa, **truong)
+            if k == "ok":
+                self.nk("{0}: BÙ MHKT video {1} XONG ({2}) — đọc lại: {3}".format(
+                    ma, vid, cach, " | ".join(doc or [])[:200]))
+            elif k == "khong-the":
+                self.nk("{0}: BÙ MHKT video {1} BỎ QUA — {2}".format(ma, vid, ly_do))
+            else:
+                self._canh_bao("{0}: bù MHKT video {1} hỏng (lần {2}/{3}): {4}".format(
+                    ma, vid, truong["mhkt_bu_loi_lan"], BU_MHKT_TOI_DA_LOI, ly_do))
+            return dict(truong, ket=k)
+
+        tb = self.tab_b()
+        kq = ""
+        try:
+            co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
+            tt = str((goi or {}).get("status") or "")
+            try:
+                dai = float(goi["lengthSeconds"]) if goi and str(goi.get("lengthSeconds") or "").strip() else None
+            except (TypeError, ValueError, KeyError):
+                dai = None
+            if dai is None:
+                try:
+                    dai = float(muc.get("thoi_luong") or muc.get("thoi_luong_tep") or 0) or None
+                except (TypeError, ValueError):
+                    dai = None
+            if not co_trang:
+                if bat_duoc and goi is None:
+                    return ket("khong-the", "video không còn trên kênh (Studio không trả video này)")
+                return ket("loi", "không mở được trang sửa video")
+            if re.search(r"DELETED|REJECTED|FAILED|REMOVED", tt.upper()):
+                return ket("khong-the", "video hỏng/bị gỡ trên Studio ({0})".format(tt))
+            if dai is not None and dai < MHKT_NGAN_NHAT_GIAY:
+                return ket("khong-the", "video dưới {0} giây ({1:.0f}s) — YouTube không cho MHKT".format(
+                    MHKT_NGAN_NHAT_GIAY, dai))
+            if not tb.tim("mhkt_mo_sua", han=20):
+                if dai is not None and dai <= SHORTS_TOI_DA_GIAY:
+                    return ket("khong-the", "Shorts/video ngắn ({0:.0f}s) — trang sửa không có mục "
+                                            "Màn hình kết thúc".format(dai))
+                return ket("loi", "trang sửa không thấy mục Màn hình kết thúc")
+            self._mhkt_mo(tb, "mhkt_mo_sua")
+            if tb.co("hop_mhkt") and not tb.co("mhkt_chon_video") and tb.tim("mhkt_phan_tu", han=8):
+                doc = self._doc_phan_tu_mhkt(tb)
+                self._dong_trinh_soan(tb, "bu-mhkt-co-san-" + ma)
+                return ket("ok", cach="co-san", doc=doc)
+            nguon = self._nguon_mhkt()
+            self.nk("{0}: BÙ MHKT video {1} — {2}".format(
+                ma, vid, "nguồn đã có MHKT: " + ", ".join(v for v, _t in nguon[:4]) if nguon
+                else "kênh chưa có video nào có MHKT → dựng mẫu «1 video, 1 đăng ký»"))
+            kq = self._mhkt_nhap_nguon(tb, d, nguon, mo_bang="mhkt_mo_sua") if nguon else ""
+            if not kq:
+                kq = self._mhkt_dung_mau(tb, d, mo_bang="mhkt_mo_sua")
+        except Exception as loi:  # noqa: BLE001 — một video hỏng, video kế vẫn làm
+            self._dong_trinh_soan(tb, "bu-mhkt-" + ma)
+            return ket("loi", "nhập/dựng MHKT hỏng: {0}".format(str(loi)[:160]))
+        self.ngu(3)
+        try:
+            doc = self._doc_lai_mhkt(tb, vid, ma)
+        except Exception as loi:  # noqa: BLE001
+            self._dong_trinh_soan(tb, "bu-mhkt-doc-lai-" + ma)
+            return ket("loi", "đã lưu ({0}) nhưng đọc lại hỏng: {1}".format(kq, str(loi)[:120]))
+        if not doc:
+            return ket("loi", "đã lưu ({0}) nhưng đọc lại không thấy thành phần MHKT".format(kq))
+        return ket("ok", cach=kq.split(":", 1)[-1] if kq else "?", doc=doc)
+
+    def bu_mhkt(self, cac: list) -> int:
+        """Bù MHKT cho danh sách [(khoá sổ, videoId)] — dừng khi gần hết hạn phiên.
+        Mã thoát: MA_XONG nếu không video nào hỏng."""
+        hong = 0
+        for khoa, vid in cac:
+            if not self.con_han(240):
+                self.nk("bù MHKT: gần hết hạn phiên — dừng, video còn lại để đêm sau")
+                break
+            if self.bu_mhkt_mot(khoa, vid).get("ket") == "loi":
+                hong += 1
+        return MA_HONG if hong else MA_XONG
 
     def link_the(self, d: dict, vid_dang: str = "") -> list:
         """Link cho thẻ video: cột "Link card 1–4" người điền (ưu tiên) + video
@@ -2665,6 +2863,12 @@ def _doc_lenh(argv):
                     help="với --them-the: xoá thẻ đang có rồi thêm lại")
     ap.add_argument("--khong-the", action="store_true")
     ap.add_argument("--khong-mhkt", action="store_true")
+    ap.add_argument("--bu-mhkt", action="store_true",
+                    help="BÙ MHKT video đã đăng mà thiếu (sổ mhkt=bo/lỗi/rỗng) qua trang sửa — agent gọi giờ vắng")
+    ap.add_argument("--toi-da-video", type=int, default=BU_MHKT_TOI_DA_DEM,
+                    help="với --bu-mhkt: tối đa số video/kênh/đêm")
+    ap.add_argument("--han-giay", type=float, default=0.0,
+                    help="hạn phiên (giây); 0 = theo config phien_han_dang_giay")
     return ap.parse_args(argv)
 
 
@@ -2696,7 +2900,28 @@ def main(argv=None) -> int:
         if loi_bo:
             log.error("studio-selectors.json lỗi: %s", "; ".join(loi_bo))
             return MA_LUI
-        if not a.kiem_dom:
+        if a.bu_mhkt:
+            # BÙ MHKT: hàng lấy từ SỔ (không cần kế hoạch); kế hoạch chỉ để tìm video
+            # nguồn theo tiêu đề — đọc hỏng thì vẫn làm (tìm theo videoId).
+            cac = hang_bu_mhkt(SoVideoId().doc(), a.kenh, date.today().isoformat(), a.toi_da_video)
+            if not cac:
+                log.info("kênh %s: không có video nào cần bù MHKT đêm nay", a.kenh)
+                return MA_XONG
+            log.info("kênh %s: bù MHKT %d video: %s", a.kenh, len(cac), ", ".join(k for k, _v in cac))
+            try:
+                if a.bao_truc_tiep:
+                    goc_tool = os.path.dirname(GOC)
+                    if goc_tool not in sys.path:
+                        sys.path.insert(0, goc_tool)
+                    from core import ke_hoach_dang  # noqa: PLC0415
+                    hang = [[""] * nguon_tool.RONG_DONG] + nguon_tool.hang_tu_csv(
+                        ke_hoach_dang.doc_van_ban(goc_tool, a.kenh), a.kenh)
+                else:
+                    hang = nguon_tool.get_rows(dict(cfg, cac_kenh=[a.kenh]))
+            except Exception as loi:  # noqa: BLE001
+                log.info("bù MHKT: không đọc được kế hoạch (%s) — tìm nguồn theo videoId", str(loi)[:120])
+                hang = [[]]
+        elif not a.kiem_dom:
             if a.mot_lan and not a.ma and not _tu_dang_bat(a.kenh):
                 log.info("kênh %s: tu_dang đang TẮT — bỏ qua", a.kenh)
                 return MA_XONG
@@ -2766,13 +2991,16 @@ def main(argv=None) -> int:
         may = MayDangDom(
             a.kenh, bo, tao_trang, SoVideoId(), bao,
             thu_muc, nhat_ky=log.info,
-            han_giay=float(cfg.get("phien_han_dang_giay") or HAN_PHIEN_MAC_DINH),
+            han_giay=float(a.han_giay or cfg.get("phien_han_dang_giay") or HAN_PHIEN_MAC_DINH),
             cai_dat_kenh=_cai_dat_kenh(a.kenh), lam_the=not a.khong_the, lam_mhkt=not a.khong_mhkt)
         may.tieu_de_theo_ma = {x["ma"]: x["tieu_de"] for x in (dong_tu_hang(r) for r in hang[1:])
                                if x.get("ma") and x.get("kenh") == a.kenh}
         ma_thoat = MA_HONG
         try:
-            if a.them_the or a.them_mhkt:
+            if a.bu_mhkt:
+                may.lay_uc()
+                ma_thoat = may.bu_mhkt(cac)
+            elif a.them_the or a.them_mhkt:
                 d = cac[0]
                 khoa = "{0}/{1}".format(a.kenh, a.ma)
                 vid = may.so.lay(khoa)["video_id"]
@@ -2796,8 +3024,10 @@ def main(argv=None) -> int:
         finally:
             may.dong_het()
             try:
-                # Video cũ thiếu MHKT: chỉ GHI DANH SÁCH (chủ kênh 30/09: chưa sửa lùi).
-                with open(os.path.join(THU_MUC_LOG, "mhkt-thieu.json"), "w", encoding="utf-8") as tep:
+                # Video thiếu MHKT: danh sách cập nhật mỗi lượt; agent bù giờ vắng (`--bu-mhkt`).
+                # Ghi CẠNH SỔ đang dùng (sổ thật → vm/logs).
+                with open(os.path.join(os.path.dirname(os.path.abspath(may.so.duong)), "mhkt-thieu.json"),
+                          "w", encoding="utf-8") as tep:
                     json.dump(danh_sach_thieu_mhkt(may.so.doc()), tep, ensure_ascii=False, indent=1)
             except OSError:
                 pass
