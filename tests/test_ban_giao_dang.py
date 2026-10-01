@@ -72,3 +72,26 @@ def test_xuat_goi_lui_ve_copy2_khi_os_link_hong(tmp_path, monkeypatch):
     # os.link không được gọi thật (đã bị thay), nhưng phần còn lại của tool
     # (đọc file) vẫn phải hoạt động bình thường — khôi phục lại cho sạch.
     monkeypatch.setattr(os, "link", goc_link)
+
+
+def test_chon_danh_sach_phat_khop_chinh_xac():
+    from core.ban_giao_dang import chon_danh_sach_phat
+    ds = "A one | B two | C three"
+    assert chon_danh_sach_phat(ds, "t", "m", lambda de: "B two") == "B two"
+    assert chon_danh_sach_phat(ds, "t", "m", lambda de: "Answer: C three") == "C three"
+    assert chon_danh_sach_phat(ds, "t", "m", lambda de: "khong co") == ""
+    assert chon_danh_sach_phat("", "t", "m", lambda de: "A") == ""
+    assert chon_danh_sach_phat(ds, "t", "m", None) == ""
+
+    def hong(de):
+        raise RuntimeError("x")
+    assert chon_danh_sach_phat(ds, "t", "m", hong) == ""
+
+
+def test_nguon_tool_doc_cot_danh_sach_phat():
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vm"))
+    import nguon_tool as nt
+    csv_ = "Mã gói,Tiêu đề,Sẵn sàng,Danh sách phát\nK-1,T,x,B two\nK-2,T,x,\n"
+    hang = nt._dung_hang(csv_, "K", "EDIT XONG")
+    assert hang[0][nt.O_DSP] == "B two" and hang[1][nt.O_DSP] == ""

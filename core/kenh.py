@@ -198,6 +198,8 @@ class Kenh:
     #: đuôi clip không trôi — đo 27/08/2026: cảnh 11 đi 2 → 4 điểm, cảnh 2 đi
     #: 3 → 4. Mặc định TẮT.
     ghim_hai_dau: bool = False
+    #: "tên 1 | tên 2 | …" — danh sách phát thật của kênh; rỗng = hành vi cũ.
+    danh_sach_phat_kenh: str = ""
     #: Sau khi dựng xong `8-video.mp4`: đưa video vào CapCut (bản máy tính,
     #: phải cài sẵn) rồi TỰ BẤM Xuất, ra thêm `9-video-capcut.mp4` — video
     #: được chính CapCut mã hoá lại. Chủ dự án 28/08/2026: *"video sau khi
@@ -904,6 +906,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         khung_dau=bool(cai.get("khung_dau", False)),
         cham_anh=bool(cai.get("cham_anh", False)),
         ghim_hai_dau=bool(cai.get("ghim_hai_dau", False)),
+        danh_sach_phat_kenh=str(cai.get("danh_sach_phat_kenh") or "").strip(),
         xuat_capcut=bool(cai.get("xuat_capcut", False)),
         hoan_thien=bool(cai.get("hoan_thien", cai.get("va_cho_rot", False))),
         so_vong_cham=min(5, max(0, int(_so(cai.get("so_vong_cham"), 0)))),

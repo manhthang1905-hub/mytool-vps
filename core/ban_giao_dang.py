@@ -54,6 +54,32 @@ def ma_goi(kenh: str, luot: str) -> str:
     return "{0}-{1}".format(str(kenh).strip(), str(luot).strip())
 
 
+def chon_danh_sach_phat(danh_sach: str, tieu_de: str, mo_ta: str, goi_ai) -> str:
+    """1 lượt LLM rẻ chọn đúng 1 tên trong `danh_sach` ("a | b | c"). Trả tên
+    ĐÚNG NGUYÊN VĂN, hoặc "" khi không chọn được (lỗi/không khớp) — không ném."""
+    ten = [t.strip() for t in str(danh_sach or "").split("|") if t.strip()]
+    if not ten or goi_ai is None:
+        return ""
+    if len(ten) == 1:
+        return ten[0]
+    de = ("Choose the ONE playlist that best fits this video, by meaning.\n"
+          "Playlists:\n" + "\n".join("- " + t for t in ten)
+          + "\n\nVideo title: " + str(tieu_de)[:300]
+          + "\nVideo description: " + str(mo_ta)[:1500]
+          + "\n\nReply with ONLY the exact playlist name, nothing else.")
+    try:
+        tra = str(goi_ai(de) or "").strip().strip("\"'`「」- ").strip()
+    except Exception:  # noqa: BLE001 — AI hỏng: bỏ, máy đăng lùi về hành vi cũ
+        return ""
+    for t in ten:
+        if tra == t:
+            return t
+    for t in ten:  # AI lỡ kèm chữ thừa: nhận nếu đúng 1 tên xuất hiện
+        if t in tra and sum(1 for u in ten if u in tra) == 1:
+            return t
+    return ""
+
+
 def _doc(duong: str) -> str:
     try:
         with open(duong, "r", encoding="utf-8", errors="replace") as tep:
@@ -178,7 +204,7 @@ def xuat_goi(thu_muc_luot: str, thu_muc_done: str, ma: str) -> str:
 
 
 def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
-             ngay: str = "", gio: str = "") -> Tuple[str, bool]:
+             ngay: str = "", gio: str = "", goi_ai=None) -> Tuple[str, bool]:
     """Xuất gói + kiểm chất lượng + ghi một dòng kế hoạch.
 
     Trả `(mã gói, có thêm dòng mới không)`.
@@ -229,8 +255,23 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
     o_ma = cot.index("Mã gói")
     da_co_dong = any(d[o_ma].strip() == ma for d in hang)
     if not da_co_dong:
+        dsp = ""
+        if getattr(k, "danh_sach_phat_kenh", ""):
+            if goi_ai is None:
+                try:
+                    from .giam_doc.quan_ly import goi_chat_that  # noqa: PLC0415
+                    _g = goi_chat_that(goc)
+                    goi_ai = (lambda de: _g(de, mo_hinh="claude-sonnet-5",
+                                            toi_da_token=64)) if _g else None
+                except Exception:  # noqa: BLE001
+                    goi_ai = None
+            dsp = chon_danh_sach_phat(k.danh_sach_phat_kenh, gt["tieu_de"],
+                                      gt["mo_ta"], goi_ai)
+            if dsp and "Danh sách phát" not in cot:  # thêm cột, giữ tương thích
+                cot = list(cot) + ["Danh sách phát"]
+                hang = [list(h) + [""] for h in hang]
         dong = {ten: "" for ten in cot}
-        dong.update({"Mã gói": ma,
+        dong.update({"Mã gói": ma, "Danh sách phát": dsp,
                      "Ngày đăng": ngay if ket_qua_qa.dat else "",
                      "Giờ đăng": gio if ket_qua_qa.dat else "",
                      "Tiêu đề": gt["tieu_de"], "Mô tả": gt["mo_ta"],

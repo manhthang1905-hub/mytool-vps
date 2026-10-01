@@ -474,7 +474,8 @@ def dong_tu_hang(r: list) -> dict:
     return {"ma": o(nt.O_MA), "kenh": o(nt.O_KENH), "the": o(nt.O_THE),
             "trang_thai": o(nt.O_TRANG_THAI), "tieu_de": o(nt.O_TIEU_DE),
             "mo_ta": (str(r[nt.O_MO_TA]) if nt.O_MO_TA < len(r) else "").strip(),
-            "link": [o(i) for i in nt.O_LINK], "ngay": o(nt.O_NGAY), "gio": o(nt.O_GIO)}
+            "link": [o(i) for i in nt.O_LINK], "ngay": o(nt.O_NGAY), "gio": o(nt.O_GIO),
+            "dsp": o(getattr(nt, "O_DSP", 62))}
 
 
 def chon_ma_can_dang(hang: list, kenh: str, bay_gio: datetime,
@@ -1288,8 +1289,9 @@ class MayDangDom:
         ta.bam(pt, hau_dieu_kien=lambda: str(ta.doc_thuoc_tinh(khoa, "aria-checked")) == "true",
                han_hau=8)
 
-    def _danh_sach_phat(self, ta) -> str:
-        ten = str(self.cai.get("danh_sach_phat") or "").strip()
+    def _danh_sach_phat(self, ta, ten_dong: str = "") -> str:
+        ten_dong = str(ten_dong or "").strip()
+        ten = ten_dong or str(self.cai.get("danh_sach_phat") or "").strip()
         ta.bam("playlist_mo", hau_dieu_kien=lambda: ta.co("playlist_muc"), han_hau=15)
         chon = ta.tim("playlist_muc", han=5)
         if chon and ten:
@@ -1297,7 +1299,16 @@ class MayDangDom:
             chon = None
             for i in range(so):
                 pt = ta.tim("playlist_muc", han=0, thu=i)
-                if pt and ten in chuan_hoa_tieu_de(ta.doc_chu(pt)):
+                if not pt:
+                    continue
+                chu_pt = ta.doc_chu(pt)
+                if ten_dong:   # tên từ kế hoạch: khớp CHÍNH XÁC (cả khối hoặc một dòng)
+                    cac = [chuan_hoa_tieu_de(chu_pt)] + [
+                        chuan_hoa_tieu_de(x) for x in str(chu_pt).splitlines()]
+                    khop = chuan_hoa_tieu_de(ten_dong) in cac
+                else:
+                    khop = ten in chuan_hoa_tieu_de(chu_pt)
+                if khop:
                     chon = pt
                     break
             if not chon:
@@ -1337,7 +1348,7 @@ class MayDangDom:
         else:
             self._canh_bao("{0}: gói không có ảnh thumbnail".format(d["ma"]))
         try:
-            self._danh_sach_phat(ta)
+            self._danh_sach_phat(ta, d.get("dsp"))
         except Exception as loi:  # noqa: BLE001 — mềm
             self._canh_bao("{0}: danh sách phát bỏ qua ({1})".format(d["ma"], loi))
             if ta.co("playlist_xong"):

@@ -40,6 +40,7 @@ O_MO_TA = 54       # IDX_DESC_BC
 O_LINK = (55, 56, 57, 58)   # BD..BG
 O_NGAY = 60        # IDX_DATE_BI
 O_GIO = 61         # IDX_TIME_BJ
+O_DSP = 62         # Danh sách phát (cột mới của kế hoạch; rỗng = hành vi cũ)
 
 #: `get_all_ready_codes` đòi `len(row) > 61` — 62 ô là vừa đủ, thêm cho chắc.
 RONG_DONG = 64
@@ -48,7 +49,8 @@ RONG_DONG = 64
 #: cột bên tool sẽ làm KeyError ngay ở đây chứ không âm thầm đăng thiếu chữ.
 _C = {"ma": "Mã gói", "ngay": "Ngày đăng", "gio": "Giờ đăng",
       "tieu_de": "Tiêu đề", "mo_ta": "Mô tả", "the": "Thẻ SEO",
-      "san_sang": "Sẵn sàng", "da_dang": "Trạng thái đăng"}
+      "san_sang": "Sẵn sàng", "da_dang": "Trạng thái đăng",
+      "dsp": "Danh sách phát"}
 _C_LINK = ("Link card 1", "Link card 2", "Link card 3", "Link card 4")
 
 
@@ -185,6 +187,7 @@ def _dung_hang(chu: str, kenh: str, trang_thai_ok: str) -> list:
             r[vi_tri] = lay(d, ten)
         r[O_NGAY] = lay(d, _C["ngay"])
         r[O_GIO] = lay(d, _C["gio"])
+        r[O_DSP] = lay(d, _C["dsp"])
         ra.append(r)
     return ra
 
