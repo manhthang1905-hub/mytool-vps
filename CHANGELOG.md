@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.138.0** — 2026-10-01 — `vps-jp1` — Công ty YouTube (gọn): khám nghiệm video + bài học + tổng giám đốc gợi ý
 - **2.137.2** — 2026-10-01 — `vps-jp1` — Ví: chi ngày theo số thật (độ tụt ví/chi phí lượt), cảnh báo đúng số ngày còn
 - **2.137.1** — 2026-10-01 — `vps-jp1` — Gác tổng: cảnh báo 'hẹn lịch chưa tải' chỉ KHẨN khi còn ≤3 giờ (bớt báo động nhiễu)
 - **2.137.0** — 2026-10-01 — `vps-jp1` — Giám đốc kênh: nối vào gác tổng/biên tập/hồ sơ; sửa ngưỡng thắng kênh ít video; TL3 chế độ gợi ý
