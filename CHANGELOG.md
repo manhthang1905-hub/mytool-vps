@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.141.5** — 2026-10-01 — `vps-jp1` — Máy đăng: video làm xong tải + hẹn lịch luôn (cửa sổ 7 → 30 ngày)
 - **2.141.4** — 2026-10-01 — `vps-jp1` — Dọn: video đã lên YouTube là xoá ngay file nặng + ảnh; gói Bỏ xoá ngay
 - **2.141.3** — 2026-10-01 — `vps-jp1` — Gọn luật dọn DONE (một luật 3 ngày) + van ổ 10 GB
 - **2.141.2** — 2026-10-01 — `vps-jp1` — Dọn DONE sau khi đăng + chặn ổ đầy + trần theo ổ
