@@ -1,21 +1,25 @@
-"""Trang **Bảng điều khiển** — mặt mở đầu mới của máy VPS (Việc 2,
-`workspace/THIET-KE-BANG-DIEU-KHIEN.md`, duyệt 29/09/2026).
+"""Trang **Bảng điều khiển** = PHÒNG ĐIỀU HÀNH CÔNG TY (Đợt G, 01/10/2026 —
+`workspace/VIEC-CON-LAI-30-09.md`; bản đầu: Việc 2, `workspace/THIET-KE-BANG-DIEU-KHIEN.md`).
 
-Mục tiêu (mục 0 của bản thiết kế): mở tool trả lời BA câu trong 5 giây —
-(a) các kênh có ổn không, (b) tôi cần làm gì, (c) kết quả ra sao. Ba khối, trên
-xuống dưới:
+"Vào VPS thì qua đó nắm tình hình và quản lý được" — đọc 10 giây hiểu, bấm vào
+mới chi tiết, màu chỉ để báo. Trên xuống dưới:
 
-* `KhoiViec` — "VIỆC CỦA BẠN": danh sách việc TAY, xếp hỏng (✕) trước, cần xem
-  (⚠) sau, thông tin (•) cuối — từ `core.bang_dieu_khien.viec_cua_ban` cộng
-  thêm dòng "Windows sắp hết hạn" (`core.tong_quan_vps.canh_bao_windows`, Việc 1
-  cố ý không gộp hàm đó vào `viec_cua_ban`).
-* `DongMay` — một dòng: ví (+ còn chạy bao lâu), ổ đĩa, máy bật từ bao giờ, máy
-  chạy nền, lần quét Studio gần nhất, lịch hằng ngày. Mỗi ô bấm được.
-* Lưới `TheKenhLon` — mỗi kênh một thẻ lớn (câu tình trạng, video kế tiếp, ba
-  video gần nhất kèm mũi tên so cùng mốc tuổi, "máy đang học"), rồi dòng
-  "Kênh khác đang tắt: … ▸" cho các kênh không tự chạy và không do máy đăng
-  quản (quyết định 5 — TL4-T7-v2 gom vào đây, TL4-T7 tự chạy=false nhưng máy
-  đăng vẫn quản thì có thẻ riêng, đánh dấu "(đang tắt)").
+* `KhoiCongTy` — CÔNG TY: view/sub/giờ xem 7 ngày (so tuần trước) · video hôm nay
+  x/trần · máy · ví ~N ngày · phiên bản + tự cập nhật · tổng giám đốc. Nút
+  "Chi tiết máy ▸" mở `DongMay` (ví, đĩa, máy bật, máy nền, quét Studio, lịch,
+  chi phí thật) — giữ nguyên mọi ô cũ.
+* `KhoiViec` — "⚠ VIỆC CỦA BẠN (n)": chỉ việc máy không tự làm được, xếp hỏng
+  (✕) trước — từ `core.bang_dieu_khien.viec_cua_ban` + dòng "Windows sắp hết
+  hạn" (`core.tong_quan_vps.canh_bao_windows`).
+* Lưới `TheKenhLon` — kênh ĐỎ lên đầu (`bdk.muc_phong`): xếp loại, YPP, 3 cổng,
+  3 video + phán quyết, đội AI nói, đang thử, lịch đăng tiếp, công tắc giám đốc
+  / tạm dừng / tự lên lịch, 3 nút trang chi tiết (`ui_qt.trang_phong_chi_tiet`)
+  + menu "⋯" (xem video, nhật ký, thư mục, cài kênh). Rồi dòng "Kênh khác đang
+  tắt: … ▸".
+
+Số nặng của thẻ (`bdk.tinh_so_kenh`) KHÔNG tính trong tiến trình giao diện:
+`phong_dieu_hanh` báo `can_tinh`, trang gọi `bdk.sinh_tinh_so` (tiến trình con
+ưu tiên thấp) tối đa mỗi `GIAY_TINH_LAI` một lần, lần làm mới sau tự đọc bộ đệm.
 
 KHÔNG viết lại lô-gic của `core.bang_dieu_khien` (Việc 1) — trang này chỉ gọi
 và vẽ. Việc tay không có dấu trên đĩa (ghim, nháp thừa) đã có nút "Đã ghim"/
@@ -55,7 +59,7 @@ from typing import Any, Callable, Dict, List, Optional
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu,
-    QMessageBox, QTextEdit, QVBoxLayout, QWidget,
+    QMessageBox, QProgressBar, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from core import bang_dieu_khien as bdk
@@ -64,13 +68,15 @@ from core.money import format_vnd
 
 from . import theme
 from .trang_dieu_khien import HopCaiDatKenh, HopNhatKyKenh
-from .trang_trung_tam import GIAY_HOI_LICH, GIAY_HOI_VI, HopDuyet, _cat, _giam_sat, _gon, _pt
+from .trang_trung_tam import GIAY_HOI_LICH, GIAY_HOI_VI, HopDuyet, _cat, _giam_sat
 from .widgets import HangXuongDong, HopXuongDong, gio_hhmm, mo_thu_muc, nhan, nut_phu
 
-__all__ = ["TrangBangDieuKhien", "KhoiViec", "DongMay", "TheKenhLon"]
+__all__ = ["TrangBangDieuKhien", "KhoiViec", "DongMay", "TheKenhLon", "KhoiCongTy"]
 
 #: CLAUDE.md luật 4 — đọc lại tệp mỗi 30 giây, không hỏi máy chủ dày hơn.
 NHIP_LAM_MOI_MS = 30_000
+#: Sinh tiến trình tính số kênh tối đa 10 phút/lần (kể cả khi lần trước hỏng).
+GIAY_TINH_LAI = 10 * 60
 #: Windows chỉ hỏi 6 giờ/lần (mục 3, "Làm mới" — `wevtutil` mất tới 8 giây).
 GIAY_HOI_WINDOWS = 6 * 60 * 60
 
@@ -196,8 +202,9 @@ class KhoiViec(QFrame):
             w = muc.widget()
             if w is not None:
                 w.deleteLater()
-        self._nhan_tieu.setText("VIỆC CỦA BẠN · {0}".format(len(danh_sach))
+        self._nhan_tieu.setText("⚠ VIỆC CỦA BẠN ({0})".format(len(danh_sach))
                                 if danh_sach else "VIỆC CỦA BẠN")
+        self._nhan_tieu.setToolTip("Chỉ những việc máy KHÔNG tự làm được — còn lại máy tự lo.")
         self._nhan_rong.setVisible(not danh_sach)
         self._hop_dong.setVisible(bool(danh_sach))
         for viec in danh_sach:
@@ -351,19 +358,150 @@ class DongMay(QFrame):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+#: Ba cổng + xếp loại + phán quyết — màu CHỈ để báo (xanh ổn · vàng sát ngưỡng · đỏ hỏng · xám chưa có số).
+_MAU_CONG = {
+    bdk.TOT: (theme.XANH, theme.XANH_NEN, theme.XANH_VIEN),
+    bdk.LUU_Y: (theme.CAM, theme.VANG_NEN, theme.VANG_VIEN),
+    bdk.HONG: (theme.DO, theme.DO_NEN, theme.DO_VIEN),
+    bdk.CHUA: (theme.CHU_MO, theme.XAM_NEN, theme.VIEN),
+}
+_MAU_LOAI = {"len": theme.XANH, "chung": theme.CHU_MO, "tut": theme.DO}
+_KET_VIDEO = {"thang": ("✓ thắng", theme.XANH), "truot": ("✕ trượt", theme.DO)}
+
+
+def _so_vn(x: Any, le: int = 0) -> str:
+    if x is None:
+        return "?"
+    try:
+        s = "{0:,.{1}f}".format(float(x), le)
+    except (TypeError, ValueError):
+        return "?"
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _chu_pct(pct: Any) -> str:
+    if pct is None:
+        return ""
+    return " ({0}{1}% so tuần trước)".format("+" if pct > 0 else "", pct)
+
+
+def _hop_trong(bo_cuc: Any) -> QWidget:
+    """Vỏ trong suốt cho một hàng chip (không ăn nền xám của QWidget mặc định)."""
+    hop = QWidget()
+    hop.setObjectName("hopTrong")
+    hop.setStyleSheet("QWidget#hopTrong{background:transparent;}")
+    hop.setLayout(bo_cuc)
+    return hop
+
+
+class KhoiCongTy(QFrame):
+    """Khối CÔNG TY: 7 ngày (view/sub/giờ xem so tuần trước) · video hôm nay x/trần · máy · ví · phiên bản ·
+    tổng giám đốc. Ô nào cần bạn nhìn mới có màu."""
+
+    def __init__(self, on_hanh_dong: Callable[[str, Dict[str, Any]], None],
+                 cha: Optional[QWidget] = None):
+        super().__init__(cha)
+        self._on_hanh_dong = on_hanh_dong
+        self.setObjectName("card")
+        theme.bong(self)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(12, 8, 12, 8)
+        v.setSpacing(4)
+        hang_tieu = QHBoxLayout()
+        hang_tieu.setContentsMargins(0, 0, 0, 0)
+        hang_tieu.addWidget(nhan("CÔNG TY", "h2"))
+        hang_tieu.addStretch(1)
+        self._nut_chi_tiet = nut_phu("Chi tiết máy ▸", lambda: self._on_hanh_dong("chi_tiet_may", {}))
+        hang_tieu.addWidget(self._nut_chi_tiet)
+        v.addLayout(hang_tieu)
+        self._hop = HopXuongDong(8)
+        v.addWidget(self._hop)
+        hang = self._hop.hang
+        self._o_xem = _OChiSoMay("View 7 ngày")
+        self._o_sub = _OChiSoMay("Sub 7 ngày")
+        self._o_gio = _OChiSoMay("Giờ xem 7 ngày")
+        self._o_video = _OChiSoMay("Video hôm nay")
+        self._o_may = _OChiSoMay("Máy", lambda: self._on_hanh_dong("chi_tiet_may", {}))
+        self._o_vi = _OChiSoMay("Ví", lambda: self._on_hanh_dong("mo_vi", {}))
+        self._o_ban = _OChiSoMay("Phiên bản", lambda: self._on_hanh_dong("mo_vi", {}))
+        self._o_tong = _OChiSoMay("Tổng giám đốc", lambda: self._on_hanh_dong("bao_cao_cong_ty", {}))
+        for o in (self._o_xem, self._o_sub, self._o_gio, self._o_video, self._o_may, self._o_vi, self._o_ban,
+                  self._o_tong):
+            hang.addWidget(o)
+        self._o_tong.setVisible(False)
+
+    def dat_mo_chi_tiet(self, mo: bool) -> None:
+        self._nut_chi_tiet.setText("Chi tiết máy ▾" if mo else "Chi tiết máy ▸")
+
+    def nap(self, ct: Dict[str, Any]) -> None:
+        tuan = ct.get("tuan") or {}
+        for o, khoa, le in ((self._o_xem, "xem", 0), (self._o_sub, "sub", 0), (self._o_gio, "gio_xem", 0)):
+            t = tuan.get(khoa) or {}
+            pct = t.get("pct")
+            if t.get("nay") is None:
+                o.dat("đang tính…" if not ct.get("so_kenh_co_so") else "chưa có số", bdk.TOT,
+                      "Số 7 ngày của các kênh YouTube (Studio). Lần đầu mở cần ~1 phút để tính.")
+                continue
+            muc = bdk.LUU_Y if pct is not None and pct <= -20 else bdk.TOT
+            mui = "" if pct is None else (" ▲{0}%".format(pct) if pct > 0 else (" ▼{0}%".format(-pct) if pct < 0 else " ●0%"))
+            o.dat(_so_vn(t["nay"], le) + mui, muc,
+                  "7 ngày qua, cộng mọi kênh YouTube{0}.\n% chỉ so trên các kênh đã có đủ số tuần trước.".format(
+                      _chu_pct(pct)))
+        hn, tran = ct.get("video_hom_nay"), ct.get("tran")
+        self._o_video.dat("{0} / trần {1}".format(hn if hn is not None else "?", tran if tran else "?"), bdk.TOT,
+                          "Video dựng xong từ 0 giờ hôm nay / trần máy làm được mỗi ngày (công suất đo 24 giờ).")
+        may = ct.get("may") or {}
+        self._o_may.dat(str(may.get("chu") or "?"), may.get("muc") or bdk.TOT,
+                        (str(may.get("tip") or "") + "\nBấm để xem chi tiết máy.").strip())
+        vi = ct.get("vi") or {}
+        ngay = vi.get("ngay")
+        self._o_vi.dat("còn ~{0:.0f} ngày".format(ngay) if ngay is not None else "chưa ước được",
+                       vi.get("muc") or bdk.TOT,
+                       ("Số dư {0}₫. ".format(_so_vn(vi.get("vnd"))) if vi.get("vnd") is not None else "")
+                       + "Bấm để nạp tiền / xem ví.")
+        pb = ct.get("phien_ban") or {}
+        if pb:
+            chu = "{0} · tự cập nhật {1}".format(pb.get("ban") or "?", "bật" if pb.get("tu_dong") else "TẮT")
+            muc = bdk.TOT
+            if pb.get("ban_moi"):
+                chu = "{0} → có bản {1}".format(pb.get("ban") or "?", pb["ban_moi"])
+                muc = bdk.TOT if pb.get("tu_dong") else bdk.LUU_Y
+            if pb.get("loi"):
+                muc = bdk.LUU_Y
+            self._o_ban.dat(chu, muc, "Kiểm lần cuối {0}{1}".format(
+                pb.get("kiem_luc") or "?", "\nLỗi: " + pb["loi"] if pb.get("loi") else ""))
+        else:
+            self._o_ban.dat("?", bdk.TOT)
+        tg = ct.get("tong_giam_doc") or {}
+        self._o_tong.setVisible(bool(tg.get("cau")))
+        if tg.get("cau"):
+            self._o_tong.dat(str(tg["cau"]).split(": ", 1)[-1][:60], bdk.TOT,
+                             str(tg["cau"]) + "\nBấm để mở Báo cáo công ty.")
+
+
+def _nhan_nho(chu: str = "", mau: str = "", dam: bool = False, xuong_dong: bool = True) -> QLabel:
+    nh = QLabel(chu)
+    nh.setWordWrap(xuong_dong)
+    nh.setMinimumWidth(1)
+    nh.setStyleSheet("font-size:12px;{0}{1}".format("color:{0};".format(mau) if mau else "",
+                                                   "font-weight:600;" if dam else ""))
+    return nh
+
+
 class TheKenhLon(QFrame):
-    """Một kênh = một thẻ lớn: câu tình trạng, video kế tiếp, ba video gần
-    đây kèm mũi tên, "máy đang học", bốn nút."""
+    """Một kênh = một thẻ ở phòng điều hành: xếp loại · tiến độ kiếm tiền · 3 cổng · 3 video gần nhất kèm phán
+    quyết · đội AI nói · đang thử gì · lịch đăng tiếp · công tắc giám đốc / tạm dừng · 3 nút trang chi tiết."""
 
     #: Bề rộng tối thiểu hợp lý — KHÔNG `setFixedWidth`: lưới 2 cột co giãn
     #: theo cửa sổ (`_LuoiThe`), ép cứng bề rộng ở đây sẽ làm cửa sổ hẹp tràn.
     RONG_TOI_THIEU = 420
 
     def __init__(self, ma: str, on_cong_tac: Callable[[str, str, bool], None],
-                on_hanh_dong: Callable[[str, str], None], cha: Optional[QWidget] = None):
+                 on_hanh_dong: Callable[[str, str], None], cha: Optional[QWidget] = None):
         super().__init__(cha)
         self._ma = ma
         self._muc = bdk.TOT
+        self._tu_chay = False
         self._dang_nap = False
         self._on_cong_tac = on_cong_tac
         self._on_hanh_dong = on_hanh_dong
@@ -381,121 +519,133 @@ class TheKenhLon(QFrame):
         self._nhan_ten.setMinimumWidth(1)
         self._nhan_ten.setStyleSheet("font-size:15px;font-weight:700;")
         hang_ten.addWidget(self._nhan_ten, 1)
+        self._nhan_loai = QLabel("")
+        self._nhan_loai.setWordWrap(False)
+        hang_ten.addWidget(self._nhan_loai)
         v.addLayout(hang_ten)
 
-        hang_ct = QHBoxLayout()
-        hang_ct.setContentsMargins(0, 0, 0, 0)
-        self._o_tu_chay = QCheckBox("Tự làm video")
-        self._o_tu_chay.toggled.connect(
-            lambda bat: self._bao_cong_tac("tu_chay", bat))
-        hang_ct.addWidget(self._o_tu_chay)
-        hang_ct.addStretch(1)
-        v.addLayout(hang_ct)
-        hang_ct2 = QHBoxLayout()
-        hang_ct2.setContentsMargins(0, 0, 0, 0)
-        self._o_tu_duyet = QCheckBox("Tự lên lịch")
-        self._o_tu_duyet.setToolTip(
-            "Bật: video làm xong tự hẹn giờ và lên sóng, không chờ bạn xem trước.\n"
-            "Tắt: video nằm chờ bạn bấm “Hẹn giờ” ở khối Việc của bạn.")
-        self._o_tu_duyet.toggled.connect(
-            lambda bat: self._bao_cong_tac("tu_duyet", bat))
-        hang_ct2.addWidget(self._o_tu_duyet)
-        hang_ct2.addStretch(1)
-        v.addLayout(hang_ct2)
-
-        self._nhan_trang_thai = QLabel("")
-        self._nhan_trang_thai.setWordWrap(True)
-        self._nhan_trang_thai.setMinimumWidth(1)
+        self._nhan_trang_thai = _nhan_nho()
         v.addWidget(self._nhan_trang_thai)
-
-        self._nhan_khau = QLabel("")
-        self._nhan_khau.setWordWrap(True)
-        self._nhan_khau.setMinimumWidth(1)
+        self._nhan_khau = _nhan_nho(mau=theme.CHU_MO)
         self._nhan_khau.setStyleSheet("color:{0};font-size:11px;".format(theme.CHU_MO))
         self._nhan_khau.setVisible(False)
         v.addWidget(self._nhan_khau)
 
-        self._nhan_ke_tiep = QLabel("Video kế tiếp  —")
-        self._nhan_ke_tiep.setWordWrap(True)
-        self._nhan_ke_tiep.setMinimumWidth(1)
-        self._nhan_ke_tiep.setStyleSheet("font-size:12px;")
+        # Tiến độ bật kiếm tiền (YPP).
+        hang_ypp = QHBoxLayout()
+        hang_ypp.setContentsMargins(0, 2, 0, 0)
+        hang_ypp.setSpacing(6)
+        self._nhan_ypp_sub = _nhan_nho(xuong_dong=False)
+        self._thanh_sub = self._thanh()
+        self._nhan_ypp_gio = _nhan_nho(xuong_dong=False)
+        self._thanh_gio = self._thanh()
+        for w in (self._nhan_ypp_sub, self._thanh_sub, self._nhan_ypp_gio, self._thanh_gio):
+            hang_ypp.addWidget(w)
+        hang_ypp.setStretch(1, 1)
+        hang_ypp.setStretch(3, 1)
+        v.addLayout(hang_ypp)
+
+        # Ba cổng.
+        hang_cong = QHBoxLayout()
+        hang_cong.setContentsMargins(0, 2, 0, 2)
+        hang_cong.setSpacing(6)
+        self._o_cong: List[QLabel] = []
+        for _i in range(3):
+            nh = QLabel("")
+            nh.setWordWrap(True)
+            nh.setMinimumWidth(1)
+            nh.setAlignment(Qt.AlignCenter)
+            hang_cong.addWidget(nh, 1)
+            self._o_cong.append(nh)
+        v.addLayout(hang_cong)
+
+        v.addWidget(_nhan_nho("Video gần nhất", theme.CHU_MO, dam=True))
+        self._hang_video: List[QLabel] = []
+        for _i in range(3):
+            nh = _nhan_nho(xuong_dong=False)
+            nh.setTextFormat(Qt.RichText)
+            v.addWidget(nh)
+            self._hang_video.append(nh)
+
+        v.addWidget(_nhan_nho("Đội AI nói", theme.CHU_MO, dam=True))
+        self._nhan_giam_doc = _nhan_nho()
+        self._nhan_giam_doc.setVisible(False)
+        v.addWidget(self._nhan_giam_doc)
+        self._nhan_ai: List[QLabel] = []
+        for _i in range(3):
+            nh = _nhan_nho()
+            nh.setVisible(False)
+            v.addWidget(nh)
+            self._nhan_ai.append(nh)
+        self._nhan_ai_rong = _nhan_nho("— chưa có chẩn đoán nào", theme.CHU_MO)
+        v.addWidget(self._nhan_ai_rong)
+
+        self._nhan_dang_thu = _nhan_nho()
+        v.addWidget(self._nhan_dang_thu)
+        self._nhan_ke_tiep = _nhan_nho()
         v.addWidget(self._nhan_ke_tiep)
 
-        self._nhan_len_song = QLabel("Lên sóng       chưa hẹn giờ")
-        self._nhan_len_song.setWordWrap(False)
-        self._nhan_len_song.setStyleSheet("color:{0};font-size:12px;".format(theme.CHU_MO))
-        v.addWidget(self._nhan_len_song)
-
-        self._luoi_gan_day = QGridLayout()
-        self._luoi_gan_day.setContentsMargins(0, 4, 0, 4)
-        self._luoi_gan_day.setHorizontalSpacing(8)
-        self._luoi_gan_day.setVerticalSpacing(2)
-        for c, ten in enumerate(("Gần đây", "Tuổi", "Lượt xem", "Tỷ lệ bấm", "Giữ chân")):
-            nh = QLabel(ten)
-            nh.setStyleSheet("color:{0};font-size:11px;font-weight:600;".format(theme.CHU_MO))
-            if ten == "Tỷ lệ bấm":
-                nh.setToolTip("Tỷ lệ bấm (CTR) — số người bấm xem / số người thấy ảnh bìa.")
-            self._luoi_gan_day.addWidget(nh, 0, c)
-        self._luoi_gan_day.setColumnStretch(0, 1)
-        self._hang_gan_day: List[List[QLabel]] = []
-        for r in range(1, 4):
-            hang: List[QLabel] = []
-            for c in range(5):
-                nh = QLabel("")
-                nh.setStyleSheet("font-size:12px;")
-                nh.setMinimumWidth(1)
-                if c == 0:
-                    nh.setWordWrap(False)
-                self._luoi_gan_day.addWidget(nh, r, c)
-                hang.append(nh)
-            self._hang_gan_day.append(hang)
-        v.addLayout(self._luoi_gan_day)
-
-        self._nhan_hoc = QLabel("")
-        self._nhan_hoc.setWordWrap(True)
-        self._nhan_hoc.setMinimumWidth(1)
-        self._nhan_hoc.setStyleSheet("color:{0};font-size:11px;".format(theme.CHU_MO))
-        self._nhan_hoc.setVisible(False)
-        v.addWidget(self._nhan_hoc)
-
-        # Giám đốc kênh (01/10/2026): 1 dòng + công tắc 3 nấc + nút Báo cáo tuần.
-        hang_gd = QHBoxLayout()
-        hang_gd.setContentsMargins(0, 0, 0, 0)
-        hang_gd.setSpacing(6)
+        # Điều khiển ngay trên thẻ.
+        hang_dk = HangXuongDong(6)
         nh_gd = QLabel("Giám đốc kênh")
         nh_gd.setStyleSheet("color:{0};font-size:11px;font-weight:600;".format(theme.CHU_MO))
-        hang_gd.addWidget(nh_gd)
+        hang_dk.addWidget(nh_gd)
         self._o_giam_doc = QComboBox()
         for khoa, ten in bdk.CHE_DO_GIAM_DOC:
             self._o_giam_doc.addItem(ten, khoa)
         self._o_giam_doc.setToolTip(
             "Tắt: không làm gì.\nGợi ý: đọc số hằng ngày, ghi “sẽ làm gì” và tự chấm — KHÔNG đổi gì của kênh.\n"
-            "Tự áp: đổi tham số kenh.yaml trong giới hạn an toàn (tối đa 2 thay đổi/tuần, tự quay lui).")
+            "Tự áp: đổi tham số kênh trong giới hạn an toàn (tối đa 2 thay đổi/tuần, tự quay lui).")
         self._o_giam_doc.currentIndexChanged.connect(self._bao_giam_doc)
-        hang_gd.addWidget(self._o_giam_doc)
-        self._nut_bao_cao = nut_phu("Báo cáo tuần", lambda: self._on_hanh_dong(self._ma, "bao_cao_giam_doc"))
-        hang_gd.addWidget(self._nut_bao_cao)
-        hang_gd.addStretch(1)
-        v.addLayout(hang_gd)
-        self._nhan_giam_doc = QLabel("")
-        self._nhan_giam_doc.setWordWrap(True)
-        self._nhan_giam_doc.setMinimumWidth(1)
-        self._nhan_giam_doc.setStyleSheet("color:{0};font-size:11px;".format(theme.CHU_MO))
-        self._nhan_giam_doc.setVisible(False)
-        v.addWidget(self._nhan_giam_doc)
+        hang_dk.addWidget(self._o_giam_doc)
+        self._nut_tam_dung = nut_phu("Tạm dừng kênh", self._bam_tam_dung)
+        hang_dk.addWidget(self._nut_tam_dung)
+        self._o_tu_duyet = QCheckBox("Tự lên lịch")
+        self._o_tu_duyet.setToolTip(
+            "Bật: video làm xong tự hẹn giờ và lên sóng, không chờ bạn xem trước.\n"
+            "Tắt: video nằm chờ bạn bấm “Hẹn giờ” ở khối Việc của bạn.")
+        self._o_tu_duyet.toggled.connect(lambda bat: self._bao_cong_tac("tu_duyet", bat))
+        hang_dk.addWidget(self._o_tu_duyet)
+        v.addWidget(_hop_trong(hang_dk))
 
         hang_nut = HangXuongDong(6)
-        self._nut_xem = nut_phu("Xem video chờ đăng",
-                                lambda: self._on_hanh_dong(self._ma, "xem_video"))
-        hang_nut.addWidget(self._nut_xem)
-        hang_nut.addWidget(nut_phu("Mở thư mục", lambda: self._on_hanh_dong(self._ma, "mo_thu_muc")))
-        hang_nut.addWidget(nut_phu("Nhật ký", lambda: self._on_hanh_dong(self._ma, "nhat_ky")))
-        hang_nut.addWidget(nut_phu("⚙ Cài kênh", lambda: self._on_hanh_dong(self._ma, "cai_kenh")))
-        hop_nut = QWidget()
-        hop_nut.setLayout(hang_nut)
-        v.addWidget(hop_nut)
-
+        self._nut_bao_cao = nut_phu("Báo cáo tuần", lambda: self._on_hanh_dong(self._ma, "bao_cao_giam_doc"))
+        hang_nut.addWidget(self._nut_bao_cao)
+        self._nut_bai_hoc = nut_phu("Bài học", lambda: self._on_hanh_dong(self._ma, "bai_hoc"))
+        hang_nut.addWidget(self._nut_bai_hoc)
+        # `&&`: Qt coi một `&` là phím tắt và giấu đi.
+        self._nut_quyet = nut_phu("Quyết định && độ chính xác", lambda: self._on_hanh_dong(self._ma, "quyet_dinh"))
+        hang_nut.addWidget(self._nut_quyet)
+        self._nut_them = nut_phu("⋯", self._menu_them)
+        self._nut_them.setToolTip("Xem video chờ đăng · Nhật ký · Mở thư mục · Cài kênh")
+        hang_nut.addWidget(self._nut_them)
+        v.addWidget(_hop_trong(hang_nut))
+        self._co_video = False
         self._ve_vien()
+
+    @staticmethod
+    def _thanh() -> QProgressBar:
+        t = QProgressBar()
+        t.setRange(0, 1000)
+        t.setTextVisible(False)
+        t.setFixedHeight(6)
+        t.setMinimumWidth(40)
+        t.setStyleSheet("QProgressBar{{background:{0};border:none;border-radius:3px;}}"
+                        "QProgressBar::chunk{{background:{1};border-radius:3px;}}".format(theme.XAM_NEN, theme.NHAN))
+        return t
+
+    def _menu_them(self) -> None:
+        menu = QMenu(self)
+        a = menu.addAction("Xem video chờ đăng", lambda: self._on_hanh_dong(self._ma, "xem_video"))
+        a.setEnabled(self._co_video)
+        menu.addAction("Nhật ký", lambda: self._on_hanh_dong(self._ma, "nhat_ky"))
+        menu.addAction("Mở thư mục", lambda: self._on_hanh_dong(self._ma, "mo_thu_muc"))
+        menu.addAction("⚙ Cài kênh", lambda: self._on_hanh_dong(self._ma, "cai_kenh"))
+        menu.exec_(self._nut_them.mapToGlobal(self._nut_them.rect().bottomLeft()))
+
+    def _bam_tam_dung(self) -> None:
+        if not self._dang_nap:
+            self._on_cong_tac(self._ma, "tu_chay", not self._tu_chay)
 
     def _bao_cong_tac(self, khoa: str, bat: bool) -> None:
         if not self._dang_nap:
@@ -513,112 +663,162 @@ class TheKenhLon(QFrame):
             self._dang_nap = False
 
     def _nap_that(self, k: Dict[str, Any]) -> None:
-        self._muc = bdk.muc_the(k)
-        ma = str(k.get("ma") or "")
-        # `ten` trong kenh.yaml có thể là "tên — mô tả dài" (dòng nhắc lời AI
-        # đặt tên) — tiêu đề thẻ chỉ hiện phần TÊN, mô tả dồn vào tooltip
-        # (chẩn đoán chủ dự án 29/09/2026: tiêu đề thẻ dài tràn cả hàng).
+        ph = k.get("phong") or {}
+        so = ph.get("so") or {}
+        self._muc = str(ph.get("muc") or bdk.muc_phong(k, so))
+        ma = str(k.get("ma") or self._ma)
+        # `ten` trong kenh.yaml có thể là "tên — mô tả dài" — tiêu đề thẻ chỉ hiện phần TÊN.
         ten_day_du = str(k.get("ten") or ma)
         ten_ngan = ten_day_du.split(" — ", 1)[0].strip() or ten_day_du
         day_du_hien = ma if ten_ngan == ma else "{0} · {1}".format(ma, ten_ngan)
-        day_du_tip = ma if ten_day_du == ma else "{0} · {1}".format(ma, ten_day_du)
-        _cat(self._nhan_ten, day_du_hien, 420)
-        self._nhan_ten.setToolTip(day_du_tip)
+        _cat(self._nhan_ten, day_du_hien, 330)
+        self._nhan_ten.setToolTip(ma if ten_day_du == ma else "{0} · {1}".format(ma, ten_day_du))
 
-        self._o_tu_chay.blockSignals(True)
-        self._o_tu_chay.setChecked(bool(k.get("tu_chay")))
-        self._o_tu_chay.blockSignals(False)
+        loai = str(so.get("loai") or "")
+        if loai in bdk.XEP_LOAI:
+            dau, chu = bdk.XEP_LOAI[loai]
+            self._nhan_loai.setText("{0} {1}".format(dau, chu))
+            self._nhan_loai.setStyleSheet("font-size:13px;font-weight:700;color:{0};".format(_MAU_LOAI[loai]))
+            da = so.get("da")
+            self._nhan_loai.setToolTip(
+                "Xếp loại của tổng giám đốc: lên = hiển thị 7 ngày ≥ 1,2× tuần trước và thắng ≥ 25% video 28 ngày; "
+                "tụt = ≤ 0,8× tuần trước.\nĐà hiển thị: {0} · thắng 28 ngày: {1}/{2}".format(
+                    _so_vn(da, 2) if da is not None else "chưa đủ 2 tuần số", so.get("thang_28", 0), so.get("kl_28", 0)))
+        else:
+            self._nhan_loai.setText("đang tính số…" if not so else "")
+            self._nhan_loai.setStyleSheet("font-size:11px;color:{0};".format(theme.CHU_MO))
+
+        self._tu_chay = bool(k.get("tu_chay"))
+        self._nut_tam_dung.setText("Tạm dừng kênh" if self._tu_chay else "▶ Chạy lại kênh")
+        self._nut_tam_dung.setToolTip("Kênh đang tự làm video — bấm để tạm dừng." if self._tu_chay
+                                      else "Kênh đang dừng, không tự làm video — bấm để chạy lại.")
         self._o_tu_duyet.blockSignals(True)
         self._o_tu_duyet.setChecked(bool(k.get("tu_duyet")))
         self._o_tu_duyet.blockSignals(False)
 
-        bay = k.get("bay_gio") or {}
-        chu_mau, nen, vien = _MAU_THE.get(self._muc, _MAU_THE[bdk.TOT])
-        dau = _DAU_THE.get(self._muc, "")
-        # Câu NGƯỜI THƯỜNG đọc được (mục 3 "Viên trạng thái") — `bay_gio.chu`
-        # là câu KIỂU CŨ (`core.trung_tam.trang_thai_bay_gio`), không phải
-        # bảng câu mới ở đây. `cau_tinh_trang` (Việc 1) đã dịch nó.
-        cau = bdk.cau_tinh_trang(k) or "—"
-        if cau.startswith("Đã hẹn đăng"):
-            dau = "⏱"  # khác dấu ✓ chung của mức TOT — mục 3 thiết kế.
-        self._nhan_trang_thai.setText("{0} {1}".format(dau, cau).strip())
-        self._nhan_trang_thai.setToolTip(bay.get("chi_tiet") or cau)
-        self._nhan_trang_thai.setStyleSheet(
-            "QLabel{{background:{0};border:1px solid {1};border-radius:8px;"
-            "padding:5px 9px;color:{2};font-size:13px;font-weight:700;}}".format(
-                nen, vien, chu_mau))
-
+        mt = k.get("muc_the") or bdk.muc_the(k)
+        cau = bdk.cau_tinh_trang(k) if k.get("bay_gio") is not None else ""
+        mau_tt = {bdk.HONG: theme.DO, bdk.CHO_BAN: theme.CAM, bdk.LUU_Y: theme.CAM}.get(mt, theme.CHU_MO)
+        self._nhan_trang_thai.setText(("Bây giờ: " + cau) if cau else "")
+        self._nhan_trang_thai.setVisible(bool(cau))
+        self._nhan_trang_thai.setToolTip(str((k.get("bay_gio") or {}).get("chi_tiet") or cau))
+        self._nhan_trang_thai.setStyleSheet("font-size:12px;color:{0};{1}".format(
+            mau_tt, "font-weight:700;" if mt in (bdk.HONG, bdk.CHO_BAN, bdk.LUU_Y) else ""))
         chu_khau = _dong_khau(k)
         self._nhan_khau.setText(chu_khau)
         self._nhan_khau.setVisible(bool(chu_khau))
 
-        vkt = k.get("video_ke_tiep") or {}
-        td = str(vkt.get("tieu_de") or "")
-        if td:
-            chu_ke_tiep = "Video kế tiếp  「{0}」".format(td)
-        else:
-            tu = str(k.get("video_ke_tiep_tu") or "")
-            chu_ke_tiep = ("Video kế tiếp  — chưa có — máy làm video mới từ {0}".format(tu)
-                          if tu else "Video kế tiếp  — chưa có")
-        self._nhan_ke_tiep.setText(chu_ke_tiep)
-        self._nhan_ke_tiep.setToolTip(td)
+        ypp = ph.get("ypp") or {}
+        for nh, thanh, gt, can, ten in ((self._nhan_ypp_sub, self._thanh_sub, ypp.get("sub"), bdk.YPP_SUB, "sub"),
+                                        (self._nhan_ypp_gio, self._thanh_gio, ypp.get("gio_xem"), bdk.YPP_GIO,
+                                         "giờ xem")):
+            nh.setText("{0} {1}/{2}".format(ten.capitalize(), _so_vn(gt), _so_vn(can)))
+            thanh.setValue(int(min(1.0, (gt or 0) / can) * 1000))
+            thanh.setToolTip("Bật kiếm tiền cần {0} {1}. Hiện có {2} ({3:.0f}%).".format(
+                _so_vn(can), ten, _so_vn(gt), 100.0 * (gt or 0) / can))
 
-        luc = str(k.get("dang_luc") or "")
-        self._nhan_len_song.setText("Lên sóng       " + (luc if luc else "chưa hẹn giờ"))
+        cong = list(so.get("cong") or [])
+        ten_cong = ("Hiển thị", "Tỉ lệ bấm trang chủ", "Giữ chân")
+        for i, nh in enumerate(self._o_cong):
+            c = cong[i] if i < len(cong) else {"ten": ten_cong[i], "muc": bdk.CHUA, "chu": "đang tính…"}
+            chu_m, nen, vien = _MAU_CONG.get(c.get("muc"), _MAU_CONG[bdk.CHUA])
+            nh.setText("{0}\n{1}".format(c.get("ten"), c.get("chu") or ""))
+            nh.setStyleSheet("QLabel{{background:{0};border:1px solid {1};border-radius:8px;padding:3px 5px;"
+                             "color:{2};font-size:11px;font-weight:600;}}".format(nen, vien, chu_m))
+            nh.setToolTip({
+                "Hiển thị": "Trung vị lượt hiển thị 48 giờ của ≤ 5 video gần nhất, so ngưỡng thắng của kênh.",
+                "Tỉ lệ bấm trang chủ": "Trung vị tỉ lệ bấm ở trang chủ YouTube (≤ 5 video), so mục tiêu kênh. "
+                                       "Vàng: từ 80% mục tiêu.",
+                "Giữ chân": "Trung vị % thời lượng được xem (≤ 5 video, số ≥ 36 giờ), so video thắng của kênh.",
+            }.get(str(c.get("ten")), "") + ("\nTính trên {0} video.".format(c.get("n")) if c.get("n") else ""))
 
-        gan_day = list(k.get("video_gan_day") or [])
-        for r, hang in enumerate(self._hang_gan_day):
-            if r < len(gan_day):
-                d = gan_day[r]
-                _cat(hang[0], str(d.get("tieu_de") or ""), 160)
-                hang[0].setToolTip(str(d.get("tieu_de") or ""))
-                hang[1].setText(str(d.get("tuoi") or "—"))
-                lx = d.get("luot_xem")
-                hang[2].setText(_gon(lx) if lx is not None else "—")
-                ctr = d.get("ty_le_bam")
-                mui_ten = _MUI_TEN.get(str(d.get("mui_ten") or ""), "")
-                mau_mui = _MAU_MUI_TEN.get(str(d.get("mui_ten") or ""), theme.CHU)
-                hang[3].setText(("{0} {1}".format(_pt(ctr), mui_ten)).strip()
-                                if ctr is not None else "—")
-                hang[3].setStyleSheet("font-size:12px;color:{0};".format(
-                    mau_mui if mui_ten else theme.CHU))
-                gc = d.get("giu_chan")
-                hang[4].setText(_pt(gc) if gc is not None else "—")
-                for lb in hang:
-                    lb.setVisible(True)
+        video = list(so.get("video") or [])
+        for i, nh in enumerate(self._hang_video):
+            if i >= len(video):
+                nh.setText("—" if i == 0 and so else "")
+                nh.setVisible(i == 0)
+                continue
+            d = video[i]
+            ket = str(d.get("ket") or "cho")
+            if ket in _KET_VIDEO:
+                chu_ket, mau = _KET_VIDEO[ket]
             else:
-                for lb in hang:
-                    lb.setText("")
-        any_gan_day = bool(gan_day)
-        for c in range(5):
-            self._luoi_gan_day.itemAtPosition(0, c).widget().setVisible(any_gan_day)
-
-        hoc = str(k.get("may_dang_hoc") or "")
-        self._nhan_hoc.setText(hoc)
-        self._nhan_hoc.setVisible(bool(hoc))
+                tuoi = d.get("tuoi_gio")
+                chu_ket = "… chờ ({0} giờ)".format(_so_vn(tuoi)) if tuoi is not None else "… chờ"
+                mau = theme.CHU_MO
+            them = ""
+            if d.get("hien_thi_48h") is not None:
+                them = " · {0} hiển thị 48h".format(_so_vn(d["hien_thi_48h"]))
+            elif d.get("hien_thi") is not None:
+                them = " · {0} hiển thị".format(_so_vn(d["hien_thi"]))
+            if d.get("doan") in ("thang", "truot") and ket not in _KET_VIDEO:
+                them += " · giám đốc đoán {0}".format("thắng" if d["doan"] == "thang" else "trượt")
+            td = str(d.get("tieu_de") or d.get("id") or "")
+            td_ngan = td if len(td) <= 34 else td[:33] + "…"
+            nh.setText('<span style="color:{0};font-weight:700;">{1}</span> <span style="color:{2};">{3}</span>'
+                       '<span style="color:{4};">{5}</span>'.format(
+                           mau, _html(chu_ket), theme.CHU, _html(td_ngan), theme.CHU_MO, _html(them)))
+            nh.setToolTip("{0}\n{1}".format(td, d.get("id") or ""))
+            nh.setVisible(True)
 
         gd = k.get("giam_doc") or {}
+        ai = list(ph.get("doi_ai") or [])
+        cau_gd = next((x["cau"] for x in ai if x.get("ai") == "Giám đốc kênh"), "")
+        if not cau_gd and not ai and gd.get("cau"):
+            cau_gd = str(gd["cau"]).split(": ", 1)[-1] if str(gd["cau"]).startswith("Giám đốc kênh") else str(gd["cau"])
+        con = [x for x in ai if x.get("ai") != "Giám đốc kênh"]
+        self._nhan_giam_doc.setText("Giám đốc kênh: " + cau_gd if cau_gd else "")
+        self._nhan_giam_doc.setToolTip(str(gd.get("cau") or cau_gd))
+        self._nhan_giam_doc.setVisible(bool(cau_gd))
+        for i, nh in enumerate(self._nhan_ai):
+            if i < len(con):
+                nh.setText("{0}: {1}".format(con[i].get("ai"), con[i].get("cau")))
+                nh.setToolTip(str(con[i].get("luc") or ""))
+                nh.setVisible(True)
+            else:
+                nh.setVisible(False)
+        self._nhan_ai_rong.setText("— giám đốc kênh đang tắt (chọn “Gợi ý” để đội AI bắt đầu đọc số)"
+                                   if str(gd.get("che_do") or "tat") == "tat" else "— chưa có chẩn đoán nào")
+        self._nhan_ai_rong.setVisible(not cau_gd and not con)
+
+        thu = list(ph.get("dang_thu") or [])
+        self._nhan_dang_thu.setText("Đang thử: " + (" · ".join(thu) if thu else "chưa thử gì"))
+        lich = list(ph.get("lich_tiep") or [])
+        if not self._tu_chay:
+            chu_lich = "Lịch đăng tiếp: kênh đang dừng"
+        elif lich:
+            phan = []
+            for x in lich:
+                td = str(x.get("tieu_de") or "")
+                phan.append("{0} {1}".format(x.get("chu_luc"), "「{0}」".format(td[:24] + ("…" if len(td) > 24 else ""))
+                                             if td else "— trống, máy sẽ làm"))
+            chu_lich = "Lịch đăng tiếp: " + " · ".join(phan)
+        else:
+            vkt = k.get("video_ke_tiep") or {}
+            tu = str(k.get("video_ke_tiep_tu") or "")
+            chu_lich = ("Lịch đăng tiếp: 「{0}」".format(vkt["tieu_de"]) if vkt.get("tieu_de")
+                        else "Lịch đăng tiếp: chưa có — máy làm video mới từ {0}".format(tu) if tu
+                        else "Lịch đăng tiếp: chưa có")
+        self._nhan_ke_tiep.setText(chu_lich)
+
         i = self._o_giam_doc.findData(str(gd.get("che_do") or "tat"))
         self._o_giam_doc.blockSignals(True)
         self._o_giam_doc.setCurrentIndex(max(0, i))
         self._o_giam_doc.blockSignals(False)
-        cau_gd = str(gd.get("cau") or "")
-        _cat(self._nhan_giam_doc, cau_gd, 900)
-        self._nhan_giam_doc.setToolTip(cau_gd)
-        self._nhan_giam_doc.setVisible(bool(cau_gd))
         self._nut_bao_cao.setEnabled(bool(gd.get("bao_cao")))
         self._nut_bao_cao.setToolTip("" if gd.get("bao_cao") else "Giám đốc chưa ghi báo cáo nào")
-
-        self._nut_xem.setEnabled(bool(vkt))
-        self._nut_xem.setToolTip("" if vkt else "Chưa có video chờ đăng")
+        self._co_video = bool(k.get("video_ke_tiep"))
         self._ve_vien()
 
     def _ve_vien(self) -> None:
-        _chu, nen, vien = _MAU_THE.get(self._muc, _MAU_THE[bdk.TOT])
-        self.setStyleSheet(
-            "QFrame#theKenhLon{{background:{0};border:1px solid {1};border-radius:12px;}}"
-            .format(theme.THE if self._muc == bdk.TOT else nen,
-                    theme.VIEN if self._muc == bdk.TOT else vien))
+        mau = {bdk.HONG: (theme.DO_NEN, theme.DO_VIEN), bdk.LUU_Y: (theme.VANG_NEN, theme.VANG_VIEN),
+               bdk.TAT: (theme.XAM_NEN, theme.VIEN)}.get(self._muc, (theme.THE, theme.VIEN))
+        self.setStyleSheet("QFrame#theKenhLon{{background:{0};border:1px solid {1};border-radius:12px;}}"
+                           .format(*mau))
+
+
+def _html(s: Any) -> str:
+    return str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _dong_khau(k: Dict[str, Any]) -> str:
@@ -689,6 +889,9 @@ class _LuoiThe(QWidget):
         cot = max(1, self._cot)
         for c in range(cot):
             self._grid.setColumnStretch(c, 1)
+        # Thứ tự thẻ đổi được (kênh đỏ lên đầu) — gỡ hết khỏi lưới rồi đặt lại, không để một thẻ chiếm 2 ô.
+        for w in self._the.values():
+            self._grid.removeWidget(w)
         for i, ma in enumerate(self._thu_tu):
             w = self._the.get(ma)
             if w is None:
@@ -717,15 +920,24 @@ class TrangBangDieuKhien(QWidget):
         self._dong = False
         self._the_kenh: Dict[str, TheKenhLon] = {}
         self._mo_kenh_khac = False
+        self._phong: Dict[str, Any] = {}
+        self._tinh_luc = 0.0
+        self._mo_chi_tiet_may = False
 
         doc = QVBoxLayout(self)
         doc.setContentsMargins(20, 14, 20, 14)
         doc.setSpacing(8)
         doc.addWidget(self._hang_tieu_de())
+        self._khoi_cong_ty = KhoiCongTy(self._hanh_dong)
+        doc.addWidget(self._khoi_cong_ty)
+        self._dong_may = DongMay(self._hanh_dong)
+        self._dong_may.setVisible(False)
+        doc.addWidget(self._dong_may)
         self._khoi_viec = KhoiViec(self._hanh_dong)
         doc.addWidget(self._khoi_viec)
-        self._dong_may = DongMay(self._hanh_dong)
-        doc.addWidget(self._dong_may)
+        self._nhan_dang_tinh = nhan("", "muted")
+        self._nhan_dang_tinh.setVisible(False)
+        doc.addWidget(self._nhan_dang_tinh)
         self._luoi = _LuoiThe()
         doc.addWidget(self._luoi)
         self._nhan_kenh_khac = nhan("")
@@ -762,7 +974,7 @@ class TrangBangDieuKhien(QWidget):
         ngang = QHBoxLayout(hop)
         ngang.setContentsMargins(0, 0, 0, 0)
         ngang.setSpacing(8)
-        tieu = nhan("Bảng điều khiển", "h1")
+        tieu = nhan("Phòng điều hành công ty", "h1")
         tieu.setWordWrap(False)
         ngang.addWidget(tieu)
         self._nhan_luc = nhan("", "muted")
@@ -818,9 +1030,13 @@ class TrangBangDieuKhien(QWidget):
                 self._app.show_message("Không thấy video",
                                        "Tệp video của gói này không còn trên máy.")
         elif ma_hanh_dong == "bao_cao_giam_doc":
-            self._mo_bao_cao_giam_doc(ma)
+            self._mo_chi_tiet("bao_cao", ma)
         elif ma_hanh_dong == "bao_cao_cong_ty":
             self._mo_bao_cao_cong_ty()
+        elif ma_hanh_dong == "chi_tiet_may":
+            self._mo_chi_tiet_may = not self._mo_chi_tiet_may
+            self._dong_may.setVisible(self._mo_chi_tiet_may)
+            self._khoi_cong_ty.dat_mo_chi_tiet(self._mo_chi_tiet_may)
         elif ma_hanh_dong == "hen_gio":
             d = self._dong_ke_hoach(ma, ma_goi)
             if d is None:
@@ -1035,9 +1251,21 @@ class TrangBangDieuKhien(QWidget):
         elif ma_hanh_dong == "cai_kenh":
             self._mo_cai_kenh(ma)
         elif ma_hanh_dong == "bao_cao_giam_doc":
-            self._mo_bao_cao_giam_doc(ma)
+            self._mo_chi_tiet("bao_cao", ma)
+        elif ma_hanh_dong in ("bai_hoc", "quyet_dinh"):
+            self._mo_chi_tiet(ma_hanh_dong, ma)
         elif ma_hanh_dong.startswith("giam_doc="):
             self._doi_giam_doc(ma, ma_hanh_dong.split("=", 1)[1])
+
+    def _mo_chi_tiet(self, trang: str, ma: str) -> None:
+        """Ba trang chi tiết của phòng điều hành (`ui_qt.trang_phong_chi_tiet`)."""
+        if not self._con_song():
+            return
+        from . import trang_phong_chi_tiet as ct  # noqa: PLC0415
+
+        lop = {"bao_cao": ct.HopBaoCaoTuan, "bai_hoc": ct.HopBaiHoc, "quyet_dinh": ct.HopQuyetDinh}[trang]
+        hop = lop(self._app, ma, self)
+        hop.exec_()
 
     def _doi_giam_doc(self, ma: str, che_do: str) -> None:
         """Công tắc 3 nấc `kenh.yaml: giam_doc`. Lên "Tự áp" thì hỏi trước."""
@@ -1049,9 +1277,7 @@ class TrangBangDieuKhien(QWidget):
                 "Giám đốc kênh {0} sẽ TỰ ĐỔI vài tham số của kênh (tỉ trọng công thức, độ dài, luật chọn tuần) "
                 "trong giới hạn an toàn: tối đa 2 thay đổi/tuần, tự quay lui khi số tụt. Bật?".format(ma))
             if hoi != QMessageBox.Yes:
-                the, k = self._the_kenh.get(ma), self._kenh(ma)
-                if the is not None and k is not None:
-                    the.nap(k)
+                self._nap_lai_the(ma)
                 return
         goc = self._app.base_dir
         self._ghi_roi_lam_moi(lambda: bdk.doi_giam_doc(goc, ma, che_do))
@@ -1110,6 +1336,18 @@ class TrangBangDieuKhien(QWidget):
                 "“⚙ Cài kênh”.".format(ma))
         self.lam_moi()
 
+    def _k_the(self, ma: str) -> Optional[Dict[str, Any]]:
+        """Dòng kênh của `anh_bang` kèm phần phòng điều hành — đúng thứ `TheKenhLon.nap` cần."""
+        k = self._kenh(ma)
+        if k is None:
+            return None
+        return dict(k, phong=(self._phong.get("the") or {}).get(ma) or {})
+
+    def _nap_lai_the(self, ma: str) -> None:
+        the, k = self._the_kenh.get(ma), self._k_the(ma)
+        if the is not None and k is not None:
+            the.nap(k)
+
     def _the_cong_tac(self, ma: str, khoa: str, bat: bool) -> None:
         if khoa == "tu_duyet" and bat:
             hoi = QMessageBox.question(
@@ -1117,10 +1355,15 @@ class TrangBangDieuKhien(QWidget):
                 "Video làm xong sẽ tự hẹn giờ và lên sóng, không chờ bạn xem "
                 "trước. Bật?")
             if hoi != QMessageBox.Yes:
-                the = self._the_kenh.get(ma)
-                k = self._kenh(ma)
-                if the is not None and k is not None:
-                    the.nap(k)
+                self._nap_lai_the(ma)
+                return
+        if khoa == "tu_chay" and not bat:
+            hoi = QMessageBox.question(
+                self, "Tạm dừng kênh",
+                "Tạm dừng kênh {0}? Máy sẽ KHÔNG làm video mới cho kênh này cho tới khi bạn bấm "
+                "“Chạy lại kênh”. Video đã hẹn lịch vẫn lên sóng.".format(ma))
+            if hoi != QMessageBox.Yes:
+                self._nap_lai_the(ma)
                 return
         self._ghi_cong_tac(ma, khoa, bat)
 
@@ -1203,7 +1446,11 @@ class TrangBangDieuKhien(QWidget):
                     win = tong_quan_vps.canh_bao_windows() or {}
                 except Exception:  # noqa: BLE001
                     win = {}
-            return bang, may, win
+            try:
+                phong = bdk.phong_dieu_hanh(goc, bang)
+            except Exception:  # noqa: BLE001 — phần phòng điều hành hỏng không làm mất khối việc/máy
+                phong = {}
+            return bang, may, win, phong
 
         def loi(e) -> None:
             self._dang_nap = False
@@ -1246,18 +1493,36 @@ class TrangBangDieuKhien(QWidget):
         self._dang_nap = False
         if not self._con_song():
             return
-        bang, may, win = ket
+        bang, may, win, phong = ket
         self._bang = bang
         self._may = may
+        self._phong = phong or {}
         if win is not None:
             self._windows_canh_bao = win
             self._windows_luc = time.monotonic()
         self._nhan_luc.setText(self._chu_luc())
         self._ve_viec()
         self._ve_may()
+        self._khoi_cong_ty.nap(self._phong.get("cong_ty") or {})
         self._ve_the(list(bang.get("kenh") or []))
         self._ve_kenh_khac()
+        self._tinh_so_neu_can()
         self._hoi_vi()
+
+    def _tinh_so_neu_can(self) -> None:
+        """Số kênh cũ/chưa có → sinh tiến trình con tính (tối đa mỗi `GIAY_TINH_LAI` một lần)."""
+        can = list(self._phong.get("can_tinh") or [])
+        dang = bool(self._phong.get("dang_tinh"))
+        if can and not dang and (not self._tinh_luc or time.monotonic() - self._tinh_luc > GIAY_TINH_LAI):
+            self._tinh_luc = time.monotonic()
+            try:
+                if bdk.sinh_tinh_so(self._app.base_dir, can):
+                    dang = True
+            except Exception:  # noqa: BLE001
+                pass
+        self._nhan_dang_tinh.setText("Đang tính số kênh ({0})… lát nữa tự hiện.".format(", ".join(can))
+                                     if dang and can else "")
+        self._nhan_dang_tinh.setVisible(bool(dang and can))
 
     def _hoi_vi(self) -> None:
         """Số dư ví tối đa 5 phút/lần (CLAUDE.md luật 4).
@@ -1318,6 +1583,7 @@ class TrangBangDieuKhien(QWidget):
         for ma in [m for m in self._the_kenh if m not in con]:
             self._the_kenh.pop(ma)
             self._luoi.xoa(ma)
+        the_phong = self._phong.get("the") or {}
         for k in kenh:
             ma = k["ma"]
             t = self._the_kenh.get(ma)
@@ -1325,8 +1591,10 @@ class TrangBangDieuKhien(QWidget):
                 t = TheKenhLon(ma, self._the_cong_tac, self._the_hanh_dong, self._luoi)
                 self._the_kenh[ma] = t
                 self._luoi.them(ma, t)
-            t.nap(k)
-        self._luoi.dat_thu_tu([k["ma"] for k in kenh])
+            t.nap(dict(k, phong=the_phong.get(ma) or {}))
+        # Kênh ĐỎ lên đầu (`bdk.muc_phong`), rồi vàng, xanh, tắt.
+        thu_tu = [m for m in (self._phong.get("thu_tu") or []) if m in con]
+        self._luoi.dat_thu_tu(thu_tu + [k["ma"] for k in kenh if k["ma"] not in thu_tu])
 
     def _ve_kenh_khac(self) -> None:
         khac = list(self._bang.get("kenh_khac") or [])

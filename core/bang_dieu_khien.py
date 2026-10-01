@@ -1,11 +1,14 @@
 """Lõi dữ liệu THUẦN cho trang **Bảng điều khiển** (Việc 1,
 `workspace/THIET-KE-BANG-DIEU-KHIEN.md`, duyệt 29/09/2026).
 
-Không Qt, không mạng, không ghi đĩa nào ngoài `workspace/viec-da-xong.json` —
-mọi thứ khác chỉ ĐỌC lại các tệp đã có (`core.trung_tam.anh_chup()` và bạn bè)
-rồi gói thành hình mà trang mới cần: một khối "Việc của bạn" xếp theo mức nặng,
-một dòng "Máy", và bộ khung mỗi thẻ kênh (câu tình trạng, video kế tiếp, ba
-video gần nhất kèm mũi tên so sánh).
+Không Qt, không mạng. Chỉ ghi: `workspace/viec-da-xong.json`, bộ đệm số kênh
+`workspace/phong-dieu-hanh/so-kenh/*.json` (mục 10) và sổ gạch bài học
+`CHANNEL/<ma>/giam-doc/bai-hoc-gach.jsonl` (mục 10, nút "Sai") — mọi thứ khác
+chỉ ĐỌC lại các tệp đã có (`core.trung_tam.anh_chup()` và bạn bè) rồi gói thành
+hình mà trang cần: một khối "Việc của bạn" xếp theo mức nặng, một dòng "Máy",
+bộ khung mỗi thẻ kênh, và (mục 10, 01/10/2026) PHÒNG ĐIỀU HÀNH CÔNG TY: khối
+công ty, thẻ kênh (xếp loại, YPP, 3 cổng, phán quyết, đội AI nói, đang thử,
+lịch đăng tiếp) và dữ liệu ba trang chi tiết.
 
 ═══ VÌ SAO TÁCH RA KHỎI `ui_qt/trang_dieu_khien.py` ═══
 
@@ -30,7 +33,7 @@ import json
 import os
 import re as _re
 import statistics
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import kenh as _kenh_mod
 from . import khuon_bia
@@ -57,6 +60,11 @@ __all__ = [
     "HONG", "CANH_BAO", "THUONG",
     # Mức thẻ kênh (`muc_the`).
     "TOT", "CHO_BAN", "LUU_Y", "TAT",
+    # Phòng điều hành công ty (01/10/2026, mục 10).
+    "CHUA", "CHUYEN_GIA", "XEP_LOAI", "ma_so_kenh", "tinh_so_kenh", "doc_so_kenh", "so_kenh_cu",
+    "tinh_va_luu", "dang_tinh", "sinh_tinh_so", "doi_ai_noi", "dang_thu", "lich_dang_tiep",
+    "muc_phong", "khoi_cong_ty", "phong_dieu_hanh", "bao_cao_tuan", "so_bai_hoc", "ma_bai",
+    "chuyen_gia_cua", "gach_bai_hoc", "doc_bai_hoc_gach", "khoa_bai_hoc_gach", "so_quyet_dinh",
 ]
 
 
@@ -1358,3 +1366,953 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         "may": may,
         "luc": anh.get("luc") or bay_gio.isoformat(timespec="seconds"),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10) PHÒNG ĐIỀU HÀNH CÔNG TY (Đợt G, 01/10/2026 — workspace/VIEC-CON-LAI-30-09.md)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Hai tầng, để trang làm mới 30 giây/lần vẫn nhẹ:
+#
+# * NẶNG — `tinh_so_kenh` (giám đốc kênh `giam_doc.du_lieu.tom_tat`: 5–25 giây
+#   MỘT kênh trên máy thật, phần lớn là `cong_thuc_v7.video_cua_kenh` +
+#   `chien_luoc.bai_hoc`). KHÔNG BAO GIỜ chạy trong tiến trình giao diện: giao
+#   diện gọi `sinh_tinh_so` → tiến trình con ưu tiên thấp `python -m
+#   core.bang_dieu_khien tinh-so <mã…>` ghi `workspace/phong-dieu-hanh/
+#   so-kenh/<mã>.json`. Chỉ tính lại khi DỮ LIỆU ĐỔI (`_chu_ky_so_kenh`: mtime
+#   bảng tóm tắt/kênh theo ngày/kenh.yaml/giam-doc) hoặc bản cũ quá 6 giờ.
+# * NHẸ — mọi thứ còn lại (`phong_dieu_hanh`): đọc lại bộ đệm trên + vài tệp
+#   JSON nhỏ (giam-doc/*, cong-suat, tinh-trang, cap-nhat, van-vi). Không mạng.
+#
+# Mọi con số đều từ hàm có sẵn: 7 ngày/tuần trước = `du_lieu.trong_khoang` (đúng
+# cửa sổ `tong.bang_cong_ty`), xếp loại = `tong.xep_loai`, phán quyết video =
+# `ket_qua.ket_luan` (qua `tom_tat`), ngưỡng = `nguong_thang_48h`/`ctr_muc_tieu`
+# của chính giám đốc kênh, trần máy = `tong.tran_may`, video hôm nay =
+# `cong_suat._video_ban_giao`, ví = `dong_may` (van_vi).
+
+#: Mức cổng chưa đủ số để tô màu (khác TOT/LUU_Y/HONG).
+CHUA = "chua"
+
+THU_MUC_PHONG = os.path.join("workspace", "phong-dieu-hanh")
+#: Sổ đội chuyên gia (Đợt F, agent khác viết): `CHANNEL/<ma>/giam-doc/doi-ai.json`
+#: = `{"nen_tang": {"cau": "...", "luc": "..."}, "khan_gia": {...}, "chu_de": {...}}`.
+#: Chưa có tệp → thẻ lùi về chẩn đoán giám đốc + khám nghiệm gần nhất.
+TEP_DOI_AI = "doi-ai.json"
+#: Phiên hội đồng cuối mỗi loại (`giam_doc.hoi_dong.TEP_CUOI`): `{loai: {luc, chuyen_gia: [...], quyet}}`.
+TEP_HOI_DONG_CUOI = "hoi-dong-cuoi.json"
+#: Sổ gạch bài học (nút "Sai" ở trang Bài học) — mỗi dòng một lần gạch.
+TEP_BAI_HOC_GACH = "bai-hoc-gach.jsonl"
+SO_KENH_TUOI_TOI_DA_GIAY = 6 * 3600
+#: Khoá tiến trình tính số: quá 20 phút coi như chết (một lượt 4 kênh ≈ 1 phút).
+KHOA_TINH_QUA_HAN_GIAY = 20 * 60
+
+CHUYEN_GIA = (("nen_tang", "Nền tảng"), ("khan_gia", "Khán giả"), ("chu_de", "Chủ đề"))
+_TEN_CHUYEN_GIA = dict(CHUYEN_GIA)
+#: Trục bài học → chuyên gia (trục lạ → "chu_de"). Nền tảng = thuật toán (hiển thị,
+#: trang chủ, bìa/tiêu đề, nguồn); Khán giả = tệp của kênh (giữ chân, hook, độ dài, sub).
+_TRUC_CHUYEN_GIA = {
+    "tieu_de": "nen_tang", "bia": "nen_tang", "nguon": "nen_tang", "ctr_trang_chu": "nen_tang",
+    "ctr_browse_48h": "nen_tang", "thumbnail_ctr": "nen_tang",
+    "hook": "khan_gia", "giu_chan": "khan_gia", "do_dai": "khan_gia", "loi_moi_dk": "khan_gia",
+    "do_dai_avd": "khan_gia", "sub_1k_view": "khan_gia",
+}
+TEN_PHAM_VI = {"kenh": "Kênh này", "nhom": "Nhóm kênh", "ngoai": "Bên ngoài",
+               # Sổ kinh nghiệm riêng của từng chuyên gia (`giam_doc.hoi_dong.duong_so`).
+               "so_toan_cuc": "Sổ chuyên gia · toàn cục", "so_kenh": "Sổ chuyên gia · kênh này",
+               "so_ngach": "Sổ chuyên gia · ngách"}
+_THU_PHAM_VI = {"so_toan_cuc": 0, "so_ngach": 0, "so_kenh": 0, "kenh": 1, "nhom": 2, "ngoai": 3}
+#: `tong.xep_loai` → (dấu, chữ).
+XEP_LOAI = {"len": ("▲", "lên"), "chung": ("●", "chững"), "tut": ("▼", "tụt")}
+#: Tên việc của giám đốc (plugin) cho người đọc.
+_TEN_VIEC_GD = {"cuu_ctr": "Cứu tỉ lệ bấm", "dan_cum": "Dàn cụm chủ đề", "do_dai": "Độ dài video",
+                "muc_tieu_ypp": "Mục tiêu kiếm tiền", "suc_khoe": "Sức khoẻ kênh"}
+_TEN_TN = {"mo": "đang đo", "giu": "giữ", "mo_rong": "mở rộng", "bo": "bỏ", "quay_lui": "quay lui",
+           "chua_du": "chưa đủ mẫu"}
+
+
+def _thuat_ngu(chu: Any) -> str:
+    """Câu AI viết (có "CTR", "AVD", "gx_1k") → chữ người thường."""
+    s = str(chu or "")
+    s = s.replace("CTR trang chủ", "tỉ lệ bấm trang chủ")
+    s = _re.sub(r"\bCTR\b", "tỉ lệ bấm", s)
+    s = _re.sub(r"\bAVD\b", "thời lượng xem TB", s)
+    s = _re.sub(r"(?:giờ xem\s+)?gx_1k", "giờ xem/1k hiển thị", s)
+    return s
+
+
+def _mot_cau(chu: Any, toi_da: int = 170) -> str:
+    s = " ".join(_thuat_ngu(chu).split())
+    s = _re.split(r"(?<=[.!?。])\s+", s)[0] if s else ""
+    return _cat_chu(s, toi_da)
+
+
+def ma_youtube(ma: str) -> str:
+    """`TL4-T7-v2` → `TL4-T7` (đăng cùng một kênh YouTube — khuôn `tong._cac_kenh`)."""
+    return _re.sub(r"[-_]v\d+$", "", str(ma or ""), flags=_re.IGNORECASE)
+
+
+def ma_so_kenh(goc: str, ma: str) -> str:
+    """Mã kênh có số Studio (`chi-so/`) — chính `ma`, không có thì kênh YouTube gốc."""
+    if os.path.isdir(os.path.join(_kenh_mod.duong_kenh(goc, ma), "chi-so")):
+        return ma
+    return ma_youtube(ma)
+
+
+def _duong_so_kenh(goc: str, ma: str) -> str:
+    return os.path.join(goc, THU_MUC_PHONG, "so-kenh", "{0}.json".format(ma))
+
+
+def _chu_ky_so_kenh(goc: str, ma: str) -> str:
+    """Dấu "dữ liệu đổi chưa": mtime các tệp nguồn của `tinh_so_kenh` (rẻ: vài `stat`)."""
+    tm = _kenh_mod.duong_kenh(goc, ma)
+    ds = [os.path.join(tm, "chi-so", "bang-tom-tat.csv"), os.path.join(tm, "chi-so", "kenh-theo-ngay.csv"),
+          os.path.join(tm, _kenh_mod.TEP_KENH)]
+    gd = os.path.join(tm, "giam-doc")
+    try:
+        ds += [os.path.join(gd, t) for t in sorted(os.listdir(gd))]
+    except OSError:
+        pass
+    phan = []
+    for d in ds:
+        try:
+            phan.append("{0:.0f}".format(os.path.getmtime(d)))
+        except OSError:
+            phan.append("-")
+    return "|".join(phan)
+
+
+def _ghi_json_nguyen_tu(duong: str, du: Any) -> None:
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    tam = duong + ".tmp"
+    with open(tam, "w", encoding="utf-8") as tep:
+        json.dump(du, tep, ensure_ascii=False, indent=1, default=str)
+    os.replace(tam, duong)
+
+
+def _tv(xs: List[Any]) -> Optional[float]:
+    xs = [float(x) for x in xs if x is not None]
+    return statistics.median(xs) if xs else None
+
+
+def _chup_tu(v: Dict[str, Any], tu_gio: float = 36.0) -> Dict[str, Any]:
+    """Bản chụp mới nhất của video có tuổi ≥ `tu_gio` (số còn non dưới đó)."""
+    ds = [b for b in (v.get("chup") or []) if (b.get("tuoi") or 0) >= tu_gio]
+    return ds[-1] if ds else {}
+
+
+def _vn(x: Optional[float], le: int = 0) -> str:
+    if x is None:
+        return "?"
+    s = "{0:,.{1}f}".format(float(x), le)
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _cong(ten: str, gia_tri: Optional[float], chuan: Optional[float], nguong_vang: float,
+          dinh_dang: Callable[[Optional[float]], str], nhan_chuan: str, n: int) -> Dict[str, Any]:
+    """Một cổng: `{ten, muc, chu, gia_tri, chuan, n}` — muc TOT ≥ chuẩn, LUU_Y ≥ ngưỡng vàng, HONG dưới."""
+    if gia_tri is None:
+        return {"ten": ten, "muc": CHUA, "chu": "chưa đủ số", "gia_tri": None, "chuan": chuan, "n": 0}
+    if not chuan:
+        return {"ten": ten, "muc": CHUA, "chu": "{0} (chưa có chuẩn để so)".format(dinh_dang(gia_tri)),
+                "gia_tri": gia_tri, "chuan": chuan, "n": n}
+    ti = gia_tri / chuan
+    muc = TOT if ti >= 1.0 else (LUU_Y if ti >= nguong_vang else HONG)
+    return {"ten": ten, "muc": muc, "chu": "{0} / {1} {2}".format(dinh_dang(gia_tri), nhan_chuan, dinh_dang(chuan)),
+            "gia_tri": gia_tri, "chuan": chuan, "n": n}
+
+
+def _ba_cong(bs: Any) -> List[Dict[str, Any]]:
+    """Ba cổng của kênh trên ≤ 5 video gần nhất: Hiển thị (48h, so ngưỡng thắng) · Tỉ lệ bấm trang chủ
+    (so mục tiêu kênh, vàng từ 80% — đúng `cuu_ctr.HE_SO_CTR`) · Giữ chân (% thời lượng xem, so trung vị
+    video thắng của chính kênh)."""
+    from .giam_doc import du_lieu as dl  # noqa: PLC0415
+    try:
+        from .giam_doc.cuu_ctr import HE_SO_CTR  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        HE_SO_CTR = 0.8  # noqa: N806
+
+    # Hiển thị 48h; video đã quá 48h mà thiếu bản chụp 48h (lỗ hổng đã biết, Đợt E) lấy bản chụp mới nhất —
+    # đúng số giám đốc kênh tự trích ("198 @38h") — để cổng không xanh oan chỉ vì còn mỗi video thắng có số.
+    h48 = []
+    for v in bs.video:
+        x = v.get("hien_thi_48h")
+        if x is None and (v.get("tuoi_gio") or 0) >= 48:
+            x = (dl.moi_nhat(v) or {}).get("hien_thi")
+        if x is not None:
+            h48.append(x)
+    h48 = h48[:5]
+    ctr = []
+    for v in bs.video[:12]:
+        tc = dl.ctr_trang_chu(v)
+        if tc and tc.get("ctr_browse") is not None:
+            ctr.append(tc["ctr_browse"])
+    ctr = ctr[:5]
+    giu = [b.get("avd_pct") for b in (_chup_tu(v) for v in bs.video[:12]) if b.get("avd_pct") is not None][:5]
+    giu_thang = [_chup_tu(v).get("avd_pct") for v in bs.video if v.get("thang")]
+    return [
+        _cong("Hiển thị", _tv(h48), bs.nguong_thang_48h, 0.5, _vn, "cần", len(h48)),
+        _cong("Tỉ lệ bấm trang chủ", _tv(ctr), bs.ctr_muc_tieu, HE_SO_CTR,
+              lambda x: _vn(x, 1) + "%", "mục tiêu", len(ctr)),
+        _cong("Giữ chân", _tv(giu), _tv(giu_thang), 0.8, lambda x: _vn(x, 0) + "%", "video thắng", len(giu)),
+    ]
+
+
+def tinh_so_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """PHẦN NẶNG của thẻ kênh (gọi trong tiến trình con, xem đầu mục 10): tuần này/tuần trước, xếp loại,
+    ba cổng, 3 video gần nhất + phán quyết + dự đoán của giám đốc, YPP. Kết quả JSON được."""
+    from .giam_doc import du_lieu as dl, so_thi_nghiem as stn, tong  # noqa: PLC0415
+
+    bay_gio = bay_gio or _dt.datetime.now()
+    bs = dl.tom_tat(goc, ma, bay_gio=bay_gio)
+    tuan = _dt.timedelta(days=7)
+    # Cùng cửa sổ `tong.bang_cong_ty`: kênh mới (dòng số đầu < 7 ngày) tính từ dòng đầu.
+    dau = next((x["luc"] for x in bs.kenh_ngay if x.get("hien_thi") is not None), None)
+    tu7 = max(bay_gio - tuan, dau) if dau and dau < bay_gio - _dt.timedelta(days=2) else bay_gio - tuan
+    khoa = ("xem", "sub", "gio_xem", "hien_thi")
+    nay = {k: dl.trong_khoang(bs, k, tu7, bay_gio) for k in khoa}
+    truoc = {k: dl.trong_khoang(bs, k, bay_gio - 2 * tuan, bay_gio - tuan) for k in khoa}
+    v28 = [v for v in bs.video if v.get("dang_luc") and v["dang_luc"] >= bay_gio - 4 * tuan]
+    kl = [v for v in v28 if v.get("ket_luan") in ("thang", "truot")]
+    thang = sum(1 for v in kl if v["ket_luan"] == "thang")
+    d = {"da": (round(nay["hien_thi"] / truoc["hien_thi"], 2)
+                if nay["hien_thi"] is not None and truoc["hien_thi"] else None),
+         "ti_le_thang": round(thang / len(kl), 2) if kl else None}
+    try:
+        doan = {str(x.get("video_id")): x for x in stn.doc_du_doan(goc, ma)}
+    except Exception:  # noqa: BLE001
+        doan = {}
+    video = []
+    for v in bs.video[:3]:
+        b = dl.moi_nhat(v) or {}
+        dd = doan.get(v["id"]) or {}
+        video.append({"id": v["id"], "tieu_de": v.get("tieu_de") or "", "ket": v.get("ket_luan") or "cho",
+                      "tuoi_gio": v.get("tuoi_gio"), "hien_thi_48h": v.get("hien_thi_48h"),
+                      "hien_thi": b.get("hien_thi"), "doan": str(dd.get("ket") or ""),
+                      "doan_dung": dd.get("dung")})
+    return {
+        "ma": ma, "luc": bay_gio.isoformat(timespec="seconds"), "chu_ky": _chu_ky_so_kenh(goc, ma),
+        "tuan": {"nay": nay, "truoc": truoc, "tu": tu7.isoformat(timespec="minutes")},
+        "da": d["da"], "ti_le_thang": d["ti_le_thang"], "thang_28": thang, "kl_28": len(kl),
+        "loai": tong.xep_loai(d), "cong": _ba_cong(bs), "video": video,
+        "ypp": {"sub": (bs.ypp or {}).get("sub"), "gio_xem": (bs.ypp or {}).get("gio_xem")},
+        "nguong_48h": bs.nguong_thang_48h, "ghi_chu": list(bs.ghi_chu)[:4],
+    }
+
+
+def doc_so_kenh(goc: str, ma: str) -> Dict[str, Any]:
+    """Bộ đệm số kênh đã tính (`{}` khi chưa có)."""
+    du = _doc_json(_duong_so_kenh(goc, ma))
+    return du if isinstance(du, dict) else {}
+
+
+def so_kenh_cu(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> bool:
+    """Cần tính lại: chưa có bộ đệm, dữ liệu nguồn đã đổi, hoặc bản cũ quá 6 giờ (cửa sổ 7 ngày trôi)."""
+    du = doc_so_kenh(goc, ma)
+    if not du:
+        return True
+    if du.get("chu_ky") != _chu_ky_so_kenh(goc, ma):
+        return True
+    try:
+        tuoi = ((bay_gio or _dt.datetime.now()) - _dt.datetime.fromisoformat(str(du.get("luc")))).total_seconds()
+    except ValueError:
+        return True
+    return tuoi > SO_KENH_TUOI_TOI_DA_GIAY
+
+
+def tinh_va_luu(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    du = tinh_so_kenh(goc, ma, bay_gio=bay_gio)
+    _ghi_json_nguyen_tu(_duong_so_kenh(goc, ma), du)
+    return du
+
+
+def _duong_khoa_tinh(goc: str) -> str:
+    return os.path.join(goc, THU_MUC_PHONG, ".dang-tinh.json")
+
+
+def dang_tinh(goc: str) -> bool:
+    """Có tiến trình `tinh-so` đang chạy (khoá còn hạn và PID còn sống)."""
+    du = _doc_json(_duong_khoa_tinh(goc))
+    if not isinstance(du, dict):
+        return False
+    try:
+        if _dt.datetime.now().timestamp() - float(du.get("luc") or 0) > KHOA_TINH_QUA_HAN_GIAY:
+            return False
+        from .tien_trinh_con import con_song  # noqa: PLC0415
+
+        return con_song(int(du.get("pid") or 0))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def sinh_tinh_so(goc: str, cac_ma: List[str]) -> int:
+    """Sinh `python -m core.bang_dieu_khien tinh-so <mã…>` (không cửa sổ, ưu tiên thấp). Trả PID (0 = không)."""
+    cac_ma = [m for m in dict.fromkeys(cac_ma) if m]
+    if not cac_ma or dang_tinh(goc):
+        return 0
+    import subprocess  # noqa: PLC0415
+
+    try:
+        from .cap_nhat_git import _python_nen  # noqa: PLC0415
+
+        py = _python_nen()
+    except Exception:  # noqa: BLE001
+        import sys  # noqa: PLC0415
+
+        py = sys.executable
+    co = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+    tm = os.path.join(goc, THU_MUC_PHONG)
+    os.makedirs(tm, exist_ok=True)
+    try:
+        log = open(os.path.join(tm, "tinh-so.log"), "a", encoding="utf-8")  # noqa: SIM115
+    except OSError:
+        log = subprocess.DEVNULL  # type: ignore[assignment]
+    try:
+        p = subprocess.Popen(  # noqa: S603
+            [py, "-X", "utf8", "-m", "core.bang_dieu_khien", "tinh-so"] + cac_ma, cwd=goc, creationflags=co,
+            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, close_fds=True,
+            env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    except OSError:
+        return 0
+    finally:
+        if log is not subprocess.DEVNULL:
+            log.close()
+    _ghi_json_nguyen_tu(_duong_khoa_tinh(goc), {"pid": p.pid, "luc": _dt.datetime.now().timestamp(), "ma": cac_ma})
+    return p.pid
+
+
+def _chan_doan_phuong_an(x: Dict[str, Any]) -> str:
+    """Câu chẩn đoán trong phương án của một chuyên gia (`phuong_an` là JSON có thể bị cắt "…")."""
+    tho = str(x.get("phuong_an") or "")
+    try:
+        du = json.loads(tho)
+        cau = du.get("chan_doan") if isinstance(du, dict) else ""
+    except ValueError:
+        m = _re.search(r'"chan_doan"\s*:\s*"((?:[^"\\]|\\.)*)', tho)
+        cau = m.group(1).replace('\\"', '"') if m else ""
+    if not cau:
+        cau = next((d.get("cau") for d in (x.get("luan_diem") or []) if isinstance(d, dict) and d.get("giu")), "")
+    return str(cau or "")
+
+
+def _doi_tu_hoi_dong(tm: str) -> List[Dict[str, str]]:
+    """Phiên hội đồng MỚI NHẤT (`hoi-dong-cuoi.json`): một câu mỗi chuyên gia còn đứng (không bị loại vì số bịa);
+    người được hội đồng chọn có dấu ★."""
+    du = _doc_json(os.path.join(tm, TEP_HOI_DONG_CUOI))
+    if not isinstance(du, dict):
+        return []
+    phien = [h for h in du.values() if isinstance(h, dict) and h.get("chuyen_gia")]
+    if not phien:
+        return []
+    h = max(phien, key=lambda x: str(x.get("luc") or ""))
+    chon = str((h.get("quyet") or {}).get("chon") or "")
+    ra = []
+    for khoa, ten in CHUYEN_GIA:
+        x = next((c for c in h["chuyen_gia"] if isinstance(c, dict) and c.get("ma") == khoa), None)
+        if not x or x.get("loai_bo"):
+            continue
+        cau = _chan_doan_phuong_an(x)
+        if cau:
+            ra.append({"ai": ten + (" ★" if khoa == chon else ""), "cau": _mot_cau(cau),
+                       "luc": "{0} · {1}".format(str(h.get("luc") or "")[:16].replace("T", " "), h.get("loai") or "")})
+    return ra
+
+
+def doi_ai_noi(goc: str, ma: str) -> List[Dict[str, str]]:
+    """"Đội AI nói": một câu mỗi chuyên gia — `giam-doc/doi-ai.json` nếu có, không thì phiên hội đồng cuối
+    (`giam_doc.hoi_dong` → `hoi-dong-cuoi.json`); chưa có đội thì lùi về chẩn đoán giám đốc kênh
+    (`bao-cao.json`) + khám nghiệm gần nhất (`kham_nghiem.doc_kham`). `[{ai, cau, luc}]`."""
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    tm = thu_muc_giam_doc(goc, ma)
+    ra: List[Dict[str, str]] = []
+    du = _doc_json(os.path.join(tm, TEP_DOI_AI))
+    if isinstance(du, dict):
+        for khoa, ten in CHUYEN_GIA:
+            o = du.get(khoa)
+            cau = o.get("cau") if isinstance(o, dict) else o
+            if cau:
+                ra.append({"ai": ten, "cau": _mot_cau(cau), "luc": str((o or {}).get("luc") or "")
+                           if isinstance(o, dict) else ""})
+    if not ra:
+        ra = _doi_tu_hoi_dong(tm)
+    if ra:
+        return ra
+    bc = _doc_json(os.path.join(tm, "bao-cao.json"))
+    if isinstance(bc, dict) and bc.get("chan_doan"):
+        ra.append({"ai": "Giám đốc kênh", "cau": _mot_cau(bc["chan_doan"]), "luc": str(bc.get("luc") or "")})
+    try:
+        from .giam_doc import kham_nghiem  # noqa: PLC0415
+
+        ds = kham_nghiem.doc_kham(goc, ma)
+    except Exception:  # noqa: BLE001
+        ds = []
+    if ds and (ds[0].get("ket") or {}).get("chan_doan"):
+        d = ds[0]
+        ra.append({"ai": "Khám nghiệm", "cau": "video {0} ({1}): {2}".format(
+            d.get("video_id"), d.get("moc"), _mot_cau(d["ket"]["chan_doan"], 150)), "luc": str(d.get("luc") or "")})
+    return ra
+
+
+def _ten_viec_gd(viec: Any) -> str:
+    return _TEN_VIEC_GD.get(str(viec or ""), str(viec or "việc"))
+
+
+def dang_thu(goc: str, ma: str) -> List[str]:
+    """Thí nghiệm đang mở của giám đốc kênh; chưa có mà đang chế độ gợi ý thì "định thử (chưa áp)"."""
+    from .giam_doc import so_thi_nghiem as stn  # noqa: PLC0415
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    try:
+        mo = stn.dang_mo(stn.doc(goc, ma))
+    except Exception:  # noqa: BLE001
+        mo = []
+    if mo:
+        return [_cat_chu("{0}: {1}".format(_ten_viec_gd(t.get("viec")), _thuat_ngu(t.get("gia_thuyet"))), 150)
+                for t in mo[:2]]
+    bc = _doc_json(os.path.join(thu_muc_giam_doc(goc, ma), "bao-cao.json"))
+    if isinstance(bc, dict) and bc.get("che_do") == "goi_y" and bc.get("se_lam"):
+        ra = []
+        for x in bc["se_lam"][:2]:
+            if not isinstance(x, dict):
+                continue
+            than = ("{0}: {1} → {2}".format(x.get("khoa"), x.get("cu"), x.get("moi")) if x.get("loai") == "tham_so"
+                    else "chỉ đạo “{0}”".format(x.get("moi")))
+            ra.append(_cat_chu("Định thử (chưa áp): " + _thuat_ngu(than), 150))
+        return ra
+    return []
+
+
+def _chu_luc(moc: _dt.datetime, bay_gio: _dt.datetime) -> str:
+    ngay = (moc.date() - bay_gio.date()).days
+    duoi = "hôm nay" if ngay == 0 else ("mai" if ngay == 1 else moc.strftime("%d/%m"))
+    return "{0} {1}".format(moc.strftime("%H:%M"), duoi)
+
+
+def lich_dang_tiep(goc: str, k: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None,
+                   n: int = 2) -> List[Dict[str, str]]:
+    """`n` khe đăng sắp tới (`xep_lich.khe_cua_kenh`) kèm video đã xếp vào khe đó (kế hoạch đăng):
+    `[{luc, chu_luc, tieu_de, loai}]` — `tieu_de` rỗng = khe còn trống (máy sẽ làm)."""
+    from . import xep_lich  # noqa: PLC0415
+
+    bay_gio = bay_gio or _dt.datetime.now()
+    ma = str(k.get("ma") or "")
+    try:
+        khe = xep_lich.khe_cua_kenh(_kenh_mod.doc_kenh(goc, ma))
+    except Exception:  # noqa: BLE001
+        khe = []
+    ke = {}
+    for d in (k.get("ke_hoach") or []):
+        g = xep_lich._gio_hop_le(d.get("gio"))  # noqa: SLF001
+        if d.get("ngay") and g and d.get("loai") not in ("bo", "da_bo"):
+            ke[(str(d["ngay"]).strip(), g)] = d
+    ra: List[Dict[str, str]] = []
+    ngay = bay_gio.date()
+    for _i in range(15):
+        chuoi = ngay.strftime("%d/%m/%Y")
+        for gio in khe:
+            moc = xep_lich._moc(chuoi, gio)  # noqa: SLF001
+            if moc is None or moc < bay_gio:
+                continue
+            d = ke.get((chuoi, gio)) or {}
+            ra.append({"luc": moc.isoformat(timespec="minutes"), "chu_luc": _chu_luc(moc, bay_gio),
+                       "tieu_de": str(d.get("tieu_de") or ""), "loai": str(d.get("loai") or "")})
+            if len(ra) >= n:
+                return ra
+        ngay += _dt.timedelta(days=1)
+    return ra
+
+
+#: Thứ tự thẻ: đỏ lên đầu.
+_THU_TU_PHONG = {HONG: 0, LUU_Y: 1, TOT: 2, TAT: 3}
+
+
+def muc_phong(k: Dict[str, Any], so: Dict[str, Any]) -> str:
+    """Màu thẻ ở phòng điều hành: ĐỎ = kênh hỏng hoặc xếp loại tụt; VÀNG = chờ bạn/lưu ý; XÁM = tắt."""
+    mt = k.get("muc_the") or muc_the(k)
+    if mt == HONG or (so or {}).get("loai") == "tut":
+        return HONG
+    if mt in (CHO_BAN, LUU_Y):
+        return LUU_Y
+    return TAT if mt == TAT else TOT
+
+
+def _tong_tuan(cac_so: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """View/sub/giờ xem 7 ngày cộng mọi kênh YouTube; % so tuần trước CHỈ trên kênh có đủ hai tuần."""
+    ra: Dict[str, Dict[str, Any]] = {}
+    for khoa in ("xem", "sub", "gio_xem"):
+        nay, nay_du, truoc_du, co = 0.0, 0.0, 0.0, False
+        for so in cac_so:
+            t = (so.get("tuan") or {})
+            a, b = (t.get("nay") or {}).get(khoa), (t.get("truoc") or {}).get(khoa)
+            if a is None:
+                continue
+            co = True
+            nay += a
+            if b is not None:
+                nay_du += a
+                truoc_du += b
+        ra[khoa] = {"nay": nay if co else None,
+                    "pct": round(100.0 * (nay_du - truoc_du) / truoc_du) if truoc_du > 0 else None}
+    return ra
+
+
+def khoi_cong_ty(goc: str, bang: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Khối CÔNG TY: 7 ngày (so tuần trước) · video hôm nay x/trần · máy · ví · phiên bản · số việc của bạn."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    tat_ca = list(bang.get("kenh") or []) + list(bang.get("kenh_khac") or [])
+    cac_ma = list(dict.fromkeys(ma_youtube(str(k.get("ma") or "")) for k in tat_ca if k.get("ma")))
+    cac_so = [s for s in (doc_so_kenh(goc, ma_so_kenh(goc, m)) for m in cac_ma) if s]
+    tuan = _tong_tuan(cac_so)
+
+    hom_nay, tran = None, None
+    try:
+        from . import cong_suat  # noqa: PLC0415
+        from .giam_doc import tong  # noqa: PLC0415
+
+        hom_nay = cong_suat._video_ban_giao(  # noqa: SLF001 — bộ đếm có sẵn, chỉ đọc
+            goc, _dt.datetime.combine(bay_gio.date(), _dt.time()).timestamp())
+        tran = tong.tran_may(cong_suat.doc_hien_tai(goc)) or None
+    except Exception:  # noqa: BLE001
+        pass
+
+    may = bang.get("may") or {}
+    tt_ = doc_tinh_trang(goc)
+    van_de, muc_may = [], TOT
+    if not ((may.get("may_nen") or {}).get("agent") or {"song": True}).get("song", True):
+        van_de.append("máy chạy nền tắt")
+        muc_may = HONG
+    o_dia = may.get("o_dia") or {}
+    if o_dia.get("muc") in (HONG, LUU_Y):
+        van_de.append("đĩa còn {0:.0f} GB".format(o_dia.get("con_gb") or 0))
+        muc_may = HONG if o_dia["muc"] == HONG or muc_may == HONG else LUU_Y
+    kenh_tt = (tt_.get("kenh") or {}) if isinstance(tt_.get("kenh"), dict) else {}
+    cho_nguoi = sorted(m for m, x in kenh_tt.items() if isinstance(x, dict) and x.get("trang_thai") == "cho_nguoi")
+    tu_thu = sorted(m for m, x in kenh_tt.items() if isinstance(x, dict) and x.get("trang_thai") == "tu_cho_co_han")
+    if cho_nguoi:
+        van_de.append("{0} kênh cần bạn".format(len(cho_nguoi)))
+        muc_may = HONG
+    ram = ((tt_.get("may") or {}).get("ram") or {})
+    tip_may = ["Ổ đĩa trống: {0} GB".format(_vn(o_dia.get("con_gb"))),
+               "RAM trống: {0}/{1} GB".format(_vn(ram.get("trong_gb"), 1), _vn(ram.get("tong_gb"), 0))]
+    if tu_thu:
+        tip_may.append("Kênh đang tự thử lại (máy tự lo): " + ", ".join(tu_thu))
+
+    vi = may.get("vi") or {}
+    pb: Dict[str, Any] = {}
+    try:
+        from . import cap_nhat_git as cng  # noqa: PLC0415
+
+        st = cng.doc_trang_thai(goc) or {}
+        pb = {"ban": cng.doc_phien_ban(goc), "tu_dong": bool(cng.doc_cau_hinh(goc).get("tu_dong_cap_nhat")),
+              "ban_moi": str(st.get("ban_moi") or ""), "kiem_luc": str(st.get("kiem_luc") or ""),
+              "loi": str(st.get("loi") or "")}
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "tuan": tuan, "so_kenh_co_so": len(cac_so),
+        "video_hom_nay": hom_nay, "tran": round(tran) if tran else None,
+        "may": {"muc": muc_may, "chu": "Khoẻ" if not van_de else "; ".join(van_de), "tip": "\n".join(tip_may)},
+        "vi": {"ngay": vi.get("so_ngay_con_chay"), "vnd": vi.get("vnd"), "muc": vi.get("muc") or TOT},
+        "phien_ban": pb, "so_viec": len(bang.get("viec") or []),
+        "tong_giam_doc": dict(may.get("cong_ty") or {}),
+    }
+
+
+def _an_bool(f: Callable[[], bool]) -> bool:
+    try:
+        return bool(f())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def phong_dieu_hanh(goc: str, bang: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """PHẦN NHẸ (đọc đĩa, gọi mỗi lần làm mới): `{cong_ty, the: {ma: {...}}, thu_tu, can_tinh, dang_tinh}`.
+    `bang` = `anh_bang(...)`. `can_tinh` = mã kênh có số cần tính lại (giao diện tự `sinh_tinh_so`)."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    the: Dict[str, Dict[str, Any]] = {}
+    can_tinh: List[str] = []
+
+    def _an(f: Callable[[], Any], mac: Any) -> Any:
+        try:
+            return f()
+        except Exception:  # noqa: BLE001 — một dòng phụ hỏng không làm hỏng thẻ
+            return mac
+
+    for k in (bang.get("kenh") or []):
+        ma = str(k.get("ma") or "")
+        ma_so = ma_so_kenh(goc, ma)
+        if _an_bool(lambda: so_kenh_cu(goc, ma_so, bay_gio=bay_gio)):
+            can_tinh.append(ma_so)
+        so = doc_so_kenh(goc, ma_so)
+        ypp = k.get("ypp") or {}
+        sub = _so(ypp.get("dang_ky"))
+        gio = _so(ypp.get("gio_xem"))
+        if sub is None:
+            sub = _so((so.get("ypp") or {}).get("sub"))
+        if gio is None:
+            gio = _so((so.get("ypp") or {}).get("gio_xem"))
+        the[ma] = {
+            "ma_so": ma_so, "so": so, "muc": muc_phong(k, so),
+            "ypp": {"sub": sub, "gio_xem": gio, "can_sub": YPP_SUB, "can_gio": YPP_GIO},
+            "doi_ai": _an(lambda: doi_ai_noi(goc, ma), []),
+            "dang_thu": _an(lambda: dang_thu(goc, ma), []),
+            "lich_tiep": _an(lambda: lich_dang_tiep(goc, k, bay_gio=bay_gio), []),
+        }
+    for k in (bang.get("kenh_khac") or []):
+        ma_so = ma_so_kenh(goc, str(k.get("ma") or ""))
+        if ma_so and ma_so not in can_tinh and _an_bool(lambda: so_kenh_cu(goc, ma_so, bay_gio=bay_gio)):
+            can_tinh.append(ma_so)
+    thu_tu = sorted(the, key=lambda m: (_THU_TU_PHONG.get(the[m]["muc"], 9), m))
+    return {"cong_ty": khoi_cong_ty(goc, bang, bay_gio=bay_gio), "the": the, "thu_tu": thu_tu,
+            "can_tinh": list(dict.fromkeys(can_tinh)), "dang_tinh": dang_tinh(goc)}
+
+
+# ── Ba trang chi tiết ──────────────────────────────────────────────────────
+
+
+def _doc_chu(duong: str) -> str:
+    try:
+        with open(duong, "r", encoding="utf-8") as tep:
+            return tep.read()
+    except OSError:
+        return ""
+
+
+def bao_cao_tuan(goc: str, ma: str) -> Dict[str, str]:
+    """`{kenh, kenh_duong, cong_ty, cong_ty_duong}` — chữ Markdown của báo cáo tuần kênh + công ty."""
+    from .giam_doc import bao_cao as _bc, tong  # noqa: PLC0415
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    dk = os.path.join(thu_muc_giam_doc(goc, ma), _bc.TEP_BAO_CAO_MD) if ma else ""
+    dc = os.path.join(goc, tong.THU_MUC, tong.TEP_MD)
+    return {"kenh": _thuat_ngu(_doc_chu(dk)) if dk else "", "kenh_duong": dk,
+            "cong_ty": _thuat_ngu(_doc_chu(dc)), "cong_ty_duong": dc}
+
+
+def _khoa_so_cg(d: Dict[str, Any]) -> str:
+    """Khoá gộp một bài trong sổ chuyên gia — ĐÚNG khoá `giam_doc.hoi_dong.doc_so`."""
+    return str(d.get("khoa") or d.get("cau") or "")[:80]
+
+
+def _so_chuyen_gia(goc: str, ma: str) -> List[Dict[str, Any]]:
+    """Sổ kinh nghiệm riêng của 3 chuyên gia (`hoi_dong.duong_so`), gộp như `hoi_dong.doc_so`: một dòng mỗi
+    khoá, n = số video ủng hộ."""
+    try:
+        from .giam_doc import hoi_dong  # noqa: PLC0415
+    except Exception:  # noqa: BLE001 — chưa có đội chuyên gia
+        return []
+    ra: List[Dict[str, Any]] = []
+    for cg in hoi_dong.CHUYEN_GIA:
+        try:
+            duong = hoi_dong.duong_so(goc, ma, cg["ma"])
+        except Exception:  # noqa: BLE001
+            continue
+        nhom: Dict[str, List[Dict[str, Any]]] = {}
+        for dong in _doc_duoi(duong, 2 * 1024 * 1024):
+            try:
+                d = json.loads(dong)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and d.get("cau"):
+                nhom.setdefault(_khoa_so_cg(d), []).append(d)
+        for khoa, xs in nhom.items():
+            vid = sorted({str(x.get("video_id")) for x in xs if x.get("video_id")})
+            ra.append({"pham_vi": "so_" + str(cg.get("pham_vi") or "kenh"), "truc": "", "cum": "",
+                       "cau": xs[-1]["cau"], "n": len(vid), "tin_cay": "", "bom": True,
+                       "bong": all(x.get("bong") for x in xs), "video": vid, "nguon": "so_chuyen_gia",
+                       "khoa": khoa, "chuyen_gia": cg["ma"], "ma_bai": "cg:{0}:{1}".format(cg["ma"], khoa)})
+    return ra
+
+
+def chuyen_gia_cua(b: Dict[str, Any]) -> str:
+    """Bài học thuộc chuyên gia nào (`b["chuyen_gia"]` nếu đội đã ghi, không thì theo trục)."""
+    cg = str(b.get("chuyen_gia") or "")
+    return cg if cg in _TEN_CHUYEN_GIA else _TRUC_CHUYEN_GIA.get(str(b.get("truc") or ""), "chu_de")
+
+
+def ma_bai(b: Dict[str, Any]) -> str:
+    """Mã bền của một bài học: khám nghiệm = "kn:" + (trục|giá trị|cụm); nguồn khác = băm câu."""
+    import hashlib  # noqa: PLC0415
+
+    khoa = str(b.get("khoa") or "")
+    if b.get("nguon") == "kham_nghiem" and khoa.count("|") >= 3:
+        truc, gt, _huong, cum = khoa.split("|", 3)
+        return "kn:{0}|{1}|{2}".format(truc, gt, cum)
+    tho = "|".join(str(b.get(x) or "") for x in ("pham_vi", "truc", "cum", "cau"))
+    return "h:" + hashlib.sha1(tho.encode("utf-8")).hexdigest()[:12]
+
+
+def _duong_gach(goc: str, ma: str) -> str:
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    return os.path.join(thu_muc_giam_doc(goc, ma), TEP_BAI_HOC_GACH)
+
+
+def doc_bai_hoc_gach(goc: str, ma: str) -> List[Dict[str, Any]]:
+    ra: List[Dict[str, Any]] = []
+    for dong in _doc_duoi(_duong_gach(goc, ma), 2 * 1024 * 1024):
+        try:
+            d = json.loads(dong)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("ma_bai"):
+            ra.append(d)
+    return ra
+
+
+def khoa_bai_hoc_gach(goc: str, ma: str) -> set:
+    """Tập `ma_bai` đã bị gạch — để nơi dựng lời nhắc (chien_luoc.bai_hoc / đội chuyên gia) lọc ra."""
+    return {d["ma_bai"] for d in doc_bai_hoc_gach(goc, ma)}
+
+
+def so_bai_hoc(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[str, Any]]:
+    """Sổ bài học cho trang Bài học (chậm vài giây — gọi ở luồng nền): `chien_luoc.bai_hoc.doc(tat_ca=True)`
+    + bài đã gạch trong sổ. Mỗi dòng `{ma_bai, chuyen_gia, ten_chuyen_gia, pham_vi, ten_pham_vi, truc, cum,
+    cau, n, tin_cay, bom, bong, video, nguon, khoa, da_gach}`; xếp chuyên gia → phạm vi → n giảm."""
+    from .chien_luoc import bai_hoc  # noqa: PLC0415
+
+    ds = _so_chuyen_gia(goc, ma) + list(bai_hoc.doc(goc, ma, tat_ca=True, bay_gio=bay_gio))
+    gach = {d["ma_bai"]: d for d in doc_bai_hoc_gach(goc, ma)}
+    ra: List[Dict[str, Any]] = []
+    co = set()
+    for b in ds:
+        mb = str(b.get("ma_bai") or ma_bai(b))
+        co.add(mb)
+        cg = chuyen_gia_cua(b)
+        ra.append({"ma_bai": mb, "chuyen_gia": cg, "ten_chuyen_gia": _TEN_CHUYEN_GIA[cg],
+                   "pham_vi": b.get("pham_vi") or "kenh", "ten_pham_vi": TEN_PHAM_VI.get(b.get("pham_vi"), "Kênh này"),
+                   "truc": b.get("truc") or "", "cum": b.get("cum") or "", "cau": _thuat_ngu(b.get("cau")),
+                   "n": int(b.get("n") or 0), "tin_cay": b.get("tin_cay") or "", "bom": bool(b.get("bom")),
+                   "bong": bool(b.get("bong")), "video": list(b.get("video") or []), "nguon": b.get("nguon") or "",
+                   "khoa": b.get("khoa") or "", "da_gach": mb in gach})
+    for mb, g in gach.items():
+        if mb in co:
+            continue
+        cg = g.get("chuyen_gia") if g.get("chuyen_gia") in _TEN_CHUYEN_GIA else "chu_de"
+        ra.append({"ma_bai": mb, "chuyen_gia": cg, "ten_chuyen_gia": _TEN_CHUYEN_GIA[cg],
+                   "pham_vi": g.get("pham_vi") or "kenh", "ten_pham_vi": TEN_PHAM_VI.get(g.get("pham_vi"), "Kênh này"),
+                   "truc": g.get("truc") or "", "cum": g.get("cum") or "", "cau": g.get("cau") or "",
+                   "n": int(g.get("n") or 0), "tin_cay": "", "bom": False, "bong": False,
+                   "video": list(g.get("video") or []), "nguon": g.get("nguon") or "", "khoa": g.get("khoa") or "",
+                   "da_gach": True})
+    thu_cg = {k: i for i, (k, _t) in enumerate(CHUYEN_GIA)}
+    ra.sort(key=lambda r: (thu_cg.get(r["chuyen_gia"], 9), _THU_PHAM_VI.get(r["pham_vi"], 9), r["da_gach"], -r["n"]))
+    return ra
+
+
+def _go_dong(duong: str, trung: Callable[[Dict[str, Any]], bool]) -> List[Dict[str, Any]]:
+    """Gỡ khỏi tệp JSONL các dòng `trung(d)` (ghi nguyên tử, dòng hỏng giữ nguyên). Trả các dòng đã gỡ."""
+    try:
+        with open(duong, "r", encoding="utf-8") as tep:
+            tho = tep.readlines()
+    except OSError:
+        return []
+    giu, go = [], []
+    for dong in tho:
+        try:
+            d = json.loads(dong)
+        except ValueError:
+            giu.append(dong)
+            continue
+        if isinstance(d, dict) and trung(d):
+            go.append(d)
+        else:
+            giu.append(dong)
+    if go:
+        tam = duong + ".tam-gach"
+        with open(tam, "w", encoding="utf-8", newline="\n") as tep:
+            tep.write("".join(x if x.endswith("\n") else x + "\n" for x in giu))
+        os.replace(tam, duong)
+    return go
+
+
+def gach_bai_hoc(goc: str, ma: str, bai: Dict[str, Any], *, ly_do: str = "",
+                 bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Nút "Sai": ghi một dòng vào `giam-doc/bai-hoc-gach.jsonl`. Bài KHÁM NGHIỆM (`bai-hoc.jsonl`) và bài trong
+    SỔ CHUYÊN GIA (`hoi_dong.duong_so`) thì gỡ luôn các dòng của nó khỏi tệp nguồn (giữ nguyên văn trong
+    `dong_goc` của sổ gạch) — không còn vào lời nhắc nào nữa (`kham_nghiem.doc_bai_hoc`, `hoi_dong.doc_so` chỉ
+    đọc các tệp đó). Bài từ nguồn khác: chỉ ghi sổ (`da_loai_khoi_loi_nhac=False`) — nơi dựng lời nhắc lọc bằng
+    `khoa_bai_hoc_gach`."""
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    mb = str(bai.get("ma_bai") or ma_bai(bai))
+    dong_goc: List[Dict[str, Any]] = []
+    if mb.startswith("cg:"):
+        # Sổ chuyên gia: gỡ mọi dòng cùng khoá — `hoi_dong.doc_so` (lời nhắc chuyên gia) chỉ đọc tệp này.
+        _, cg, khoa = mb.split(":", 2)
+        try:
+            from .giam_doc import hoi_dong  # noqa: PLC0415
+
+            duong = hoi_dong.duong_so(goc, ma, cg)
+        except Exception:  # noqa: BLE001
+            duong = ""
+        dong_goc = _go_dong(duong, lambda d: _khoa_so_cg(d) == khoa) if duong else []
+    elif mb.startswith("kn:"):
+        truc, gt, cum = mb[3:].split("|", 2)
+        dong_goc = _go_dong(os.path.join(thu_muc_giam_doc(goc, ma), "bai-hoc.jsonl"),
+                            lambda d: (str(d.get("truc") or "") == truc and str(d.get("gia_tri") or "") == gt
+                                       and str(d.get("cum") or "") == cum))
+    ghi = {"luc": (bay_gio or _dt.datetime.now()).isoformat(timespec="seconds"), "ma_bai": mb,
+           "chuyen_gia": mb.split(":", 2)[1] if mb.startswith("cg:") else chuyen_gia_cua(bai), "pham_vi": bai.get("pham_vi") or "kenh", "truc": bai.get("truc") or "",
+           "cum": bai.get("cum") or "", "cau": str(bai.get("cau") or ""), "n": int(bai.get("n") or 0),
+           "video": list(bai.get("video") or []), "nguon": bai.get("nguon") or "", "khoa": bai.get("khoa") or "",
+           "ly_do": str(ly_do or ""), "da_loai_khoi_loi_nhac": bool(dong_goc), "dong_goc": dong_goc}
+    duong_gach = _duong_gach(goc, ma)
+    os.makedirs(os.path.dirname(duong_gach), exist_ok=True)
+    with open(duong_gach, "a", encoding="utf-8", newline="\n") as tep:
+        tep.write(json.dumps(ghi, ensure_ascii=False, default=str) + "\n")
+    return ghi
+
+
+_TEN_CONG = {"hien_thi": "Hiển thị", "ctr": "Tỉ lệ bấm", "giu_chan": "Giữ chân", "khong": "không cổng nào"}
+_TEN_LOAI_QD = {"du_doan": "Đoán thắng/trượt", "thi_nghiem": "Thí nghiệm", "chan_doan": "Chẩn đoán cổng (khám nghiệm)",
+                "hoi_dong": "Hội đồng chuyên gia", "luot": "Lượt giám đốc", "doi_khe": "Đổi khe đăng (tổng giám đốc)"}
+_TEN_CONG_HD = {"ap": "áp", "thu_nho": "chỉ thử nhỏ", "quan_sat": "chỉ quan sát"}
+
+
+def so_quyet_dinh(goc: str, ma: str) -> Dict[str, Any]:
+    """Trang "Quyết định & độ chính xác": `{dong: [{luc, loai, ten_loai, quyet, vi_sao, ket_qua, dung}],
+    ti_le: [{loai, ten_loai, dung, tong, so_quyet}]}` từ `du-doan.json`, sổ thí nghiệm, `nhat-ky.jsonl`, bản
+    khám nghiệm và sổ đổi khe của tổng giám đốc. `dung`: True/False đã chấm, None = chưa chấm được."""
+    from .giam_doc import so_thi_nghiem as stn  # noqa: PLC0415
+    from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    dong: List[Dict[str, Any]] = []
+
+    def them(luc: Any, loai: str, quyet: str, vi_sao: Any, ket_qua: str, dung: Optional[bool]) -> None:
+        dong.append({"luc": str(luc or "")[:16].replace("T", " "), "loai": loai, "ten_loai": _TEN_LOAI_QD[loai],
+                     "quyet": _thuat_ngu(quyet), "vi_sao": _cat_chu(_thuat_ngu(vi_sao), 400),
+                     "ket_qua": ket_qua, "dung": dung})
+
+    for d in stn.doc_du_doan(goc, ma):
+        doan = "THẮNG" if d.get("ket") == "thang" else "trượt"
+        if "dung" in d:
+            kq = "{0} — thật: {1}".format("ĐÚNG" if d["dung"] else "SAI",
+                                          "thắng" if d.get("ket_that") == "thang" else "trượt")
+        else:
+            kq = "chờ đủ 48 giờ"
+        them(d.get("luc"), "du_doan", "Video {0}: đoán {1}".format(d.get("video_id"), doan), d.get("ly_do"), kq,
+             d.get("dung") if "dung" in d else None)
+    for t in stn.doc(goc, ma):
+        tt_ = str(t.get("trang_thai") or "")
+        ly = (t.get("ket_luan") or {}).get("ly_do") or ""
+        dung = True if tt_ in ("giu", "mo_rong") else (False if tt_ in ("bo", "quay_lui") else None)
+        them(t.get("bat_dau"), "thi_nghiem", "Thử {0}: {1}".format(_ten_viec_gd(t.get("viec")), t.get("gia_thuyet")),
+             t.get("ly_do_llm"), _TEN_TN.get(tt_, tt_) + (" — " + str(ly) if ly else ""), dung)
+    for x in stn.doc_nhat_ky(goc, ma, so_dong=200):
+        sau = x.get("sau") if isinstance(x.get("sau"), dict) else {}
+        if x.get("viec") == "luot":
+            quyet = "Lượt {0}{1}: chọn {2}/{3} việc, đoán thêm {4} video".format(
+                {"goi_y": "gợi ý", "tu_ap": "tự áp", "tat": "tắt"}.get(sau.get("che_do"), sau.get("che_do") or "?"),
+                " (tuần)" if sau.get("tuan") else "", sau.get("chon", 0), sau.get("thuc_don", 0),
+                sau.get("du_doan_moi", 0))
+            kq = "báo động sức khoẻ" if sau.get("bao_dong") else "—"
+        else:
+            quyet = "{0}: {1} → {2}".format(x.get("viec"), json.dumps(x.get("truoc"), ensure_ascii=False, default=str)[:80],
+                                            json.dumps(x.get("sau"), ensure_ascii=False, default=str)[:80])
+            kq = "—"
+        them(x.get("luc"), "luot", quyet, x.get("ly_do_llm"), kq, None)
+    try:
+        from .giam_doc import kham_nghiem  # noqa: PLC0415
+
+        for d in kham_nghiem.doc_kham(goc, ma):
+            k = d.get("ket") or {}
+            them(d.get("luc"), "chan_doan", "Video {0} ({1}): cổng hỏng = {2}".format(
+                d.get("video_id"), d.get("moc"), _TEN_CONG.get(k.get("cong_hong"), k.get("cong_hong") or "?")),
+                k.get("chan_doan"), {"thang": "video thắng", "truot": "video trượt"}.get(d.get("ket_luan") or "", "chờ"),
+                None)
+    except Exception:  # noqa: BLE001
+        pass
+    # Phiên hội đồng chuyên gia (`hoi-dong.jsonl`), lý do lấy từ phiên cuối cùng loại nếu trùng lúc.
+    tm = thu_muc_giam_doc(goc, ma)
+    cuoi = _doc_json(os.path.join(tm, TEP_HOI_DONG_CUOI))
+    cuoi = cuoi if isinstance(cuoi, dict) else {}
+    for dong_tho in _doc_duoi(os.path.join(tm, "hoi-dong.jsonl")):
+        try:
+            x = json.loads(dong_tho)
+        except ValueError:
+            continue
+        if not isinstance(x, dict):
+            continue
+        h = cuoi.get(x.get("loai")) if isinstance(cuoi.get(x.get("loai")), dict) else {}
+        q = (h.get("quyet") or {}) if h.get("luc") == x.get("luc") else {}
+        ten_cg = dict(CHUYEN_GIA).get(str(x.get("chon") or ""), str(x.get("chon") or "—"))
+        quyet = "{0}: chọn {1} · độ tin {2}".format(str(x.get("loai") or "").replace("_", " "), ten_cg,
+                                                  x.get("do_tin") if x.get("do_tin") is not None else "?")
+        if x.get("loai_bo"):
+            quyet += " · loại vì số bịa: " + ", ".join(dict(CHUYEN_GIA).get(m, m) for m in x["loai_bo"])
+        them(x.get("luc"), "hoi_dong", quyet, q.get("ly_do") or x.get("loi") or "",
+             _TEN_CONG_HD.get(str(x.get("cong") or ""), str(x.get("cong") or "—")), None)
+    try:
+        from .giam_doc import tong  # noqa: PLC0415
+
+        for t in tong.doc_so(goc).get("thay_doi") or []:
+            if isinstance(t, dict) and t.get("ma") in (ma, ma_youtube(ma)):
+                them(t.get("luc"), "doi_khe", "Khe {0} → {1}".format(t.get("khe_cu"), t.get("khe_moi")),
+                     t.get("ly_do") or t.get("ly_do_llm"), str(t.get("trang_thai") or "đã áp"), None)
+    except Exception:  # noqa: BLE001
+        pass
+    dong.sort(key=lambda d: d["luc"], reverse=True)
+
+    ti_le = []
+    for loai, ten in _TEN_LOAI_QD.items():
+        cham = [d for d in dong if d["loai"] == loai and d["dung"] is not None]
+        co = [d for d in dong if d["loai"] == loai]
+        # Chỉ loại CHẤM ĐƯỢC (dự đoán, thí nghiệm) — lượt/chẩn đoán/đổi khe chưa có thước đo đúng sai.
+        if co and (loai in ("du_doan", "thi_nghiem") or cham):
+            ti_le.append({"loai": loai, "ten_loai": ten, "dung": sum(1 for d in cham if d["dung"]),
+                          "tong": len(cham), "so_quyet": len(co)})
+    # Sổ độ chính xác của hội đồng (`giam_doc.hoi_dong.do_chinh_xac`, đọc không ghi) — có thì THAY phần tự
+    # đếm: đúng định nghĩa đúng/sai + quyền tự áp theo thành tích mà giám đốc thật sự dùng.
+    try:
+        from .giam_doc import hoi_dong  # noqa: PLC0415
+
+        dcx = (hoi_dong.do_chinh_xac(goc, ma, ghi=False) or {}).get("loai") or {}
+    except Exception:  # noqa: BLE001
+        dcx = {}
+    if dcx:
+        tuong_ung = {"du_doan": "du_doan", "doi_chuan": "thi_nghiem", "chan_doan_cong": "chan_doan", "chia_khe": "doi_khe"}
+        ti_le = [{"loai": k, "ten_loai": str(o.get("ten") or k).capitalize(), "dung": int(o.get("dung") or 0),
+                  "tong": int(o.get("n") or 0), "quyen": str(o.get("quyen") or ""),
+                  "so_quyet": max(int(o.get("n") or 0), sum(1 for d in dong if d["loai"] == tuong_ung.get(k)))}
+                 for k, o in dcx.items() if isinstance(o, dict)]
+    return {"dong": dong, "ti_le": ti_le}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11) CLI — tiến trình con tính số (giao diện sinh, xem `sinh_tinh_so`)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _main(argv: Optional[List[str]] = None) -> int:
+    import sys  # noqa: PLC0415
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or argv[0] != "tinh-so":
+        print("Dùng: python -m core.bang_dieu_khien tinh-so <mã kênh>...")
+        return 2
+    goc = os.getcwd()
+    loi = 0
+    try:
+        for ma in argv[1:]:
+            bat_dau = _dt.datetime.now()
+            try:
+                tinh_va_luu(goc, ma)
+                print("{0} {1}: xong ({2:.1f}s)".format(bat_dau.strftime("%Y-%m-%d %H:%M:%S"), ma,
+                                                       (_dt.datetime.now() - bat_dau).total_seconds()), flush=True)
+            except Exception as e:  # noqa: BLE001 — một kênh hỏng không chặn kênh khác
+                loi += 1
+                print("{0} {1}: LỖI {2}: {3}".format(bat_dau.strftime("%Y-%m-%d %H:%M:%S"), ma,
+                                                     type(e).__name__, str(e)[:200]), flush=True)
+    finally:
+        try:
+            du = _doc_json(_duong_khoa_tinh(goc))
+            if isinstance(du, dict) and int(du.get("pid") or 0) in (0, os.getpid()):
+                os.remove(_duong_khoa_tinh(goc))
+        except (OSError, ValueError, TypeError):
+            pass
+    return 1 if loi else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

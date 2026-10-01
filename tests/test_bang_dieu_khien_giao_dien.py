@@ -111,6 +111,10 @@ def _dung_goc(tmp_path, monkeypatch, *, gio_lich="2:00:00 AM") -> str:
     monkeypatch.setattr(tt, "_o_dia", lambda _g: {"con_gb": 500.0, "tong_gb": 1000.0})
     goc_anh_chup = tt.anh_chup
     monkeypatch.setattr(tt, "anh_chup", lambda g, **kw: goc_anh_chup(g, bay_gio=BAY_GIO, **kw))
+    # Phòng điều hành (01/10/2026): KHÔNG sinh tiến trình tính số thật trong bài kiểm.
+    from core import bang_dieu_khien as bdk
+
+    monkeypatch.setattr(bdk, "sinh_tinh_so", lambda g, ds: 0)
     dung_may(goc, BAY_GIO)
     return goc
 
@@ -282,10 +286,26 @@ def test_cong_tac_tu_lam_video_ghi_dung_duong(trang, monkeypatch, qapp):
     t, _app, goc = trang
     goi = []
     monkeypatch.setattr(bdk, "doi_cong_tac", lambda g, ma, khoa, bat: goi.append((g, ma, khoa, bat)))
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
     the = t._the_kenh["K3"]
-    the._o_tu_chay.setChecked(not the._o_tu_chay.isChecked())
+    dang_chay = the._tu_chay
+    the._nut_tam_dung.click()
     qapp.processEvents()
-    assert goi and goi[0][:3] == (goc, "K3", "tu_chay")
+    assert goi and goi[0] == (goc, "K3", "tu_chay", not dang_chay)
+
+
+def test_tam_dung_kenh_hoi_lai_bam_khong_thi_khong_ghi(trang, monkeypatch, qapp):
+    from core import bang_dieu_khien as bdk
+
+    t, _app, _goc = trang
+    goi = []
+    monkeypatch.setattr(bdk, "doi_cong_tac", lambda g, ma, khoa, bat: goi.append((ma, khoa, bat)))
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.No))
+    the = t._the_kenh["K1"]
+    assert the._tu_chay and the._nut_tam_dung.text() == "Tạm dừng kênh"
+    the._nut_tam_dung.click()
+    qapp.processEvents()
+    assert goi == []
 
 
 def test_cong_tac_tu_len_lich_hoi_lai_truoc_khi_bat(trang, monkeypatch, qapp):
@@ -363,7 +383,7 @@ def _the_don(qapp, **k_over):
     from ui_qt.trang_bang_dieu_khien import TheKenhLon
 
     k = {"ma": "K1", "ten": "K1", "bay_gio": {"chu": "Hôm nay chưa chạy", "muc": "nghi"},
-        "tu_chay": False, "tu_duyet": False, "video_ke_tiep": {}, "video_gan_day": [],
+        "tu_chay": True, "tu_duyet": False, "video_ke_tiep": {}, "video_gan_day": [],
         "may_dang_hoc": ""}
     k.update(k_over)
     k["muc_the"] = bdk.muc_the(k)
@@ -393,12 +413,13 @@ def test_video_ke_tiep_rong_noi_ro_luc_may_lam_lai(qapp):
     the = _the_don(qapp, video_ke_tiep={}, video_ke_tiep_tu="29/09 20:00")
     assert "chưa có" in the._nhan_ke_tiep.text()
     assert "29/09 20:00" in the._nhan_ke_tiep.text()
+    assert the._nhan_ke_tiep.text().startswith("Lịch đăng tiếp")
     the.deleteLater()
 
 
 def test_video_ke_tiep_rong_khong_co_gio_thi_chi_noi_chua_co(qapp):
     the = _the_don(qapp, video_ke_tiep={})
-    assert the._nhan_ke_tiep.text() == "Video kế tiếp  — chưa có"
+    assert the._nhan_ke_tiep.text() == "Lịch đăng tiếp: chưa có"
     the.deleteLater()
 
 
@@ -425,3 +446,131 @@ def test_trang_an_khong_doc_dia(tmp_path, monkeypatch, qapp):
     finally:
         t.close()
         t.deleteLater()
+
+
+# ── Phòng điều hành công ty (Đợt G, 01/10/2026) ──────────────────────────────
+
+_PHONG_MAU = {
+    "muc": "hong", "ma_so": "K1",
+    "so": {"loai": "tut", "da": 0.43, "thang_28": 4, "kl_28": 6,
+           "cong": [{"ten": "Hiển thị", "muc": "hong", "chu": "1.709 / cần 6.000", "n": 3},
+                    {"ten": "Tỉ lệ bấm trang chủ", "muc": "tot", "chu": "12,1% / mục tiêu 5,0%", "n": 2},
+                    {"ten": "Giữ chân", "muc": "chua", "chu": "chưa đủ số", "n": 0}],
+           "video": [{"id": "v1", "tieu_de": "Video một", "ket": "cho", "tuoi_gio": 16.5, "doan": "truot"},
+                     {"id": "v2", "tieu_de": "Video hai", "ket": "thang", "hien_thi_48h": 15707},
+                     {"id": "v3", "tieu_de": "Video ba", "ket": "truot", "hien_thi_48h": 1709}]},
+    "ypp": {"sub": 30.0, "gio_xem": 167.0},
+    "doi_ai": [{"ai": "Giám đốc kênh", "cau": "Cổng hiển thị hỏng nặng."},
+               {"ai": "Khám nghiệm", "cau": "video v3 (7d): hook lệch tiêu đề."}],
+    "dang_thu": ["Cứu tỉ lệ bấm: đổi tiêu đề"],
+    "lich_tiep": [{"chu_luc": "20:00 hôm nay", "tieu_de": "Video tối"}, {"chu_luc": "05:00 mai", "tieu_de": ""}],
+}
+
+
+def test_the_phong_dieu_hanh_hien_du_cac_dong(qapp):
+    the = _the_don(qapp, phong=_PHONG_MAU, giam_doc={"che_do": "goi_y", "cau": "x", "bao_cao": "x.md"})
+    assert "tụt" in the._nhan_loai.text()
+    assert [o.text().split("\n")[0] for o in the._o_cong] == ["Hiển thị", "Tỉ lệ bấm trang chủ", "Giữ chân"]
+    assert "chờ (16 giờ)" in the._hang_video[0].text() and "đoán trượt" in the._hang_video[0].text()
+    assert "thắng" in the._hang_video[1].text() and "trượt" in the._hang_video[2].text()
+    assert the._nhan_giam_doc.text() == "Giám đốc kênh: Cổng hiển thị hỏng nặng."
+    assert the._nhan_ai[0].text().startswith("Khám nghiệm:") and the._nhan_ai[1].isHidden()
+    assert the._nhan_dang_thu.text() == "Đang thử: Cứu tỉ lệ bấm: đổi tiêu đề"
+    assert the._nhan_ke_tiep.text() == "Lịch đăng tiếp: 20:00 hôm nay 「Video tối」 · 05:00 mai — trống, máy sẽ làm"
+    assert the._nhan_ypp_sub.text() == "Sub 30/1.000" and the._thanh_sub.value() == 30
+    assert the._muc == "hong"
+    the.deleteLater()
+
+
+def test_the_bam_ba_nut_chi_tiet_bao_dung_hanh_dong(qapp):
+    from ui_qt.trang_bang_dieu_khien import TheKenhLon
+
+    bam = []
+    the = TheKenhLon("K1", lambda *a: None, lambda ma, hd: bam.append(hd))
+    the.nap({"ma": "K1", "giam_doc": {"bao_cao": "x.md"}, "phong": _PHONG_MAU})
+    the._nut_bao_cao.click()
+    the._nut_bai_hoc.click()
+    the._nut_quyet.click()
+    assert bam == ["bao_cao_giam_doc", "bai_hoc", "quyet_dinh"]
+    assert the._nut_quyet.text() == "Quyết định && độ chính xác"
+    the.deleteLater()
+
+
+def test_trang_xep_kenh_do_len_dau_va_sinh_tinh_so(tmp_path, monkeypatch, qapp):
+    from core import bang_dieu_khien as bdk
+
+    goc = _dung_goc(tmp_path, monkeypatch)
+    sinh = []
+    monkeypatch.setattr(bdk, "sinh_tinh_so", lambda g, ds: sinh.append(list(ds)) or 123)
+    that = bdk.phong_dieu_hanh
+
+    def phong(g, bang, **kw):
+        ph = that(g, bang, **kw)
+        ph["thu_tu"] = list(reversed(ph["thu_tu"]))
+        return ph
+
+    monkeypatch.setattr(bdk, "phong_dieu_hanh", phong)
+    t, _app = _mo(goc)
+    try:
+        dau = t._phong["thu_tu"][0]
+        assert t._luoi._grid.itemAtPosition(0, 0).widget() is t._the_kenh[dau]
+        assert sinh and set(sinh[0]) >= {"K1", "K2"}, "chưa có bộ đệm số → phải sinh tiến trình tính"
+        t.lam_moi()
+        assert len(sinh) == 1, "không sinh lại trong vòng GIAY_TINH_LAI"
+        assert t._khoi_cong_ty._o_video.text().startswith("Video hôm nay")
+    finally:
+        t.close()
+        t.deleteLater()
+
+
+def test_chi_tiet_may_bat_tat_dong_may(trang, qapp):
+    t, _app, _goc = trang
+    assert not t._dong_may.isVisibleTo(t)
+    t._hanh_dong("chi_tiet_may", {})
+    assert t._dong_may.isVisibleTo(t) and "▾" in t._khoi_cong_ty._nut_chi_tiet.text()
+
+
+def test_khong_phoi_tu_ky_thuat_tren_the_phong(qapp):
+    the = _the_don(qapp, phong=_PHONG_MAU)
+    chu = [w.text() for w in the.findChildren(QLabel)] + [w.text() for w in the.findChildren(QPushButton)]
+    assert not [c for c in chu for tu in _TU_CAM if tu in c]
+    the.deleteLater()
+
+
+def test_hop_bai_hoc_nut_sai_goi_gach(tmp_path, monkeypatch, qapp):
+    from core import bang_dieu_khien as bdk
+    from ui_qt.trang_phong_chi_tiet import HopBaiHoc
+
+    app = _AppGia(str(tmp_path))
+    hop = HopBaiHoc(app, "K1", tu_nap=False)
+    dong = [{"ma_bai": "kn:a", "chuyen_gia": "khan_gia", "ten_pham_vi": "Kênh này", "pham_vi": "kenh",
+             "cau": "Hook 30s đầu.", "n": 3, "tin_cay": "vua", "bom": True, "video": ["aV4P"], "da_gach": False},
+            {"ma_bai": "h:b", "chuyen_gia": "chu_de", "ten_pham_vi": "Nhóm kênh", "pham_vi": "nhom",
+             "cau": "Cụm IQ.", "n": 1, "da_gach": True}]
+    hop.ve(dong)
+    nut = [n for n in hop.findChildren(QPushButton) if n.text() == "Sai"]
+    assert len(nut) == 1, "bài đã gạch không còn nút Sai"
+    goi = []
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    monkeypatch.setattr(bdk, "gach_bai_hoc", lambda g, m, b, **kw: goi.append((m, b["ma_bai"])))
+    monkeypatch.setattr(bdk, "so_bai_hoc", lambda g, m, **kw: [dict(dong[0], da_gach=True)])
+    nut[0].click()
+    assert goi == [("K1", "kn:a")]
+    assert "0 bài học · 1 đã gạch" in hop._nhan_trang.text()
+    hop.deleteLater()
+
+
+def test_hop_quyet_dinh_va_bao_cao_tuan(tmp_path, qapp):
+    from ui_qt.trang_phong_chi_tiet import HopBaoCaoTuan, HopQuyetDinh
+
+    app = _AppGia(str(tmp_path))
+    hop = HopQuyetDinh(app, "K1", tu_nap=False)
+    hop.ve({"ti_le": [{"loai": "du_doan", "ten_loai": "Đoán thắng/trượt", "dung": 1, "tong": 2, "so_quyet": 3}],
+            "dong": [{"luc": "2026-10-01 10:20", "ten_loai": "Đoán thắng/trượt", "quyet": "Video a: đoán trượt",
+                      "vi_sao": "ít hiển thị", "ket_qua": "ĐÚNG", "dung": True}]})
+    assert "1/2" in hop._nhan_ti_le.text() and hop.bang.rowCount() == 1
+    assert hop.bang.item(0, 4).text() == "ĐÚNG"
+    hop.deleteLater()
+    bc = HopBaoCaoTuan(app, "K1")
+    assert [bc.the.tabText(i) for i in range(bc.the.count())] == ["Kênh K1", "Công ty"]
+    bc.deleteLater()
