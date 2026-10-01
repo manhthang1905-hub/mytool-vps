@@ -59,6 +59,12 @@ HANG_SO = {
          "ma_tuyen": "nguoi-cao-tuoi-dang-song-tuoi-gia"},
     )],
     "chu_de_con_mac_dinh": True,
+    # 01/10/2026 (khởi tạo ngách bằng AI): nhóm tâm lý Nhật KHÔNG khai bốn khoá mới — để TRỐNG là
+    # điều kiện để mọi lời nhắc của nó giữ nguyên văn câu cũ (`ho_so_ngach.la_ngach_mac_dinh`).
+    "luat_nan_khuon": [],
+    "tieu_chi_doi_thu": [],
+    "tu_khoa_tim": [],
+    "the_loai_en": "",
 }
 
 #: Trường không có hằng tương ứng một-một — được so gián tiếp qua ĐẦU RA của hàm dùng nó (các bài
@@ -155,3 +161,21 @@ def test_ma_tep_doc_tep_them_cua_ngach(goc):
     # tên tệp trên giao diện: slug của tệp cũ vẫn ra tên ngắn khi truyền goc+nhom
     assert tt.mo_ta_tep(pt.MA_TRUNG_NIEN, goc=goc, nhom="tam-ly-nhat")[0] == "Trung niên"
     assert tt.mo_ta_tep("nguoi-cao-tuoi-dang-song-tuoi-gia", goc=goc, nhom="tam-ly-nhat")[0] == "Tuổi già"
+
+
+def test_tam_ly_nhat_la_ngach_mac_dinh_moi_loi_nhac_giu_nguyen(goc, hs):
+    """01/10/2026: nhóm tâm lý Nhật là NGÁCH MẶC ĐỊNH — mọi lời nhắc đã tổng quát hoá cho ngách khác
+    (lọc trang chủ, kiểm ngách đối thủ, phán xử + gán tuyến, nắn tiêu đề, biên tập, bìa) trả ĐÚNG hằng cũ."""
+    from core import auto_khau, bia_theo_khuon, bien_tap_content, kiem_ngach_doi_thu, loc_doi_thu, trang_chu
+    from core.ho_so_ngach import la_ngach_mac_dinh
+
+    assert la_ngach_mac_dinh(hs)
+    assert trang_chu.de_bai_loc_cho(goc, "KENH-THU") is trang_chu.DE_BAI_TAM_LY
+    assert kiem_ngach_doi_thu.de_bai_cho(goc, "KENH-THU") == (kiem_ngach_doi_thu.DE_BAI,
+                                                               kiem_ngach_doi_thu.DE_BAI_SAU)
+    assert pt.de_bai_phan_xu_cho(hs) is pt.DE_BAI_PHAN_XU and pt.de_bai_gan_cho(hs) is pt.DE_BAI_GAN
+    assert auto_khau._luat_nan_khuon_ngach(goc, "KENH-THU") is None
+    assert bien_tap_content.che_do_de_bai(goc, "KENH-THU") == ""
+    assert loc_doi_thu.de_bai_loc_cho(goc, "KENH-THU") is loc_doi_thu.DE_BAI_LOC
+    chu = "psychology YouTube thumbnail · Hook text (Japanese): x · (like Noto Sans JP Black)"
+    assert bia_theo_khuon.ban_dia_hoa(chu, goc, "KENH-THU") == chu

@@ -105,7 +105,7 @@ def _kiem_bang_canh(duong: str) -> None:
         from openpyxl import load_workbook
     except ImportError as loi:  # pragma: no cover — SETUP.bat cài sẵn
         raise LoiNapSan(
-            "Máy chưa có bộ đọc Excel. Bạn nhấp đúp SETUP.bat một lần rồi "
+            "Máy chưa có bộ đọc Excel. Bạn nhấp đúp scripts\\SETUP.bat một lần rồi "
             "thử lại.") from loi
     try:
         sach = load_workbook(duong, read_only=True)
@@ -237,7 +237,7 @@ def _mau_bang_canh(duong: str) -> str:
         from openpyxl import Workbook
     except ImportError as loi:  # pragma: no cover
         raise LoiNapSan(
-            "Máy chưa có bộ ghi Excel. Bạn nhấp đúp SETUP.bat một lần rồi "
+            "Máy chưa có bộ ghi Excel. Bạn nhấp đúp scripts\\SETUP.bat một lần rồi "
             "thử lại.") from loi
 
     sach = Workbook()

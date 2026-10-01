@@ -54,7 +54,7 @@ def _mo_sach(duong: str):
         from openpyxl import load_workbook
     except ImportError as loi:  # pragma: no cover — SETUP.bat cài sẵn
         raise LoiBangCanh(
-            "Máy chưa có bộ đọc Excel. Bạn nhấp đúp SETUP.bat một lần rồi thử "
+            "Máy chưa có bộ đọc Excel. Bạn nhấp đúp scripts\\SETUP.bat một lần rồi thử "
             "lại.") from loi
     try:
         return load_workbook(duong, read_only=True, data_only=True)
@@ -118,7 +118,7 @@ def viet_mau(duong_dich: str) -> str:
         from openpyxl import Workbook
     except ImportError as loi:  # pragma: no cover
         raise LoiBangCanh(
-            "Máy chưa có bộ ghi Excel. Bạn nhấp đúp SETUP.bat một lần rồi thử "
+            "Máy chưa có bộ ghi Excel. Bạn nhấp đúp scripts\\SETUP.bat một lần rồi thử "
             "lại.") from loi
 
     sach = Workbook()

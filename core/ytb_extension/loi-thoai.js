@@ -94,10 +94,16 @@
     } catch (e) { return false; }
   };
 
+  // Ngôn ngữ phụ đề cần lấy = ngôn ngữ của KÊNH (kenh.yaml `ngon_ngu`, trạm đẩy xuống nền).
+  // 01/10/2026: trước đây cứng 'ja'. Nền cũ không gửi → rỗng → lùi 'ja' như trước.
+  let NGON_NGU = '';
+
   const duocKich = async () => {
     const tuSession = coSession();
     const tuUrl = new URLSearchParams(location.search).has('shopapi_lt');
-    const tuBg = !!(await goi({ type: 'lt_hoi' })).la_tab_lt;
+    const hoi = await goi({ type: 'lt_hoi' });
+    const tuBg = !!hoi.la_tab_lt;
+    NGON_NGU = String(hoi.ngon_ngu || '').trim().toLowerCase().split(/[-_]/)[0];
     if (tuBg || tuSession || tuUrl) {
       await noi(`${MA}: chạy (background=${tuBg} · session=${tuSession} · url=${tuUrl})`);
       return true;
@@ -121,7 +127,7 @@
 
   const hien = (el) => !!(el && el.offsetParent !== null);
 
-  // ── Mở phần mô tả: nút "Bản chép lời" nằm sau "...more" (tiếng Nhật: "...もっと見る") ──
+  // ── Mở phần mô tả: nút "Bản chép lời" nằm sau "...more" (giao diện Nhật: "...もっと見る") ──
   let daCuon = false, daBamMo = false;
   const moMoTa = () => {
     // YouTube dựng LƯỜI phần dưới màn hình: mô tả và khối "Bản chép lời" có thể chưa được
@@ -237,8 +243,10 @@
   const chonTrack = (pr) => {
     const cac = (((pr || {}).captions || {}).playerCaptionsTracklistRenderer || {}).captionTracks || [];
     if (!cac.length) return null;
-    const ja = cac.filter((c) => String(c.languageCode || '').startsWith('ja'));
-    const uuTien = ja.find((c) => c.kind !== 'asr') || ja.find((c) => c.kind === 'asr');
+    // Track đúng ngôn ngữ kênh (người làm > tự động), không có thì track người làm bất kỳ, rồi track đầu.
+    const ma = NGON_NGU || 'ja';
+    const dung = cac.filter((c) => String(c.languageCode || '').toLowerCase().startsWith(ma));
+    const uuTien = dung.find((c) => c.kind !== 'asr') || dung.find((c) => c.kind === 'asr');
     return uuTien || cac.find((c) => c.kind !== 'asr') || cac[0];
   };
 

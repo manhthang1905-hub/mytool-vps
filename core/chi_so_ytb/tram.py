@@ -1420,7 +1420,57 @@ class Tram:
             kho = kho_lt.dem(self.goc, kenh)
         except Exception:  # noqa: BLE001 — đếm hỏng không được chặn danh sách
             kho = {}
-        return {"kenh": kenh, "video": ra, "k": so_can, "kho": kho}
+        tra = {"kenh": kenh, "video": ra, "k": so_can, "kho": kho}
+        nn = self.ngon_ngu_kenh(kenh)
+        if nn:
+            # 01/10/2026: `loi-thoai.js` chọn track phụ đề theo ngôn ngữ KÊNH (trước đây cứng 'ja').
+            tra["ngon_ngu"] = nn
+        return tra
+
+    def ngon_ngu_kenh(self, kenh: str) -> str:
+        """`ngon_ngu` trong kenh.yaml của kênh (mã ngắn, chữ thường) — "" nếu thiếu/hỏng.
+
+        Đọc bằng `core.kenh.doc_yaml` (có bộ đọc dự phòng): kenh.yaml thật có dòng PyYAML không nuốt
+        nổi (đường Windows không nháy) vẫn ra đúng tiếng."""
+        try:
+            from core.kenh import TEP_KENH, doc_yaml, duong_kenh  # noqa: PLC0415
+
+            ma = an_toan(kenh or "")
+            if not ma:
+                return ""
+            gt = (doc_yaml(os.path.join(duong_kenh(self.goc, ma), TEP_KENH)) or {}).get("ngon_ngu")
+            return str(gt or "").strip().lower()[:12]
+        except Exception:  # noqa: BLE001
+            return ""
+
+    #: Số cụm tìm kiếm giao cho MỘT lượt quét (mỗi cụm một trang kết quả, nghỉ 4–8 giây giữa hai cụm).
+    K_TIM_KIEM = 3
+
+    def can_tim_kiem(self, kenh: str, *, hom_nay=None) -> dict:
+        """Cụm tìm kiếm YouTube cho mắt cào hôm nay (01/10/2026, khởi tạo ngách bằng AI).
+
+        Lấy từ `tu_khoa_tim` của `ngach.yaml` nhóm kênh, XOAY `K_TIM_KIEM` cụm mỗi ngày (tất định
+        theo ngày, không ngẫu nhiên) để sau vài ngày mọi cụm đều được tìm. Nhóm không khai (ngách
+        tâm lý Nhật hôm nay) → danh sách rỗng: mắt cào không mở trang tìm kiếm nào, y như cũ.
+        """
+        import datetime as _dt_tim  # noqa: PLC0415
+
+        kenh = an_toan(kenh or "")
+        try:
+            from core.ho_so_ngach import doc_ngach  # noqa: PLC0415
+
+            ds = [str(x).strip() for x in (doc_ngach(self.goc, kenh).tu_khoa_tim or []) if str(x).strip()]
+        except Exception:  # noqa: BLE001
+            ds = []
+        ds = list(dict.fromkeys(ds))
+        if not ds:
+            return {"kenh": kenh, "tu_khoa": []}
+        ngay = hom_nay or _dt_tim.date.today()
+        k = min(self.K_TIM_KIEM, len(ds))
+        dau = (ngay.toordinal() * k) % len(ds)
+        chon = [ds[(dau + i) % len(ds)] for i in range(k)]
+        self.ghi("kênh {0}: giao {1} cụm tìm kiếm cho mắt cào".format(kenh, len(chon)))
+        return {"kenh": kenh, "tu_khoa": chon}
 
     def nhan_loi_thoai(self, b: dict) -> Tuple[dict, int]:
         """Ghi một bản ghi lời thoại vào kho. Trả `(gói JSON, mã HTTP)`.
@@ -1571,6 +1621,14 @@ def _lam_xu_ly(tram: "Tram"):
                                            if (q.get("k") or ["0"])[0].isdigit() else 0),
                     ensure_ascii=False).encode("utf-8"),
                     "application/json; charset=utf-8")
+            if self.path.startswith("/tim-kiem/can-tim"):
+                # 01/10/2026 — mắt cào hỏi cụm TÌM KIẾM theo chủ đề cho kênh (xem `Tram.can_tim_kiem`).
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                return self._tra(json.dumps(tram.can_tim_kiem((q.get("kenh") or [""])[0]),
+                                            ensure_ascii=False).encode("utf-8"),
+                                 "application/json; charset=utf-8")
             if self.path.startswith("/lenh-tien-ich"):
                 # Tiện ích hỏi mỗi phút: có lệnh ÉP nào cho kênh này không.
                 # Một lần lấy là hết (một lệnh = một lượt chụp ép).
@@ -1603,6 +1661,10 @@ def _lam_xu_ly(tram: "Tram"):
                             tra["ngay_bat_dau"] = moc
                     except Exception:  # noqa: BLE001 — thiếu mốc thì cào như cũ
                         pass
+                    # 01/10/2026: ngôn ngữ kênh cho `loi-thoai.js` (chọn track phụ đề đúng tiếng).
+                    nn = tram.ngon_ngu_kenh(kenh_hoi)
+                    if nn:
+                        tra["ngon_ngu"] = nn
                 return self._tra(json.dumps(tra).encode("utf-8"),
                                  "application/json; charset=utf-8")
             if self.path.startswith("/kenh"):

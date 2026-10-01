@@ -17,9 +17,25 @@
 //
 // Trình duyệt KHÔNG phân tích gì. Tool ở nhà có yt-dlp tra tên kênh, tag, tuổi, view, rồi lọc và
 // cào. Bám DOM càng ít càng ít hỏng: thứ bắt buộc duy nhất là `a[href]`.
+//
+// ═══ TÌM KIẾM THEO CHỦ ĐỀ (01/10/2026) ═══
+// Kênh MỚI ở ngách mới: trang chủ của một tài khoản vừa lập chưa biết gì về chủ đề, nên lượt quét
+// cuối xin trạm vài cụm tìm kiếm (`/tim-kiem/can-tim`, từ `tu_khoa_tim` của ngach.yaml — nhóm không
+// khai thì trạm trả rỗng và KHÔNG có gì xảy ra, y như cũ), rồi mở trang kết quả tìm kiếm ngay trong
+// tab này, gom link y như trang chủ và gửi cùng đường `trang_chu` (kệ = "tìm: <cụm>"). Danh sách cụm
+// sống trong sessionStorage (`tc_tim_v1`) — trang kết quả chỉ chạy khi có nó, tức chỉ khi CHÍNH lượt
+// quét này mở ra; người ngồi tìm tay không bị cào.
 (() => {
   if (location.hostname !== 'www.youtube.com') return;
-  if (location.pathname !== '/') return;   // chỉ trang chủ — không đụng trang xem
+  const KHO_TIM = 'tc_tim_v1';
+  const docTim = () => { try { return JSON.parse(sessionStorage.getItem(KHO_TIM) || 'null'); } catch (e) { return null; } };
+  const ghiTim = (o) => {
+    try { if (o) sessionStorage.setItem(KHO_TIM, JSON.stringify(o)); else sessionStorage.removeItem(KHO_TIM); } catch (e) {}
+  };
+  const laTrangTim = location.pathname === '/results';
+  const tim = laTrangTim ? docTim() : null;
+  if (laTrangTim && !(tim && Array.isArray(tim.ds) && tim.ds.length)) return;
+  if (location.pathname !== '/' && !laTrangTim) return;   // chỉ trang chủ (+ trang tìm do lượt quét mở) — không đụng trang xem
 
   const SO_LUOT_TAI = 3;          // tải lại trang chủ bao nhiêu lượt — mỗi lượt một bộ đề xuất khác
   const MAX_LAN_CUON = 60;        // trần cuộn mỗi lượt: không treo mãi
@@ -28,6 +44,9 @@
   const KHO = 'tc_v26';           // khoá sessionStorage (mất khi đóng tab — đúng ý: mỗi lần mở là một lượt quét)
 
   const goi = (msg) => { try { chrome.runtime.sendMessage(msg); } catch (e) {} };
+  // MỘT chỗ gửi gói về nền (trang chủ theo từng lượt, và trang tìm kiếm) — nền đẩy lên trạm `/trang-chu`.
+  const guiGoi = (video, danh_sach, lan, luotGui, soLuot) => goi({ type: 'trang_chu', video, danh_sach,
+    href: location.href, so_lan_cuon: lan, luot: luotGui, so_luot_tai: soLuot });
   const docKho = () => { try { return JSON.parse(sessionStorage.getItem(KHO) || '{}'); } catch (e) { return {}; } };
   const ghiKho = (o) => { try { sessionStorage.setItem(KHO, JSON.stringify(o)); } catch (e) {} };
 
@@ -103,10 +122,7 @@
     const da_gui = new Set(kho.kenh_da_gui || []);
     const trong_video = new Set(moi_video.map(v => v.link_kenh).filter(Boolean));
     const danh_sach = [...trong_video, ...[...kenh].filter(k => !trong_video.has(k))].filter(k => !da_gui.has(k));
-    if (moi_video.length || danh_sach.length) {
-      goi({ type: 'trang_chu', video: moi_video, danh_sach, href: location.href,
-            so_lan_cuon: lan, luot, so_luot_tai: SO_LUOT_TAI });
-    }
+    if (moi_video.length || danh_sach.length) guiGoi(moi_video, danh_sach, lan, luot, SO_LUOT_TAI);
     danh_sach.forEach(k => da_gui.add(k));
 
     if (luot < SO_LUOT_TAI) {
@@ -120,13 +136,60 @@
     try { sessionStorage.removeItem(KHO); } catch (e) {}
     goi({ type: 'zoom', muc: 1 });
     window.scrollTo(0, 0);
+    batDauTim();
   }, NGHI_MS);
   };
+
+  const denTrangTim = (q, choMs) => {
+    setTimeout(() => { location.href = '/results?search_query=' + encodeURIComponent(q); }, choMs);
+  };
+
+  // Lượt trang chủ xong → hỏi trạm có cụm tìm kiếm nào không. Không có (nhóm không khai, trạm cũ) → thôi.
+  const batDauTim = () => {
+    try {
+      chrome.runtime.sendMessage({ type: 'tim_kiem_hoi' }, (r) => {
+        if (chrome.runtime.lastError) return;
+        const ds = ((r && r.tu_khoa) || []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 3);
+        if (!ds.length) return;
+        ghiTim({ ds, i: 0 });
+        denTrangTim(ds[0], 3000 + Math.floor(Math.random() * 3001));
+      });
+    } catch (e) {}
+  };
+
+  // Một trang kết quả tìm kiếm: cuộn ít (tối đa 8 lần), gom, gửi, rồi sang cụm kế sau 4–8 giây.
+  const quetTrangTim = () => {
+    const q = String(tim.ds[tim.i || 0] || '');
+    let lan = 0, khongMoi = 0;
+    goi({ type: 'zoom', muc: 0.5 });
+    const dongHo = setInterval(() => {
+      lan += 1;
+      const moi = gom();
+      khongMoi = moi ? 0 : khongMoi + 1;
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      if (lan < 8 && khongMoi < 3) return;
+      clearInterval(dongHo);
+      gom();
+      const ds = [...video.values()].map((v) => Object.assign(v, { ke: ('tìm: ' + q).slice(0, 60) }));
+      const danh_sach = [...new Set(ds.map((v) => v.link_kenh).filter(Boolean))];
+      if (ds.length) guiGoi(ds, danh_sach, lan, 1, 1);
+      goi({ type: 'zoom', muc: 1 });
+      const tiep = (tim.i || 0) + 1;
+      if (tiep < tim.ds.length) {
+        ghiTim({ ds: tim.ds, i: tiep });
+        denTrangTim(tim.ds[tiep], 4000 + Math.floor(Math.random() * 4001));
+      } else {
+        ghiTim(null);
+      }
+    }, NGHI_MS);
+  };
+
+  const chay = laTrangTim ? quetTrangTim : batDau;
   try {
     chrome.runtime.sendMessage({ type: 'cho_phep_quet' }, (r) => {
-      if (chrome.runtime.lastError) { batDau(); return; }
-      if (r && r.ok === false) return;
-      batDau();
+      if (chrome.runtime.lastError) { if (!laTrangTim) chay(); else ghiTim(null); return; }
+      if (r && r.ok === false) { ghiTim(null); return; }
+      chay();
     });
-  } catch (e) { batDau(); }
+  } catch (e) { if (!laTrangTim) chay(); }
 })();

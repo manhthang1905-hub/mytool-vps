@@ -98,6 +98,8 @@ def test_khong_co_du_lieu_thi_noi_ro_chu_khong_ra_bang_rong():
 
 
 def test_liet_ke_kenh_bo_qua_thu_muc_he_thong(tmp_path):
-    (tmp_path / "UCthat").mkdir()
-    (tmp_path / "_tam").mkdir()
-    assert cs.liet_ke_kenh(str(tmp_path)) == ["UCthat"]
+    # Thư mục con riêng: `tmp_path` còn chứa `vm-goc-mac-dinh` do conftest tạo (cô lập vm/).
+    goc = tmp_path / "goc"
+    (goc / "UCthat").mkdir(parents=True)
+    (goc / "_tam").mkdir()
+    assert cs.liet_ke_kenh(str(goc)) == ["UCthat"]

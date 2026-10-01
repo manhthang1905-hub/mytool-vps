@@ -32,12 +32,9 @@ TRAN_CAO = 660
 
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: 26/09/2026 — VPS này đã xoá `CHANNEL/_KHUON/` (chủ dự án chốt: VPS chỉ cần 4
-#: template kênh). Hộp "Tạo kênh mới" khi đó rẽ sang trang "Chưa có mẫu nào để
-#: bắt đầu" (`ui_qt.kenh.HopKenh._trang_chua_co_khuon`, đã sửa để không vỡ
-#: `AttributeError` — xem `_ve_tt_tao`), nên các bài đo NĂM BƯỚC/BA Ô CHỌN thật
-#: của trình thiết kế kênh không còn gì để kiểm.
-_CO_KHUON = os.path.isdir(os.path.join(GOC, "CHANNEL", "_KHUON"))
+#: 01/10/2026 — kho không mang dữ liệu khuôn ba mảnh; gốc giả của bài kiểm dựng khuôn GIẢ đủ luật
+#: (`tests/khuon_gia.py`), nên các bài đo NĂM BƯỚC/BA Ô CHỌN của trình thiết kế kênh chạy trên MỌI máy.
+_CO_KHUON = True
 
 
 def _goc_vps(tmp_dir) -> str:
@@ -65,6 +62,9 @@ def _goc_vps(tmp_dir) -> str:
     goc = str(tmp_dir)
     with open(os.path.join(goc, che_do_vps.TEN_MARKER), "w", encoding="utf-8") as f:
         json.dump({"vm_dir": goc}, f)
+    import khuon_gia
+
+    khuon_gia.dung(goc)
     ma = "TL1-T1"
     _kenh(goc, ma, "Kênh thử", tu_chay=False)
     # `core/kenh.py::doc_kenh` nạp lời nhắc của kênh từ thư mục `prompt/`,
@@ -235,7 +235,6 @@ def test_hop_tao_kenh_vua_man_hinh(hop_tao_kenh):
         goi.height())
 
 
-@pytest.mark.skipif(not _CO_KHUON, reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_hop_tao_kenh_co_du_ba_o_chon(hop_tao_kenh):
     """Thiếu một ô là khuôn không ghép đủ ba mảnh."""
     hop, _app = hop_tao_kenh
@@ -244,7 +243,6 @@ def test_hop_tao_kenh_co_du_ba_o_chon(hop_tao_kenh):
     assert hop._c_vh.count() >= 3
 
 
-@pytest.mark.skipif(not _CO_KHUON, reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_hop_tao_kenh_hien_ten_tieng_viet_chu_khong_hien_ma(hop_tao_kenh):
     """CLAUDE.md: không dùng từ kỹ thuật trên giao diện.
 
@@ -257,7 +255,6 @@ def test_hop_tao_kenh_hien_ten_tieng_viet_chu_khong_hien_ma(hop_tao_kenh):
             assert o.itemText(i) != o.itemData(i), o.itemText(i)
 
 
-@pytest.mark.skipif(not _CO_KHUON, reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_chon_phong_cach_thi_dien_san_loi_ta(hop_tao_kenh):
     """Chọn một phong cách ở Bước 3 phải điền sẵn ô lời tả + các khoá hình.
 
@@ -449,7 +446,6 @@ def test_doi_o_anh_thi_doi_anh_lon(hop_xem_phong):
     assert hop._da_mo == [], "bấm ô ảnh mà lại bật trình xem video"
 
 
-@pytest.mark.skipif(not _CO_KHUON, reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_di_het_nam_buoc_khong_tran_760px(hop_tao_kenh):
     """Bấm Tiếp đi hết 5 bước — không bước nào đẩy nút ra ngoài mép 760px.
 
@@ -575,7 +571,6 @@ def test_hop_soan_khuon_dung_duoc_ca_bon_loai(hop_soan_khuon):
             hop._chon_loai.currentData())
 
 
-@pytest.mark.skipif(not _CO_KHUON, reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_hop_soan_khuon_chon_tao_moi_thi_mo_khoa_ma(hop_soan_khuon):
     """“➕ Tạo mới…” mở khoá ô mã; sửa bộ có sẵn thì khoá lại."""
     hop, app = hop_soan_khuon

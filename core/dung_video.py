@@ -1148,7 +1148,7 @@ def loi_khong_chay_duoc(loi: OSError) -> str:
         return ("dòng lệnh dựng quá dài cho Windows — dự án có quá nhiều "
                 "ảnh/clip; tách thành hai dự án nhỏ hơn")
     if ma == 2 or getattr(loi, "errno", None) == 2:
-        return ("không tìm thấy file FFmpeg ({0}) — chạy lại SETUP.bat để tool "
+        return ("không tìm thấy file FFmpeg ({0}) — chạy lại scripts\\SETUP.bat để tool "
                 "tải bản đầy đủ về thư mục tool".format(loi.filename or ""))
     if ma == 5 or getattr(loi, "errno", None) == 13:
         return ("Windows hoặc phần mềm diệt virus chặn không cho FFmpeg chạy — "

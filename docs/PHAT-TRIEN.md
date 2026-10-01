@@ -73,6 +73,7 @@ Dùng `--chi <tệp…>` khi máy còn tệp dở của người khác: chỉ nh
 
 | Khâu | Module |
 |---|---|
+| Khởi tạo ngách (VPS/chủ đề/quốc gia mới) | `core/khoi_tao_ngach.py` (một lệnh: hồ sơ ngách → kênh từ `CHANNEL/_KHUON/kenh-mau/` → nghiên cứu khởi động), `core/ho_so_ngach.py` (`la_ngach_mac_dinh`: ngách tâm lý Nhật giữ nguyên văn lời nhắc cũ) |
 | Nghiên cứu đối thủ | `core/danh_ba_doi_thu.py`, `core/doi_thu_kenh.py`, `core/chot_doi_thu.py`, `core/loi_thoai.py` |
 | Chọn nguồn | `core/chien_luoc/` (công thức `v7`, `vph`, `mot_nut`; `bai_hoc`, `ngu_canh`; xem `docs/kien-thuc/chien-luoc.md`), `core/cong_thuc_v7*.py`, `core/mot_nut.py`, `core/bien_tap_content.py`, `core/chon_content.py`, `core/kiem_trung_y.py`, `core/trung_tieu_de.py`, `core/ho_so_ngach.py` |
 | Điều phối lượt | `core/tu_chay.py` (một lượt mỗi kênh), `core/dieu_phoi.py` (song song), `core/khe.py`, `core/uu_tien.py` (khe "api"/"nang" liên tiến trình), `core/che_do_vps.py` |

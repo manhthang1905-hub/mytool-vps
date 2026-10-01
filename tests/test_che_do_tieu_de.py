@@ -87,6 +87,8 @@ class TestTL5:
 class TestTL4LayNguyenDoiThu:
     def test_TL4_nguyen_goc_va_bam_do_dai(self):
         # Chủ dự án, 22/08/2026: TL4-T7 lấy nguyên tiêu đề + chữ bìa đối thủ.
+        if not os.path.isfile(os.path.join(GOC, "CHANNEL", "TL4-T7", "kenh.yaml")):
+            pytest.skip("kho không mang kênh thật TL4-T7 (chỉ có trên máy đang chạy kênh ấy)")
         k = doc_kenh(GOC, "TL4-T7")
         assert k.che_do_tieu_de == "nguyen_goc"
         # 24/08/2026: độ dài về mốc 12–15 phút cố định, không bám bản gốc.

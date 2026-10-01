@@ -1660,7 +1660,11 @@ class TrangTuyen(QWidget):
         self._bat_dau_ai("Đang phân tuyến {0} content…".format(len(can)))
 
         def viec():
-            return pt.gan_tuyen(client, tieu_de, tuyen_co, kenh_nguon=kenh_nguon)
+            # 01/10/2026: luật cứng theo bộ từ của ngách kênh (cùng đường với lượt tự chạy).
+            from core.mot_nut import _luat_cung_theo_ngach  # noqa: PLC0415
+
+            return pt.gan_tuyen(client, tieu_de, tuyen_co, kenh_nguon=kenh_nguon,
+                                **_luat_cung_theo_ngach(goc, kenh))
 
         def xong(ket):
             self._xong_ai()

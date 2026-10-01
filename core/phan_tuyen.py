@@ -272,14 +272,15 @@ def _dinh_tu_loai_tru(tieu_de: str, *, bo_qua_zatsugaku: bool = False,
 def ly_do_luat_cung(tieu_de: str, kenh_nguon: str, ma: str, ma_co: "Sequence[str] | set", *,
                     bo_qua_zatsugaku: bool = False,
                     tu_loai_tru: Sequence[str] = TU_LOAI_TRU,
-                    dau_moc_tuoi: Sequence[str] = DAU_MOC_TUOI) -> Tuple[str, str]:
+                    dau_moc_tuoi: Sequence[str] = DAU_MOC_TUOI,
+                    bo_moc_tuoi: bool = False) -> Tuple[str, str]:
     """(nhãn sau luật cứng, câu nói luật nào đổi nó — rỗng nếu không đổi). Cùng thân với
     `ap_luat_cung`, thêm LÝ DO để lượt phán xử theo nghĩa (`phan_xu_luat_cung`) biết hỏi gì.
-    `tu_loai_tru`/`dau_moc_tuoi`: xem `ap_luat_cung`."""
+    `tu_loai_tru`/`dau_moc_tuoi`/`bo_moc_tuoi`: xem `ap_luat_cung`."""
     tu_loai_tru = tu_loai_tru or TU_LOAI_TRU
     dau_moc_tuoi = dau_moc_tuoi or DAU_MOC_TUOI
     moi = ap_luat_cung(tieu_de, kenh_nguon, ma, ma_co, bo_qua_zatsugaku=bo_qua_zatsugaku,
-                       tu_loai_tru=tu_loai_tru, dau_moc_tuoi=dau_moc_tuoi)
+                       tu_loai_tru=tu_loai_tru, dau_moc_tuoi=dau_moc_tuoi, bo_moc_tuoi=bo_moc_tuoi)
     if moi == str(ma or "").strip():
         return moi, ""
     td, kn = tieu_de or "", kenh_nguon or ""
@@ -327,16 +328,56 @@ DE_BAI_PHAN_XU = (
     "giữ nhãn AI; \"luat\" = luật đúng. Phân vân thì trả \"luat\"."
 )
 
+#: 01/10/2026 — bản cho NGÁCH KHÁC ngách mặc định: ví dụ từ loại trừ / mốc tuổi lấy từ CHÍNH bộ từ
+#: của ngách (`ngach.yaml`), không còn 雑学/50代 của tâm lý Nhật. Dựng bằng `de_bai_phan_xu_cho`.
+DE_BAI_PHAN_XU_NGACH = (
+    "Một bộ LUẬT CHỮ đang định đổi nhãn tệp khán giả mà AI vừa gán cho vài tiêu đề video YouTube "
+    "{tieng}. Luật chữ chỉ nhìn thấy một từ, không hiểu nghĩa. Với MỖI ca, đọc NGHĨA tiêu đề và "
+    "phán: luật có ĐÚNG với ý nghĩa thật của video không.\n\n"
+    "Ý định của từng luật:\n"
+    "- Luật 'từ loại trừ' ({vd_loai_tru}…): video có TRỌNG TÂM là thể loại khác ngách thì không thuộc "
+    "tệp nào. Nhưng một NHÃN hay một chữ tình cờ dính vào video mà trọng tâm vẫn đúng ngách, đúng tệp "
+    "thì luật BẮT NHẦM.\n"
+    "- Luật 'mốc tuổi' ({vd_tuoi}…): khi TUỔI TÁC là nhân vật chính thì video thuộc tệp lớn tuổi. Nếu "
+    "tuổi chỉ là một chi tiết phụ thì luật BẮT NHẦM.\n\n"
+    "Các tệp:\n{{tep}}\n\n"
+    "Trả về DUY NHẤT một JSON {{{{\"1\": \"giu\" hoặc \"luat\", …}}}} đủ mọi số: \"giu\" = luật bắt nhầm, "
+    "giữ nhãn AI; \"luat\" = luật đúng. Phân vân thì trả \"luat\"."
+)
+
+
+def de_bai_phan_xu_cho(ho_so: Any) -> str:
+    """Khuôn đề bài phán xử (còn chỗ `{tep}`) theo hồ sơ ngách. Ngách mặc định → `DE_BAI_PHAN_XU`
+    nguyên văn. Hỏng → bản cũ."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        if ho_so_ngach.la_ngach_mac_dinh(ho_so):
+            return DE_BAI_PHAN_XU
+
+        def _vd(ds: Sequence[str]) -> str:
+            ra = ", ".join(str(x) for x in list(ds or [])[:5] if str(x).strip())
+            return (ra or "—").replace("{", "(").replace("}", ")")
+
+        tieng = ho_so_ngach.ten_tieng(ho_so.ngon_ngu()) or ""
+        return DE_BAI_PHAN_XU_NGACH.format(tieng=(tieng or "của kênh").replace("{", "("),
+                                           vd_loai_tru=_vd(ho_so.tu_loai_tru), vd_tuoi=_vd(ho_so.tu_tuoi))
+    except Exception:  # noqa: BLE001
+        return DE_BAI_PHAN_XU
+
 
 def phan_xu_luat_cung(client: Any, ca: Sequence[Tuple[str, str, str, str]],
                       tuyen: Sequence["TuyenDeXuat"], *, goi: Callable[..., str] = goi_van_ban,
-                      on_log: Optional[Callable[[str], None]] = None) -> Dict[int, bool]:
+                      on_log: Optional[Callable[[str], None]] = None,
+                      de_bai_goc: Optional[str] = None) -> Dict[int, bool]:
     """`ca` = `[(tiêu đề, kênh nguồn, mã AI gán, lý do luật)]` → `{vị trí: True nếu GIỮ nhãn AI}`.
-    Lô 20. Lỗi / câu trả lời lạ → vị trí đó vắng mặt (nơi gọi áp luật — đường lùi)."""
+    Lô 20. Lỗi / câu trả lời lạ → vị trí đó vắng mặt (nơi gọi áp luật — đường lùi).
+
+    `de_bai_goc` (01/10/2026): khuôn đề bài theo ngách (`de_bai_phan_xu_cho`); `None` = bản cũ."""
     ten = {t.ma: t.ten for t in tuyen}
     khoi_tep = "\n".join("- {0}: {1}{2}".format(t.ma, t.ten, " — insight: " + t.insight if t.insight else "")
                          for t in tuyen)
-    de_bai = DE_BAI_PHAN_XU.format(tep=khoi_tep or "(không có)")
+    de_bai = (de_bai_goc or DE_BAI_PHAN_XU).format(tep=khoi_tep or "(không có)")
     ra: Dict[int, bool] = {}
     for dau in range(0, len(ca), SO_TIEU_DE_MOI_LO_GAN):
         lo = list(ca[dau:dau + SO_TIEU_DE_MOI_LO_GAN])
@@ -959,6 +1000,52 @@ DE_BAI_GAN = (
     "thứ tự đã cho, đủ mọi số."
 )
 
+#: 01/10/2026 — đề bài gán cho NGÁCH KHÁC ngách mặc định. `DE_BAI_GAN` ở trên mang ví dụ/bẫy của tâm lý
+#: Nhật ("người sống lệch nhịp", 「中年以降」, "mẹo/tự-giúp thường KHÔNG thuộc tệp nào") — sai cho ngách mà
+#: chính "mẹo" là nội dung lõi (nấu ăn, làm đẹp…). Bản này giữ nguyên cơ chế: insight, ba câu hỏi, luật mã,
+#: thang `do_tin`, định dạng trả về.
+DE_BAI_GAN_NGACH = (
+    "Bạn gán mỗi tiêu đề video vào ĐÚNG MỘT TỆP KHÁN GIẢ trong danh sách "
+    "cho sẵn.\n\n"
+    "Một tệp là một INSIGHT — một câu người xem đang thầm nghĩ về chính "
+    "mình. KHÔNG phải một chủ đề.\n\n"
+    "Với mỗi tiêu đề, hỏi đúng ba câu, theo thứ tự này:\n"
+    "  1. Ai bấm vào cái này?\n"
+    "  2. Lúc bấm, họ đang ở trạng thái nào, đang cần gì?\n"
+    "  3. Xem xong, họ cần nhận được gì?\n\n"
+    "ĐỪNG gán theo đề tài bề mặt: một đề tài chạy ngang qua NHIỀU tệp — cùng một đề tài mà khác người "
+    "bấm, khác thứ họ cần thì là hai tệp khác nhau.\n\n"
+    "=== DANH SÁCH TỆP (chỉ được chọn trong đây) ===\n{0}\n"
+    '- {1} · không tệp nào ở trên hợp rõ ràng\n\n'
+    "LUẬT:\n"
+    "1. KHÔNG được đặt mã mới. Chỉ dùng mã có trong danh sách, hoặc `{1}`.\n"
+    "2. Không hợp tệp nào thì trả `{1}` — đó là câu trả lời đúng, không "
+    "phải là thất bại. Ép một tiêu đề vào tệp gần nhất là cách làm hỏng "
+    "dữ liệu tệ nhất, vì cái sai ấy trông y hệt cái đúng.\n"
+    "3. Xét TỪNG tiêu đề một cách độc lập. Tiêu đề đứng cạnh nhau trong danh "
+    "sách không liên quan gì tới nhau.\n\n"
+    "THANG `do_tin` — dùng đúng bốn mốc này:\n"
+    "  90-100  tiêu đề khớp thẳng cửa vào của tệp, không có tệp nào khác "
+    "đáng cân nhắc\n"
+    "  70-89   rõ ràng cùng insight với tệp này, dù chữ nghĩa không trùng "
+    "khít cửa vào\n"
+    "  50-69   đang phân vân giữa tệp này và một tệp khác\n"
+    "  0-49    đoán mò\n\n"
+    "Trả về DUY NHẤT một khối JSON, không lời dẫn, không rào ```: một đối "
+    'tượng {{"số thứ tự": {{"ma": "mã tuyến", "do_tin": 0-100}}}} đúng các số '
+    "thứ tự đã cho, đủ mọi số."
+)
+
+
+def de_bai_gan_cho(ho_so: Any) -> str:
+    """Khuôn đề bài gán tuyến theo hồ sơ ngách: ngách mặc định → `DE_BAI_GAN` nguyên văn. Hỏng → bản cũ."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        return DE_BAI_GAN if ho_so_ngach.la_ngach_mac_dinh(ho_so) else DE_BAI_GAN_NGACH
+    except Exception:  # noqa: BLE001
+        return DE_BAI_GAN
+
 
 def _khoi_tuyen(tuyen: Sequence[TuyenDeXuat], ma_ngan: Dict[str, str]) -> str:
     dong = []
@@ -1016,8 +1103,17 @@ def gan_tuyen(client: Any, tieu_de: Sequence[str],
               kenh_nguon: Sequence[str] = (),
               bo_qua_zatsugaku: bool = False,
               phan_xu: bool = True,
-              nho_phan_xu: Optional[Dict[str, set]] = None) -> List[KetGan]:
+              nho_phan_xu: Optional[Dict[str, set]] = None,
+              tu_loai_tru: Sequence[str] = TU_LOAI_TRU,
+              dau_moc_tuoi: Sequence[str] = DAU_MOC_TUOI,
+              bo_moc_tuoi: bool = False,
+              de_bai_phan_xu: Optional[str] = None,
+              de_bai_gan: Optional[str] = None) -> List[KetGan]:
     """Gán tuyến cho từng tiêu đề → danh sách **cùng thứ tự, cùng độ dài**.
+
+    `tu_loai_tru`/`dau_moc_tuoi`/`bo_moc_tuoi`/`de_bai_phan_xu` — 01/10/2026: lớp luật cứng sau model
+    dùng bộ từ của NGÁCH kênh (`mot_nut.gan_tuyen_ai` truyền theo `ho_so_ngach`, cùng luật với
+    `sua_so_theo_luat_cung`); không truyền → hằng tiếng Nhật cũ, hành vi cũ.
 
     `phan_xu` (29/09/2026, mặc định bật) — khi luật cứng định đè nhãn AI, hỏi AI một lượt ngắn
     theo nghĩa trước (`phan_xu_luat_cung`); `False` = luật đè thẳng như cũ. `nho_phan_xu` (tuỳ
@@ -1044,7 +1140,7 @@ def gan_tuyen(client: Any, tieu_de: Sequence[str],
     #: mã ngắn -> mã thật, để dịch ngược câu trả lời.
     that = {v: k for k, v in ngan.items()}
     that[MA_KHAC] = MA_KHAC
-    de_bai = DE_BAI_GAN.format(_khoi_tuyen(tuyen, ngan), MA_KHAC)
+    de_bai = (de_bai_gan or DE_BAI_GAN).format(_khoi_tuyen(tuyen, ngan), MA_KHAC)
 
     for dau in range(0, len(goc), so_moi_lo):
         if kiem_dung is not None:
@@ -1102,14 +1198,16 @@ def gan_tuyen(client: Any, tieu_de: Sequence[str],
         if not ket.ma or ket.ma == MA_KHAC:
             continue
         kn = kenh_nguon[i] if i < len(kenh_nguon) else ""
-        moi, ly = ly_do_luat_cung(goc[i], kn, ket.ma, ma_co, bo_qua_zatsugaku=bo_qua_zatsugaku)
+        moi, ly = ly_do_luat_cung(goc[i], kn, ket.ma, ma_co, bo_qua_zatsugaku=bo_qua_zatsugaku,
+                                  tu_loai_tru=tu_loai_tru, dau_moc_tuoi=dau_moc_tuoi,
+                                  bo_moc_tuoi=bo_moc_tuoi)
         if moi != ket.ma:
             xung.append((i, moi, ly))
     giu: Dict[int, bool] = {}
     if xung and phan_xu:
         ca = [(goc[i], kenh_nguon[i] if i < len(kenh_nguon) else "", ra[i].ma, ly) for i, _m, ly in xung]
         try:
-            giu = phan_xu_luat_cung(client, ca, tuyen, goi=goi, on_log=on_log)
+            giu = phan_xu_luat_cung(client, ca, tuyen, goi=goi, on_log=on_log, de_bai_goc=de_bai_phan_xu)
         except Exception:  # noqa: BLE001 — phán xử hỏng thì luật thắng (hành vi cũ)
             giu = {}
         so_giu = sum(1 for v in giu.values() if v)

@@ -1,5 +1,7 @@
-# MẪU ngách tâm lý học tiếng Nhật = BẢN SAO ngày 30/09/2026 của CHANNEL/_NHOM/tam-ly-nhat/ngach.yaml
+# MẪU ngách tâm lý học tiếng Nhật = BẢN SAO ngày 01/10/2026 của CHANNEL/_NHOM/tam-ly-nhat/ngach.yaml
 # (bản sống, đã đồng bộ với hằng số mặc định trong mã). Tham chiếu ĐẦY ĐỦ mọi khoá hồ sơ ngách.
+# Nhóm này KHÔNG khai tieu_chi_doi_thu / luat_nan_khuon / tu_khoa_tim / the_loai_en: nó là NGÁCH MẶC
+# ĐỊNH của mã (mau_tieu_de đúng câu gốc) nên mọi lời nhắc giữ nguyên văn. Ngách mới: xem ngach-mau.yaml.
 
 # ============================================================================
 # Hồ sơ ngách — nhóm "tam-ly-nhat" (tâm lý học / khoa học não bộ tiếng Nhật)
@@ -307,6 +309,12 @@ tep_khan_gia:
   - ma: '8'
     ten: Cảnh giác kẻ độc hại
     ten_ngan: Cảnh giác
+  # 30/09/2026 — kênh 5 (workspace/chuan-bi-kenh-5/de-xuat-ngach.yaml). Tệp MỚI, khác các số 5·6·7
+  # cũ đã bỏ trong BAN-DO-TEP-KHAN-GIA.md. `ma_tuyen` = mã tuyến (tuyen.csv / kenh.yaml `tep`).
+  - ma: '7'
+    ten: Người 65+ đang sống tuổi già
+    ten_ngan: Tuổi già
+    ma_tuyen: nguoi-cao-tuoi-dang-song-tuoi-gia
 
 # ---- Tiền lọc rẻ: ca HIỂN NHIÊN (core/trang_chu.py) ----
 tu_kenh_hien_nhien:
@@ -509,3 +517,28 @@ luat_kenh_nguon:
   dung: 'cùng nghề với tôi — mổ xẻ tâm lý/não bộ của một kiểu người.'
   gan: 'có chạm tâm lý nhưng lẫn nhiều thứ khác.'
   lac: 'nghề khác. Ví dụ: tự lực/phát triển bản thân (dạy thói quen, quy tắc, cách làm, động lực), tin tức, chính trị, kinh doanh, sức khoẻ, giải trí, review. Một kênh tự lực có thể có vài video tiêu đề nghe rất tâm lý — vẫn là "lac".'
+
+# ---- Chuẩn bìa của NGÁCH (core/bia_theo_khuon.py, 30/09/2026) ----
+# Lớp BẮT BUỘC cho mọi tấm bìa của mọi kênh trong nhóm. Rút từ 493 bìa THẬT của đối thủ
+# (workspace/nghien-cuu-bia/BAO-CAO-BIA.md): đặc trưng bìa KHÔNG tách được video nổ khỏi video
+# thường, nhưng cả hai nhóm cùng theo chuẩn này — "vé vào cửa". Bộ áo riêng (nét vẽ, màu, nhân
+# vật) vẫn lấy từ style.yaml của từng kênh. Ngách khác: khai khoá này bằng số của ngách đó;
+# không khai = không chèn lớp chuẩn ngách.
+bia_chuan_ngach:
+  so_bia_mau: 493
+  chu:
+    tran_co_vien: true           # 80% bìa ngách: chữ trần, không khối nền
+    vien: {co: true, mau: den}   # 75% có viền ở mọi tầng
+    mau_chinh: [vang, trang]     # 78% có chữ vàng
+    tu_khoa_mau_khac: do         # 78% tô màu khác cho từ khoá
+    so_tang: [2, 3]              # 80%
+    co_lon_nhat_pct: [22, 29]    # 66%: tầng lớn nhất 22-29% chiều cao
+    tang_duoi_lon_nhat: true     # 66%
+    chiem_khung_pct: [40, 55]
+    tong_ky_tu_toi_da: 20        # trung vị ngách 17; bìa thắng TL3 18
+  nen:
+    loai: canh_minh_hoa          # cảnh cụ thể (phòng, phố, bàn…), không nền trơn trắng/đen
+    anh_sang: am
+  nhan_vat:
+    bieu_cam_ro: true
+    tranh_net_mat: [buon]        # nền tối + mặt buồn: 19% nổ (n=21, p=0,003)

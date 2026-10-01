@@ -2665,7 +2665,8 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                     bc.ghi("  nắn tiêu đề về khuôn kênh (mẫu: {0} video đang thắng)…".format(len(mau)))
                     try:
                         tra = _goi(bc, de_bai_nan_khuon(tieu_de, mau, k.nhan_tieu_de,
-                                                        mau_tieu_de=_mau_tieu_de_ngach(bc.goc, k.ma)),
+                                                        mau_tieu_de=_mau_tieu_de_ngach(bc.goc, k.ma),
+                                                        luat_khuon=_luat_nan_khuon_ngach(bc.goc, k.ma)),
                                    _khoa_chat(luot, "tieu-de:nan-khuon"))
                         moi, _b = _doc_tieu_de(tra)
                     except Exception as loi:  # noqa: BLE001 — hỏng thì giữ tiêu đề nguồn, không vỡ lượt
@@ -3997,8 +3998,32 @@ def _mau_tieu_de_ngach(goc: str, ma_kenh: str) -> str:
     return hs.mau_tieu_de or ("kênh YouTube ({0})".format(hs.mo_ta_ngach) if hs.mo_ta_ngach else "")
 
 
+#: 01/10/2026 — luật 3–4 trung tính cho ngách KHÁC ngách mặc định khi `ngach.yaml` chưa khai
+#: `luat_nan_khuon` (luật cũ nói "MỘT KIỂU NGƯỜI", 「」, ｜, 【賢い大人】 — khuôn của tâm lý Nhật).
+LUAT_NAN_KHUON_CHUNG = (
+    "Viết lại theo đúng hình dạng của các tiêu đề mẫu ở trên: cách mở câu, chủ ngữ, kiểu lời hứa, "
+    "dấu câu và ngoặc mà các mẫu dùng.",
+    "Ngoặc/nhãn đầu câu của nguồn có thể là MỒI CÂU chứ không phải nhãn thể loại — nếu là mồi thì giữ ý "
+    "đó trong câu, đừng vứt đi.",
+)
+
+
+def _luat_nan_khuon_ngach(goc: str, ma_kenh: str) -> Optional[List[str]]:
+    """Luật 3–4 của `de_bai_nan_khuon` theo hồ sơ ngách: ngách mặc định → `None` (luật cũ nguyên văn);
+    ngách khác → `luat_nan_khuon` của `ngach.yaml`, chưa khai thì `LUAT_NAN_KHUON_CHUNG`. Hỏng → None."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, ma_kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return None
+        return [x for x in (hs.luat_nan_khuon or []) if str(x).strip()][:2] or list(LUAT_NAN_KHUON_CHUNG)
+    except Exception:  # noqa: BLE001 — hồ sơ hỏng không được làm vỡ khâu tiêu đề
+        return None
+
+
 def de_bai_nan_khuon(tieu_de_nguon: str, mau: Sequence[str], nhan: str = "", *,
-                     mau_tieu_de: str = "") -> str:
+                     mau_tieu_de: str = "", luat_khuon: Optional[Sequence[str]] = None) -> str:
     """Lời nhắc nắn tiêu đề nguồn về KHUÔN của kênh mình, giữ nguyên luận điểm đã chứng minh.
 
     Chủ dự án, 21/09/2026: *"không lấy 100% được vì from đang win của kênh mình nó hơi khác với
@@ -4010,11 +4035,25 @@ def de_bai_nan_khuon(tieu_de_nguon: str, mau: Sequence[str], nhan: str = "", *,
     `mau_tieu_de` — 30/09/2026, Đợt 4 (A1): câu mở "Bạn đặt tiêu đề cho một {mau_tieu_de}." theo hồ
     sơ ngách (`_mau_tieu_de_ngach`). Rỗng → câu cũ "kênh YouTube tâm lý tiếng Nhật" nguyên văn; nhóm
     tam-ly-nhat khai đúng chuỗi đó nên đề bài không đổi một ký tự.
+
+    `luat_khuon` — 01/10/2026: hai câu thay luật 3 và 4 (khuôn tiêu đề của ngách, `_luat_nan_khuon_ngach`).
+    `None` → luật 3–4 cũ của tâm lý Nhật, nguyên văn.
     """
     ds = [t for t in (mau or []) if t]
     # `{`/`}` nhân đôi vì cả chuỗi còn qua `.format(nguon=…, nhan=…)` bên dưới.
     mo_dau = "Bạn đặt tiêu đề cho một {0}.\n\n".format(
         (mau_tieu_de or "kênh YouTube tâm lý tiếng Nhật").replace("{", "{{").replace("}", "}}"))
+    if luat_khuon:
+        lk = [str(x).strip().replace("{", "{{").replace("}", "}}") for x in luat_khuon if str(x).strip()]
+        lk = (lk + list(LUAT_NAN_KHUON_CHUNG))[:2]
+        luat_34 = "3. {0}\n4. {1}\n".format(lk[0], lk[1])
+    else:
+        luat_34 = (
+            "3. Viết lại theo đúng hình dạng của các tiêu đề mẫu ở trên: chủ ngữ là MỘT KIỂU NGƯỜI, "
+            "phần thưởng là một danh từ trong 「」, và nếu mẫu có vế hai sau ｜ thì dùng vế hai để "
+            "khẳng định bằng khoa học.\n"
+            "4. Ngoặc đầu câu của nguồn có thể là MỒI CÂU (ví dụ 【賢い大人】) chứ không phải nhãn thể "
+            "loại — nếu là mồi thì giữ ý đó trong câu, đừng vứt đi.\n")
     return (
         mo_dau +
         "KHUÔN CỦA KÊNH — đây là các tiêu đề ĐANG THẮNG, hãy bắt chước đúng hình dạng này:\n"
@@ -4024,11 +4063,7 @@ def de_bai_nan_khuon(tieu_de_nguon: str, mau: Sequence[str], nhan: str = "", *,
         "1. GIỮ NGUYÊN luận điểm và đối tượng của nguồn — đó là thứ đã chứng minh có người bấm. "
         "Không đổi chủ đề, không thêm ý mới, không bịa số liệu.\n"
         "2. BỎ mọi dấu vết của kênh nguồn: tên kênh, hashtag, nhãn thương hiệu của họ.\n"
-        "3. Viết lại theo đúng hình dạng của các tiêu đề mẫu ở trên: chủ ngữ là MỘT KIỂU NGƯỜI, "
-        "phần thưởng là một danh từ trong 「」, và nếu mẫu có vế hai sau ｜ thì dùng vế hai để "
-        "khẳng định bằng khoa học.\n"
-        "4. Ngoặc đầu câu của nguồn có thể là MỒI CÂU (ví dụ 【賢い大人】) chứ không phải nhãn thể "
-        "loại — nếu là mồi thì giữ ý đó trong câu, đừng vứt đi.\n"
+        + luat_34 +
         "{nhan}"
         "5. Độ dài tương đương các mẫu. Chỉ trả về MỘT dòng:\nTITLE: <tiêu đề>"
     ).format(nguon=tieu_de_nguon,
@@ -4235,7 +4270,8 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
             bc.ghi("  nắn tiêu đề về khuôn kênh (mẫu: {0} video đang thắng)…".format(len(mau)))
             try:
                 tra = _goi(bc, de_bai_nan_khuon(sach, mau, k.nhan_tieu_de,
-                                                mau_tieu_de=_mau_tieu_de_ngach(bc.goc, k.ma)),
+                                                mau_tieu_de=_mau_tieu_de_ngach(bc.goc, k.ma),
+                                                luat_khuon=_luat_nan_khuon_ngach(bc.goc, k.ma)),
                           _khoa_chat(luot, "tieu-de:nan-khuon"))
                 moi, _b = _doc_tieu_de(tra)
             except Exception as loi:  # noqa: BLE001 — hỏng thì bỏ ứng viên này, không vỡ lượt
@@ -7560,6 +7596,11 @@ _LUAT_SO_BIA = (
 )
 
 
+def _nguyen_van(chu: str, *_a: Any) -> str:
+    """Thay cho `bia_theo_khuon.ban_dia_hoa` khi tiến trình đang chạy còn giữ bản cũ của module ấy."""
+    return chu
+
+
 def _chuan_ngach_cho_bia(bc: "BoiCanh") -> Tuple[str, Dict[str, str]]:
     """(khối chuẩn ngách tiếng Anh, kiểu chữ đè style.yaml) — rỗng khi ngách
     không khai `bia_chuan_ngach` hoặc bối cảnh không có gốc (bài kiểm)."""
@@ -7577,7 +7618,9 @@ def _chuan_ngach_cho_bia(bc: "BoiCanh") -> Tuple[str, Dict[str, str]]:
         "thumb_text_style": "BARE lettering with NO background boxes, main text bright yellow or white, "
                             "the key word in red",
         "thumb_text_shadow": "thick black outline on every line plus a soft drop shadow",
-        "thumb_text_font": "extra-bold heavy gothic (like Noto Sans JP Black)",
+        # 01/10/2026: phông theo tiếng của ngách (ngách mặc định giữ nguyên "Noto Sans JP Black").
+        "thumb_text_font": getattr(_btk, "ban_dia_hoa", _nguyen_van)("extra-bold heavy gothic (like Noto Sans JP Black)",
+                                            goc, bc.kenh.ma),
     }
 
 
@@ -7823,6 +7866,12 @@ def _dung_loi_nhac_tu_khuon(bc: BoiCanh, luot: LuotChay, kh: Dict[str, Any], tie
     khuon = kh.get("khuon") or {}
     kc = khuon.get("khuon_chu") or {}
     cn = kh.get("chuan_ngach") or {}
+
+    def bd(chu: str) -> str:
+        # 01/10/2026: "psychology / Japanese" trong lời nhắc bìa → thể loại + tiếng của ngách kênh
+        # (ngách mặc định: nguyên văn).
+        return getattr(_btk, "ban_dia_hoa", _nguyen_van)(chu, getattr(bc, "goc", "") or "", bc.kenh.ma)
+
     for nhom in ("khuon", "chuan_ngach"):
         ds = [m for m in kh.get("muc") or [] if m.get("nhom") == nhom]
         if not ds:
@@ -7830,19 +7879,19 @@ def _dung_loi_nhac_tu_khuon(bc: BoiCanh, luot: LuotChay, kh: Dict[str, Any], tie
         mau = kc if nhom == "khuon" else _btk.khuon_tu_chuan_ngach(cn)
         bt = _btk.viet_bien_the(bc.goi_chat, mau, tieu_de=tieu_de, chu_bia=chu_bia, n=len(ds),
                                 co_dinh_chu=co_dinh, mo_hinh=bc.kenh.mo_hinh,
-                                khoa=_khoa_chat(luot, "bia-bien-the-" + nhom))
+                                khoa=_khoa_chat(luot, "bia-bien-the-" + nhom), ban_dia=bd)
         for m, b in zip(ds, bt["bien_the"]):
             ma_ve = m.get("ve_chu") == "ma"
             m["chu_tang"] = bt["chu_tang"]
             m["chu_du_kien"] = "".join(_btk.chu_cua_tang(t) for t in bt["chu_tang"])
             if nhom == "khuon":
-                m["loi_nhac"] = _btk.loi_nhac_theo_khuon(
+                m["loi_nhac"] = bd(_btk.loi_nhac_theo_khuon(
                     kc, phong_cach=bo_ao["phong_cach"], bien_the=b, chu_tang=bt["chu_tang"],
-                    chu_do_ma_ve=ma_ve, cam=bo_ao["cam"])
+                    chu_do_ma_ve=ma_ve, cam=bo_ao["cam"]))
                 m["tham_chieu_bia_thang"] = True
             else:
-                m["loi_nhac"] = _btk.loi_nhac_chuan_ngach(
-                    cn, bo_ao=bo_ao, bien_the=b, chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve)
+                m["loi_nhac"] = bd(_btk.loi_nhac_chuan_ngach(
+                    cn, bo_ao=bo_ao, bien_the=b, chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve))
 
 
 def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any], tieu_de: str,
@@ -7862,17 +7911,23 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
         khuon.get("video_id")))
     thu = os.path.join(thu_muc, "_thu-khuon")
     os.makedirs(thu, exist_ok=True)
+
+    def bd(chu: str) -> str:
+        # 01/10/2026: bản địa hoá lời nhắc bìa theo ngách (ngách mặc định: nguyên văn).
+        return getattr(_btk, "ban_dia_hoa", _nguyen_van)(chu, getattr(bc, "goc", "") or "", bc.kenh.ma)
+
     bt = _btk.viet_bien_the(bc.goi_chat, kc, tieu_de=tieu_de, chu_bia=chu_bia, n=4,
                             co_dinh_chu=bc.kenh.che_do_tieu_de == "nguyen_goc",
-                            mo_hinh=bc.kenh.mo_hinh, khoa=_khoa_chat(luot, "thu-khuon-bien-the"))
+                            mo_hinh=bc.kenh.mo_hinh, khoa=_khoa_chat(luot, "thu-khuon-bien-the"),
+                            ban_dia=bd)
     chu_mong = "".join(_btk.chu_cua_tang(t) for t in bt["chu_tang"])
     bo_ao = _bo_ao_kenh(bc)
     hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)), khuon["tep"])
     ket = []
     for i, b in enumerate(bt["bien_the"]):
         ma_ve = i % 2 == 1
-        ln = _btk.loi_nhac_theo_khuon(kc, phong_cach=bo_ao["phong_cach"], bien_the=b,
-                                      chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve, cam=bo_ao["cam"])
+        ln = bd(_btk.loi_nhac_theo_khuon(kc, phong_cach=bo_ao["phong_cach"], bien_the=b,
+                                         chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve, cam=bo_ao["cam"]))
         tep = os.path.join(thu, "thu_{0}.png".format(i + 1))
         try:
             nen = os.path.join(thu, "_nen_thu_{0}.png".format(i + 1)) if ma_ve else tep
@@ -7885,8 +7940,8 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
             from PIL import Image  # noqa: PLC0415
             nho = tep[:-4] + "-120.png"
             Image.open(tep).convert("RGB").resize((120, 68)).save(nho)
-            du = loc_json(_goi(bc, _btk.LOI_NHAC_CHAM_THEO_KHUON.format(
-                ctr=float(khuon.get("ctr") or 0), khuon=_btk.khoi_khuon_tieng_anh(kc), chu=chu_mong),
+            du = loc_json(_goi(bc, bd(_btk.LOI_NHAC_CHAM_THEO_KHUON.format(
+                ctr=float(khuon.get("ctr") or 0), khuon=_btk.khoi_khuon_tieng_anh(kc), chu=chu_mong)),
                 _khoa_chat(luot, "thu-khuon-cham-{0}".format(i + 1)), toi_da_token=1200,
                 anh=[data_url(khuon["tep"]), data_url(tep), data_url(nho)]))
             du = du if isinstance(du, dict) else {}

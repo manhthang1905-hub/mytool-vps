@@ -958,7 +958,8 @@ class HopKenh(QDialog):
         v.addWidget(nhan("Chưa có mẫu nào để bắt đầu", "h2"))
         v.addWidget(self._phu(
             "Cần ít nhất một kiểu vẽ và một khán giả có sẵn để dựng kênh. Bấm "
-            "bên dưới để soạn mẫu đầu tiên ngay trong tool."))
+            "bên dưới để soạn mẫu đầu tiên ngay trong tool — hoặc để AI dựng cả "
+            "ngách lẫn kênh: Số liệu kênh → Thêm kênh → “Ngách mới bằng AI”."))
         v.addWidget(nut_phu("Quản lý kiểu vẽ / văn hoá…", self._sua_khuon,
                             rong=240))
         v.addStretch(1)

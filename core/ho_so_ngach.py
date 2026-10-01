@@ -57,6 +57,7 @@ from .kenh import TEP_KENH, doc_yaml, duong_kenh
 __all__ = [
     "TEN_TEP_NGACH", "THU_MUC_NHOM", "HoSoNgach", "duong_ngach_yaml",
     "nhom_cua_kenh", "doc_ngach_tho", "doc_ngach",
+    "MAU_TIEU_DE_GOC", "la_ngach_mac_dinh", "ten_tieng",
 ]
 
 _log = logging.getLogger(__name__)
@@ -74,13 +75,43 @@ _KHOA_DS_CHUOI = (
     "tu_tuoi_them", "tu_ghep_khong_phai_nguoi", "ten_kenh_dung_ngach", "tu_khop_nguon", "tu_go_toi",
     "tu_kenh_hien_nhien", "handle_hien_nhien", "tu_tieu_de_hien_nhien", "dau_moc_tuoi_kenh",
     "luat_chon",
+    # 01/10/2026 — khởi tạo ngách bằng AI (`core/khoi_tao_ngach.py`): luật nắn tiêu đề theo khuôn
+    # (thay luật 3–4 cứng của `auto_khau.de_bai_nan_khuon`), tiêu chí đối thủ cho lượt kiểm ngách
+    # (`kiem_ngach_doi_thu`), từ khoá tìm kiếm YouTube (trạm giao cho mắt cào + tìm lúc khởi tạo).
+    "luat_nan_khuon", "tieu_chi_doi_thu", "tu_khoa_tim",
 )
 
 #: Khoá CHUỖI (mô tả, lời nhắc) — `str(...).strip()`, không khai thì "".
 _KHOA_CHUOI = (
     "mo_ta_ngach", "dang_thang", "mau_tieu_de", "mo_ta_kenh_cho_ai", "dang_thang_cho_ai",
     "mo_ta_phan_cum", "nhan_the_loai_mau", "vi_du_phan_cum",
+    # 01/10/2026 — thể loại bằng TIẾNG ANH cho lời nhắc ảnh bìa ("home cooking" thay "psychology").
+    "the_loai_en",
 )
+
+#: Câu `mau_tieu_de` của ngách mặc định trong mã (tâm lý × Nhật). Nhóm tam-ly-nhat khai ĐÚNG chuỗi này,
+#: nên mọi lời nhắc "ngách mặc định" giữ nguyên văn từng ký tự cho nhóm ấy — xem `la_ngach_mac_dinh`.
+MAU_TIEU_DE_GOC = "kênh YouTube tâm lý tiếng Nhật"
+
+#: Tên ngôn ngữ theo mã ngắn — (tên tiếng Việt, tên tiếng Anh). Mã lạ → chính mã đó.
+_TEN_TIENG = {
+    "ja": ("tiếng Nhật", "Japanese"), "vi": ("tiếng Việt", "Vietnamese"), "en": ("tiếng Anh", "English"),
+    "ko": ("tiếng Hàn", "Korean"), "zh": ("tiếng Trung", "Chinese"), "th": ("tiếng Thái", "Thai"),
+    "id": ("tiếng Indonesia", "Indonesian"), "es": ("tiếng Tây Ban Nha", "Spanish"),
+    "pt": ("tiếng Bồ Đào Nha", "Portuguese"), "fr": ("tiếng Pháp", "French"), "de": ("tiếng Đức", "German"),
+    "it": ("tiếng Ý", "Italian"), "ru": ("tiếng Nga", "Russian"), "tr": ("tiếng Thổ Nhĩ Kỳ", "Turkish"),
+    "hi": ("tiếng Hindi", "Hindi"), "ar": ("tiếng Ả Rập", "Arabic"), "ms": ("tiếng Mã Lai", "Malay"),
+    "tl": ("tiếng Philippines", "Filipino"), "pl": ("tiếng Ba Lan", "Polish"), "nl": ("tiếng Hà Lan", "Dutch"),
+}
+
+
+def ten_tieng(ma: str, *, anh: bool = False) -> str:
+    """`"vi"` → `"tiếng Việt"` (hoặc `"Vietnamese"` với `anh=True`). Nhận cả `"pt-BR"`. Mã lạ → mã."""
+    goc = str(ma or "").strip()
+    cap = _TEN_TIENG.get(goc.lower().split("-")[0].split("_")[0])
+    if not cap:
+        return goc
+    return cap[1] if anh else cap[0]
 
 
 def _ten_thu_muc_an_toan(ten: str) -> str:
@@ -172,6 +203,14 @@ class HoSoNgach:
     vi_du_phan_cum: str = ""
     #: Luật chọn nguồn theo NGHĨA cho biên tập viên AI (danh sách câu ngắn).
     luat_chon: List[str] = field(default_factory=list)
+    #: 01/10/2026 — luật 3–4 của đề bài nắn tiêu đề theo khuôn (`auto_khau.de_bai_nan_khuon`).
+    luat_nan_khuon: List[str] = field(default_factory=list)
+    #: 01/10/2026 — tiêu chí "đúng đối thủ" cho lượt kiểm ngách bằng LLM (`kiem_ngach_doi_thu`).
+    tieu_chi_doi_thu: List[str] = field(default_factory=list)
+    #: 01/10/2026 — cụm tìm kiếm YouTube bằng ngôn ngữ thị trường (trạm giao cho mắt cào).
+    tu_khoa_tim: List[str] = field(default_factory=list)
+    #: 01/10/2026 — thể loại bằng tiếng Anh cho lời nhắc ảnh bìa ("" → "psychology" như cũ).
+    the_loai_en: str = ""
 
     # ── Thị trường (quốc gia/ngôn ngữ) — thô như trong tệp; `ngu_canh.thi_truong` trộn với
     # kenh.yaml và mặc định. Khoá: quoc_gia, ngon_ngu, mui_gio, bac_lam_tron_view, …
@@ -181,6 +220,26 @@ class HoSoNgach:
         """Có hồ sơ thật (đọc được tệp) hay không — `False` thì mọi trường ở trên đều là mặc
         định rỗng, nơi gọi nên lùi về hằng số cũ của chính nó."""
         return bool(self.nguon)
+
+    def ngon_ngu(self) -> str:
+        """Mã ngôn ngữ thị trường của ngách (`thi_truong.ngon_ngu` > `ngon_ngu_nguon`), "" nếu chưa khai."""
+        return str((self.thi_truong or {}).get("ngon_ngu") or self.ngon_ngu_nguon or "").strip().lower()
+
+
+def la_ngach_mac_dinh(hs: Optional["HoSoNgach"]) -> bool:
+    """Ngách này có phải NGÁCH MẶC ĐỊNH của mã (tâm lý × Nhật, nhóm TL1–TL4) không.
+
+    Dùng ở những lời nhắc mà bản cũ viết cứng cho tâm lý Nhật (lọc trang chủ, kiểm ngách đối thủ,
+    phán xử luật cứng, nắn tiêu đề, bìa): mặc định → giữ NGUYÊN VĂN câu cũ (kênh đang chạy không
+    đổi một ký tự); ngách khác → câu dựng từ hồ sơ ngách.
+
+    `True` khi: không có hồ sơ (kênh không nhóm / nhóm chưa có `ngach.yaml`), hoặc hồ sơ khai đúng
+    `mau_tieu_de` của ngách mặc định (`MAU_TIEU_DE_GOC` — nhóm tam-ly-nhat). Hồ sơ của ngách khác
+    (khuôn `_KHUON/ngach-mau*.yaml`, `core/khoi_tao_ngach.py`) luôn khai `mau_tieu_de` riêng.
+    """
+    if hs is None or not hs.co():
+        return True
+    return (hs.mau_tieu_de or "").strip() == MAU_TIEU_DE_GOC
 
 
 def duong_ngach_yaml(goc: str, nhom: str) -> str:

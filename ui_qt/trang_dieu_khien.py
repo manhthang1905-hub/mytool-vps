@@ -794,9 +794,10 @@ class CotKenh(QFrame):
         self._nhan_ten.setToolTip(ten_day)
 
         ma_tep = k.get("tep") or ""
-        _cat(self._nhan_tep, _tep_ngan(ma_tep), self._RONG_TRONG - 112)
+        nhom_k = str(k.get("nhom") or "")
+        _cat(self._nhan_tep, _tep_ngan(ma_tep, nhom_k), self._RONG_TRONG - 112)
         self._nhan_tep.setToolTip(
-            "Tệp khán giả: {0}\n{1}".format(_tep_ngan(ma_tep), _ten_tep(ma_tep))
+            "Tệp khán giả: {0}\n{1}".format(_tep_ngan(ma_tep, nhom_k), _ten_tep(ma_tep, nhom_k))
             if ma_tep else "Kênh chưa chọn tệp khán giả.")
 
         # ── Câu tình trạng ──────────────────────────────────────────────────

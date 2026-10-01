@@ -1,0 +1,75 @@
+# ============================================================================
+#  KÊNH MẪU — khuôn kenh.yaml của `python -m core.khoi_tao_ngach`
+# ============================================================================
+#  Các con số sản xuất dưới đây là cấu hình đã chứng minh trên kênh đang sản xuất
+#  (5 bản nháp, 3 vòng chấm–sửa, hook riêng, 6–7 ảnh bìa). Lệnh khởi tạo ngách
+#  chép khuôn này vào CHANNEL/<MÃ>/kenh.yaml rồi đặt các khoá NHẬN DIỆN (ma, ten,
+#  nhom, tep, ngon_ngu, giong_van, ky_tu_moi_phut, chu_bia_hoa, gio_dang,
+#  ngay_bat_dau) theo chủ đề + quốc gia + ngôn ngữ mới.
+#
+#  Công tắc tiền và tự động (`tu_chay`, `tu_duyet`, `ngan_sach_ngay`) luôn TẮT ở
+#  đây — chủ kênh tự bật sau khi chọn giọng đọc và chạy thử `--thu`.
+#
+#  ⚠ KHÔNG BAO GIỜ ĐẶT KHOÁ API VÀO ĐÂY. Tool có bộ quét, thấy khoá là chặn.
+# ============================================================================
+kenh_rieng: true
+ma: ""
+ten: ""
+nhom: ""
+tep: ""
+ngon_ngu: ""
+giong_van: ""
+#  Ký tự đọc lên mỗi phút của GIỌNG ĐỌC — đo lại sau video đầu: số ký tự kịch bản
+#  chia cho số phút của 2-giong-doc.mp3. Lệnh khởi tạo điền số tham khảo theo tiếng.
+ky_tu_moi_phut: 0
+chu_bia_hoa: true
+#  Giọng đọc: chọn MỘT giọng riêng cho kênh (khác mọi kênh khác trên máy).
+voice_id: ""
+phut_muc_tieu: 15
+chenh_cho_phep: 0.15
+do_dai_theo_goc: false
+so_ban_nhap: 5
+so_ban_hook: 3
+hoan_thien: true
+so_vong_cham: 3
+so_ban_va: 2
+che_do_tieu_de: "nguyen_goc"
+nhan_tieu_de: ""
+nan_khuon_tieu_de: true
+giay_nghi_phan: 3.0
+giay_nghi_chuyen_phan: 3.0
+chuyen_phan: "den"
+giay_chuyen_phan: 1.0
+nhac_theo_phan: true
+kho_nhac: "PROJECTS/music"
+nhac_duoi_giong_db: 18
+nhac_nghi_giua_phan: 2.0
+nhac_noi_bai_giay: 4
+ngat_phan_tu_dong: true
+engine: "veo3"
+so_thumbnail: 6
+chon_bia_ai: true
+so_luot_cham_bia: 2
+bia_khuon_thang: true
+bia_kham_pha: true
+mo_hinh: "claude-sonnet-5"
+dot_phu_de: false
+am_luong_nhac: 0.12
+nhac_nen: ""
+do_phan_giai: 1080p
+#  Chọn nguồn: "tu_dong" = kênh MỚI dùng VPH (đột biến đối thủ) + lượt thăm dò; khi kênh
+#  có video thắng thật (cổng chuyển V7) thì tự chuyển sang V7. Xem docs/kien-thuc/chien-luoc.md.
+chien_luoc: "tu_dong"
+chien_luoc_tham_do: 20
+de_bai_bien_tap: "gon"
+tu_don: true
+don_sau_gio: 24
+giu_toi_da_luot: 3
+gio_dang: "20:00"
+chu_ky_dang_ngay: 1
+san_xuat_truoc_gio: 72
+dung_mot_lan: true
+tu_chay: false
+tu_duyet: false
+ngan_sach_ngay: 0
+ngay_bat_dau: ""

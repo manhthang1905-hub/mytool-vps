@@ -180,7 +180,7 @@ def main() -> int:
     except ImportError:
         _die("Thiếu thư viện giao diện",
              "Tool cần PyQt5 mà máy chưa có.\n\n"
-             "Bạn nhấp đúp SETUP.bat một lần để cài, rồi mở lại tool.\n\n"
+             "Bạn nhấp đúp scripts\\SETUP.bat một lần để cài, rồi mở lại tool.\n\n"
              "Hoặc mở cửa sổ lệnh và chạy:\n"
              "    python -m pip install PyQt5")
         return 1

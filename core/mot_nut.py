@@ -150,6 +150,23 @@ def tuyen_de_xuat(goc: str, kenh: str) -> List[pt.TuyenDeXuat]:
     return ra
 
 
+def _luat_cung_theo_ngach(goc: str, kenh: str) -> Dict[str, object]:
+    """Bộ từ cho lớp luật cứng của `phan_tuyen.gan_tuyen` theo hồ sơ ngách của kênh — cùng luật với
+    `phan_tuyen.sua_so_theo_luat_cung` (khoá trống → hằng tiếng Nhật cũ). 01/10/2026: trước đây
+    `gan_tuyen` luôn dùng hằng tiếng Nhật, kênh ngách khác bị luật "雑学/50代" đè nhãn AI. Hỏng → {}."""
+    try:
+        from .ho_so_ngach import doc_ngach  # noqa: PLC0415
+
+        hs = doc_ngach(goc, kenh)
+        return {"tu_loai_tru": list(hs.tu_loai_tru) or pt.TU_LOAI_TRU,
+                "dau_moc_tuoi": list(hs.tu_tuoi) or pt.DAU_MOC_TUOI,
+                "bo_moc_tuoi": pt.cho_phep_tep_gia(goc, kenh),
+                "de_bai_phan_xu": pt.de_bai_phan_xu_cho(hs),
+                "de_bai_gan": pt.de_bai_gan_cho(hs)}
+    except Exception:  # noqa: BLE001 — hồ sơ hỏng: hành vi cũ
+        return {}
+
+
 def gan_tuyen_ai(goc: str, kenh: str, client, *, gan: Optional[Callable[..., list]] = None,
                  on_log: Optional[Callable[[str], None]] = None,
                  cancel: Optional[threading.Event] = None,
@@ -228,7 +245,8 @@ def gan_tuyen_ai(goc: str, kenh: str, client, *, gan: Optional[Callable[..., lis
     gan = gan or pt.gan_tuyen
     ket = gan(client, tieu_de, tuyen_co, kenh_nguon=kenh_nguon, on_log=on_log,
               bo_qua_zatsugaku=bo_qua_zatsugaku,
-              kiem_dung=(lambda: (_ for _ in ()).throw(RuntimeError("dừng")) if cancel is not None and cancel.is_set() else None))
+              kiem_dung=(lambda: (_ for _ in ()).throw(RuntimeError("dừng")) if cancel is not None and cancel.is_set() else None),
+              **_luat_cung_theo_ngach(goc, kenh))
     theo_link = {}
     if nho:
         hom_nay = _dt.date.today().isoformat()

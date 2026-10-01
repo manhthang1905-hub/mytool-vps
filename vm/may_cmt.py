@@ -146,7 +146,7 @@ LANG_MAP = {
 }
 
 # Che do chon ngon ngu reply:
-#   "channel" - tra loi theo ngon ngu KENH (hau to -T<n>); chua ro hau to -> theo binh luan
+#   "channel" - tra loi theo ngon ngu KENH (kenh.yaml `ngon_ngu`, lui ve hau to -T<n>); chua ro -> theo binh luan
 #   "comment" - tra loi theo dung ngon ngu cua tung BINH LUAN
 REPLY_LANG_MODE = "channel"
 
@@ -1153,8 +1153,37 @@ def dang_binh_luan_moi(channel, gioi_han=None):
 
 
 # ========== XU LY 1 KENH ==========
-def channel_language(channel):
-    """Ngon ngu khan gia cua kenh theo hau to -T<n> (vd TL1-T1 -> Spanish). None neu khong ro."""
+#: Ma ngon ngu kenh.yaml `ngon_ngu` -> ten tieng Anh cho loi nhac (cung bang voi may_cmt_dom.NGON_NGU).
+TEN_NGON_NGU = {"ja": "Japanese", "vi": "Vietnamese", "en": "English", "es": "Spanish",
+                "fr": "French", "de": "German", "pt": "Portuguese", "ko": "Korean",
+                "it": "Italian", "tr": "Turkish", "th": "Thai", "id": "Indonesian",
+                "zh": "Chinese", "ru": "Russian", "hi": "Hindi", "ar": "Arabic"}
+
+
+def _ngon_ngu_kenh_yaml(channel, goc_tool=None):
+    """`ngon_ngu` trong CHANNEL/<kenh>/kenh.yaml (cung cach doc voi may_cmt_dom.doc_cai_dat). "" neu thieu."""
+    goc_tool = goc_tool or os.path.dirname(BASE_DIR)
+    try:
+        with open(os.path.join(goc_tool, "CHANNEL", str(channel or "").strip(), "kenh.yaml"),
+                  "r", encoding="utf-8") as tep:
+            for dong in tep:
+                m = re.match(r'^ngon_ngu:\s*"?([A-Za-z-]+)"?', dong)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    return ""
+
+
+def channel_language(channel, goc_tool=None):
+    """Ngon ngu khan gia cua kenh. None neu khong ro.
+
+    01/10/2026: lay tu kenh.yaml `ngon_ngu` TRUOC (VPS kenh/ngach/quoc gia khac dat ma kenh tuy y,
+    vd "K1" - hau to -T<n> khong con mang nghia). Kenh khong co kenh.yaml canh tool (nep vm dat
+    rieng) thi lui ve nep cu: hau to -T<n> (vd TL1-T1 -> Spanish)."""
+    ma = _ngon_ngu_kenh_yaml(channel, goc_tool).lower().split("-")[0]
+    if ma:
+        return TEN_NGON_NGU.get(ma, ma)
     m = re.search(r"-T(\d+)\s*$", channel.strip(), re.IGNORECASE)
     if m:
         return LANG_MAP.get(int(m.group(1)))

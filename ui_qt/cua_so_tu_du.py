@@ -100,7 +100,7 @@ class HopTuDu(QDialog):
         self._them("")
         self._them("Xong. " + loi_nhan if duoc else
                    "Chưa cài được: {0}. Tôi vẫn mở tool, nhưng có thể vài "
-                   "phần chưa chạy — bạn nhấp đúp SETUP.bat một lần rồi mở "
+                   "phần chưa chạy — bạn nhấp đúp scripts\\SETUP.bat một lần rồi mở "
                    "lại.".format(loi_nhan))
         self._nut.setEnabled(True)
         self._nut.setDefault(True)

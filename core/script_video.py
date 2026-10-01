@@ -673,7 +673,7 @@ def _tu_nghe(url: str, ghi: Callable[[str], None],
         loi_cai = _tu_cai_faster_whisper(ghi)
         if loi_cai:
             return "", "", ("máy chưa có faster-whisper (phần tự nghe), tự cài không "
-                            "được: {0}. Chạy SETUP.bat rồi mở lại tool.".format(loi_cai))
+                            "được: {0}. Chạy scripts\\SETUP.bat rồi mở lại tool.".format(loi_cai))
         loi_nap = _nap_duoc_faster_whisper()
         if loi_nap:
             # ═══ ĐỪNG HỨA "MỞ LẠI LÀ ĐƯỢC" — CÓ CA MỞ LẠI VẪN HỎNG ═══
@@ -692,7 +692,7 @@ def _tu_nghe(url: str, ghi: Callable[[str], None],
             # hai bước theo thứ tự — thà dài một câu còn hơn hứa một thứ tool
             # không giữ được rồi khách mở lại mấy lần vẫn thế.
             return "", "", ("có faster-whisper trên máy nhưng chưa nạp được ({0}). "
-                            "Tắt tool mở lại một lần; vẫn vậy thì chạy SETUP.bat "
+                            "Tắt tool mở lại một lần; vẫn vậy thì chạy scripts\\SETUP.bat "
                             "(thường là máy thiếu bộ thư viện chạy Visual C++)."
                             .format(loi_nap))
         ghi("    đã cài xong faster-whisper.")

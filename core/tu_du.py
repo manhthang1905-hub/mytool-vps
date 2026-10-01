@@ -282,7 +282,7 @@ def _python_32_bit() -> bool:
 #: đọc nổi. Khách 31/08/2026 báo đúng kiểu này: "gì mà 32 bit… có 2 gói".
 LOI_KHUYEN_32_BIT = (
     "Python của máy là bản 32-bit — mấy gói trên chỉ có bản 64-bit nên cài "
-    "kiểu gì cũng trượt. Cách chữa: nhấp đúp SETUP.bat trong thư mục tool, "
+    "kiểu gì cũng trượt. Cách chữa: nhấp đúp scripts\\SETUP.bat trong thư mục tool, "
     "nó sẽ cài Python 64-bit và dựng môi trường riêng ngay trong thư mục tool."
 )
 

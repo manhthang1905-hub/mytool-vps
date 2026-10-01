@@ -13,7 +13,7 @@ Tệp này là cửa vào duy nhất. Phiên Claude trên máy đọc thêm `CLA
 - Mỗi kênh một Chrome portable (GPM…) đã đăng nhập YouTube.
 - Một deploy key riêng cho máy. Chủ dự án thêm key vào GitHub.
 
-## Cài VPS mới (5 bước)
+## Cài VPS mới (6 bước)
 1. **Deploy key.** Mỗi máy một key, không chép key của máy khác:
    `ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\mytool_vps_deploy -N "" -C mytool-<ma-may>`.
    Gửi tệp `.pub` cho chủ dự án. Chủ dự án thêm nó vào GitHub, mục Settings > Deploy keys, và bật **Allow write access**.
@@ -48,10 +48,16 @@ Tệp này là cửa vào duy nhất. Phiên Claude trên máy đọc thêm `CLA
    python -m core.kiem_may --day-du      (mọi dòng phải OK)
    python -m core.dong_bo_git ket_noi    (đường tới kho + deploy key)
    ```
-   Mở tool bằng biểu tượng **MyTool VPS** hoặc `CHAY-GON.vbs`. Vào **Tài khoản & Cài đặt** để đăng nhập shopapi.vn. Thêm kênh theo `docs/KENH-VA-NGACH.md`.
+   Mở tool bằng biểu tượng **MyTool VPS** hoặc `CHAY-GON.vbs`. Vào **Tài khoản & Cài đặt** để đăng nhập shopapi.vn.
    - Thiếu mô hình Whisper (máy chỉ IPv6 không tải được từ HuggingFace): chép thư mục `models\faster-whisper-small\` từ một máy đã có, qua ổ chia sẻ RDP.
    - Thiếu thư viện: chạy lại `CAI-DAT-VPS.bat` khi mạng ổn. Chạy lại nhiều lần không hại gì.
    - Trạm hoặc phiên kênh chưa chạy: mở tool một lần rồi kiểm lại.
+6. **Ngách + kênh đầu tiên (AI tự làm):** chủ đề, quốc gia, ngôn ngữ là đủ:
+   ```
+   python -m core.khoi_tao_ngach --chu-de "nấu ăn tại gia" --quoc-gia VN --ngon-ngu vi --thu   (xem trước, 0 đồng)
+   python -m core.khoi_tao_ngach --chu-de "nấu ăn tại gia" --quoc-gia VN --ngon-ngu vi [--kenh-mau <link>]
+   ```
+   Hoặc trên giao diện: **Số liệu kênh → Thêm kênh → "Ngách mới bằng AI"**. Lệnh viết hồ sơ ngách, dựng kênh, viết lại lời nhắc theo ngách, tìm đối thủ rồi chạy nghiên cứu khởi động. Việc còn lại cho người (giọng đọc, Chrome kênh, bật tiền) nằm ở `CHANNEL/<mã>/KHOI-TAO.md`. Chi tiết: `docs/KENH-VA-NGACH.md`.
 
 ## Vận hành hằng ngày
 Máy tự chạy qua 5 lịch Windows:
@@ -99,7 +105,7 @@ Khi cần xem lỗi trên cửa sổ console, chạy `scripts\CHAY-QT.bat`.
 |---|---|
 | `CLAUDE.md` | Luật cho mọi phiên Claude trên mọi VPS |
 | `docs/PHAT-TRIEN.md` | Sửa mã, đẩy lên kho, phiên bản, bản đồ module |
-| `docs/KENH-VA-NGACH.md` | Thêm kênh, đổi chủ đề/quốc gia, hồ sơ ngách, chia sẻ bài học |
+| `docs/KENH-VA-NGACH.md` | Ngách mới bằng AI, thêm kênh, đổi chủ đề/quốc gia, hồ sơ ngách, chia sẻ bài học |
 | `docs/DANG-VA-BINH-LUAN.md` | Máy đăng (DOM/ảnh), bình luận, OAuth dự phòng |
 | `docs/kien-thuc/` | `chien-luoc.md` (bộ máy chọn nguồn), `con-duong-kenh-thang.md`, `nghien-cuu-bia.md` |
 

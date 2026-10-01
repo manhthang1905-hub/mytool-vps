@@ -595,7 +595,7 @@ _MAU_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]
 _EMAIL_CHO_PHEP = re.compile(
     r"@(?:example\.(?:com|org|net)|[a-z0-9.\-]*\.(?:test|invalid|example|local)|localhost|"
     r"users\.noreply\.github\.com|anthropic\.com|github\.com|shopapi\.vn|"
-    r"mail\.com|email\.com|domain\.com|gmail\.test|congty\.vn|proxy\.vn|[a-z]\.[a-z]{2,3})$", re.I)
+    r"mail\.com|email\.com|domain\.com|congty\.vn|proxy\.vn|[a-z]\.[a-z]{2,3})$", re.I)
 _MAU_DUONG_NGUOI_DUNG = re.compile(
     r"[A-Za-z]:(?:\\\\|\\|/)+Users(?:\\\\|\\|/)+(?!Public\b|Default\b|<|%|\{|\$|\.\.\.|…)([A-Za-z0-9_.\-]+)", re.I)
 _TEN_NGUOI_DUNG_MAU = {"ten", "tên", "user", "username", "you", "ban", "name", "x", "a", "khach", "admin",

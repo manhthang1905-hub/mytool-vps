@@ -323,7 +323,7 @@ def describe(exc: BaseException) -> ErrorAdvice:
                     "nào — việc này chạy trên máy bạn, không tiêu ví.",
             action="Sang tab “Agent xây tool”, bấm “Cài những thứ còn thiếu”, "
                    "đợi chạy xong rồi quay lại bấm lại. Nếu vẫn vậy thì chạy "
-                   "SETUP.bat trong thư mục tool một lần.",
+                   "scripts\\SETUP.bat trong thư mục tool một lần.",
         )
 
     # ── Không phải lỗi của SDK (ghi file, thư mục không tồn tại…) ─────────────

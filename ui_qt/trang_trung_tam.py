@@ -178,13 +178,22 @@ def _pt(so: Any) -> str:
     return "—" if so is None else "{0:.1f}%".format(float(so)).replace(".", ",")
 
 
-def _ten_tep(ma_tep: str) -> str:
-    """Tooltip ô Tệp: tên đầy đủ + insight."""
-    return tt.mo_ta_tep(ma_tep)[1] if ma_tep else ""
+#: Gốc MyTool của chính giao diện này — để tra tệp khán giả theo hồ sơ ngách của nhóm.
+_GOC_TOOL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _tep_ngan(ma_tep: str) -> str:
-    return tt.mo_ta_tep(ma_tep)[0] if ma_tep else "—"
+def _ten_tep(ma_tep: str, nhom: str = "") -> str:
+    """Tooltip ô Tệp: tên đầy đủ + insight. `nhom` (01/10/2026): tra theo hồ sơ ngách của nhóm —
+    kênh ngách khác không còn hiện tên tệp tâm lý Nhật."""
+    if not ma_tep:
+        return ""
+    return (tt.mo_ta_tep(ma_tep, goc=_GOC_TOOL, nhom=nhom) if nhom else tt.mo_ta_tep(ma_tep))[1]
+
+
+def _tep_ngan(ma_tep: str, nhom: str = "") -> str:
+    if not ma_tep:
+        return "—"
+    return (tt.mo_ta_tep(ma_tep, goc=_GOC_TOOL, nhom=nhom) if nhom else tt.mo_ta_tep(ma_tep))[0]
 
 
 def _giam_sat(app):
@@ -352,8 +361,9 @@ class TheKenh(QFrame):
         # nó thuộc về phần "kênh này là kênh gì", tức cái tên. Cột Tệp đầy đủ
         # vẫn còn nguyên ở cách xem Bảng.
         ma_tep = k.get("tep") or ""
+        nhom_k = str(k.get("nhom") or "")
         self._nhan_ten.setToolTip(day_du + ("\nTệp khán giả: {0} — {1}".format(
-            _tep_ngan(ma_tep), _ten_tep(ma_tep)) if ma_tep else ""))
+            _tep_ngan(ma_tep, nhom_k), _ten_tep(ma_tep, nhom_k)) if ma_tep else ""))
 
         chu, nen, vien = _MAU_BAO[self._muc]
         dau = _CHU_BAO[self._muc]
@@ -1015,7 +1025,8 @@ class TrangTrungTam(QWidget):
                 b.setItem(r, 0, _o(chu_kenh if len(chu_kenh) <= 24 else chu_kenh[:23] + "…",
                                    tip=chu_kenh))
                 b.item(r, 0).setData(Qt.UserRole, k["ma"])
-                b.setItem(r, 1, _o(_tep_ngan(k.get("tep") or ""), tip=_ten_tep(k.get("tep") or "")))
+                b.setItem(r, 1, _o(_tep_ngan(k.get("tep") or "", str(k.get("nhom") or "")),
+                                   tip=_ten_tep(k.get("tep") or "", str(k.get("nhom") or ""))))
                 b.setItem(r, 2, _o(bay.get("chu", ""), tip=bay.get("chi_tiet", ""),
                                    mau=_MAU_MUC.get(muc, "")))
                 td = (k.get("video") or {}).get("tieu_de") or ""
@@ -1729,7 +1740,9 @@ class TrangTrungTam(QWidget):
                 b.setRowCount(len(hang))
                 for r, d in enumerate(hang):
                     b.setItem(r, 0, _o(d.get("Kênh")))
-                    b.setItem(r, 1, _o(_tep_ngan(d.get("Tệp") or ""), tip=_ten_tep(d.get("Tệp") or "")))
+                    ten_n = str(n.get("ten") or "")
+                    b.setItem(r, 1, _o(_tep_ngan(d.get("Tệp") or "", ten_n),
+                                       tip=_ten_tep(d.get("Tệp") or "", ten_n)))
                     b.setItem(r, 2, _o((d.get("Tiêu đề") or d.get("Mã video") or "")[:70],
                                        tip=d.get("Tiêu đề") or ""))
                     b.setItem(r, 3, _o(_gon(tt._so(d.get("Lượt xem"))), phai=True))
@@ -2445,8 +2458,7 @@ class HopThemKenh(QDialog):
     # Bước 1 ---------------------------------------------------------------
 
     def _buoc_1(self) -> QWidget:
-        from core.trung_tam import TEP_KHAN_GIA  # noqa: PLC0415
-        from .trang_quan_ly_kenh import _danh_sach_nhom  # noqa: PLC0415
+        from .trang_quan_ly_kenh import _danh_sach_nhom, dien_o_tep  # noqa: PLC0415
 
         w = QWidget()
         v = QVBoxLayout(w)
@@ -2455,7 +2467,43 @@ class HopThemKenh(QDialog):
         goc = self._app.base_dir
         self._r_tao = QRadioButton("Tạo kênh mới từ một kênh mẫu")
         self._r_co = QRadioButton("Dùng kênh có sẵn")
+        # 01/10/2026 — VPS mới / chủ đề mới / quốc gia mới: AI dựng hồ sơ ngách, kênh, lời nhắc và
+        # nghiên cứu khởi động (`core/khoi_tao_ngach.py`), chạy riêng ngoài giao diện.
+        self._r_ai = QRadioButton("Ngách mới bằng AI (chủ đề + quốc gia + ngôn ngữ)")
         self._r_tao.setChecked(True)
+        v.addWidget(self._r_ai)
+        self._hop_ai = QWidget()
+        va = QVBoxLayout(self._hop_ai)
+        va.setContentsMargins(22, 0, 0, 0)
+        va.setSpacing(4)
+        va.addWidget(nhan("Chủ đề (ví dụ: nấu ăn tại gia):"))
+        self._o_ai_chu_de = QLineEdit()
+        va.addWidget(self._o_ai_chu_de)
+        hang_ai = HangXuongDong()
+        hang_ai.addWidget(nhan("Quốc gia:"))
+        self._o_ai_qg = QLineEdit()
+        self._o_ai_qg.setPlaceholderText("VN")
+        self._o_ai_qg.setMaximumWidth(70)
+        hang_ai.addWidget(self._o_ai_qg)
+        hang_ai.addWidget(nhan("Ngôn ngữ:"))
+        self._o_ai_nn = QLineEdit()
+        self._o_ai_nn.setPlaceholderText("vi")
+        self._o_ai_nn.setMaximumWidth(70)
+        hang_ai.addWidget(self._o_ai_nn)
+        va.addLayout(hang_ai)
+        va.addWidget(nhan("Kênh mẫu hoặc từ khoá (không bắt buộc, cách nhau bằng dấu phẩy):"))
+        self._o_ai_mau = QLineEdit()
+        self._o_ai_mau.setPlaceholderText("https://www.youtube.com/@..., món ngon mỗi ngày")
+        va.addWidget(self._o_ai_mau)
+        va.addWidget(nhan("Cho kênh:"))
+        self._o_ai_kenh = QComboBox()
+        self._o_ai_kenh.addItem("(kênh mới — tự đặt mã theo thư mục trình duyệt)", "")
+        for ma in liet_ke_kenh(goc):
+            self._o_ai_kenh.addItem("Đổi chủ đề kênh {0}".format(ma), ma)
+        va.addWidget(self._o_ai_kenh)
+        self._o_ai_thu = QCheckBox("Chạy thử — chỉ dựng bản nháp, không tốn tiền")
+        va.addWidget(self._o_ai_thu)
+        v.addWidget(self._hop_ai)
         v.addWidget(self._r_tao)
         self._hop_tao = QWidget()
         vt = QVBoxLayout(self._hop_tao)
@@ -2487,9 +2535,10 @@ class HopThemKenh(QDialog):
         vt.addWidget(self._o_nhom)
         vt.addWidget(nhan("Tệp khán giả kênh này nhắm tới:"))
         self._o_tep = QComboBox()
-        self._o_tep.addItem("(chưa chọn)", "")
-        for ma_tep, ten_tep in TEP_KHAN_GIA:
-            self._o_tep.addItem("{0} — {1}".format(ma_tep, ten_tep), ma_tep)
+        # 01/10/2026: tệp theo hồ sơ ngách của nhóm đang chọn (trước đây cứng năm tệp tâm lý Nhật).
+        dien_o_tep(self._o_tep, goc, self._o_nhom.currentText().strip())
+        self._o_nhom.currentTextChanged.connect(
+            lambda t: dien_o_tep(self._o_tep, goc, str(t or "").strip()))
         vt.addWidget(self._o_tep)
         v.addWidget(self._hop_tao)
         v.addWidget(self._r_co)
@@ -2498,16 +2547,45 @@ class HopThemKenh(QDialog):
             self._o_co.addItem(ma, ma)
         self._o_co.setEnabled(False)
         v.addWidget(self._o_co)
-        self._r_tao.toggled.connect(self._doi_kieu)
+        self._r_tao.toggled.connect(lambda _b: self._doi_kieu())
+        self._r_co.toggled.connect(lambda _b: self._doi_kieu())
+        self._r_ai.toggled.connect(lambda _b: self._doi_kieu())
+        self._doi_kieu()
         v.addStretch(1)
         return w
 
-    def _doi_kieu(self, tao: bool) -> None:
-        self._hop_tao.setEnabled(tao)
-        self._o_co.setEnabled(not tao)
+    def _doi_kieu(self, *_a) -> None:
+        self._hop_tao.setEnabled(self._r_tao.isChecked())
+        self._o_co.setEnabled(self._r_co.isChecked())
+        self._hop_ai.setEnabled(self._r_ai.isChecked())
+
+    def _khoi_tao_ai(self) -> bool:
+        """Mở `python -m core.khoi_tao_ngach …` TÁCH KHỎI giao diện (vài phút, gọi AI qua ví) rồi
+        đóng hộp. Kênh mới hiện trong danh sách khi lượt khởi tạo xong; nhật ký ghi ra tệp."""
+        from core import khoi_tao_ngach  # noqa: PLC0415
+
+        chu_de = self._o_ai_chu_de.text().strip()
+        qg = (self._o_ai_qg.text().strip() or "VN").upper()
+        nn = (self._o_ai_nn.text().strip() or "vi").lower()
+        if not chu_de:
+            self._app.show_message("Thiếu chủ đề", "Gõ chủ đề của ngách, ví dụ: nấu ăn tại gia.")
+            return False
+        mau = [x.strip() for x in self._o_ai_mau.text().split(",") if x.strip()]
+        kenh_mau = [x for x in mau if "youtube.com/" in x or x.startswith("@")]
+        tu_khoa = [x for x in mau if x not in kenh_mau]
+        ma = str(self._o_ai_kenh.currentData() or "")
+        ok, chu = khoi_tao_ngach.chay_nen(
+            self._app.base_dir, chu_de=chu_de, quoc_gia=qg, ngon_ngu=nn, kenh_mau=kenh_mau,
+            tu_khoa=tu_khoa, ma_kenh=ma, doi_chu_de=bool(ma), thu=self._o_ai_thu.isChecked())
+        self._app.show_message("Ngách mới bằng AI" if ok else "Chưa chạy được", chu)
+        if ok:
+            self.reject()
+        return False
 
     def _xong_buoc_1(self) -> bool:
         goc = self._app.base_dir
+        if self._r_ai.isChecked():
+            return self._khoi_tao_ai()
         if self._r_co.isChecked():
             self._ma = str(self._o_co.currentData() or "").strip()
             if not self._ma:

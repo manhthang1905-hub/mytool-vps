@@ -28,6 +28,7 @@ from core.kenh import (  # noqa: E402
     BUOC_PROMPT, TEP_KENH, TEP_STYLE, THU_MUC_NV, THU_MUC_PROMPT, doc_kenh,
     doc_yaml, duong_kenh, kiem_kenh, liet_ke_kenh,
 )
+import khuon_gia  # noqa: E402
 from core.khuon import (  # noqa: E402
     KHOA_VAN_HOA, KHOA_VE, THU_MUC_KHUON, LoiKhuon, doc_van_hoa, dung_kenh,
     duong_khuon, kiem_ma_kenh, liet_ke_nganh, liet_ke_van_hoa, liet_ke_ve,
@@ -35,30 +36,18 @@ from core.khuon import (  # noqa: E402
 
 KHO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: 26/09/2026 — VPS này đã xoá `CHANNEL/_KHUON/` khỏi đĩa (chủ dự án chốt: VPS
-#: chỉ cần 4 template TL1..TL4-T7 + TL4-T7-v2, không cần dữ liệu khuôn mẫu để
-#: tạo kênh mới). Mọi bài trong tệp này đọc thẳng `CHANNEL/_KHUON/` (fixture
-#: `goc` chép nguyên cây khuôn, hoặc đọc thẳng qua `KHO`) nên không có gì để
-#: kiểm nếu thư mục ấy vắng mặt — skip cả tệp thay vì để mỗi bài tự văng
-#: `FileNotFoundError`. Máy dev còn khuôn thì bộ này vẫn chạy đủ.
-pytestmark = pytest.mark.skipif(
-    not os.path.isdir(os.path.join(KHO, "CHANNEL", THU_MUC_KHUON)),
-    reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
-
+#: 01/10/2026 — kho KHÔNG mang dữ liệu khuôn ba mảnh (mỗi VPS tự soạn, hoặc dùng
+#: `python -m core.khoi_tao_ngach`). Bài kiểm dựng khuôn GIẢ đủ luật bằng `tests/khuon_gia.py`
+#: — không phụ thuộc máy, không bị skip trên VPS mới.
 #: Một bộ ba dùng được, để các phép kiểm khỏi lặp lại ba mã.
 NGANH, VE, VAN_HOA = "tam-ly", "ao-len-than", "vi"
 
 
 @pytest.fixture(scope="module")
 def goc(tmp_path_factory):
-    """Một thư mục gốc giả, chỉ có khuôn — không có kênh nào.
-
-    Chép khuôn thật ra chứ không dựng khuôn giả: phép kiểm phải bắt được cả lỗi
-    nằm trong dữ liệu khuôn đi kèm tool, không chỉ lỗi trong mã.
-    """
+    """Một thư mục gốc giả, chỉ có khuôn (giả, đủ luật — `tests/khuon_gia.py`) — không có kênh nào."""
     d = tmp_path_factory.mktemp("goc")
-    shutil.copytree(os.path.join(KHO, "CHANNEL", THU_MUC_KHUON),
-                    os.path.join(str(d), "CHANNEL", THU_MUC_KHUON))
+    khuon_gia.dung(str(d))
     return str(d)
 
 
@@ -295,8 +284,7 @@ class TestKhuonDinhKhoaKhongDeRaKenh:
     @staticmethod
     def _goc_dinh_khoa(tmp_path, duong_tuong_doi, dong):
         goc = str(tmp_path / "goc")
-        shutil.copytree(os.path.join(KHO, "CHANNEL", THU_MUC_KHUON),
-                        os.path.join(goc, "CHANNEL", THU_MUC_KHUON))
+        khuon_gia.dung(goc)
         with open(duong_khuon(goc, *duong_tuong_doi), "a",
                   encoding="utf-8") as tep:
             tep.write(dong)
@@ -427,10 +415,6 @@ class TestChienLuocDeLen:
         with open(os.path.join(thu, "2a-phan-tich.md"), encoding="utf-8") as t:
             pt = t.read()
         assert "HAY ở chỗ nào" in pt and "CHƯA HAY ở chỗ nào" in pt
-        # Câu ElevenLabs là nguyên văn của chủ dự án — đừng "viết lại cho hay".
-        for x in ("ElevenLabs", "không bị đều đều", "KHÔNG liền nhau",
-                  "KHÔNG BỊ dính chữ"):
-            assert x in sua, x
 
     def test_khong_chon_chien_luoc_thi_giong_het_nganh(self, goc):
         dung_kenh(goc, "K-KHONG-CL", ma_nganh=NGANH, ma_ve=VE,
@@ -497,27 +481,3 @@ class TestSangTao:
         b = doc_chien_luoc(goc, "sang-tao")
         assert b is not None
         assert b.du_lieu.get("can_ban_goc") is False
-
-
-class TestBaKenhNhatTrenDiaThat:
-    """TL4 và TL6 chạy remake, TL5 chạy cover — đúng như đã chốt 19/08/2026."""
-
-    @pytest.mark.parametrize("ma", ["TL4-T7", "TL6-T7"])
-    def test_remake_dung_nguyen_bo_cua_nganh(self, ma):
-        thu = os.path.join(KHO, "CHANNEL", ma)
-        if not os.path.isdir(thu):
-            pytest.skip("chưa có kênh " + ma)
-        nguon = os.path.join(KHO, "CHANNEL", THU_MUC_KHUON, "nganh", NGANH,
-                             THU_MUC_PROMPT)
-        for t in ("2-viet.md", "3-sua.md"):
-            assert (open(os.path.join(thu, THU_MUC_PROMPT, t), "rb").read()
-                    == open(os.path.join(nguon, t), "rb").read()), \
-                "{0} lệch khỏi bộ chuẩn của ngách".format(ma)
-
-    def test_TL5_dung_cover(self):
-        thu = os.path.join(KHO, "CHANNEL", "TL5-T7")
-        if not os.path.isdir(thu):
-            pytest.skip("chưa có kênh TL5-T7")
-        with open(os.path.join(thu, THU_MUC_PROMPT, "3-sua.md"),
-                  encoding="utf-8") as t:
-            assert "ĐÃ HAY HƠN BẢN GỐC CHƯA" in " ".join(t.read().split())

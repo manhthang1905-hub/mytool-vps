@@ -28,33 +28,27 @@ from core.khuon import (  # noqa: E402
     KHOA_VAN_HOA, KHOA_VE, THU_MUC_KHUON, LoiKhuon, dung_kenh, duong_khuon,
     liet_ke_nganh, liet_ke_van_hoa, liet_ke_ve,
 )
+import khuon_gia  # noqa: E402
 from core.soan_khuon import (  # noqa: E402
     ghi_chien_luoc, ghi_nganh, ghi_van_hoa, ghi_ve, kiem_ma_bo, xoa_bo,
 )
 
 KHO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: 26/09/2026 — VPS này đã xoá `CHANNEL/_KHUON/` khỏi đĩa (chủ dự án chốt: VPS
-#: chỉ cần 4 template TL1..TL4-T7 + TL4-T7-v2). Fixture `goc` chép nguyên cây
-#: khuôn thật để ghi đè lên — không có gì để chép thì skip cả tệp thay vì mỗi
-#: bài tự văng `FileNotFoundError`.
-pytestmark = pytest.mark.skipif(
-    not os.path.isdir(os.path.join(KHO, "CHANNEL", THU_MUC_KHUON)),
-    reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
-
+#: 01/10/2026 — kho không mang dữ liệu khuôn ba mảnh: fixture `goc` dựng khuôn GIẢ đủ luật
+#: (`tests/khuon_gia.py`) để ghi đè lên — chạy trên mọi máy, không skip.
 NGANH, VE, VAN_HOA = "tam-ly", "ao-len-than", "vi"
 
 
 @pytest.fixture
 def goc(tmp_path):
-    """Thư mục gốc giả với khuôn thật chép vào — mỗi phép kiểm một bản riêng.
+    """Thư mục gốc giả với khuôn giả đủ luật (`tests/khuon_gia.py`) — mỗi phép kiểm một bản riêng.
 
     Function-scope chứ không module-scope: các phép kiểm ở đây GHI vào khuôn,
     dùng chung một bản là chúng dẫm chân nhau.
     """
     d = str(tmp_path / "goc")
-    shutil.copytree(os.path.join(KHO, "CHANNEL", THU_MUC_KHUON),
-                    os.path.join(d, "CHANNEL", THU_MUC_KHUON))
+    khuon_gia.dung(d)
     return d
 
 

@@ -63,3 +63,10 @@ tep_khan_gia:
 mau_tieu_de: "kênh YouTube <ngách> tiếng Anh cho khán giả Mỹ"
 mo_ta_kenh_cho_ai: ""
 mo_ta_phan_cum: "tiếng Anh (ngách <ngách>)"
+
+# ── Khởi tạo ngách bằng AI (`python -m core.khoi_tao_ngach` viết các khoá này; khuôn tay thì điền) ─
+tieu_chi_doi_thu: ["<ngôn ngữ>", "<nội dung chính>", "<khán giả>", "<dạng video dài có lời đọc>"]
+luat_nan_khuon: ["<khuôn tiêu đề đang thắng của thị trường này>", "<mồi câu đầu tiêu đề>"]
+tu_khoa_tim: ["<cụm người xem gõ trên YouTube>"]
+the_loai_en: "<thể loại bằng tiếng Anh, vd home cooking>"
+khan_gia_mo_ta: "<khán giả thật, một câu>"

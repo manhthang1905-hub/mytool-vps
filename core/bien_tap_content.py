@@ -1074,9 +1074,24 @@ _TEN_TIENG = {"ja": "tiếng Nhật", "vi": "tiếng Việt", "en": "tiếng Anh
 
 
 def che_do_de_bai(goc: str, ma_kenh: str) -> str:
-    """`"gon"` khi kenh.yaml khai `de_bai_bien_tap: "gon"`, ngược lại `""` (đề bài cũ)."""
-    gt = str(_yaml_kenh(goc, ma_kenh).get(KHOA_DE_BAI) or "").strip().lower()
-    return DE_BAI_GON if gt == DE_BAI_GON else ""
+    """`"gon"` khi kenh.yaml khai `de_bai_bien_tap: "gon"`, ngược lại `""` (đề bài cũ).
+
+    01/10/2026: kenh.yaml KHÔNG khai khoá này mà kênh thuộc ngách KHÁC ngách mặc định (khởi tạo ngách
+    bằng AI, khuôn `_KHUON`) → `"gon"`: đề bài cũ viết cứng "kênh YouTube tiếng Nhật… chỉ TÂM LÝ mới đúng
+    ngách", đề bài gọn đọc tiếng/khán giả/luật ngách từ hồ sơ. Kênh tâm lý Nhật không đổi."""
+    tho = _yaml_kenh(goc, ma_kenh).get(KHOA_DE_BAI)
+    gt = str(tho or "").strip().lower()
+    if gt == DE_BAI_GON:
+        return DE_BAI_GON
+    if tho is None:
+        try:
+            from . import ho_so_ngach  # noqa: PLC0415
+
+            if not ho_so_ngach.la_ngach_mac_dinh(ho_so_ngach.doc_ngach(goc, ma_kenh)):
+                return DE_BAI_GON
+        except Exception:  # noqa: BLE001
+            pass
+    return ""
 
 
 def _gia_tri(goc: str, ma_kenh: str, nc: Any, khoa: str, mac_dinh: Any) -> Any:
@@ -1959,7 +1974,20 @@ def danh_gia_lai(goc: str, ma_kenh: str, *, goi_chat: Optional[Callable[..., str
         try:
             from .goi_van_ban import loc_json  # noqa: PLC0415
 
-            tho = goi_chat(DE_BAI_VI_SAO_SAI.format(kenh=ma_kenh, ca=ca), mo_hinh=thang_mo_hinh(goc, ma_kenh)[0],
+            de_bai_vs = DE_BAI_VI_SAO_SAI
+            try:  # 01/10/2026: ngách khác ngách mặc định → đúng tiếng của kênh, không "tiếng Nhật"
+                from . import ho_so_ngach  # noqa: PLC0415
+
+                hs_vs = ho_so_ngach.doc_ngach(goc, ma_kenh)
+                if not ho_so_ngach.la_ngach_mac_dinh(hs_vs):
+                    tieng_vs = ho_so_ngach.ten_tieng(str(_yaml_kenh(goc, ma_kenh).get("ngon_ngu") or "")
+                                                     or hs_vs.ngon_ngu())
+                    de_bai_vs = DE_BAI_VI_SAO_SAI.replace(
+                        "kênh YouTube remake tiếng Nhật", "kênh YouTube remake " + (tieng_vs or "").replace(
+                            "{", "(").replace("}", ")"), 1)
+            except Exception:  # noqa: BLE001
+                de_bai_vs = DE_BAI_VI_SAO_SAI
+            tho = goi_chat(de_bai_vs.format(kenh=ma_kenh, ca=ca), mo_hinh=thang_mo_hinh(goc, ma_kenh)[0],
                            khoa="{0}:bien-tap-cham:{1}".format(ma_kenh, bay_gio.strftime("%Y%m%d%H%M")),
                            toi_da_token=4096)  # 1500 → 4096: trần thấp làm cổng trả rỗng (30/09)
             du = loc_json(tho)

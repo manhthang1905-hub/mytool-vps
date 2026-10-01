@@ -99,22 +99,25 @@ class TestNhanBan:
           "story-mau-nuoc đã bị dọn khỏi đĩa (VPS chỉ cần 4 template TL1..TL4)")
 @pytest.mark.parametrize("ma", KENH_MAU)
 def test_kenh_mau_ship_kem_tool_co_co_mau(ma):
+    # 01/10/2026: kho chung (.gitignore danh sách trắng) KHÔNG mang thư mục kênh nào — kênh mẫu chỉ
+    # còn trên máy cài từ bản ZIP cũ. Clone sạch thì không có gì để soi.
+    if not os.path.isfile(os.path.join(GOC, "CHANNEL", ma, "kenh.yaml")):
+        pytest.skip("kho không mang kênh mẫu " + ma)
     k = doc_kenh(GOC, ma)
     assert k.mau_cua_tool is True and k.kenh_rieng is False, ma
 
 
-@pytest.mark.skipif(
-    not os.path.isdir(os.path.join(GOC, "CHANNEL", "_KHUON")),
-    reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")
 def test_tao_kenh_moi_la_kenh_rieng(tmp_path):
     """`dung_kenh` (Tạo kênh mới) đánh dấu kenh_rieng — cập nhật không đụng."""
     import shutil
 
     from core.khuon import dung_kenh
 
+    import khuon_gia
+
     goc = tmp_path / "goc"
-    shutil.copytree(os.path.join(GOC, "CHANNEL", "_KHUON"), str(goc / "CHANNEL" / "_KHUON"))
-    dung_kenh(str(goc), "K-MOI", ma_nganh="tam-ly", ma_ve="trang-tron-nen-dao",
+    khuon_gia.dung(str(goc))     # khuôn giả đủ luật — kho không mang dữ liệu khuôn ba mảnh
+    dung_kenh(str(goc), "K-MOI", ma_nganh="tam-ly", ma_ve="ao-len-than",
               ma_van_hoa="vi", voice_id="g")
     k = doc_kenh(str(goc), "K-MOI")
     assert k.kenh_rieng is True and k.mau_cua_tool is False

@@ -369,17 +369,34 @@ def _khuc_ung_vien(so_do: SoDo) -> str:
     return "\n".join(dong)
 
 
+def de_bai_loc_cho(goc: str, kenh: str) -> str:
+    """Đề bài bậc 2 theo ngách của kênh (01/10/2026): ngách mặc định → `DE_BAI_LOC` nguyên văn; ngách
+    khác → cùng đề bài, đổi ví dụ "kênh tạp học có vài video tâm lý" thành ví dụ trung tính."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        if ho_so_ngach.la_ngach_mac_dinh(ho_so_ngach.doc_ngach(goc, kenh)):
+            return DE_BAI_LOC
+        return DE_BAI_LOC.replace("ví dụ kênh tạp học có vài video tâm lý",
+                                  "ví dụ kênh tạp nham chỉ có vài video đúng chủ đề")
+    except Exception:  # noqa: BLE001
+        return DE_BAI_LOC
+
+
 def hoi_ai_kenh(client: Any, so_do: SoDo, *, mo_ta_kenh: str = "",
                 ngon_ngu: str = "", phut_muc_tieu: float = 0.0,
                 goi: Callable[..., str] = goi_van_ban,
-                on_log: Optional[Callable[[str], None]] = None) -> DanhGia:
+                on_log: Optional[Callable[[str], None]] = None,
+                de_bai: str = "") -> DanhGia:
     """Một lượt hỏi AI về MỘT kênh → `DanhGia`. **Chạy ở luồng nền.**
 
     Trả về `DanhGia` rỗng-với-lý-do thay vì ném lỗi khi AI trả rác: một kênh
     chấm hỏng không được giết cả lượt lọc 20 kênh.
+
+    `de_bai` (01/10/2026): đề bài theo ngách (`de_bai_loc_cho`); rỗng = `DE_BAI_LOC`.
     """
     tho = goi(client, [
-        {"role": "system", "content": DE_BAI_LOC},
+        {"role": "system", "content": de_bai or DE_BAI_LOC},
         {"role": "user", "content": "{0}\n\n{1}".format(
             _khuc_kenh_toi(mo_ta_kenh, ngon_ngu, phut_muc_tieu),
             _khuc_ung_vien(so_do))},

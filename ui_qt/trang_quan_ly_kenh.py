@@ -44,6 +44,31 @@ from core.trung_tam import TEP_KHAN_GIA  # noqa: E402
 from core.trung_tam import _so_tep as _so_tep_gui  # noqa: E402 — mã tệp từ slug
 
 
+def dien_o_tep(o: QComboBox, goc: str, nhom: str) -> None:
+    """Điền ô chọn tệp khán giả theo hồ sơ ngách của NHÓM (`trung_tam.tep_khan_gia_cho_nhom`).
+
+    01/10/2026: trước đây mọi ô chọn tệp đọc thẳng năm tệp tâm lý Nhật (`TEP_KHAN_GIA`) — kênh ngách
+    khác không chọn được tệp của chính ngách mình. Nhóm trống/không có hồ sơ → năm tệp cũ. Giữ lựa
+    chọn đang có nếu còn trong danh sách; không phát tín hiệu (không kích tự lưu)."""
+    from core.trung_tam import tep_khan_gia_cho_nhom  # noqa: PLC0415
+
+    dang = o.currentData()
+    o.blockSignals(True)
+    try:
+        o.clear()
+        o.addItem("(chưa chọn)", "")
+        try:
+            bang = tep_khan_gia_cho_nhom(goc, nhom)
+        except Exception:  # noqa: BLE001 — hồ sơ hỏng: năm tệp cũ, không vỡ hộp thoại
+            bang = tuple((m, t, t) for m, t in TEP_KHAN_GIA)
+        for ma_tep, ten_tep, _ngan in bang:
+            o.addItem("{0} — {1}".format(ma_tep, ten_tep), ma_tep)
+        i = o.findData(dang) if dang else -1
+        o.setCurrentIndex(i if i >= 0 else 0)
+    finally:
+        o.blockSignals(False)
+
+
 def _ghi_khoa_tu_chay(goc: str, ma: str, **khoa: Any) -> None:
     """Ghi một loạt khoá vào `kenh.yaml` của kênh `ma` — autosave của thẻ Tự chạy.
 
@@ -104,9 +129,9 @@ class HopTaoKenhTrongNhom(QDialog):
 
         v.addWidget(nhan("Tệp khán giả:"))
         self._o_tep = QComboBox()
-        self._o_tep.addItem("(chưa chọn)", "")
-        for ma_tep, ten_tep in TEP_KHAN_GIA:
-            self._o_tep.addItem("{0} — {1}".format(ma_tep, ten_tep), ma_tep)
+        dien_o_tep(self._o_tep, app.base_dir, self._o_nhom.currentText().strip())
+        self._o_nhom.currentTextChanged.connect(
+            lambda t: dien_o_tep(self._o_tep, app.base_dir, str(t or "").strip()))
         v.addWidget(self._o_tep)
 
         hang = HangXuongDong()
@@ -307,9 +332,7 @@ class TheTuChay(QFrame):
         hang_nhom.addWidget(self._o_nhom)
         hang_nhom.addWidget(nhan("Tệp khán giả:"))
         self._o_tep = QComboBox()
-        self._o_tep.addItem("(chưa chọn)", "")
-        for ma_tep, ten_tep in TEP_KHAN_GIA:
-            self._o_tep.addItem("{0} — {1}".format(ma_tep, ten_tep), ma_tep)
+        dien_o_tep(self._o_tep, self._app.base_dir, "")
         self._o_tep.currentIndexChanged.connect(lambda _i: self._tu_luu_tu_chay())
         hang_nhom.addWidget(self._o_tep)
         v.addLayout(hang_nhom)
@@ -574,6 +597,7 @@ class TheTuChay(QFrame):
             self._o_san_xuat_truoc.setValue(max(1, int(kenh.san_xuat_truoc_gio or 24)))
             self._o_thu_muc_done.dat_thang(kenh.thu_muc_done)
             self._nap_combo_nhom(kenh.nhom)
+            dien_o_tep(self._o_tep, self._app.base_dir, kenh.nhom)
             self._nhan_ket_qua_thu.setText("")
             # ═══ ĐỪNG ĐÁNH RƠI TỆP KHÁN GIẢ ═══
             #

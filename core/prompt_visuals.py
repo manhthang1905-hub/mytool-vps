@@ -435,7 +435,7 @@ def dung_boi_canh(kich_ban: str = "", mau_hinh: str = "auto",
 #: "transcribe.local: thieu model faster-whisper-small." thì đúng nhưng vô dụng:
 #: người đọc không biết model là gì và không biết bấm vào đâu.
 _DICH_THIEU = (
-    ("thieu model", "Máy bạn chưa có bộ nghe tiếng ({0}). Chạy lại SETUP.bat "
+    ("thieu model", "Máy bạn chưa có bộ nghe tiếng ({0}). Chạy lại scripts\\SETUP.bat "
                     "một lần khi có mạng — nó tải bộ nghe (khoảng 0,5 GB) về "
                     "thẳng thư mục tool, các lần sau dùng lại."),
     ("thieu thanh phan", "Máy bạn thiếu thư viện: {0}. Mở tab Agent, bấm "

@@ -212,6 +212,18 @@ def _chon(bo: Optional[Dict[str, List[str]]], khoa: Sequence[str]) -> Dict[str, 
 
 _CHU_NHAT = re.compile(r"[぀-ヿ一-鿿]")
 
+#: Bảng chữ nhận ra một tiếng (ngoài tiếng Nhật) — `dung_tieng`. Tiếng Việt: chữ có dấu riêng.
+_CHU_THEO_TIENG = {
+    "vi": re.compile(r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]",
+                     re.IGNORECASE),
+    "ko": re.compile(r"[가-힣ᄀ-ᇿ]"),
+    "zh": re.compile(r"[一-鿿]"),
+    "th": re.compile(r"[฀-๿]"),
+    "ru": re.compile(r"[Ѐ-ӿ]"),
+    "ar": re.compile(r"[؀-ۿ]"),
+    "hi": re.compile(r"[ऀ-ॿ]"),
+}
+
 
 def ngon_ngu_kenh(goc: str, kenh: str) -> str:
     """`ngon_ngu` trong kenh.yaml của kênh — thiếu thì trả "" (không lọc theo tiếng)."""
@@ -239,6 +251,11 @@ def dung_tieng(chu: str, lang: str) -> bool:
         return True
     if lang.startswith("ja"):
         return bool(_CHU_NHAT.search(chu))
+    # 01/10/2026 — tiếng có chữ viết RIÊNG nhận ra được bằng bảng chữ (VPS ngách/quốc gia khác).
+    # Tiếng dùng chung chữ La-tinh trơn (en, es, fr…) không đoán được → không lọc (như cũ).
+    khuon = _CHU_THEO_TIENG.get(lang.lower().split("-")[0])
+    if khuon is not None:
+        return bool(khuon.search(chu))
     return True
 
 
@@ -413,6 +430,38 @@ DE_BAI_TAM_LY = (
     "Trả về JSON duy nhất dạng {{\"1\": \"dung\", \"2\": \"lech\", …}} theo số thứ tự, đủ mọi số. Không giải thích."
 )
 
+#: 01/10/2026 — đề bài lọc cho NGÁCH KHÁC ngách mặc định (khởi tạo ngách bằng AI, khuôn `_KHUON`).
+#: `DE_BAI_TAM_LY` ở trên liệt kê "nấu ăn, mẹo vặt…" là LỆCH — đúng cho tâm lý Nhật, nhưng giết
+#: sạch nguồn của một kênh nấu ăn. Ngách khác: cái gì lệch là do `mo_ta_cho_loc_ai` của chính nó nói.
+DE_BAI_NGACH = (
+    "Bạn lọc NGUỒN cho một kênh YouTube {tieng} làm theo lối remake (xem video đối thủ đã thắng rồi "
+    "viết lại kịch bản). Bạn nhận một danh sách tiêu đề video (kèm tên kênh). Với MỖI tiêu đề, ĐỌC "
+    "NGHĨA — không dò từ khoá — và trả lời: video này có thuộc NGÁCH của kênh không.\n\n"
+    "NGÁCH:\n{ngach}\n\n"
+    "'dung' = trọng tâm video là thứ của ngách trên (kể cả khi không có chữ nào quen thuộc).\n"
+    "'lech' = trọng tâm là thứ khác ngách trên (xem phần 'không thuộc ngách' nếu có), hoặc là Shorts, "
+    "video tổng hợp/cắt clip, tóm tắt, reup.\n\n"
+    "Tên kênh chỉ là gợi ý bối cảnh — một kênh tạp nham vẫn có video đúng ngách, một kênh đúng ngách vẫn "
+    "có video lệch.\n\n"
+    "Trả về JSON duy nhất dạng {{\"1\": \"dung\", \"2\": \"lech\", …}} theo số thứ tự, đủ mọi số. Không giải thích."
+)
+
+
+def de_bai_loc_cho(goc: str, kenh: str) -> str:
+    """Khuôn đề bài lọc nghĩa của kênh (còn chỗ `{ngach}`): ngách mặc định → `DE_BAI_TAM_LY` nguyên
+    văn; ngách khác → `DE_BAI_NGACH` theo tiếng của kênh. Hỏng → `DE_BAI_TAM_LY`."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return DE_BAI_TAM_LY
+        tieng = ho_so_ngach.ten_tieng(ngon_ngu_kenh(goc, kenh) or hs.ngon_ngu()) or "cùng tiếng với kênh"
+        return DE_BAI_NGACH.replace("{tieng}", tieng)
+    except Exception:  # noqa: BLE001
+        return DE_BAI_TAM_LY
+
+
 #: Ngữ cảnh cho `phan_loai_bang_ai` khi nơi gọi (mot_nut: `lambda tds: phan_loai_bang_ai(client,
 #: tds)`) không truyền: `hoan_thien` đặt `{"ngach": …, "kenh_cua": {tiêu đề: tên kênh}}` quanh
 #: đúng lời gọi `goi_ai` của nó. Dùng contextvar để không phải sửa chữ ký hàm của nơi gọi.
@@ -449,8 +498,17 @@ def mo_ta_ngach_cho_ai(goc: str, kenh: str) -> str:
         pass
     lang = ngon_ngu_kenh(goc, kenh)
     if lang:
-        mo_ta += "\nChỉ nhận video viết/nói bằng tiếng của kênh ({0}); tiêu đề tiếng khác → 'lech'.".format(
-            "tiếng Nhật" if lang.startswith("ja") else lang)
+        if lang.startswith("ja"):
+            ten = "tiếng Nhật"
+        else:
+            # 01/10/2026: tên tiếng thay cho mã trần ("vi" → "tiếng Việt") — tiếng Nhật giữ nguyên câu cũ.
+            try:
+                from .ho_so_ngach import ten_tieng  # noqa: PLC0415
+
+                ten = ten_tieng(lang) or lang
+            except Exception:  # noqa: BLE001
+                ten = lang
+        mo_ta += "\nChỉ nhận video viết/nói bằng tiếng của kênh ({0}); tiêu đề tiếng khác → 'lech'.".format(ten)
     return mo_ta
 
 
@@ -475,7 +533,9 @@ def phan_loai_bang_ai(client, tieu_de: Sequence[str], *,
         mo_ta_ngach = str(nc.get("ngach") or "") or MO_TA_NGACH_MAC_DINH
     if kenh_cua is None:
         kenh_cua = nc.get("kenh_cua") or {}
-    de_bai = DE_BAI_TAM_LY.format(ngach=mo_ta_ngach)
+    # 01/10/2026: `hoan_thien` đặt khuôn đề bài theo ngách của kênh (`de_bai_loc_cho`) — không có
+    # ngữ cảnh (nơi gọi cũ, bài kiểm) thì đề bài tâm lý cũ, nguyên văn.
+    de_bai = str(nc.get("de_bai") or DE_BAI_TAM_LY).format(ngach=mo_ta_ngach)
     ra: Dict[str, str] = {}
     tds = [str(t) for t in tieu_de if str(t).strip()]
     for dau in range(0, len(tds), so_moi_lo):
@@ -572,7 +632,8 @@ def _phan_loai_theo_nghia(goc: str, kenh: str, dong: List[Dict[str, str]], bo_nh
             "để lượt sau {4}).".format(len(ai), len(can_hoi), len(lung_td), len(can_hoi) - len(lung_td),
                                        dem["de_luot_sau"]))
     if can_hoi:
-        tok = _NGU_CANH_AI.set({"ngach": mo_ta_ngach_cho_ai(goc, kenh), "kenh_cua": kenh_cua})
+        tok = _NGU_CANH_AI.set({"ngach": mo_ta_ngach_cho_ai(goc, kenh), "kenh_cua": kenh_cua,
+                                "de_bai": de_bai_loc_cho(goc, kenh)})
         try:
             moi = goi_ai(can_hoi) or {}
         except Exception as loi:  # noqa: BLE001 — AI hỏng: đường lùi là từ khoá
@@ -725,11 +786,20 @@ def hoan_thien(goc: str, kenh: str, *, lang: str = "",
                 log("  AI phân loại: {0} tiêu đề đã hỏi trước đây (dùng lại), hỏi mới {1}."
                     .format(len(phan), len(can_hoi)))
         if can_hoi:
+            # 01/10/2026: ngách KHÁC ngách mặc định → đề bài + mô tả theo hồ sơ ngách (đường cũ không
+            # đặt ngữ cảnh, nên kênh tâm lý Nhật đi y hệt trước).
+            tok_cu = None
+            de_bai_cu = de_bai_loc_cho(goc, kenh)
+            if de_bai_cu is not DE_BAI_TAM_LY:
+                tok_cu = _NGU_CANH_AI.set({"ngach": mo_ta_ngach_cho_ai(goc, kenh), "de_bai": de_bai_cu})
             try:
                 moi = goi_ai(can_hoi) or {}
             except Exception as loi:  # noqa: BLE001 — AI hỏng thì phần lưỡng lự để nguyên
                 log("  AI phân loại hỏng, để nguyên phần lưỡng lự: {0}".format(str(loi)[:90]))
                 moi = {}
+            finally:
+                if tok_cu is not None:
+                    _NGU_CANH_AI.reset(tok_cu)
             if nho_ai and moi:
                 try:
                     ncc.ai_trang_chu_ghi(goc, kenh, moi)

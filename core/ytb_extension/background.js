@@ -681,6 +681,12 @@ async function hoiLenh() {
       await datLich();
     }
   }
+  // 01/10/2026 — ngôn ngữ của kênh (kenh.yaml `ngon_ngu`): `loi-thoai.js` chọn đúng track phụ đề
+  // theo nó (trước đây cứng 'ja'). Thiếu (trạm cũ) thì giữ giá trị đang có.
+  if (lenh && lenh.ngon_ngu) {
+    const nn = String(lenh.ngon_ngu).slice(0, 12);
+    if (nn !== (await st('lt_ngon_ngu', ''))) await luu('lt_ngon_ngu', nn);
+  }
   if (lenh && lenh.chup === 'het') {
     log('tram ra lenh: CHUP LAI TAT CA (lenh tay tu tool)');
     await quetNgayHet();
@@ -977,6 +983,7 @@ async function ltDanhSach(host, kenh) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     if (j && j.loi) log(`lời thoại: trạm nói ${j.loi}`);
+    if (j && j.ngon_ngu) { try { await luu('lt_ngon_ngu', String(j.ngon_ngu).slice(0, 12)); } catch (e) {} }
     return (j && j.video) || [];
   } catch (e) { log(`lời thoại: không hỏi được danh sách (${e.message})`); return []; }
 }
@@ -1184,7 +1191,28 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       // bằng địa chỉ của chính mình nữa — YouTube gỡ dấu `shopapi_lt` trước khi nó chạy
       // (đo thật 22/09/2026, xem khối `ltTabId` ở trên).
       // Cổng quét: lời thoại chỉ hút trong cửa sổ QUÉT NGÀY (agent mở trang xem kèm dấu ở đó).
-      reply({ la_tab_lt: (await choPhepQuet()) && await ltLaTabLt(sender.tab && sender.tab.id) });
+      // 01/10/2026: kèm ngôn ngữ kênh để trang chọn đúng track phụ đề (rỗng → trang tự lùi 'ja').
+      reply({ la_tab_lt: (await choPhepQuet()) && await ltLaTabLt(sender.tab && sender.tab.id),
+              ngon_ngu: await st('lt_ngon_ngu', '') });
+    }
+    else if (msg.type === 'tim_kiem_hoi') {
+      // 01/10/2026 — `trang-chu.js` xong lượt trang chủ, hỏi có cụm TÌM KIẾM nào cho kênh không
+      // (`tu_khoa_tim` của ngach.yaml, trạm xoay 3 cụm/ngày). Chỉ trong cửa sổ QUÉT NGÀY; trạm cũ /
+      // nhóm không khai → danh sách rỗng, trang không làm gì thêm.
+      let tu = [];
+      try {
+        const host = await st('host', HOST_MAC_DINH);
+        const kenh = (await st('ma_kenh', '')) || (await st('kenh', ''));
+        if (host && kenh && (await choPhepQuet())) {
+          const r = await fetch(`${host}/tim-kiem/can-tim?kenh=${encodeURIComponent(kenh)}`);
+          if (r.ok) {
+            const j = await r.json().catch(() => ({}));
+            tu = ((j && j.tu_khoa) || []).map((x) => String(x || '')).filter(Boolean).slice(0, 3);
+            if (tu.length) log(`tìm kiếm theo chủ đề: ${tu.length} cụm (${tu.join(' · ').slice(0, 120)})`);
+          }
+        }
+      } catch (e) { tu = []; }
+      reply({ tu_khoa: tu });
     }
     else if (msg.type === 'cho_phep_quet') {
       // `trang-chu.js` hỏi trước khi cuộn/gom trang chủ (cổng quét, 30/09/2026).

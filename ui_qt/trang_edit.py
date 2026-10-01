@@ -447,7 +447,7 @@ class TrangDungVideo(QWidget):
                 "lượng tốt nhất.")
         else:
             self._gpu.setToolTip(
-                "Máy bạn không có card NVIDIA — dựng bằng CPU. Chạy SETUP.bat "
+                "Máy bạn không có card NVIDIA — dựng bằng CPU. Chạy scripts\\SETUP.bat "
                 "lại nếu vừa lắp card mới.")
         doc.addWidget(self._gpu)
 

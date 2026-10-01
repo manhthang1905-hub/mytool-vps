@@ -60,7 +60,7 @@ GIAY_LANG_TOI_THIEU = 0.8
 CUA_BAM = 2.5
 #: Giọng nghỉ ≥ ngần này giây (lượt mới, `giay_nghi_phan: 3.0`) thì MỌI khoảng
 #: lặng ≥ 0,8 × nghỉ đều là ranh giới — nhịp nghỉ tự nhiên giữa câu của giọng
-#: ElevenLabs đo trên TL3/0004 chỉ 0,8–1,9 giây, không lẫn được với 2,4.
+#: giọng đọc đo trên TL3/0004 chỉ 0,8–1,9 giây, không lẫn được với 2,4.
 GIAY_NGHI_TU_NHAN = 2.5
 
 #: Tiền tố dấu ngắt phần còn dính trong SRT: "--- ユングは、" (lỗi thật (a)).

@@ -278,17 +278,74 @@ def _mo_ta_ngach(goc: str, ma_kenh: str) -> str:
         return "Tâm lý học / khoa học não bộ tiếng Nhật, chân dung một kiểu người."
 
 
+#: 01/10/2026 — đề bài cho NGÁCH KHÁC ngách mặc định. `DE_BAI`/`DE_BAI_SAU` ở trên viết cứng "kênh TIẾNG
+#: NHẬT · tâm lý học · khán giả Nhật 50+": một kênh nấu ăn Việt chạy lượt kiểm này là mọi đối thủ đúng
+#: ngách bị phán "bo" và danh bạ trống trơn. Ngách khác: bốn tiêu chí lấy từ `ngach.yaml`
+#: (`tieu_chi_doi_thu`), thiếu thì dựng từ tiếng + mô tả ngách.
+DE_BAI_NGACH = (
+    "Bạn kiểm DANH BẠ ĐỐI THỦ của một nhóm kênh YouTube {tieng} làm theo lối REMAKE (xem video đối thủ "
+    "đã thắng rồi viết lại kịch bản). Một kênh chỉ được là đối thủ khi ĐỦ mọi tiêu chí:\n{tieu_chi}\n\n"
+    "NGÁCH CỦA NHÓM:\n{{ngach}}\n\n"
+    "Với MỖI kênh, đọc NGHĨA các tiêu đề (không dò từ khoá) và phán:\n"
+    "  \"giu\"  = đúng ngách, remake được.\n"
+    "  \"bo\"   = sai ngách — nói CỤ THỂ nó là kênh gì.\n"
+    "  \"nghi\" = lưng chừng — có một phần đúng ngách nhưng trọng tâm lệch.\n"
+    "Tỉ lệ khớp từ khoá của máy KHÔNG phải bằng chứng; chỉ nội dung thật mới là bằng chứng.\n\n"
+    "Trả về DUY NHẤT một JSON: {{{{\"1\": {{{{\"k\": \"giu|bo|nghi\", \"ly_do\": \"một câu tiếng Việt ≤ 20 chữ\"}}}}, …}}}} "
+    "đủ mọi số."
+)
+
+DE_BAI_SAU_NGACH = (
+    "Lượt kiểm trước đã xếp các kênh dưới đây vào loại LƯNG CHỪNG. Giờ bạn phải QUYẾT DỨT KHOÁT, không có "
+    "lựa chọn thứ ba. Tiêu chí đối thủ (đủ cả):\n{tieu_chi}\nKênh chỉ thỉnh thoảng có một video đúng ngách "
+    "thì KHÔNG.\n\n"
+    "NGÁCH CỦA NHÓM:\n{{ngach}}\n\n"
+    "Đọc KỸ ~30 tiêu đề gần nhất và số hoạt động của từng kênh. Trả về DUY NHẤT một JSON: "
+    "{{{{\"1\": {{{{\"k\": \"giu\" hoặc \"bo\", \"ly_do\": \"một câu tiếng Việt ≤ 25 chữ, nói rõ kênh làm gì\"}}}}, …}}}} đủ mọi số."
+)
+
+
+def de_bai_cho(goc: str, ma_kenh: str) -> Tuple[str, str]:
+    """`(đề bài, đề bài lượt sâu)` — còn chỗ `{ngach}`. Ngách mặc định (tâm lý × Nhật) → `DE_BAI`,
+    `DE_BAI_SAU` nguyên văn; ngách khác → dựng từ hồ sơ ngách. Hỏng → bản cũ."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, ma_kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return DE_BAI, DE_BAI_SAU
+        tieng = ho_so_ngach.ten_tieng(hs.ngon_ngu()) or "đúng tiếng của nhóm"
+        tieu_chi = [str(x).strip() for x in (hs.tieu_chi_doi_thu or []) if str(x).strip()]
+        if not tieu_chi:
+            tieu_chi = ["kênh nói/viết {0}".format(tieng),
+                        "nội dung CHÍNH đúng ngách: {0}".format(hs.mo_ta_ngach or "(xem mô tả ngách bên dưới)"),
+                        "hợp khán giả của nhóm" + (" ({0})".format(
+                            (hs.thi_truong or {}).get("quoc_gia")) if (hs.thi_truong or {}).get("quoc_gia") else ""),
+                        "dạng VIDEO DÀI có lời đọc (không phải Shorts, không phải cắt clip/tổng hợp/reup)"]
+        khoi = "\n".join("({0}) {1}".format(i, x.replace("{", "(").replace("}", ")"))
+                         for i, x in enumerate(tieu_chi, 1))
+        tieng_an = tieng.replace("{", "(").replace("}", ")")
+        return (DE_BAI_NGACH.format(tieng=tieng_an, tieu_chi=khoi),
+                DE_BAI_SAU_NGACH.format(tieng=tieng_an, tieu_chi=khoi))
+    except Exception:  # noqa: BLE001
+        return DE_BAI, DE_BAI_SAU
+
+
 def hoi_ngach(client: Any, cac_kenh: Sequence[Dict[str, Any]], *, mo_ta_ngach: str,
               goi: Optional[Callable[..., str]] = None, so_moi_lo: int = 10,
               on_log: Optional[Callable[[str], None]] = None, sau: bool = False,
-              ghi_moi_lo: Optional[Callable[[Dict[str, Dict[str, str]]], None]] = None) -> Dict[str, Dict[str, str]]:
+              ghi_moi_lo: Optional[Callable[[Dict[str, Dict[str, str]]], None]] = None,
+              de_bai_goc: Optional[str] = None) -> Dict[str, Dict[str, str]]:
     """`cac_kenh` = `[{"link", "ten", "subs", "view_tv", "so_video", "dai_tv", "tieu_de": [...], "so"}]` →
     `{link: {"k": giu|bo|nghi, "ly_do"}}`. `sau=True` = lượt sâu (30 tiêu đề + số hoạt động, chỉ giu/bo).
-    Lô hỏng thì bỏ lô ấy (không có ý kiến), đi tiếp."""
+    Lô hỏng thì bỏ lô ấy (không có ý kiến), đi tiếp.
+
+    `de_bai_goc` (01/10/2026) — khuôn đề bài (còn `{ngach}`) theo ngách của nhóm (`de_bai_cho`);
+    `None` = đề bài tâm lý Nhật cũ."""
     from .goi_van_ban import goi_van_ban, loc_json  # noqa: PLC0415
 
     goi = goi or goi_van_ban
-    de_bai = (DE_BAI_SAU if sau else DE_BAI).format(ngach=mo_ta_ngach)
+    de_bai = (de_bai_goc or (DE_BAI_SAU if sau else DE_BAI)).format(ngach=mo_ta_ngach)
     so_td = 30 if sau else 10
     if sau:
         so_moi_lo = min(so_moi_lo, 5)
@@ -556,7 +613,8 @@ def kiem(goc: str, cac_kenh: Sequence[str], client: Any, *, sua: Sequence[str] =
     if can and client is not None and co_goi:
         log("  hỏi LLM ngách {0} kênh (dùng lại {1} phán quyết của nhóm)…".format(len(can), len(ai)))
         moi = hoi_ngach(client, can, mo_ta_ngach=_mo_ta_ngach(goc, cac_kenh[0]), goi=goi, on_log=on_log,
-                        ghi_moi_lo=lambda p: ghi_phan_quyet_nhom(goc, cac_kenh[0], p))
+                        ghi_moi_lo=lambda p: ghi_phan_quyet_nhom(goc, cac_kenh[0], p),
+                        de_bai_goc=de_bai_cho(goc, cac_kenh[0])[0])
         ghi_phan_quyet_nhom(goc, cac_kenh[0], moi)
         ai.update(moi)
     # 2) lượt SÂU cho mọi ca lưng chừng (NGHI, hoặc GIỮ mà sổ không có video dài nào để đo) —
@@ -567,7 +625,8 @@ def kiem(goc: str, cac_kenh: Sequence[str], client: Any, *, sua: Sequence[str] =
                and (h["so"] is None or not h["so"].so_video_dai))]
     if sau and client is not None and co_goi:
         log("  lượt SÂU (30 tiêu đề + số hoạt động) cho {0} kênh lưng chừng…".format(len(sau)))
-        moi2 = hoi_ngach(client, sau, mo_ta_ngach=_mo_ta_ngach(goc, cac_kenh[0]), goi=goi, on_log=on_log, sau=True)
+        moi2 = hoi_ngach(client, sau, mo_ta_ngach=_mo_ta_ngach(goc, cac_kenh[0]), goi=goi, on_log=on_log, sau=True,
+                         de_bai_goc=de_bai_cho(goc, cac_kenh[0])[1])
         moi2 = {l: dict(v, ly_do="(lượt sâu) " + v.get("ly_do", "")) for l, v in moi2.items()}
         ghi_phan_quyet_nhom(goc, cac_kenh[0], moi2)
         ai.update(moi2)

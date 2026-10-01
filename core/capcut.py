@@ -119,7 +119,7 @@ def _thong_tin_video(video: str) -> tuple:
 
     ffmpeg = tim_ffmpeg(thu_muc_tool())
     if not ffmpeg:
-        raise LoiCapCut("Chưa có FFmpeg — chạy SETUP.bat một lần là có.")
+        raise LoiCapCut("Chưa có FFmpeg — chạy scripts\\SETUP.bat một lần là có.")
     giay = doc_thoi_luong(ffmpeg, video)
     if giay <= 0:
         raise LoiCapCut("Không đọc được độ dài của video: " + video)
@@ -434,7 +434,7 @@ def xuat_qua_capcut(video: str, dich: str, *,
         import uiautomation as uia
     except ImportError:
         raise LoiCapCut("Thiếu thư viện điều khiển cửa sổ (uiautomation). "
-                        "Chạy lại SETUP.bat một lần là có.")
+                        "Chạy lại scripts\\SETUP.bat một lần là có.")
 
     ten = "shopapi-xuat-" + time.strftime("%d%m-%H%M%S")
     goc = thu_muc_nhap()

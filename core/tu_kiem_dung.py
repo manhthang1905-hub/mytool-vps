@@ -80,7 +80,7 @@ class KetKiem:
         """Một câu cho khách đọc. Không có từ kỹ thuật nào."""
         if not self.ffmpeg:
             return ("Máy chưa có FFmpeg — tab Dựng video sẽ không chạy. "
-                    "Chạy lại SETUP.bat khi máy có mạng.")
+                    "Chạy lại scripts\\SETUP.bat khi máy có mạng.")
         if not self.chay_duoc:
             return ("Máy này chưa dựng được video. " + (self.loi[0] if self.loi
                                                         else ""))

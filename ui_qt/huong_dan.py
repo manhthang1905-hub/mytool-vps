@@ -1053,7 +1053,7 @@ HUONG_DAN: Dict[str, Dict[str, object]] = {
             "nhắc bạn đã sửa. Thứ gì bản mới không mang theo thì tôi không có "
             "quyền xoá.",
             "Bản mới cần thêm thư viện thì tôi tự cài lúc mở tool, có cửa sổ "
-            "báo tiến trình — bạn không phải đi chạy SETUP.bat nữa. Máy đã đủ "
+            "báo tiến trình — bạn không phải đi chạy scripts\\SETUP.bat nữa. Máy đã đủ "
             "đồ thì bước này không tốn giây nào.",
             "Lần tự cài lỡ hỏng (mất mạng giữa chừng chẳng hạn) thì bấm “Kiểm "
             "tra và cài phần thiếu” ở thẻ Thư viện phía dưới.",

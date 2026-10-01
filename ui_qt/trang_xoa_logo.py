@@ -346,7 +346,7 @@ class TrangXoaLogo(QWidget):
         if not co_dung_duoc():
             self._app.show_message(
                 "Chưa chạy được",
-                "Máy thiếu thư viện xử lý ảnh. Bạn nhấp đúp SETUP.bat một lần "
+                "Máy thiếu thư viện xử lý ảnh. Bạn nhấp đúp scripts\\SETUP.bat một lần "
                 "rồi mở lại tool.")
             return
         if self._dang_chay or not self._duong:

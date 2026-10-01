@@ -109,7 +109,7 @@ def kiem_ffmpeg(goc: str = GOC) -> MucKiem:
         return MucKiem("FFmpeg", False, "lỗi khi tìm: {0}".format(str(loi)[:150]))
     if not duong:
         return MucKiem("FFmpeg", False,
-                       "chưa có bản nào — chạy lại SETUP.bat hoặc mở tab Dựng video một lần khi có mạng")
+                       "chưa có bản nào — chạy lại scripts\\SETUP.bat hoặc mở tab Dựng video một lần khi có mạng")
     try:
         du = du_dung(duong)
     except Exception as loi:  # noqa: BLE001

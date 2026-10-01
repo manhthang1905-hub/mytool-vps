@@ -229,3 +229,26 @@ thi_truong:
     - {duoi: 1000000, bac: 1000}
     - {duoi: 10000000, bac: 100000}
     - {bac: 1000000}
+
+# ── Khởi tạo ngách bằng AI (01/10/2026, `python -m core.khoi_tao_ngach`) — các khoá dưới do lệnh đó
+#    viết; khuôn tay thì điền theo ví dụ. Ngách nào khai `mau_tieu_de` riêng (không phải câu của
+#    ngách tâm lý Nhật) thì mọi lời nhắc lọc/kiểm/gán/nắn/bìa dựng theo các khoá này.
+# Bốn tiêu chí "đúng đối thủ" cho lượt kiểm ngách bằng LLM (core/kiem_ngach_doi_thu.py).
+tieu_chi_doi_thu:
+  - "kênh nói tiếng Việt"
+  - "nội dung chính là dạy nấu một món cụ thể ở bếp nhà"
+  - "hợp khán giả Việt Nam tự nấu ăn"
+  - "video dài có lời đọc (không Shorts, không reup)"
+# Hai câu thay luật 3–4 của đề bài nắn tiêu đề về khuôn kênh (core/auto_khau.de_bai_nan_khuon).
+luat_nan_khuon:
+  - "Viết lại theo đúng hình dạng các tiêu đề mẫu: tên món + lời hứa kết quả (mềm, giòn, không hỏng)."
+  - "Ngoặc/nhãn đầu câu của nguồn có thể là mồi câu — nếu là mồi thì giữ ý đó, đừng vứt."
+# Cụm người xem gõ trên YouTube — trạm giao 3 cụm/ngày cho mắt cào tìm đối thủ (/tim-kiem/can-tim).
+tu_khoa_tim:
+  - "cách làm thịt kho"
+  - "món ngon mỗi ngày"
+  - "nấu ăn tại nhà"
+# Thể loại bằng tiếng Anh cho lời nhắc ảnh bìa ("psychology" của ngách mặc định).
+the_loai_en: "home cooking"
+# Khán giả thật, một câu — biên tập viên AI đọc (core/bien_tap_content, đề bài gọn).
+khan_gia_mo_ta: "người Việt 25–55 tuổi tự nấu cơm nhà, xem nhiều trên điện thoại"

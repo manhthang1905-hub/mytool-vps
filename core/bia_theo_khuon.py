@@ -776,10 +776,53 @@ def tach_chu_mac_dinh(chu_bia: str, khuon_chu: Dict[str, Any]) -> List[Dict[str,
     return ra
 
 
+#: 01/10/2026 — các cụm viết cứng cho kênh tâm lý Nhật trong lời nhắc ảnh bìa. Ngách KHÁC ngách mặc
+#: định (`ho_so_ngach.la_ngach_mac_dinh`) được thay bằng thể loại/tiếng của chính nó (`ban_dia_hoa`);
+#: ngách mặc định giữ nguyên từng ký tự.
+_CUM_CUNG = (
+    ("psychology YouTube thumbnail", "{the_loai} YouTube thumbnail"),
+    ("for a Japanese psychology channel", "for a {tieng} {the_loai} channel"),
+    ("Hook text (Japanese)", "Hook text ({tieng})"),
+    ("Spell every Japanese character EXACTLY", "Spell every character EXACTLY"),
+    ("the Japanese text is spelled exactly", "the {tieng} text is spelled exactly"),
+    ("the orange-headed stick character, placed", "the channel's reference character, placed"),
+    ("character is recognisably the SAME character (orange round head, black stick body)",
+     "character is recognisably the SAME character as the channel's reference character"),
+    ("(like Noto Sans JP Black)", "(heavy sans that supports {tieng} letters)"),
+)
+
+
+def ban_dia_hoa(chu: str, goc: str, kenh: str) -> str:
+    """Thay các cụm "psychology / Japanese" viết cứng trong lời nhắc bìa bằng thể loại + tiếng của
+    ngách kênh. Ngách mặc định (tâm lý Nhật) hoặc đọc hồ sơ hỏng → trả NGUYÊN `chu`."""
+    if not chu or not goc or not kenh:
+        return chu
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+        from .kenh import TEP_KENH, doc_yaml, duong_kenh  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return chu
+        ma_tieng = str((doc_yaml(os.path.join(duong_kenh(goc, kenh), TEP_KENH)) or {}).get("ngon_ngu")
+                       or hs.ngon_ngu() or "")
+        tieng = ho_so_ngach.ten_tieng(ma_tieng, anh=True) or "local-language"
+        the_loai = (hs.the_loai_en or "").strip() or "niche"
+    except Exception:  # noqa: BLE001
+        return chu
+    for cu, moi in _CUM_CUNG:
+        if cu in chu:
+            chu = chu.replace(cu, moi.replace("{the_loai}", the_loai).replace("{tieng}", tieng))
+    return chu
+
+
 def viet_bien_the(goi_chat: Optional[Callable[..., str]], khuon_chu: Dict[str, Any], *,
                   tieu_de: str, chu_bia: str, n: int, co_dinh_chu: bool,
-                  mo_hinh: str = "", khoa: str = "") -> Dict[str, Any]:
-    """`{chu_tang, bien_the[n]}` — AI hỏng/vi phạm luật chữ thì lùi `tach_chu_mac_dinh`."""
+                  mo_hinh: str = "", khoa: str = "",
+                  ban_dia: Optional[Callable[[str], str]] = None) -> Dict[str, Any]:
+    """`{chu_tang, bien_the[n]}` — AI hỏng/vi phạm luật chữ thì lùi `tach_chu_mac_dinh`.
+
+    `ban_dia` (01/10/2026): hàm bản địa hoá lời nhắc theo ngách (`ban_dia_hoa`); `None` = nguyên văn."""
     from .goi_van_ban import loc_json  # noqa: PLC0415
     kc = khuon_chu or {}
     tang_k = (kc.get("chu") or {}).get("tang") or []
@@ -796,9 +839,12 @@ def viet_bien_the(goi_chat: Optional[Callable[..., str]], khuon_chu: Dict[str, A
                 kw["mo_hinh"] = mo_hinh
             if khoa:
                 kw["khoa"] = khoa
-            du = loc_json(str(goi_chat(LOI_NHAC_BIEN_THE.format(
+            loi_nhac = LOI_NHAC_BIEN_THE.format(
                 khuon=khoi_khuon_tieng_anh(kc), mau_chu=mau_chu, tieu_de=tieu_de, chu_bia=chu_bia,
-                luat_chu=luat, n=n), **kw) or ""))
+                luat_chu=luat, n=n)
+            if ban_dia is not None:
+                loi_nhac = ban_dia(loi_nhac)
+            du = loc_json(str(goi_chat(loi_nhac, **kw) or ""))
             if isinstance(du, dict):
                 ra = du
         except Exception:  # noqa: BLE001

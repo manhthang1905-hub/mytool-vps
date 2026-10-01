@@ -325,7 +325,13 @@ def hoi_ai_co_dem(goc: str, ma_kenh: str,
     (một kênh đối thủ là/không là kênh tâm lý thì như nhau với mọi tệp)."""
     from . import loc_doi_thu as loc  # noqa: PLC0415
 
-    hoi = hoi or loc.hoi_ai_kenh
+    if hoi is None:
+        # 01/10/2026: ngách KHÁC ngách mặc định → đề bài không mang ví dụ "tâm lý" (`de_bai_loc_cho`);
+        # ngách mặc định → `hoi_ai_kenh` y như cũ.
+        # getattr: tiến trình đang chạy còn giữ `loc_doi_thu` bản cũ (trước 01/10) thì đi đường cũ.
+        cho = getattr(loc, "de_bai_loc_cho", None)
+        de_bai = cho(goc, ma_kenh) if cho is not None else loc.DE_BAI_LOC
+        hoi = loc.hoi_ai_kenh if de_bai is loc.DE_BAI_LOC else functools.partial(loc.hoi_ai_kenh, de_bai=de_bai)
     p = duong_kenh_ai(goc, ma_kenh)
 
     def _hoi(client: Any, so_do: Any, **k: Any) -> Any:
