@@ -1,6 +1,6 @@
 # Giám đốc kênh
 
-Tầng tự quyết SAU KHI ĐĂNG: đọc số → quyết → áp có giới hạn → đo → giữ / bỏ / mở rộng. Lấp chỗ trống "tool học nhiều nhưng không ai đổi tham số". Gói `core/giam_doc/` (chưa nối vào lịch — việc nối là bước sau).
+Tầng tự quyết SAU KHI ĐĂNG: đọc số → quyết → áp có giới hạn → đo → giữ / bỏ / mở rộng. Lấp chỗ trống "tool học nhiều nhưng không ai đổi tham số". Gói `core/giam_doc/`, nối vào lịch từ v2.137 (mục 8).
 
 ## 1. Dùng thử (0 đồng, không ghi gì)
 
@@ -60,3 +60,13 @@ Ba tay: tham số kenh.yaml (danh sách trắng) · chỉ đạo chữ ≤ 5 dò
 ## 7. Thêm một việc
 
 Chép `core/giam_doc/_mau.py` thành `core/giam_doc/<ten>.py` (tự được phát hiện): `TEN, MO_TA, NHIP, CHI_SO_CHINH`, `ap_dung(bs)` (0 = thiếu dữ liệu), `quan_sat(bs)` (câu có số + n + tin cậy), `de_xuat(bs, qs)` (thực đơn), `ket_luan(bs, tn)`. Chỉ đọc `BangSo` (`du_lieu.tom_tat`), không gọi mạng, chỉ số của chính kênh. Test: `tests/test_giam_doc_plugin.py` (kênh giả `tests/du-lieu/giam-doc/kenh-mau.json`).
+
+## 8. Nối vào mã sống (01/10/2026)
+
+- **Chạy:** gác tổng (`core/gac_tong._main`, mỗi 15') gọi `giam_doc.nhip(goc, thu=thu)` trong `try` riêng → kênh đến hạn (chưa chạy hôm nay; thứ Hai = lượt tuần; không trong 60' trước giờ đăng) thì sinh tiến trình tách rời `python -m core.giam_doc --chay` (khoá `workspace/giam-doc/.khoa`, giành lại sau 3 giờ, log `workspace/giam-doc/tien-trinh.log`). Không chạy trong `vong_hoc`/`tu_chay`.
+- **Báo:** `giam_doc_ket` (mức thường) khi kênh đến hạn liền ≥ 6 giờ chưa chạy được (`kiem_ket`, mốc ở `workspace/giam-doc/den-han.json`); mỗi dòng "Việc của bạn" của báo cáo cuối → `giam_doc_viec` (mức nhắc, lọc lặp 4 giờ theo nội dung) + một dòng ở khối Việc của bạn (nút Báo cáo tuần / Đã xong).
+- **Bảng điều khiển:** thẻ kênh có công tắc 3 nấc `giam_doc` (Tắt / Gợi ý / Tự áp — lên Tự áp phải xác nhận), một dòng `bao_cao.cau_the`, nút "Báo cáo tuần" (`BAO-CAO-TUAN.md`).
+- **Chế độ gợi ý = bóng:** không đổi kenh.yaml, không ghi `chi-dao.json`, không mở thí nghiệm; ghi nhật ký `goi_y` + mục "Sẽ làm" của báo cáo. LLM đoán thắng/trượt cho mọi video đang chờ (`du_doan`), giữ lần đoán ĐẦU, máy tự chấm khi video có kết luận (`giam-doc/du-doan.json`; "đoán đúng x/y" trên thẻ).
+- **Biên tập viên:** chỉ đạo còn hạn + `kenh.yaml: luat_chon_tuan` → khối "CHỈ ĐẠO TUẦN NÀY CỦA GIÁM ĐỐC KÊNH" ngay trước khối ỨNG VIÊN (cả đề bài cũ lẫn gọn). Không có gì → lời nhắc y hệt từng byte. `NguCanh.luat_chon` nối thêm `luat_chon_tuan`.
+- **Hồ sơ video:** mỗi mốc thêm `ctr_trang_chu`, `hien_thi_trang_chu`, `pct_browse`, `pct_de_xuat`, `subs`, `gio_xem`; `thi_nghiem` (id thí nghiệm đang mở lúc bàn giao, cách nhau dấu phẩy); `lich_su_sua[]` (`ho_so_video.ghi_sua`, đo trước/sau bằng hiệu hai bản chụp, mỗi phía ≥ 500 hiển thị); `bia_2` + `anh/<mã gói>-bia-2.jpg` (bìa hạng nhì của giám khảo). `bia_theo_khuon` không coi bìa có `doi_boi: "giam_doc"` là bìa tay.
+- **Ngưỡng thắng 48h** (`cong_thuc_v7.nguong_thang_48h`, dùng chung V7 / `chien_luoc.ket_qua` / biên tập viên / giám đốc): kênh ≥ 5 video có số 48h → max(`toi_thieu_48h`, 3 × trung vị kênh) như cũ; ít hơn → ngưỡng ngách (`ngach.yaml: nguong_thang_48h`, chưa khai = `toi_thieu_48h` 6.000) trộn sang ngưỡng kênh với trọng số ((n−1)/4)².

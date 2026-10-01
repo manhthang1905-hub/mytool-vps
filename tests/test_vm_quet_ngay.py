@@ -138,8 +138,9 @@ class TestMotLuotQuetNgay:
 class TestCongQuetMatCao:
     def test_ghi_cho_phep_chan_va_xoa(self, tmp_path):
         ag = _nap_agent(tmp_path)
-        tm = tmp_path / "tien-ich"
-        tm.mkdir()
+        # 01/10/2026: máy một kênh cũng dùng `tien-ich/<kênh>/` (chưa có mắt cào phẳng nếp cũ)
+        tm = tmp_path / "tien-ich" / "A"
+        tm.mkdir(parents=True)
         ch = {"kenh": "A"}
         ag.ghi_che_do_mat_cao(ch, True, 600, "123")
         d = json.loads((tm / "che-do.json").read_text(encoding="utf-8"))

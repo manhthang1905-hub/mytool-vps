@@ -9,6 +9,8 @@ bằng `pkgutil.iter_modules` (khuôn sổ đăng ký của `core/chien_luoc`). 
     so_dang_ky()                                         {TEN: module}
     chay_kenh(goc, ma, *, che_do, goi_chat, tuan)        một lượt của một kênh → KetQua
     nhip(goc, *, thu, bay_gio)                           gác tổng gọi: có việc thì sinh tiến trình tách rời
+    kiem_ket(goc, *, bay_gio, ghi)                       gác tổng: kênh đến hạn ≥ 6 giờ chưa chạy (`giam_doc_ket`)
+    viec_cua_ban_kenh(goc, ma)                           "Việc của bạn" của báo cáo cuối (bảng điều khiển, gác tổng)
     doc_chi_dao(goc, ma)                                 chỉ đạo còn hạn (biên tập viên đọc)
 
 Khoá kenh.yaml: `giam_doc: tat | goi_y | tu_ap` (mặc định `tat`), `giam_doc_studio: false`,
@@ -97,6 +99,8 @@ class KetQua:
     quyet_dinh: Any = None
     viec_cua_ban: List[str] = field(default_factory=list)
     da_lam: List[Dict[str, Any]] = field(default_factory=list)
+    se_lam: List[Dict[str, Any]] = field(default_factory=list)   # chế độ gợi ý: việc ĐÃ CHỌN mà không áp
+    tu_cham: Dict[str, Any] = field(default_factory=dict)        # {tong, dung, moi, cho} dự đoán thắng/trượt
 
 
 def _thuc_don(bs: BangSo, viec: List[Dict[str, Any]], so_: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -179,6 +183,10 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
         return kq
 
     qd = kq.quyet_dinh
+    # TỰ CHẤM (mọi chế độ có ghi): dự đoán thắng/trượt cũ nào mà video nay đã có kết luận
+    kq.tu_cham = stn.cham_du_doan(goc, ma, {v["id"]: v.get("ket_luan") or "" for v in bs.video}, bay_gio=bs.bay_gio)
+    if qd is not None and not qd.loi and qd.du_doan:
+        kq.tu_cham["moi_doan"] = stn.ghi_du_doan(goc, ma, qd.du_doan, bay_gio=bs.bay_gio)
     if qd is not None and not qd.loi:
         for k in qd.ket_luan if cd == "tu_ap" else []:
             tn = next((t for t in kq.thi_nghiem if t["id"] == k["id"]), None)
@@ -197,10 +205,20 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
             if cd != "tu_ap":
                 stn.ghi_nhat_ky(goc, ma, viec="goi_y", sau=d.get("gia_tri") or d.get("noi_dung"), khoa=d.get("khoa"),
                                 ly_do_llm=d.get("ly_do_llm"), bay_gio=bs.bay_gio)
+                kq.se_lam.append({"id": d.get("id"), "loai": d.get("loai"), "khoa": d.get("khoa"),
+                                  "cu": d.get("gia_tri_cu"), "moi": d.get("gia_tri") or d.get("noi_dung"),
+                                  "gia_thuyet": d.get("gia_thuyet"), "ly_do_llm": d.get("ly_do_llm")})
                 continue
             duoc, ly = gioi_han.kiem(d, stn.doc_so(goc, ma), bs)  # soát lại với sổ mới nhất
             kq.da_lam.append(gioi_han.ap(goc, ma, d, bs, ly_do_llm=d.get("ly_do_llm", ""), bay_gio=bs.bay_gio)
                              if duoc else {"ket": "tu_choi", "id": d["id"], "ly_do": ly})
+    # một dòng nhật ký MỖI lượt (kể cả lượt không chọn gì) — để biết giám đốc có chạy và nghĩ gì
+    stn.ghi_nhat_ky(goc, ma, viec="luot", sau={"che_do": cd, "tuan": tuan, "thuc_don": len(kq.thuc_don),
+                                                "chon": len(qd.chon) if qd is not None and not qd.loi else 0,
+                                                "du_doan_moi": int(kq.tu_cham.get("moi_doan") or 0),
+                                                "bao_dong": kq.bao_dong, "mo_hinh": qd.mo_hinh if qd is not None else ""},
+                    ly_do_llm=(qd.chan_doan if qd is not None and not qd.loi else (qd.loi if qd is not None else
+                               "không gọi AI (van ví chặn / chế độ thử)"))[:400], bay_gio=bs.bay_gio)
     stn.ghi_trang_thai(goc, ma, ngay_chay=bs.bay_gio.date().isoformat(), luc_chay=bs.bay_gio.isoformat(timespec="seconds"),
                        bao_dong=kq.bao_dong, loi_llm=(qd.loi if qd is not None else ""),
                        **({"ngay_tuan": bs.bay_gio.date().isoformat()} if tuan else {}), **_gom_goi_y(bs))
@@ -310,6 +328,79 @@ def nhip(goc: str, *, thu: bool = False, bay_gio: Optional[_dt.datetime] = None,
         return {"viec": viec, "pid": 0, "ly_do": "chế độ thử — không sinh tiến trình"}
     pid = (sinh or _sinh)(goc)
     return {"viec": viec, "pid": pid, "ly_do": "đã sinh tiến trình {0}".format(pid) if pid else "không sinh được"}
+
+
+KET_SAU_GIO = 6.0
+TEP_DEN_HAN = "den-han.json"
+VIEC_CUA_BAN_CON_NGAY = 8
+
+
+def _chua_chay(goc: str, ma: str, bay_gio: _dt.datetime) -> bool:
+    """Kênh bật mà hôm nay chưa có lượt (thứ Hai: chưa có lượt tuần) — KHÔNG tính tránh phiên."""
+    tt = stn.doc_trang_thai(goc, ma)
+    hom_nay = bay_gio.date().isoformat()
+    return tt.get("ngay_chay") != hom_nay or (bay_gio.weekday() == 0 and tt.get("ngay_tuan") != hom_nay)
+
+
+def kiem_ket(goc: str, *, bay_gio: Optional[_dt.datetime] = None, ghi: bool = True) -> List[Dict[str, Any]]:
+    """Gác tổng gọi: kênh bật giám đốc mà đến hạn liền ≥ `KET_SAU_GIO` giờ chưa chạy được → [{ma, gio, ly_do}].
+    Nhớ lúc THẤY đến hạn lần đầu ở `workspace/giam-doc/den-han.json` (`ghi=False`: chỉ đọc)."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    duong = os.path.join(goc, THU_MUC_KHOA, TEP_DEN_HAN)
+    try:
+        with io.open(duong, encoding="utf-8") as tep:
+            cu = json.load(tep)
+        cu = cu if isinstance(cu, dict) else {}
+    except (OSError, ValueError):
+        cu = {}
+    moi: Dict[str, str] = {}
+    ra = []
+    for ma in _kenh_bat(goc):
+        if not _chua_chay(goc, ma, bay_gio):
+            continue
+        tu = str(cu.get(ma) or "") or bay_gio.replace(microsecond=0).isoformat()
+        moi[ma] = tu
+        try:
+            gio = (bay_gio - _dt.datetime.fromisoformat(tu[:19])).total_seconds() / 3600.0
+        except ValueError:
+            gio = 0.0
+        if gio >= KET_SAU_GIO:
+            tt = stn.doc_trang_thai(goc, ma)
+            ly = "lượt cuối {0}".format(str(tt.get("luc_chay") or "chưa có")[:16].replace("T", " "))
+            if dang_giu_khoa(goc):
+                ly += "; khoá lượt đang giữ từ {0:%H:%M}".format(
+                    _dt.datetime.fromtimestamp(float(dang_giu_khoa(goc).get("bat_dau") or 0)))
+            ra.append({"ma": ma, "gio": round(gio, 1), "ly_do": ly})
+    if ghi and moi != cu:
+        try:
+            os.makedirs(os.path.dirname(duong), exist_ok=True)
+            with io.open(duong + ".tam", "w", encoding="utf-8") as tep:
+                json.dump(moi, tep, ensure_ascii=False, indent=1)
+            os.replace(duong + ".tam", duong)
+        except OSError:
+            pass
+    return ra
+
+
+def viec_cua_ban_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> List[str]:
+    """"Việc của bạn" trong báo cáo cuối của giám đốc kênh `ma` (≤ 8 ngày tuổi, kênh còn bật)."""
+    from .bao_cao import TEP_BAO_CAO_JSON  # noqa: PLC0415
+    from .du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+    if ma not in _kenh_bat(goc):
+        return []
+    try:
+        with io.open(os.path.join(thu_muc_giam_doc(goc, ma), TEP_BAO_CAO_JSON), encoding="utf-8") as tep:
+            bc = json.load(tep)
+    except (OSError, ValueError):
+        return []
+    bay_gio = bay_gio or _dt.datetime.now()
+    try:
+        if (bay_gio - _dt.datetime.fromisoformat(str(bc.get("luc"))[:19])).days > VIEC_CUA_BAN_CON_NGAY:
+            return []
+    except ValueError:
+        return []
+    return [str(x) for x in bc.get("viec_cua_ban") or [] if str(x).strip()]
 
 
 def chay_het(goc: str, *, ghi: Optional[Callable[[str], None]] = None) -> List[KetQua]:

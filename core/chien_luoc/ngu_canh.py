@@ -20,7 +20,9 @@
   Giai đoạn ........ nc.giai_doan    "moi" | "dang_len" | "kiem_tien"
                      nc.ypp          {"sub", "gio", "thieu": "sub"|"gio"|"ca_hai"|"", "nguon"}
                      nc.luat_chon    list[str] — luật chọn nguồn THEO NGHĨA (kenh.yaml > ngach.yaml
-                                     `luat_chon`), cho mọi lời nhắc AI chọn/lọc nguồn; [] = ngách chưa khai
+                                     `luat_chon`), cho mọi lời nhắc AI chọn/lọc nguồn; [] = ngách chưa khai;
+                                     nối thêm nc.luat_chon_tuan (kenh.yaml `luat_chon_tuan`, ≤ 3 câu — luật
+                                     phụ của tuần do giám đốc kênh đặt)
   Dữ liệu học ...... nc.co_v7 (bool), nc.so_video_48h (int)
                      nc.bai_hoc      list[BaiHoc] — core.chien_luoc.bai_hoc.doc(goc, kenh, "chon") (agent B)
                      nc.ket_qua(ngay=28) / nc.ket_qua_cong_thuc
@@ -254,7 +256,19 @@ class NguCanh:
             gt = getattr(self.ngach, "luat_chon", None)
         if isinstance(gt, str):
             gt = [x.strip() for x in gt.split("|") if x.strip()]
-        return [str(x) for x in (gt or []) if str(x).strip()]
+        ra = [str(x) for x in (gt or []) if str(x).strip()]
+        # 01/10/2026: luật PHỤ của tuần (giám đốc kênh ghi `kenh.yaml: luat_chon_tuan`) nối SAU luật gốc —
+        # không khai thì danh sách y như trước.
+        return ra + [x for x in self.luat_chon_tuan if x not in ra]
+
+    @cached_property
+    def luat_chon_tuan(self) -> List[str]:
+        """`kenh.yaml: luat_chon_tuan` ("câu 1 | câu 2" hoặc list, ≤ 3 câu) — luật chọn PHỤ của tuần do
+        giám đốc kênh đặt (`core/giam_doc`, khoá trong danh sách trắng). [] khi không khai."""
+        gt = self._kenh_yaml.get("luat_chon_tuan")
+        if isinstance(gt, str):
+            gt = [x.strip() for x in gt.split("|") if x.strip()]
+        return [str(x).strip() for x in (gt or []) if str(x).strip()][:3]
 
     @cached_property
     def bai_hoc(self) -> List[Dict[str, Any]]:

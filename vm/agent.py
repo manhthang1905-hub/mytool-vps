@@ -725,13 +725,23 @@ def _thu_muc_tien_ich_kenh(cau_hinh: dict) -> str:
     Máy NHIỀU kênh: mỗi kênh một cửa sổ Chrome riêng — nếu dùng CHUNG một
     thư mục `tien-ich/` (một `cau-hinh.json` với một `ma_kenh`) thì mọi
     kênh khác sẽ bị extension báo NHẦM số liệu về đúng MỘT kênh đó. Nên
-    máy nhiều kênh có `tien-ich/<kênh>/` riêng; máy MỘT kênh (nếp cũ) vẫn
-    dùng thẳng thư mục phẳng `tien-ich/` như trước — không đổi gì.
+    máy nhiều kênh có `tien-ich/<kênh>/` riêng.
+
+    01/10/2026: máy MỘT kênh cũng dùng `tien-ich/<kênh>/` — một bố cục cho mọi máy (VPS mới khởi tạo
+    ngách bằng AI, `che-do.json`/`cau-hinh.json` luôn ở thư mục riêng của kênh). Ngoại lệ giữ nếp cũ:
+    máy một kênh ĐÃ chạy mắt cào ở thư mục PHẲNG (có `tien-ich/manifest.json`) mà chưa có bản riêng →
+    giữ phẳng: extension nạp không đóng gói đổi đường là đổi ID, mất kho video của mắt cào.
     """
     kenh = str(cau_hinh.get("kenh") or "")
-    if kenh and len(danh_sach_kenh(cau_hinh)) > 1:
-        return os.path.join(THU_MUC_TIEN_ICH, kenh)
-    return THU_MUC_TIEN_ICH
+    if not kenh:
+        return THU_MUC_TIEN_ICH
+    rieng = os.path.join(THU_MUC_TIEN_ICH, kenh)
+    if len(danh_sach_kenh(cau_hinh)) > 1:
+        return rieng
+    if (os.path.isfile(os.path.join(THU_MUC_TIEN_ICH, "manifest.json"))
+            and not os.path.isfile(os.path.join(rieng, "manifest.json"))):
+        return THU_MUC_TIEN_ICH
+    return rieng
 
 
 def bao_dam_tien_ich(cau_hinh: dict) -> str:

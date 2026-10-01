@@ -11,9 +11,10 @@ Nối SỔ LƯỢT `CHANNEL/<k>/tu-chay/*.json` (công thức = `run.nguon.cong_
 ═══ "THẮNG" ĐO THEO CHÍNH KÊNH ═══
 
 Cờ thắng lấy nguyên của `cong_thuc_v7.video_cua_kenh` → `_danh_dau_thang`: hiển thị 48h ≥
-max(`toi_thieu_48h`, `boi_so_trung_vi` × TRUNG VỊ 48h của kênh) — ngưỡng tương đối theo cỡ kênh,
-KHÔNG phải 20.000 cứng. Video chưa có trong danh sách V7 nhưng hồ sơ đã có mốc 48h/72h thì so
-cùng ngưỡng ấy (`_nguong_thang`, chép đúng công thức của `_danh_dau_thang`).
+`cong_thuc_v7.nguong_thang_48h` = max(`toi_thieu_48h`, `boi_so_trung_vi` × TRUNG VỊ 48h của kênh)
+khi kênh có ≥ 5 video có số 48h; ít hơn thì ngưỡng NGÁCH (`ngach.yaml: nguong_thang_48h`, chưa khai
+= `toi_thieu_48h`) trộn dần sang ngưỡng riêng (01/10/2026). KHÔNG phải 20.000 cứng. Video chưa có
+trong danh sách V7 nhưng hồ sơ đã có mốc 48h/72h thì so cùng ngưỡng ấy (`_nguong_thang`).
 
 Nghĩa các số:
   * `lam`  — số gói (video) công thức này đã ra trong cửa sổ `ngay` (theo ngày của tệp sổ; lượt
@@ -65,13 +66,12 @@ def _tv(ds: List[float], so_le: int = 2) -> Optional[float]:
 # ── video của kênh theo V7 ───────────────────────────────────────────────────
 
 def _nguong_thang(ds: List[Any], ch: Dict[str, Any]) -> float:
-    """Ngưỡng hiển thị 48h của `cong_thuc_v7._danh_dau_thang` — chép đúng công thức (không sửa tệp
-    V7), dùng cho video có mốc trong hồ sơ mà danh sách V7 chưa đo được."""
-    th = ch["thang"]
-    so48 = [v.hien_thi_48h for v in ds if v.hien_thi_48h is not None]
-    if not so48 or len(ds) < int(th.get("so_video_toi_thieu", 5) or 5):
-        return float(th["toi_thieu_48h"])
-    return max(float(th["toi_thieu_48h"]), th["boi_so_trung_vi"] * statistics.median(so48))
+    """Ngưỡng hiển thị 48h của `cong_thuc_v7._danh_dau_thang` — GỌI CHUNG `nguong_thang_48h` (01/10/2026,
+    trước đây chép công thức; kênh ít video có số 48h giờ dùng ngưỡng ngách trộn dần), dùng cho video
+    có mốc trong hồ sơ mà danh sách V7 chưa đo được."""
+    from .. import cong_thuc_v7 as v7  # noqa: PLC0415
+
+    return v7.nguong_thang_48h(ds, ch)
 
 
 def video_kenh(goc: str, ma_kenh: str) -> Tuple[Dict[str, Any], Optional[float]]:
@@ -294,8 +294,9 @@ def ghi_tep(goc: str, ma_kenh: str, *, bay_gio: Optional[_dt.datetime] = None,
     du = {
         "kenh": ma_kenh, "cap_nhat_luc": bay_gio.replace(microsecond=0).isoformat(),
         "cua_so_ngay": NGAY_MAC_DINH,
-        "cach_do_thang": "cong_thuc_v7._danh_dau_thang — hiển thị 48h ≥ max(toi_thieu_48h, "
-                         "boi_so_trung_vi × trung vị 48h của CHÍNH kênh)",
+        "cach_do_thang": "cong_thuc_v7.nguong_thang_48h — hiển thị 48h ≥ max(toi_thieu_48h, "
+                         "boi_so_trung_vi × trung vị 48h của CHÍNH kênh); kênh < 5 video có số 48h: "
+                         "ngưỡng ngách trộn dần sang ngưỡng kênh",
         "nguong_thang_48h": round(nguong) if nguong is not None else None,
         "thong_ke": tk, "thong_ke_toan_bo": tk_het,
         "ti_trong_hien_tai": {t: round(w / sum(hien_tai.values()), 3) for t, w in hien_tai.items()}

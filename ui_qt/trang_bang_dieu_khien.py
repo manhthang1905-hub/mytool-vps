@@ -54,8 +54,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
-    QCheckBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu,
-    QMessageBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu,
+    QMessageBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from core import bang_dieu_khien as bdk
@@ -450,6 +450,32 @@ class TheKenhLon(QFrame):
         self._nhan_hoc.setVisible(False)
         v.addWidget(self._nhan_hoc)
 
+        # Giám đốc kênh (01/10/2026): 1 dòng + công tắc 3 nấc + nút Báo cáo tuần.
+        hang_gd = QHBoxLayout()
+        hang_gd.setContentsMargins(0, 0, 0, 0)
+        hang_gd.setSpacing(6)
+        nh_gd = QLabel("Giám đốc kênh")
+        nh_gd.setStyleSheet("color:{0};font-size:11px;font-weight:600;".format(theme.CHU_MO))
+        hang_gd.addWidget(nh_gd)
+        self._o_giam_doc = QComboBox()
+        for khoa, ten in bdk.CHE_DO_GIAM_DOC:
+            self._o_giam_doc.addItem(ten, khoa)
+        self._o_giam_doc.setToolTip(
+            "Tắt: không làm gì.\nGợi ý: đọc số hằng ngày, ghi “sẽ làm gì” và tự chấm — KHÔNG đổi gì của kênh.\n"
+            "Tự áp: đổi tham số kenh.yaml trong giới hạn an toàn (tối đa 2 thay đổi/tuần, tự quay lui).")
+        self._o_giam_doc.currentIndexChanged.connect(self._bao_giam_doc)
+        hang_gd.addWidget(self._o_giam_doc)
+        self._nut_bao_cao = nut_phu("Báo cáo tuần", lambda: self._on_hanh_dong(self._ma, "bao_cao_giam_doc"))
+        hang_gd.addWidget(self._nut_bao_cao)
+        hang_gd.addStretch(1)
+        v.addLayout(hang_gd)
+        self._nhan_giam_doc = QLabel("")
+        self._nhan_giam_doc.setWordWrap(True)
+        self._nhan_giam_doc.setMinimumWidth(1)
+        self._nhan_giam_doc.setStyleSheet("color:{0};font-size:11px;".format(theme.CHU_MO))
+        self._nhan_giam_doc.setVisible(False)
+        v.addWidget(self._nhan_giam_doc)
+
         hang_nut = HangXuongDong(6)
         self._nut_xem = nut_phu("Xem video chờ đăng",
                                 lambda: self._on_hanh_dong(self._ma, "xem_video"))
@@ -466,6 +492,10 @@ class TheKenhLon(QFrame):
     def _bao_cong_tac(self, khoa: str, bat: bool) -> None:
         if not self._dang_nap:
             self._on_cong_tac(self._ma, khoa, bool(bat))
+
+    def _bao_giam_doc(self, _i: int = 0) -> None:
+        if not self._dang_nap:
+            self._on_hanh_dong(self._ma, "giam_doc=" + str(self._o_giam_doc.currentData() or "tat"))
 
     def nap(self, k: Dict[str, Any]) -> None:
         self._dang_nap = True
@@ -558,6 +588,18 @@ class TheKenhLon(QFrame):
         hoc = str(k.get("may_dang_hoc") or "")
         self._nhan_hoc.setText(hoc)
         self._nhan_hoc.setVisible(bool(hoc))
+
+        gd = k.get("giam_doc") or {}
+        i = self._o_giam_doc.findData(str(gd.get("che_do") or "tat"))
+        self._o_giam_doc.blockSignals(True)
+        self._o_giam_doc.setCurrentIndex(max(0, i))
+        self._o_giam_doc.blockSignals(False)
+        cau_gd = str(gd.get("cau") or "")
+        _cat(self._nhan_giam_doc, cau_gd, 900)
+        self._nhan_giam_doc.setToolTip(cau_gd)
+        self._nhan_giam_doc.setVisible(bool(cau_gd))
+        self._nut_bao_cao.setEnabled(bool(gd.get("bao_cao")))
+        self._nut_bao_cao.setToolTip("" if gd.get("bao_cao") else "Giám đốc chưa ghi báo cáo nào")
 
         self._nut_xem.setEnabled(bool(vkt))
         self._nut_xem.setToolTip("" if vkt else "Chưa có video chờ đăng")
@@ -767,6 +809,8 @@ class TrangBangDieuKhien(QWidget):
             else:
                 self._app.show_message("Không thấy video",
                                        "Tệp video của gói này không còn trên máy.")
+        elif ma_hanh_dong == "bao_cao_giam_doc":
+            self._mo_bao_cao_giam_doc(ma)
         elif ma_hanh_dong == "hen_gio":
             d = self._dong_ke_hoach(ma, ma_goi)
             if d is None:
@@ -980,6 +1024,52 @@ class TrangBangDieuKhien(QWidget):
             self._mo_nhat_ky(ma)
         elif ma_hanh_dong == "cai_kenh":
             self._mo_cai_kenh(ma)
+        elif ma_hanh_dong == "bao_cao_giam_doc":
+            self._mo_bao_cao_giam_doc(ma)
+        elif ma_hanh_dong.startswith("giam_doc="):
+            self._doi_giam_doc(ma, ma_hanh_dong.split("=", 1)[1])
+
+    def _doi_giam_doc(self, ma: str, che_do: str) -> None:
+        """Công tắc 3 nấc `kenh.yaml: giam_doc`. Lên "Tự áp" thì hỏi trước."""
+        if not self._con_song() or not ma:
+            return
+        if che_do == "tu_ap":
+            hoi = QMessageBox.question(
+                self, "Giám đốc kênh — Tự áp",
+                "Giám đốc kênh {0} sẽ TỰ ĐỔI vài tham số của kênh (tỉ trọng công thức, độ dài, luật chọn tuần) "
+                "trong giới hạn an toàn: tối đa 2 thay đổi/tuần, tự quay lui khi số tụt. Bật?".format(ma))
+            if hoi != QMessageBox.Yes:
+                the, k = self._the_kenh.get(ma), self._kenh(ma)
+                if the is not None and k is not None:
+                    the.nap(k)
+                return
+        goc = self._app.base_dir
+        self._ghi_roi_lam_moi(lambda: bdk.doi_giam_doc(goc, ma, che_do))
+
+    def _mo_bao_cao_giam_doc(self, ma: str) -> None:
+        """Hộp chỉ đọc `CHANNEL/<ma>/giam-doc/BAO-CAO-TUAN.md`."""
+        duong = str(((self._kenh(ma) or {}).get("giam_doc") or {}).get("bao_cao") or "")
+        if not duong:
+            duong = bdk.giam_doc_the(self._app.base_dir, ma).get("bao_cao") or ""
+        try:
+            with open(duong, encoding="utf-8") as tep:
+                chu = tep.read()
+        except OSError:
+            self._app.show_message("Chưa có báo cáo", "Giám đốc kênh {0} chưa ghi báo cáo nào.".format(ma))
+            return
+        hop = QDialog(self)
+        hop.setWindowTitle("Báo cáo tuần — giám đốc kênh {0}".format(ma))
+        hop.resize(760, 620)
+        v = QVBoxLayout(hop)
+        o = QTextEdit()
+        o.setReadOnly(True)
+        if hasattr(o, "setMarkdown"):
+            o.setMarkdown(chu)
+        else:
+            o.setPlainText(chu)
+        v.addWidget(o, 1)
+        v.addWidget(nut_phu("Đóng", hop.accept, rong=90))
+        hop.exec_()
 
     def _ghi_cong_tac(self, ma: str, khoa: str, bat: bool) -> None:
         """Cửa ghi công tắc DÙNG CHUNG cho hộp ⚙ Cài kênh và hai công tắc trên

@@ -1582,6 +1582,41 @@ def ban_tin_ngay(
     return "\n".join(dong)
 
 
+# ── Giám đốc kênh (01/10/2026) ──────────────────────────────────────────────
+
+
+def kiem_giam_doc(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
+                  ghi_dia: bool = True) -> List[Dict[str, Any]]:
+    """Sự cố của giám đốc kênh cho gác tổng:
+
+    * `giam_doc_ket` (mức thường): kênh bật giám đốc đến hạn liền ≥ 6 giờ mà chưa chạy được lượt nào
+      (`giam_doc.kiem_ket`);
+    * `giam_doc_viec` (mức nhắc): mỗi dòng "Việc của bạn" trong báo cáo cuối của giám đốc — `dedupe_khoa`
+      theo nội dung nên cùng một việc chỉ nhắc lại sau `NGUONG_LAP_BAO_GIO` (4 giờ).
+
+    `ghi_dia=False` (`--thu`): chỉ đọc, không ghi `den-han.json`."""
+    import hashlib  # noqa: PLC0415
+
+    from core import giam_doc  # noqa: PLC0415
+
+    ra: List[Dict[str, Any]] = []
+    for k in giam_doc.kiem_ket(goc, bay_gio=bay_gio, ghi=ghi_dia):
+        ra.append(_su_co(
+            "giam_doc_ket", bao_dong.MUC_THUONG, kenh=k["ma"],
+            chuyen_gi="Giám đốc kênh {0} đến hạn {1:.0f} giờ mà chưa chạy được lượt nào ({2}).".format(
+                k["ma"], k["gio"], k["ly_do"]),
+            can_lam_gi="Xem workspace/giam-doc/tien-trinh.log; tắt tạm bằng kenh.yaml giam_doc: tat nếu cần.",
+            neu_khong_lam="Kênh không có ai đọc số và đề xuất việc sau khi đăng.",
+            dedupe_khoa="giam_doc:ket:" + k["ma"]))
+    for ma in giam_doc._kenh_bat(goc):  # noqa: SLF001
+        for viec in giam_doc.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio):
+            ra.append(_su_co(
+                "giam_doc_viec", bao_dong.MUC_NHAC, kenh=ma,
+                chuyen_gi="Giám đốc kênh {0}: {1}".format(ma, viec[:300]), can_lam_gi=viec[:300],
+                dedupe_khoa="giam_doc:viec:{0}:{1}".format(ma, hashlib.sha1(viec.encode("utf-8")).hexdigest()[:12])))
+    return ra
+
+
 # ── `python -m core.gac_tong --mot-luot [--thu]` ────────────────────────────
 
 
@@ -1625,6 +1660,22 @@ def _main(argv: Optional[List[str]] = None) -> int:
             "Các chốt an toàn (ví/license/hạn VPS/giọng) không chạy được: {0}".format(str(loi_chot)[:150]),
             can_lam_gi="Báo người quản trị tool xem nhật ký.", dedupe_khoa="chot:tat_ca"))
     ds_su_co += kiem_lai_goi_ket_dinh_ky(goc, sorted((anh.get("kenh") or {}).keys()), ghi_dia=not thu)
+    # Giám đốc kênh (01/10/2026, `core/giam_doc`): `nhip` chỉ QUYẾT có việc không, có thì sinh tiến trình
+    # tách rời `python -m core.giam_doc --chay` (khoá `workspace/giam-doc/.khoa`). try riêng — hỏng không
+    # được làm sập gác tổng.
+    tom_tat_gd = ""
+    try:
+        from core import giam_doc  # noqa: PLC0415
+
+        kq_gd = giam_doc.nhip(goc, thu=thu)
+        tom_tat_gd = "{0} kênh đến hạn — {1}".format(len(kq_gd.get("viec") or []), kq_gd.get("ly_do"))
+        ds_su_co += kiem_giam_doc(goc, ghi_dia=not thu)
+    except Exception as loi_gd:  # noqa: BLE001
+        tom_tat_gd = "không chạy được ({0})".format(str(loi_gd)[:200])
+        ds_su_co.append(_su_co(
+            "giam_doc_hong", bao_dong.MUC_NHAC,
+            "Giám đốc kênh không chạy được: {0}".format(str(loi_gd)[:150]),
+            can_lam_gi="Báo người quản trị tool xem nhật ký.", dedupe_khoa="giam_doc:hong"))
     ket_qua = bao_cao_su_co(goc, anh, ds_su_co, ghi_dia=not thu)
     hanh_dong_tu_sua = tu_sua(goc, anh, ghi_dia=not thu)
 
@@ -1641,6 +1692,9 @@ def _main(argv: Optional[List[str]] = None) -> int:
         print("Tự sửa{0}:".format(" (--thu: SẼ làm, chưa làm thật)" if thu else ""))
         for h in hanh_dong_tu_sua:
             print("  - {0}".format(h["chuyen_gi"]))
+    if tom_tat_gd:
+        print("")
+        print("Giám đốc kênh: {0}".format(tom_tat_gd))
     # Kiểm cập nhật (30/09/2026, `core/cap_nhat_git.py`): tự hãm nhịp ~30 phút,
     # `git fetch` + đọc origin/main:VERSION; có bản mới + tự động bật + máy rảnh
     # thì SINH tiến trình `dong_bo_git keo` tách rời (gác tổng không chờ nó).

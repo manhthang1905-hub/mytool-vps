@@ -1153,14 +1153,22 @@ TY_TRONG_SAN = 0.2
 
 
 def _moc_danh_gia(hs: Dict[str, Any]) -> Optional[Tuple[float, float, float]]:
-    """(ctr, imp, giờ) — mốc 48h trước (điều phối: "CTR trang chủ @48h"), lùi 72h;
-    CTR trang chủ nếu hồ sơ có (`ctr_trang_chu`)."""
+    """(ctr, imp, giờ) — mốc 48h trước, lùi 72h. CTR TỔNG (`ctr`), KHÔNG lấy `ctr_trang_chu`:
+    `khuon["ctr"]` (mốc so "tụt") là CTR tổng của video khuôn — 01/10/2026 hồ sơ bắt đầu có
+    `ctr_trang_chu` (giám đốc kênh), đổi thước giữa chừng sẽ làm "tụt" giả."""
     for ten in ("48h", "72h"):
         m = (hs.get("chi_so") or {}).get(ten)
         if not isinstance(m, dict) or m.get("ctr") is None:
             continue
-        ctr = m.get("ctr_trang_chu") if m.get("ctr_trang_chu") is not None else m.get("ctr")
-        return float(ctr), float(m.get("impressions") or 0), float(m.get("moc_gio_that") or 0)
+        return float(m.get("ctr")), float(m.get("impressions") or 0), float(m.get("moc_gio_that") or 0)
+    return None
+
+
+def _sua_bia_giam_doc(hs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Lần đổi bìa CUỐI do giám đốc kênh làm (`lich_su_sua[]` có `doi_boi: "giam_doc"`), hoặc None."""
+    for m in reversed(list(hs.get("lich_su_sua") or [])):
+        if isinstance(m, dict) and m.get("loai") == "bia" and m.get("doi_boi") == "giam_doc":
+            return m
     return None
 
 
@@ -1216,7 +1224,20 @@ def hoc_sau_video(goc: str, kenh: str, khuon: Dict[str, Any], *,
         nhom = nhom_cua_thumbnail(th)
         dong = {"ma_goi": ma_goi, "video_id": hs["video_id"], "ctr": moc[0], "imp": moc[1],
                 "nhom": nhom, "kieu": th.get("kieu", "")}
-        if anh_that_cua is not None:
+        sua_gd = _sua_bia_giam_doc(hs)
+        if sua_gd is not None:
+            # Bìa trên YouTube khác bìa tool chọn vì GIÁM ĐỐC KÊNH đổi (bìa hạng nhì) — không phải bìa
+            # tay. Mốc đo trước lúc đổi vẫn là số của bìa tool chọn → tính như thường; đổi trước mốc
+            # thì số trộn hai bìa → không tính.
+            dong["doi_boi"] = "giam_doc"
+            luc_moc = next((str(m.get("luc_chup") or "") for m in (hs.get("chi_so") or {}).values()
+                            if isinstance(m, dict) and float(m.get("moc_gio_that") or -1) == moc[2]), "")
+            if luc_moc and str(sua_gd.get("luc") or "").replace("T", " ")[:16] < luc_moc[:16]:
+                da_tinh.add(ma_goi)
+                dong["ket_qua"] = "giám đốc đổi bìa trước mốc đo — không tính"
+                nhat_ky.append(dong)
+                continue
+        elif anh_that_cua is not None:
             duong_that = anh_that_cua(str(hs["video_id"]))
             duong_tool = ho_so_video.duong_anh_ho_so(goc, kenh, ma_goi)
             chenh = khac_bia_tool(duong_that, duong_tool) if duong_that else None

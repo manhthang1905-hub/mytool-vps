@@ -452,7 +452,7 @@ def _kenh_gia(ten, subs=1000, videos=None):
 def test_do_ung_vien_truyen_bo_qua_zatsugaku_xuong_kenh_bi_loai(monkeypatch):
     goi = []
 
-    def kenh_bi_loai_gia(ten, link, *, bo_qua_zatsugaku=False):
+    def kenh_bi_loai_gia(ten, link, *, bo_qua_zatsugaku=False, **_kw):
         goi.append(bo_qua_zatsugaku)
         return False
 

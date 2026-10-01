@@ -51,6 +51,8 @@ __all__ = [
     # Các đường ghi công tắc — thuần, trang mới lẫn trang cũ gọi được.
     "doi_cong_tac", "doi_ngan_sach", "doi_gio_dang", "doi_nhip_dang",
     "doi_phut_phien", "doi_giu_luot", "tam_dung_tat_ca", "bat_lai_tam_dung",
+    # Giám đốc kênh (01/10/2026).
+    "doi_giam_doc", "giam_doc_the", "CHE_DO_GIAM_DOC",
     # Mức việc — dùng để sắp xếp/tô màu ở cả hai lớp.
     "HONG", "CANH_BAO", "THUONG",
     # Mức thẻ kênh (`muc_the`).
@@ -802,6 +804,36 @@ def doi_phut_phien(goc: str, ma: str, phut: int) -> None:
     vm_cai_dat.luu(goc, ma, phien_truoc_phut=int(phut))
 
 
+#: Công tắc 3 nấc của giám đốc kênh (`kenh.yaml: giam_doc`) — nhãn người đọc.
+CHE_DO_GIAM_DOC = (("tat", "Tắt"), ("goi_y", "Gợi ý (chỉ ghi, không áp)"), ("tu_ap", "Tự áp (có giới hạn)"))
+
+
+def doi_giam_doc(goc: str, ma: str, che_do: str) -> None:
+    """`kenh.yaml: giam_doc: tat | goi_y | tu_ap` — giá trị lạ thì ném lỗi (giao diện báo)."""
+    che_do = str(che_do or "").strip().lower()
+    if che_do not in {k for k, _ in CHE_DO_GIAM_DOC}:
+        raise ValueError("chế độ giám đốc kênh lạ: {0}".format(che_do))
+    tt.ghi_cai_kenh(goc, ma, giam_doc=che_do)
+
+
+def giam_doc_the(goc: str, ma: str) -> Dict[str, Any]:
+    """Dòng giám đốc kênh của thẻ kênh: `{che_do, cau, bao_cao}` — `bao_cao` = đường `BAO-CAO-TUAN.md`
+    ("" nếu chưa có). Chỉ đọc đĩa; hỏng thì chế độ "tat", câu rỗng."""
+    try:
+        from .giam_doc import bao_cao as _bc  # noqa: PLC0415
+        from .giam_doc.du_lieu import thu_muc_giam_doc  # noqa: PLC0415
+
+        cai = _kenh_mod.doc_yaml(os.path.join(_kenh_mod.duong_kenh(goc, ma), _kenh_mod.TEP_KENH)) or {}
+        che_do = str(cai.get("giam_doc") or "tat").strip().lower()
+        che_do = che_do if che_do in {k for k, _ in CHE_DO_GIAM_DOC} else "tat"
+        duong = os.path.join(thu_muc_giam_doc(goc, ma), _bc.TEP_BAO_CAO_MD)
+        co = os.path.isfile(duong)
+        cau = _bc.cau_the(goc, ma) if (che_do != "tat" or co) else ""
+        return {"che_do": che_do, "cau": cau, "bao_cao": duong if co else ""}
+    except Exception:  # noqa: BLE001 — dòng phụ, không làm hỏng thẻ
+        return {"che_do": "tat", "cau": "", "bao_cao": ""}
+
+
 #: Khoá `workspace/trung-tam.json` nhớ những kênh mà "Tạm dừng tất cả" đã tắt.
 KHOA_TAM_DUNG = "tam_dung_kenh"
 
@@ -1156,6 +1188,28 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             chu=str(cb["chuyen_gi"]),
             goi_y="→ " + str(cb.get("can_lam_gi") or "xem workspace/loi-chay-max.md")))
 
+    # 15) Giám đốc kênh (01/10/2026): "Việc của bạn" trong báo cáo cuối (gợi ý chỉ chủ đổi được, đổi tiêu
+    # đề video trượt, sức khoẻ kênh…). Bấm "Đã xong" thì ẩn; nhắc lại qua bao_dong ≤ 1 lần / 4 giờ (gác tổng).
+    try:
+        import hashlib  # noqa: PLC0415
+
+        from . import giam_doc as _gd  # noqa: PLC0415
+
+        for k in kenh_ds:
+            ma = str(k.get("ma") or "")
+            for chu_gd in _gd.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio):
+                khoa = "giam-doc:{0}:{1}".format(ma, hashlib.sha1(chu_gd.encode("utf-8")).hexdigest()[:12])
+                if khoa in da_xong:
+                    continue
+                ra.append(_viec(
+                    khoa, THUONG, kenh=ma, chu="Giám đốc kênh: " + _cat_chu(chu_gd, 200),
+                    goi_y="→ xem Báo cáo tuần của kênh",
+                    nut=[("Báo cáo tuần", "bao_cao_giam_doc", {"ma": ma}),
+                         ("Đã xong", "danh_dau_xong", {"khoa": khoa})],
+                    xong_tay=True))
+    except Exception:  # noqa: BLE001 — giám đốc hỏng không làm hỏng khối việc
+        pass
+
     # 6) ví sắp cạn.
     ma_cac_kenh = [str(k.get("ma") or "") for k in kenh_ds]
     may = dong_may(goc, anh, bay_gio=bay_gio, so_du_micro=so_du_micro,
@@ -1266,6 +1320,7 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         k2["video_gan_day"] = video_gan_day(goc, str(k.get("ma") or ""), 3, bay_gio=bay_gio)
         k2["may_dang_hoc"] = may_dang_hoc(goc, str(k.get("ma") or ""))
         k2["con_thieu_ypp"] = con_thieu_ypp(k.get("ypp") or {})
+        k2["giam_doc"] = giam_doc_the(goc, str(k.get("ma") or ""))
         kenh.append(k2)
 
     viec = viec_cua_ban(goc, anh=anh, bay_gio=bay_gio, so_du_micro=so_du_micro,

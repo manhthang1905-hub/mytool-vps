@@ -957,7 +957,53 @@ def dung_boi_canh(goc: str, ma_kenh: str, *, bay_gio: Optional[_dt.datetime] = N
             ra.update(_boi_canh_gon(goc, ma_kenh, bay_gio, ra, an_toan))
         except Exception:  # noqa: BLE001 — khối gọn hỏng thì lùi về đề bài cũ, không chặn lượt
             pass
+    # 01/10/2026 — chỉ đạo của giám đốc kênh (tay mềm). KHÔNG có chỉ đạo còn hạn / luật tuần thì không thêm
+    # khoá nào: bối cảnh và lời nhắc y hệt từng byte bản cũ (golden).
+    try:
+        chi_dao = _khoi_chi_dao(goc, ma_kenh, bay_gio)
+    except Exception:  # noqa: BLE001
+        chi_dao = ""
+    if chi_dao:
+        ra["chi_dao"] = chi_dao
     return ra
+
+
+TIEU_DE_CHI_DAO = "CHỈ ĐẠO TUẦN NÀY CỦA GIÁM ĐỐC KÊNH"
+
+
+def _khoi_chi_dao(goc: str, ma_kenh: str, bay_gio: _dt.datetime) -> str:
+    """Chỉ đạo còn hạn (`giam_doc.doc_chi_dao`, ≤ 5 dòng) + luật chọn tuần (`kenh.yaml: luat_chon_tuan`).
+    Rỗng khi không có gì — nơi gọi không thêm khối."""
+    dong: List[str] = []
+    try:
+        from . import giam_doc  # noqa: PLC0415
+
+        for d in giam_doc.doc_chi_dao(goc, ma_kenh, bay_gio):
+            nd = _gon(str(d.get("noi_dung") or "").strip(), 200)
+            if nd:
+                han = str(d.get("het_han") or "")[:10]
+                dong.append("- {0}{1}".format(nd, " (tới {0})".format(han) if han else ""))
+    except Exception:  # noqa: BLE001 — giám đốc hỏng không chặn biên tập
+        pass
+    tuan = _yaml_kenh(goc, ma_kenh).get("luat_chon_tuan")
+    if isinstance(tuan, str):
+        tuan = [x.strip() for x in tuan.split("|") if x.strip()]
+    for x in [str(x).strip() for x in (tuan or []) if str(x).strip()][:3]:
+        dong.append("- Luật chọn tuần này: " + _gon(x, 200))
+    if not dong:
+        return ""
+    return ("Tiêu chí MỀM của tuần (giám đốc kênh đọc số của kênh rồi đặt, có hạn) — cân nhắc khi chấm, "
+            "nhưng SỐ THẬT và luật ngách vẫn đứng trên:\n" + "\n".join(dong))
+
+
+def _chen_chi_dao(khuon: str, dau: str, chi_dao: str, *, mo: str, dong: str) -> str:
+    """Chèn khối chỉ đạo vào KHUÔN lời nhắc ngay trước dòng `dau` (đầu khối ỨNG VIÊN). Không có chỉ đạo
+    → trả nguyên khuôn."""
+    if not chi_dao or dau not in khuon:
+        return khuon
+    khoi = mo + TIEU_DE_CHI_DAO + dong + "\n" + chi_dao.replace("{", "{{").replace("}", "}}") + "\n\n"
+    i = khuon.index(dau)
+    return khuon[:i] + khoi + khuon[i:]
 
 
 # ── lời nhắc ─────────────────────────────────────────────────────────────────
@@ -1273,12 +1319,14 @@ TỰ SỬA — các lần đã dự đoán, và số thật:
 def _dung_loi_nhac_gon(boi_canh: Dict[str, str], uv: Sequence[Dict[str, Any]], so_chon: int) -> str:
     """Đề bài gọn + ĐÚNG khối TRẢ LỜI của DE_BAI cũ (cắt từ chính DE_BAI — một nguồn, không lệch)."""
     tra_loi = DE_BAI[DE_BAI.index("═══ TRẢ LỜI ═══"):]
-    gt = {k: v for k, v in boi_canh.items() if not k.startswith("_")}
+    gt = {k: v for k, v in boi_canh.items() if not k.startswith("_") and k != "chi_dao"}
     for k in ("muc_tieu", "dinh_vi", "khan_gia", "video_minh", "bai_hoc", "xu_huong", "da_lam", "tu_sua"):
         gt[k] = gt.get(k) or "(trống)"
     gt.setdefault("khoi_nhom", "")
-    return (DE_BAI_GON_KHUON + tra_loi).format(so_uv=len(uv), so_chon=max(1, int(so_chon)),
-                                               ung_vien=_khoi_ung_vien(uv), **gt)
+    khuon = _chen_chi_dao(DE_BAI_GON_KHUON, "ỨNG VIÊN (thứ tự của công thức):", boi_canh.get("chi_dao") or "",
+                          mo="", dong=":")
+    return (khuon + tra_loi).format(so_uv=len(uv), so_chon=max(1, int(so_chon)),
+                                    ung_vien=_khoi_ung_vien(uv), **gt)
 
 
 def _khoi_ung_vien(uv: Sequence[Dict[str, Any]]) -> str:
@@ -1340,9 +1388,11 @@ def _khoi_ung_vien(uv: Sequence[Dict[str, Any]]) -> str:
 def dung_loi_nhac(boi_canh: Dict[str, str], uv: Sequence[Dict[str, Any]], so_chon: int) -> str:
     if boi_canh.get("_de_bai") == DE_BAI_GON:
         return _dung_loi_nhac_gon(boi_canh, uv, so_chon)
-    return DE_BAI.format(so_uv=len(uv), so_chon=max(1, int(so_chon)), thang=_ngan_so(NGUONG_THANG_48H),
-                         truot=_ngan_so(NGUONG_TRUOT_48H), ung_vien=_khoi_ung_vien(uv),
-                         **{k: (v or "(trống)") for k, v in boi_canh.items() if not k.startswith("_")})
+    khuon = _chen_chi_dao(DE_BAI, "═══ ỨNG VIÊN (thứ tự của công thức) ═══", boi_canh.get("chi_dao") or "",
+                          mo="═══ ", dong=" ═══")
+    return khuon.format(so_uv=len(uv), so_chon=max(1, int(so_chon)), thang=_ngan_so(NGUONG_THANG_48H),
+                        truot=_ngan_so(NGUONG_TRUOT_48H), ung_vien=_khoi_ung_vien(uv),
+                        **{k: (v or "(trống)") for k, v in boi_canh.items() if not k.startswith("_") and k != "chi_dao"})
 
 
 # ── đọc câu trả lời ───────────────────────────────────────────────────────────

@@ -200,11 +200,13 @@ def moi_nhat(v: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def video_sau(bs: "BangSo", tu: Any, *, qua_gio: float = 52.0, id_tn: str = "") -> List[Dict[str, Any]]:
     """Video của TOOL đăng sau mốc `tu` (ISO/datetime) và đã quá `qua_gio` giờ — mẫu đo của một thí
-    nghiệm. Video đã gắn đúng `id_tn` trong hồ sơ luôn được tính."""
+    nghiệm. Video đã gắn `id_tn` trong hồ sơ (`thi_nghiem`: các id cách nhau dấu phẩy — `ho_so_video.tao_ho_so`)
+    luôn được tính."""
     if not isinstance(tu, _dt.datetime):
         tu = _dt.datetime.fromisoformat(str(tu)[:19])
     return [v for v in bs.video if v.get("tu_tool") and (v.get("tuoi_gio") or 0) >= qua_gio
-            and ((id_tn and v.get("thi_nghiem") == id_tn) or (v.get("dang_luc") and v["dang_luc"] >= tu))]
+            and ((id_tn and id_tn in str(v.get("thi_nghiem") or "").split(","))
+                 or (v.get("dang_luc") and v["dang_luc"] >= tu))]
 
 
 def ket_luan_so(tn: Dict[str, Any], moi: List[float]) -> Dict[str, Any]:

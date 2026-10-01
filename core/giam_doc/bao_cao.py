@@ -52,7 +52,8 @@ def bang_so_chu(bs: BangSo, toi_da: int = TOI_DA_KY_TU_BANG) -> str:
         "Ngưỡng thắng 48h của kênh: {0} hiển thị (tính từ {1} video có số 48h) · mục tiêu CTR trang chủ {2} ({3})".format(
             _s(bs.nguong_thang_48h), bs.n_48h,
             _s(bs.ctr_muc_tieu, 1, "%"), bs.nhan_ctr_muc_tieu)
-        + (" — ngưỡng CHƯA VỮNG (< 5 video), nhãn thắng/trượt chỉ để tham khảo" if bs.n_48h < 5 else ""),
+        + (" — kênh < 5 video có số 48h: ngưỡng = ngưỡng NGÁCH trộn dần sang trung vị kênh "
+           "(cong_thuc_v7.nguong_thang_48h), nhãn thắng/trượt còn non" if bs.n_48h < 5 else ""),
     ]
     cuoi_k = [d for d in bs.kenh_ngay if d.get("hien_thi") is not None]
     if cuoi_k:
@@ -150,6 +151,20 @@ def ghi_tuan(goc: str, ma: str, kq: Any) -> str:
                                              " ({0})".format((t.get("ket_luan") or {}).get("ly_do"))
                                              if (t.get("ket_luan") or {}).get("ly_do") else "")
              for t in ds[-8:]] or ["- (chưa có thí nghiệm nào)"]
+    se_lam = list(getattr(kq, "se_lam", []) or [])
+    if kq.che_do == "goi_y":
+        dong += ["", "## Sẽ làm (chế độ gợi ý — CHƯA áp gì)"]
+        dong += ["- {0}{1} — {2}".format(
+            "{0}: {1} → {2}".format(x.get("khoa"), x.get("cu"), x.get("moi")) if x.get("loai") == "tham_so"
+            else "chỉ đạo: “{0}”".format(x.get("moi")), "", x.get("ly_do_llm") or x.get("gia_thuyet") or "")
+            for x in se_lam] or ["- (không chọn gì)"]
+    tc = dict(getattr(kq, "tu_cham", {}) or {})
+    if tc.get("tong") or tc.get("cho") or tc.get("moi_doan"):
+        dong += ["", "## Tự chấm dự đoán thắng/trượt",
+                 "- Đã chấm {0}: đúng {1}{2}; đang chờ 48h: {3} (lượt này đoán thêm {4}).".format(
+                     tc.get("tong", 0), tc.get("dung", 0),
+                     " ({0:.0%})".format(tc["dung"] / tc["tong"]) if tc.get("tong") else "",
+                     tc.get("cho", 0) + int(tc.get("moi_doan") or 0), int(tc.get("moi_doan") or 0))]
     dong += ["", "## Tuần tới", (qd.tuan_toi if qd and qd.tuan_toi else "(chưa có)")]
     vcb = list(kq.viec_cua_ban) + (list(qd.viec_cua_ban) if qd else [])
     if vcb:
@@ -162,7 +177,8 @@ def ghi_tuan(goc: str, ma: str, kq: Any) -> str:
     stn._ghi_json(os.path.join(tm, TEP_BAO_CAO_JSON), {  # noqa: SLF001
         "kenh": ma, "luc": kq.bs.bay_gio.isoformat(timespec="seconds"), "che_do": kq.che_do,
         "chan_doan": qd.chan_doan if qd else "", "tuan_toi": qd.tuan_toi if qd else "",
-        "viec_cua_ban": list(dict.fromkeys(vcb)), "da_lam": kq.da_lam})
+        "viec_cua_ban": list(dict.fromkeys(vcb)), "da_lam": kq.da_lam, "se_lam": se_lam, "tu_cham": tc,
+        "loi_llm": qd.loi if qd is not None else "", "mo_hinh": qd.mo_hinh if qd is not None else ""})
     return duong
 
 
@@ -182,5 +198,9 @@ def cau_the(goc: str, ma: str) -> str:
             str(tt["loi_luc"])[:16].replace("T", " "), str(tt["loi_cuoi"])[:120])
     if not bc:
         return "Giám đốc kênh: chưa chạy lần nào."
-    return "Giám đốc kênh ({0}, {1}): {2} · {3} thí nghiệm đang mở.".format(
-        str(bc.get("luc"))[:16].replace("T", " "), bc.get("che_do"), (bc.get("chan_doan") or "—")[:140], mo)
+    tc = bc.get("tu_cham") or {}
+    doan = " · đoán đúng {0}/{1}".format(tc.get("dung", 0), tc["tong"]) if tc.get("tong") else ""
+    chan = bc.get("chan_doan") or ("(không quyết được: {0})".format(str(bc.get("loi_llm"))[:80])
+                                   if bc.get("loi_llm") else "—")
+    return "Giám đốc kênh ({0}, {1}): {2} · {3} thí nghiệm đang mở{4}.".format(
+        str(bc.get("luc"))[:16].replace("T", " "), bc.get("che_do"), chan[:140], mo, doan)

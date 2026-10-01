@@ -259,6 +259,17 @@ def _cau_hinh_mac_dinh_cho_kenh(goc: str, kenh: str) -> Dict:
         if ho_so.ngach_tu_lac:
             ng["tu_lac"] = list(ho_so.ngach_tu_lac)
         ra["ngach"] = ng
+    # 01/10/2026: ngưỡng thắng 48h của NGÁCH (`ngach.yaml: nguong_thang_48h`) — kênh còn ít video có
+    # số 48h dùng nó (trộn dần sang trung vị riêng, xem `nguong_thang_48h`). Chưa khai → không thêm
+    # khoá (= `toi_thieu_48h`, cấu hình y hệt trước).
+    try:
+        from .ho_so_ngach import doc_ngach_tho  # noqa: PLC0415
+
+        gt = (doc_ngach_tho(goc, ho_so.nhom) or {}).get("nguong_thang_48h")
+        if gt is not None and float(gt) > 0:
+            ra["thang"] = dict(ra["thang"], nguong_ngach_48h=float(gt))
+    except (TypeError, ValueError, AttributeError):
+        pass
     return ra
 
 
@@ -836,19 +847,43 @@ def video_cua_kenh(goc: str, kenh: str, ch: Optional[Dict] = None,
     return ra
 
 
+def nguong_thang_48h(ds: List[VideoMinh], ch: Dict) -> float:
+    """Ngưỡng hiển thị 48h để một video của kênh là THẮNG — MỘT công thức cho mọi nơi
+    (`_danh_dau_thang`, `chien_luoc.ket_qua`, biên tập viên, giám đốc kênh).
+
+    * Kênh đủ `so_video_toi_thieu` (5) video CÓ SỐ 48h: max(`toi_thieu_48h`, `boi_so_trung_vi`
+      × trung vị 48h của chính kênh) — y như trước (TL4-T7 không đổi).
+    * Ít hơn: TRỘN DẦN từ ngưỡng NGÁCH sang ngưỡng của chính kênh, trọng số kênh = ((n−1)/(5−1))²
+      (n = 1 → 0, 2 → 0,06, 3 → 0,25, 4 → 0,56): trung vị của vài video gồm chính các video đang bị
+      xét (×3 thì không video nào vượt nổi), nên tin nó CHẬM. Ngưỡng ngách = `ngach.yaml: nguong_thang_48h`
+      (→ `thang.nguong_ngach_48h`, xem `_cau_hinh_mac_dinh_cho_kenh`), chưa khai thì `toi_thieu_48h`.
+
+    ═══ VÌ SAO (01/10/2026) ═══ Trước đây chỉ đếm `len(ds)` (mọi video có thư mục chi-so, kể cả
+    chưa tới 48h), nên kênh có 5 video mà mới 1 video đủ 48h lấy 3 × CHÍNH video ấy làm ngưỡng:
+    TL3-T7 = 3 × 15.707 = 47.121 → video 低IQ (23,7k hiển thị, CTR 8,9%) bị nhãn "trượt" — không
+    video nào vượt nổi 3 lần chính nó. Giờ đếm video CÓ SỐ 48h."""
+    th = ch["thang"]
+    san = float(th["toi_thieu_48h"])
+    du = max(1, int(th.get("so_video_toi_thieu", 5) or 5))
+    so48 = [v.hien_thi_48h for v in ds if v.hien_thi_48h is not None]
+    ngach = float(th.get("nguong_ngach_48h") or san)
+    if not so48:
+        return ngach
+    rieng = max(san, float(th["boi_so_trung_vi"]) * statistics.median(so48))
+    n = len(so48)
+    if n >= du:
+        return rieng
+    w = ((n - 1) / float(du - 1)) ** 2
+    return (1.0 - w) * ngach + w * rieng
+
+
 def _danh_dau_thang(ds: List[VideoMinh], ch: Dict) -> None:
     th = ch["thang"]
-    so_toi_thieu = int(th.get("so_video_toi_thieu", 5) or 5)
     so48 = [v.hien_thi_48h for v in ds if v.hien_thi_48h is not None]
-    # Kênh CHƯA đủ `so_video_toi_thieu` video thì bỏ số hạng "boi_so × trung vị": trung vị
-    # của 1-2 video rồi nhân 3 là một mốc gần như không video nào tự vượt nổi CHÍNH NÓ — kênh
-    # mới trong nhóm (`nhom_kenh.tao_kenh_trong_nhom`) sẽ không bao giờ có video thắng đầu
-    # tiên, dù video ấy hiển thị vượt xa mốc tối thiểu của cả ngách. TL4-T7 (≥5 video) không
-    # đổi hành vi — số hạng vẫn áp như cũ.
-    if not so48 or len(ds) < so_toi_thieu:
-        nguong = float(th["toi_thieu_48h"])
-    else:
-        nguong = max(float(th["toi_thieu_48h"]), th["boi_so_trung_vi"] * statistics.median(so48))
+    # Ngưỡng: `nguong_thang_48h` — kênh ít video có số 48h dùng ngưỡng NGÁCH trộn dần sang trung
+    # vị của chính kênh (1–2 video × 3 là mốc không video nào tự vượt nổi CHÍNH NÓ). Kênh ≥ 5
+    # video có số 48h (TL4-T7) không đổi hành vi.
+    nguong = nguong_thang_48h(ds, ch)
     manh = max(so48) if so48 else nguong
     for v in ds:
         if v.hien_thi_48h is not None and v.hien_thi_48h >= nguong:

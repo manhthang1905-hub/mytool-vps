@@ -173,6 +173,46 @@ def ghi_nhat_ky(goc: str, ma: str, *, viec: str, truoc: Any = None, sau: Any = N
     return dong_
 
 
+TEP_DU_DOAN = "du-doan.json"
+
+
+def doc_du_doan(goc: str, ma: str) -> List[Dict[str, Any]]:
+    """Sổ dự đoán (`du-doan.json`): [{video_id, ket, ly_do, luc, ket_that?, dung?, cham_luc?}] cũ → mới."""
+    du = _doc_json(os.path.join(thu_muc_giam_doc(goc, ma), TEP_DU_DOAN), {})
+    return [d for d in du.get("du_doan") or [] if isinstance(d, dict)]
+
+
+def ghi_du_doan(goc: str, ma: str, ds: List[Dict[str, Any]], *,
+                bay_gio: Optional[_dt.datetime] = None) -> int:
+    """Thêm dự đoán thắng/trượt của giám đốc cho video đang chờ (MỖI video giữ dự đoán ĐẦU TIÊN — đoán
+    lại khi đã thấy thêm số là gian). Trả số dự đoán mới ghi."""
+    cu = doc_du_doan(goc, ma)
+    co = {d.get("video_id") for d in cu}
+    moi = [dict(d, luc=_luc(bay_gio)) for d in ds if d.get("video_id") and d["video_id"] not in co]
+    if moi:
+        _ghi_json(os.path.join(thu_muc_giam_doc(goc, ma), TEP_DU_DOAN), {"kenh": ma, "du_doan": cu + moi})
+    return len(moi)
+
+
+def cham_du_doan(goc: str, ma: str, ket_luan_cua: Dict[str, str], *,
+                 bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """TỰ CHẤM: dự đoán nào mà video nay đã có kết luận ("thang" | "truot") thì ghi đúng/sai.
+    `ket_luan_cua` = {video_id: kết luận hiện tại}. Trả {tong, dung, moi} trên mọi dự đoán đã chấm."""
+    ds = doc_du_doan(goc, ma)
+    moi = 0
+    for d in ds:
+        kl = ket_luan_cua.get(str(d.get("video_id")))
+        if "dung" in d or kl not in ("thang", "truot"):
+            continue
+        d.update(ket_that=kl, dung=(d.get("ket") == kl), cham_luc=_luc(bay_gio))
+        moi += 1
+    if moi:
+        _ghi_json(os.path.join(thu_muc_giam_doc(goc, ma), TEP_DU_DOAN), {"kenh": ma, "du_doan": ds})
+    da = [d for d in ds if "dung" in d]
+    return {"tong": len(da), "dung": sum(1 for d in da if d["dung"]), "moi": moi,
+            "cho": sum(1 for d in ds if "dung" not in d)}
+
+
 def ghi_trang_thai(goc: str, ma: str, **thay: Any) -> Dict[str, Any]:
     """Gộp `thay` vào `trang-thai.json` (khoá con dict thì gộp nông)."""
     tt = doc_trang_thai(goc, ma)

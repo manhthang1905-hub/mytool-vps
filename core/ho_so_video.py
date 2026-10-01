@@ -55,6 +55,7 @@ __all__ = [
     "duong_thu_muc_ho_so", "duong_tep_ho_so", "duong_anh_ho_so", "doc_ho_so",
     "tao_ho_so", "ghi_video_id", "cap_nhat_chi_so", "bu_ho_so",
     "doc_bang_hieu_suat_tieu_de", "nguon_cua_goi",
+    "ghi_sua", "do_truoc_sau", "duong_bia_2_ho_so",
 ]
 
 #: Khung mốc giờ chuẩn dùng để gộp số liệu Studio (mục 2.2, Việc 3 bản thiết
@@ -144,6 +145,43 @@ def _sao_luu_anh_bia(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> None:
         os.replace(tam, dich)
     except OSError:
         pass
+
+
+def duong_bia_2_ho_so(goc: str, kenh: str, ma_goi: str) -> str:
+    """Bản sao bìa HẠNG NHÌ của giám khảo — `ho-so-video/anh/<mã gói>-bia-2.jpg`."""
+    return os.path.join(duong_thu_muc_ho_so(goc, kenh), "anh", "{0}-bia-2.jpg".format(ma_goi))
+
+
+def _sao_luu_bia_2(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> Optional[Dict[str, Any]]:
+    """Chép bìa hạng nhì (theo `chon-bia.json`: điểm cao nhất sau tấm được chọn, không bị loại) sang
+    `anh/<mã gói>-bia-2.jpg` — giám đốc kênh đổi bìa video trượt mà không tốn tiền sinh lại.
+    Không có bản chấm / không có tấm nhì / lỗi đĩa → None (metadata phụ, không chặn hồ sơ)."""
+    try:
+        from . import chon_bia  # noqa: PLC0415
+
+        thu_muc = os.path.dirname(duong_anh)
+        du = chon_bia.doc_chon_bia(thu_muc) or {}
+        so_chon = (du.get("chon") or {}).get("so")
+        ds = [u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")
+              and u.get("so") is not None and u.get("so") != so_chon and u.get("tong_diem") is not None]
+        if not ds:
+            return None
+        nhi = max(ds, key=lambda u: float(u["tong_diem"]))
+        nguon = next((os.path.join(thu_muc, t) for t in sorted(os.listdir(thu_muc))
+                      if not t.upper().startswith("CHON-") and _RE_THUMB_SO.match(t)
+                      and int(_RE_THUMB_SO.match(t).group(1)) == int(nhi["so"])
+                      and os.path.splitext(t)[1].lower() in (".png", ".jpg", ".jpeg", ".webp")), "")
+        if not nguon:
+            return None
+        dich = duong_bia_2_ho_so(goc, kenh, ma_goi)
+        os.makedirs(os.path.dirname(dich), exist_ok=True)
+        shutil.copy2(nguon, dich + ".tmp")
+        os.replace(dich + ".tmp", dich)
+        return {"tep": os.path.basename(nguon), "so": nhi["so"], "kieu": str(nhi.get("kieu") or ""),
+                "nhom": str(nhi.get("nhom") or ""), "tong_diem": nhi.get("tong_diem"),
+                "anh": os.path.join("anh", os.path.basename(dich)).replace("\\", "/")}
+    except Exception:  # noqa: BLE001 — bìa nhì là phụ
+        return None
 
 
 # ── Đọc dữ liệu từ thư mục lượt sản xuất ────────────────────────────────────
@@ -317,6 +355,11 @@ def _khung_ho_so(kenh: str, ma_goi: str, *, luc: Optional[_dt.datetime] = None) 
         # lượt THĂM DÒ không — tra qua sổ lượt (`nguon_cua_goi`). Hồ sơ cũ thiếu hai khoá này vẫn
         # đúng: `core.chien_luoc.ket_qua` nối lại qua sổ lượt, không đọc hai khoá này.
         "cong_thuc": "", "tham_do": False,
+        # 01/10/2026 (giám đốc kênh): mọi lần sửa tiêu đề/bìa trên Studio (`ghi_sua`, đo trước/sau ở
+        # `cap_nhat_chi_so`) + id thí nghiệm đang mở lúc video ra đời (cách nhau dấu phẩy; rỗng = không).
+        "lich_su_sua": [], "thi_nghiem": "",
+        # bìa hạng nhì của giám khảo (`anh/<mã gói>-bia-2.jpg`) — đổi bìa không tốn tiền sinh lại.
+        "bia_2": None,
     }
 
 
@@ -433,6 +476,7 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
             ho_so["thumbnail"].update(nhom=tt_chon.get("nhom", ""), theo_khuon=bool(tt_chon["theo_khuon"]),
                                       tham_do=bool(tt_chon.get("tham_do")))
         _sao_luu_anh_bia(goc, kenh, ma_goi, duong_anh)
+        ho_so["bia_2"] = _sao_luu_bia_2(goc, kenh, ma_goi, duong_anh)
 
     duong_video = os.path.join(thu_muc_luot, ban_giao_dang.TEP_VIDEO)
     if os.path.isfile(duong_video):
@@ -461,7 +505,9 @@ def _xay_ho_so_toi_gian(goc: str, kenh: str, ma_goi: str, hang: Dict[str, str]) 
     if duong_anh:
         ten_anh = os.path.basename(duong_anh)
         ho_so["thumbnail"] = {
-            "tep": ten_anh, "kieu": tt_chon.get("kieu") or _version_desc_tu_ten_anh(ten_anh),
+            # 01/10/2026: bỏ `tt_chon.get("kieu")` — biến không tồn tại ở nhánh tối giản (NameError
+            # làm `bu_ho_so` im lặng bỏ mọi gói đã dọn).
+            "tep": ten_anh, "kieu": _version_desc_tu_ten_anh(ten_anh),
             "chon_boi": "nguoi" if ten_anh.upper().startswith("CHON-") else "khong_ro",
             "diem_giam_khao": None, "ly_do": "", "khuon_thang_dung": False,
         }
@@ -490,7 +536,107 @@ def tao_ho_so(goc: str, kenh: str, luot: str, ma_goi: str) -> str:
         _gan_cong_thuc(ho_so, nguon_cua_goi(goc, kenh).get(ma_goi))
     except Exception:  # noqa: BLE001
         pass
+    ho_so["thi_nghiem"] = _thi_nghiem_dang_mo(goc, kenh)
     return _luu_ho_so(goc, kenh, ma_goi, ho_so)
+
+
+def _thi_nghiem_dang_mo(goc: str, kenh: str) -> str:
+    """Id các thí nghiệm giám đốc kênh đang mở (`giam-doc/thi-nghiem.json`), cách nhau dấu phẩy —
+    video ra đời lúc này thuộc mẫu đo của chúng. Không có sổ / hỏng → ""."""
+    try:
+        from .giam_doc import so_thi_nghiem as _stn  # noqa: PLC0415
+
+        return ",".join(str(t.get("id")) for t in _stn.dang_mo(_stn.doc(goc, kenh)) if t.get("id"))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+#: Mỗi phía của phép đo trước/sau một lần sửa cần ít nhất ngần này hiển thị.
+HIEN_THI_TOI_THIEU_DO_SUA = 500
+_KHOA_MOC_SUA = ("impressions", "ctr", "views", "ctr_trang_chu", "hien_thi_trang_chu", "luc_chup", "moc_gio_that")
+
+
+def ghi_sua(goc: str, kenh: str, ma_goi: str, *, loai: str, cu: Any, moi: Any, doi_boi: str = "giam_doc",
+            thi_nghiem: str = "", ly_do: str = "", bay_gio: Optional[_dt.datetime] = None) -> Optional[Dict[str, Any]]:
+    """Ghi MỘT lần sửa trên Studio (`loai`: "tieu_de" | "bia") vào `lich_su_sua[]` của hồ sơ.
+
+    Chỉ hồ sơ ĐÃ có `video_id` (sửa video nào phải biết video nào). `moc_truoc` = bản chụp mới nhất lúc
+    sửa (số CỘNG DỒN); `cap_nhat_chi_so` điền `do` (hiệu hai bản chụp, mỗi phía ≥ 500 hiển thị).
+    `doi_boi="giam_doc"` để `bia_theo_khuon` không coi bìa giám đốc đổi là bìa tay. Trả mục vừa ghi
+    hoặc None."""
+    ho_so = doc_ho_so(goc, kenh, ma_goi)
+    if not isinstance(ho_so, dict) or not ho_so.get("video_id"):
+        return None
+    sm = ho_so.get("so_lieu_moi_nhat") or {}
+    muc = {"luc": (bay_gio or _dt.datetime.now()).replace(microsecond=0).isoformat(), "loai": str(loai),
+           "cu": cu, "moi": moi, "doi_boi": str(doi_boi or ""), "thi_nghiem": str(thi_nghiem or ""),
+           "ly_do": str(ly_do or ""), "moc_truoc": {k: sm.get(k) for k in _KHOA_MOC_SUA} if sm else None,
+           "do": None}
+    ho_so["lich_su_sua"] = list(ho_so.get("lich_su_sua") or []) + [muc]
+    _luu_ho_so(goc, kenh, ma_goi, ho_so)
+    return muc
+
+
+def _so_hs(x: Any) -> Optional[float]:
+    try:
+        return float(str(x).replace(",", "").replace("%", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def do_truoc_sau(muc: Dict[str, Any], sau: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Trước/sau một lần sửa từ HAI bản chụp cộng dồn: trước = số tới lúc sửa (`moc_truoc`), sau =
+    hiệu (bản chụp mới nhất − `moc_truoc`). CTR sau = (bấm sau − bấm trước) / (hiển thị sau − trước).
+    `du` = mỗi phía ≥ `HIEN_THI_TOI_THIEU_DO_SUA` hiển thị."""
+    t = muc.get("moc_truoc") or {}
+    ra: Dict[str, Any] = {"du": False, "truoc": None, "sau": None, "luc_chup_sau": (sau or {}).get("luc_chup")}
+    it, ct = _so_hs(t.get("impressions")), _so_hs(t.get("ctr"))
+    if it is None or ct is None:
+        return ra
+    ra["truoc"] = {"hien_thi": it, "ctr": round(ct, 2)}
+    if not sau or str(sau.get("luc_chup") or "") <= str(t.get("luc_chup") or ""):
+        return ra
+    is_, cs = _so_hs(sau.get("impressions")), _so_hs(sau.get("ctr"))
+    if is_ is None or cs is None or is_ <= it:
+        return ra
+    them = is_ - it
+    ctr_sau = max(0.0, (is_ * cs - it * ct) / them)
+    ra["sau"] = {"hien_thi": round(them), "ctr": round(ctr_sau, 2)}
+    tb, cb = _so_hs(t.get("hien_thi_trang_chu")), _so_hs(t.get("ctr_trang_chu"))
+    sb, csb = _so_hs(sau.get("hien_thi_trang_chu")), _so_hs(sau.get("ctr_trang_chu"))
+    if None not in (tb, cb, sb, csb) and sb > tb:
+        ra["truoc"]["ctr_trang_chu"] = round(cb, 2)
+        ra["sau"]["ctr_trang_chu"] = round(max(0.0, (sb * csb - tb * cb) / (sb - tb)), 2)
+    ra["du"] = it >= HIEN_THI_TOI_THIEU_DO_SUA and them >= HIEN_THI_TOI_THIEU_DO_SUA
+    return ra
+
+
+def _browse_cua_ban_chup(thu_muc: str) -> Tuple[Optional[float], Optional[float]]:
+    """(hiển thị trang chủ, CTR trang chủ) — dòng "Browse features" của `traffic-type.csv` cạnh bản chụp
+    (Studio xuất riêng, không bộ giải mã nào gộp vào `BanGhi`)."""
+    if not thu_muc:
+        return None, None
+    try:
+        from .chi_so_ytb.gom import doc_csv  # noqa: PLC0415
+
+        for dong in doc_csv(os.path.join(thu_muc, "traffic-type.csv")):
+            if dong and dong[0].strip() == "Browse features" and len(dong) > 2:
+                return _so_hs(dong[1]), _so_hs(dong[2])
+    except Exception:  # noqa: BLE001
+        pass
+    return None, None
+
+
+def _pct_nguon(traffic: Any, khoa: str) -> Optional[float]:
+    """% lượt xem từ nguồn `khoa` ("browse" | "related") — chuẩn hoá trên tổng các nguồn."""
+    if not isinstance(traffic, dict):
+        return None
+    so_ = [float(v) for v in traffic.values() if isinstance(v, (int, float))]
+    tong = sum(so_)
+    if not tong:
+        return None
+    v = traffic.get(khoa)
+    return round(100.0 * float(v) / tong, 1) if isinstance(v, (int, float)) else 0.0
 
 
 def ghi_video_id(goc: str, kenh: str, ma_goi: str, video_id: str,
@@ -640,12 +786,19 @@ def cap_nhat_chi_so(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = No
                 if not ten_moc:
                     continue
                 cu = chi_so.get(ten_moc)
-                if isinstance(cu, dict) and cu.get("luc_chup") == b.luc_chup:
+                if isinstance(cu, dict) and cu.get("luc_chup") == b.luc_chup and "pct_browse" in cu:
                     continue  # số liệu y hệt lần trước — không phải "cập nhật mới"
+                # 01/10/2026 (giám đốc kênh): thêm CTR trang chủ (dòng Browse của traffic-type.csv),
+                # % view từ trang chủ / đề xuất, sub, giờ xem. Mốc cũ thiếu các khoá này được bù MỘT lần.
+                hien_thi_tc, ctr_tc = _browse_cua_ban_chup(getattr(b, "thu_muc", "") or "")
+                tr = getattr(b, "traffic", None) or {}
                 chi_so[ten_moc] = {
                     "impressions": b.impressions, "ctr": b.ctr, "views": b.views,
                     "avd_pct": b.avd_pct, "avd_giay": b.avd_giay,
                     "luc_chup": b.luc_chup, "moc_gio_that": b.moc_gio,
+                    "ctr_trang_chu": ctr_tc, "hien_thi_trang_chu": hien_thi_tc,
+                    "pct_browse": _pct_nguon(tr, "browse"), "pct_de_xuat": _pct_nguon(tr, "related"),
+                    "subs": getattr(b, "subs", None), "gio_xem": getattr(b, "watch_hours", None),
                 }
                 thay = True
                 cap_nhat_moc += 1
@@ -657,6 +810,15 @@ def cap_nhat_chi_so(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = No
                                    if isinstance(kv[1], dict) and kv[1].get("moc_gio_that") is not None
                                    else -1))
                 ho_so["so_lieu_moi_nhat"] = dict(gt_moi, moc=ten_moc_moi)
+                # đo trước/sau mọi lần sửa trên Studio (giám đốc kênh) bằng bản chụp mới nhất
+                ls = [dict(m) for m in ho_so.get("lich_su_sua") or [] if isinstance(m, dict)]
+                for m in ls:
+                    do = do_truoc_sau(m, gt_moi)
+                    if do != m.get("do"):
+                        m["do"] = do
+                        thay = True
+                if ls:
+                    ho_so["lich_su_sua"] = ls
                 luc_chup = gt_moi.get("luc_chup")
                 if luc_chup:
                     try:

@@ -26,7 +26,10 @@ TIEU_CHI = """\
 - Tự đọc BẢNG SỐ của CHÍNH kênh; ý biên tập viên / nhóm chỉ là tham khảo. n < 3 là tín hiệu yếu — chưa đủ
   số thì chọn ít hoặc không chọn gì, và nói rõ số nào chưa tin được.
 - Mỗi thay đổi là một thí nghiệm đo được; không đổi hai thứ lên cùng một chỉ số; đừng lặp một khuôn.
-- Việc chỉ chủ làm được (Studio, tiền, đăng nhập) → "viec_cua_ban", câu người thường hiểu."""
+- Việc chỉ chủ làm được (Studio, tiền, đăng nhập) → "viec_cua_ban", câu người thường hiểu. CHỈ việc người phải TỰ
+  TAY làm — "đợi số / chờ video qua 48h" không phải việc của ai (máy tự đợi), không ghi vào đó.
+- Với MỖI video đang "chờ" (chưa đủ 48h) trong bảng số: đoán "thang" | "truot" theo ngưỡng của kênh — máy tự
+  chấm khi video qua 48h (tỉ lệ đoán đúng là thước đo giám đốc có đọc đúng kênh không)."""
 
 DANG_TRA_LOI = """\
 Chỉ trả MỘT khối JSON:
@@ -34,6 +37,7 @@ Chỉ trả MỘT khối JSON:
  "chon": [{"id": "d1", "ly_do": "1 câu có số", "noi_dung": "chỉ cho chi_dao (sửa câu được) / viec_studio (tiêu đề mới)"}],
  "ket_luan": [{"id": "<id thí nghiệm>", "ket": "giu|bo|mo_rong|chua_du", "ly_do": "1 câu"}],
  "viec_cua_ban": ["…"],
+ "du_doan": [{"video_id": "<mã video đang chờ>", "ket": "thang|truot", "ly_do": "1 câu có số"}],
  "tuan_toi": "1 câu: tuần tới giám đốc định thử gì"}"""
 
 
@@ -44,6 +48,7 @@ class QuyetDinh:
     chon: List[Dict[str, Any]] = field(default_factory=list)
     ket_luan: List[Dict[str, Any]] = field(default_factory=list)
     viec_cua_ban: List[str] = field(default_factory=list)
+    du_doan: List[Dict[str, Any]] = field(default_factory=list)
     tuan_toi: str = ""
     mo_hinh: str = ""
     loi: str = ""
@@ -107,9 +112,10 @@ def loi_nhac(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[
 
 
 def doc_ket_qua(tho: str, thuc_don: List[Dict[str, Any]], thi_nghiem: List[Dict[str, Any]],
-                toi_da_tham_so: int = 2) -> Optional[Dict[str, Any]]:
+                toi_da_tham_so: int = 2, video_cho: Optional[set] = None) -> Optional[Dict[str, Any]]:
     """Câu trả lời thô → quyết định đã soát. Không đọc được / sai dạng → None. Bỏ mọi id lạ, việc Studio
-    thiếu tiêu đề mới, tham số vượt ngân sách; chữ dài quá thì cắt."""
+    thiếu tiêu đề mới, tham số vượt ngân sách; chữ dài quá thì cắt. `du_doan` chỉ giữ video trong
+    `video_cho` (video đang chờ kết luận của kênh)."""
     from ..goi_van_ban import loc_json  # noqa: PLC0415
 
     try:
@@ -142,7 +148,12 @@ def doc_ket_qua(tho: str, thuc_don: List[Dict[str, Any]], thi_nghiem: List[Dict[
                 for k in du.get("ket_luan") or []
                 if isinstance(k, dict) and k.get("id") in id_tn and k.get("ket") in KET_HOP_LE]
     vcb = du.get("viec_cua_ban") or []
-    return {"chan_doan": _gon(du.get("chan_doan"), 600), "chon": chon, "ket_luan": ket_luan,
+    dd: List[Dict[str, Any]] = []
+    for x in du.get("du_doan") or []:
+        if (isinstance(x, dict) and str(x.get("video_id")) in (video_cho or set()) and x.get("ket") in ("thang", "truot")
+                and all(d["video_id"] != str(x["video_id"]) for d in dd)):
+            dd.append({"video_id": str(x["video_id"]), "ket": x["ket"], "ly_do": _gon(x.get("ly_do"), 200)})
+    return {"chan_doan": _gon(du.get("chan_doan"), 600), "chon": chon, "ket_luan": ket_luan, "du_doan": dd,
             "viec_cua_ban": [_gon(x, 300) for x in (vcb if isinstance(vcb, list) else [vcb]) if str(x).strip()][:5],
             "tuan_toi": _gon(du.get("tuan_toi"), 300)}
 
@@ -168,7 +179,8 @@ def nghi(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[Dict
             if ghi:
                 ghi("  [giám đốc] {0} hỏng — thử bậc dưới.".format(loi))
             continue
-        kq = doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da)
+        kq = doc_ket_qua(tho, thuc_don, thi_nghiem, toi_da,
+                         {v["id"] for v in getattr(bs, "video", []) or [] if not v.get("ket_luan")})
         if kq is not None:
             return QuyetDinh(mo_hinh=mo_hinh, loi_nhac=ln, tho=tho, **kq)
         loi = "{0}: trả lời không đọc được — {1}".format(mo_hinh, _gon(tho, 120))
