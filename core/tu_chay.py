@@ -1174,7 +1174,26 @@ def _ap_cham_bien_tap(ds: List[Dict[str, Any]], ket: Dict[str, Any],
     return moi + con
 
 
-def _cong_chat_luong(ds: List[Dict[str, Any]], log: Callable[[str], None]) -> List[Dict[str, Any]]:
+def _chi_nhan_tot(goc: str, ma_kenh: str) -> str:
+    """01/10/2026 — ĐĂNG THƯA (`chu_ky_dang_ngay` ≥ 2, chủ dự án: "2 ngày 1 video hoặc 3 ngày 1 video"):
+    kho đệm còn ≥ 1 video có lịch/chờ thì lượt này CHỈ nhận nguồn TỐT — bỏ một lượt không làm kênh trống
+    khe, nên không tiêu tiền vào nguồn TẠM. Kho cạn (0 video) thì TẠM ≥ `NGUONG_TAM_DUNG` vẫn được dùng như
+    cũ. Trả lý do (chuỗi rỗng = luật cũ). Hỏng gì cũng trả rỗng."""
+    try:
+        k = doc_kenh(goc, ma_kenh)
+        n = xep_lich.chu_ky_ngay(k)
+        if n < 2 or not xep_lich.che_do_nhieu_khe(k):
+            return ""
+        kho = xep_lich.dem_kho_dem(goc, ma_kenh, k)
+        if int(kho.get("kho") or 0) >= 1:
+            return "đăng thưa 1 video/{0} ngày, kho đệm còn {1} video".format(n, kho.get("kho"))
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _cong_chat_luong(ds: List[Dict[str, Any]], log: Callable[[str], None],
+                     chi_tot: str = "") -> List[Dict[str, Any]]:
     """KIỂM TRA CHẤT LƯỢNG NGUỒN CUỐI CÙNG (30/09/2026, chủ dự án: "chọn content đúng quyết định 80%").
 
     Có phán quyết biên tập (dòng mang `bien_tap.hang`): chỉ cho qua nguồn TỐT CÓ LÝ DO BIÊN TẬP RÕ.
@@ -1199,6 +1218,10 @@ def _cong_chat_luong(ds: List[Dict[str, Any]], log: Callable[[str], None]) -> Li
         log("  [CỔNG NGUỒN] {0} nguồn TỐT qua cổng: {1}".format(len(tot), " | ".join(
             "“{0}” ({1})".format(str(d.get("tieu_de") or "")[:40], d["bien_tap"].get("diem")) for d in tot[:3])))
         return tot
+    if chi_tot:
+        log("  [CỔNG NGUỒN] không có nguồn TỐT — {0}: KHÔNG nhận nguồn TẠM, không mở lượt (chờ nguồn TỐT)."
+            .format(chi_tot))
+        return []
     tam = [d for d in co_cham if d["bien_tap"]["hang"] == "TAM" and co_ly_do(d)
            and float(d["bien_tap"].get("diem") or 0) >= NGUONG_TAM_DUNG]
     if tam:
@@ -1437,7 +1460,8 @@ def _chon_nguon(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
     la_tham_do = any(d.get("tham_do") for d in ds)
     ds = _bien_tap_ai(goc, ma_kenh, ds, goi_chat, co_v7_truoc, log)
     if goi_chat is not None:
-        ds = _cong_chat_luong(ds, log)
+        chi_tot = _chi_nhan_tot(goc, ma_kenh)
+        ds = _cong_chat_luong(ds, log, **({"chi_tot": chi_tot} if chi_tot else {}))
         if not ds and la_tham_do:
             # 30/09/2026 — lượt THĂM DÒ (kenh.yaml `chien_luoc`) không có nguồn nào qua cổng: lùi về
             # bảng KHAI THÁC ngay trong lượt này, không để thăm dò làm kênh mất một ngày.
@@ -1446,7 +1470,8 @@ def _chon_nguon(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
                                       doc_danh_sach=doc_danh_sach, log=log,
                                       da_lam_tieu_de=da_lam_tieu_de,
                                       nguong_giong_tieu_de=nguong_giong_tieu_de, tham_do=False)
-            ds = _cong_chat_luong(_bien_tap_ai(goc, ma_kenh, ds, goi_chat, co_v7_truoc, log), log)
+            ds = _cong_chat_luong(_bien_tap_ai(goc, ma_kenh, ds, goi_chat, co_v7_truoc, log), log,
+                                  **({"chi_tot": chi_tot} if chi_tot else {}))
     if thong_ke is not None:
         thong_ke["so_ung_vien"] = len(ds)
     if not ds:
@@ -1741,9 +1766,11 @@ def _cua_so_san_xuat(goc: str, ma_kenh: str, kenh: Any,
             return True, "", thong_tin
         if kho["moc_tuong_lai_som_nhat"]:
             thong_tin["mo_cua_san_xuat"] = kho["moc_tuong_lai_som_nhat"]
-        return False, ("kho đệm đã đủ {0}/{1} video ({2} ngày × {3} khe) — sản xuất tiếp khi "
+        return False, ("kho đệm đã đủ {0}/{1} video ({2} ngày, {3}) — sản xuất tiếp khi "
                        "một khe lên sóng{4}.").format(
-                           kho["kho"], kho["can"], kho["kho_dem_ngay"], kho["so_khe_ngay"],
+                           kho["kho"], kho["can"], kho["kho_dem_ngay"],
+                           ("1 video/{0} ngày".format(kho.get("chu_ky_dang_ngay"))
+                            if int(kho.get("chu_ky_dang_ngay") or 1) >= 2 else "{0} khe/ngày".format(kho["so_khe_ngay"])),
                            (" (sớm nhất " + _dt.datetime.fromisoformat(
                                kho["moc_tuong_lai_som_nhat"]).strftime("%d/%m %H:%M") + ")")
                            if kho["moc_tuong_lai_som_nhat"] else ""), thong_tin

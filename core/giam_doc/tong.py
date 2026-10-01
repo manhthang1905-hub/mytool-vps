@@ -1,14 +1,20 @@
 """Tổng giám đốc — cấp VPS, bản gọn (`workspace/THIET-KE-CONG-TY.md`, BẢN GỌN mục 3).
 
 Mỗi thứ Hai, sau lượt tuần của mọi giám đốc kênh: bảng công ty (một dòng mỗi KÊNH YOUTUBE — cặp `-v2` gộp
-làm một) → xếp loại lên / chững / tụt → luật ±1 khe/kênh/tuần trong trần máy → MỘT lượt LLM chọn trong thực
-đơn → (tu_ap) đổi khe qua `trung_tam.ghi_cai_kenh` → báo cáo `workspace/tong-giam-doc/BAO-CAO-CONG-TY.md`.
+làm một) → xếp loại lên / chững / tụt → luật NHỊP NGÀY ±1 bậc/kênh/tuần trong trần máy → MỘT lượt LLM chọn
+trong thực đơn → (tu_ap) đổi nhịp qua `trung_tam.ghi_cai_kenh` → báo cáo `workspace/tong-giam-doc/BAO-CAO-CONG-TY.md`.
+
+01/10/2026 — LUẬT NHỊP NGÀY thay luật số khe/ngày. Chủ dự án: "đăng nhiều video mỗi ngày không tốt, view lẹt
+đẹt; nên 2 ngày 1 video hoặc 3 ngày 1 video" (TL4 thắng ở 1 video/2 ngày; kênh đối thủ đăng thưa có trung vị
+view ≈ 5× kênh đăng dày). Bậc nhịp `chu_ky_dang_ngay`: 1 → 2 → 3 ngày/video. Kênh LÊN → dày hơn một bậc (tối đa
+1 video/ngày); kênh CHỮNG hoặc TỤT → thưa hơn một bậc (tối đa 1 video/3 ngày). Kênh còn nhiều khe/ngày → về
+1 khe/ngày. `khe_cu`/`khe_moi` trong thực đơn = số VIDEO/NGÀY (1, 0,5, 0,33).
 
     bang_cong_ty(goc) · xep_loai(dong) · chia_khe(bang, tran) · hop_tuan(goc, goi_chat) · bao_cao(goc, kq)
     den_han(goc) · cau_the(goc) · de_xuat_kenh_moi(goc, cs)
 
 Khoá `workspace/cai-dat.json: tong_giam_doc: tat | goi_y | tu_ap` (mặc định `tat`). Gợi ý = chỉ ghi báo cáo.
-Chỉ đổi `nhip_dang`, `video_toi_da_ngay`, `ngan_sach_ngay` (chỉ nâng) của kênh nhiều khe; nghỉ 14 ngày sau mỗi
+Chỉ đổi `chu_ky_dang_ngay`, `nhip_dang`, `video_toi_da_ngay`, `ngan_sach_ngay` (chỉ nâng); nghỉ 14 ngày sau mỗi
 lần đổi; chủ sửa tay thì không đè; quay lui khi hiển thị 48h trung vị tụt ≥ 30% hoặc máy quá tải.
 """
 
@@ -30,6 +36,8 @@ TEP_MD = "BAO-CAO-CONG-TY.md"
 TEP_JSON = "bao-cao.json"
 CHE_DO = ("tat", "goi_y", "tu_ap")
 KHE_MIN, KHE_MAX = 1, 6
+#: Bậc nhịp ngày (01/10/2026): 1 video mỗi 1..3 ngày.
+CHU_KY_MIN, CHU_KY_MAX = 1, 3
 HE_SO_TRAN = 0.85
 NGHI_NGAY = 14
 CHU_GIU_NGAY = 30
@@ -96,6 +104,26 @@ def _nhip(cai: Dict[str, Any]) -> List[str]:
     return chuan_hoa_nhip(cai.get("nhip_dang"))
 
 
+def _chu_ky(x: Any) -> int:
+    try:
+        return max(1, int(float(x or 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def tan_suat(c: Dict[str, Any]) -> float:
+    """Video/NGÀY của một cấu hình chạy: N ≥ 2 ngày/video → 1/N; N = 1 → số khe/ngày (đường cũ)."""
+    n = _chu_ky(c.get("chu_ky"))
+    return 1.0 / n if n >= 2 else float(len(c.get("nhip") or []) or 1)
+
+
+def ten_tan_suat(f: float) -> str:
+    """0,5 → "1 video/2 ngày"; 1 → "1 video/ngày"; 3 → "3 video/ngày"."""
+    if f >= 1:
+        return "{0:g} video/ngày".format(round(f, 2))
+    return "1 video/{0:g} ngày".format(round(1.0 / f)) if f > 0 else "—"
+
+
 def _bat(x: Any) -> bool:
     return str(x).strip().lower() == "true" or x is True
 
@@ -146,8 +174,10 @@ def bang_cong_ty(goc: str, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[
             cai = bs.cai if m == ma else _cai(goc, m)
             if _bat(cai.get("tu_chay")) and _bat(cai.get("tu_duyet")) and _nhip(cai):
                 chay.append({"ma": m, "nhip": _nhip(cai), "video_toi_da_ngay": int(cai.get("video_toi_da_ngay") or 0),
-                             "ngan_sach_ngay": int(cai.get("ngan_sach_ngay") or 0)})
+                             "ngan_sach_ngay": int(cai.get("ngan_sach_ngay") or 0),
+                             "chu_ky": _chu_ky(cai.get("chu_ky_dang_ngay"))})
         d = {"ma": ma, "cac_ma": cac, "chay": chay, "khe": sum(len(c["nhip"]) for c in chay),
+             "video_ngay": round(sum(tan_suat(c) for c in chay), 2),
              "hien_thi_7": so7["hien_thi"], "hien_thi_7_truoc": truoc, "gio_xem_7": so7["gio_xem"], "sub_7": so7["sub"],
              "xem_7": so7["xem"], "da": round(so7["hien_thi"] / truoc, 2) if so7["hien_thi"] is not None and truoc else None,
              "thang_28": sum(1 for v in kl if v["ket_luan"] == "thang"), "kl_28": len(kl), "video_28": len(v28),
@@ -177,25 +207,49 @@ def tran_may(cs: Dict[str, Any]) -> float:
 # ── luật khe ───────────────────────────────────────────────────────────────
 
 def chia_khe(bang: List[Dict[str, Any]], tran: float) -> List[Dict[str, Any]]:
-    """Lên +1, tụt −1, chững giữ; mỗi kênh 1..6; tổng ≤ 0,85 × trần máy (quá thì bỏ tăng, rồi bớt kênh nhiều khe)."""
+    """LUẬT NHỊP NGÀY (01/10/2026, thay ±1 khe/ngày): bậc `chu_ky_dang_ngay` 1..3 ngày/video. Lên → dày hơn một
+    bậc (tối đa 1/ngày); chững/tụt → thưa hơn một bậc (tối đa 1/3 ngày); kênh còn nhiều khe/ngày → về 1/ngày.
+    Tổng video/ngày ≤ 0,85 × trần máy (quá thì bỏ bước dày lên — đà thấp trước —, rồi giãn kênh dày nhất).
+    Trả [{ma, khe_cu, khe_moi (video/ngày), chu_ky_cu, chu_ky_moi, ly_do}]."""
     dong = [d for d in bang if d["chay"]]
-    moi = {d["ma"]: max(KHE_MIN, min(KHE_MAX, d["khe"] + {"len": 1, "tut": -1}.get(d["loai"], 0))) for d in dong}
-    tran_tong = math.floor(HE_SO_TRAN * tran) if tran else sum(d["khe"] for d in dong)
-    for d in sorted((d for d in dong if moi[d["ma"]] > d["khe"]), key=lambda d: d.get("da") or 0):
-        if sum(moi.values()) <= tran_tong:
+    cu: Dict[str, int] = {}
+    f_cu: Dict[str, float] = {}
+    moi: Dict[str, int] = {}
+    for d in dong:
+        c = d["chay"][0]
+        n = _chu_ky(c.get("chu_ky"))
+        f_cu[d["ma"]] = tan_suat(c)
+        cu[d["ma"]] = n
+        if n <= 1 and len(c.get("nhip") or []) > 1:
+            moi[d["ma"]] = 1                                     # nhiều khe/ngày → 1 video/ngày
+        elif d["loai"] == "len":
+            moi[d["ma"]] = max(CHU_KY_MIN, n - 1)
+        else:
+            moi[d["ma"]] = min(CHU_KY_MAX, n + 1)
+
+    def tong_f() -> float:
+        return sum((1.0 / moi[m]) for m in moi)
+    tran_tong = HE_SO_TRAN * tran if tran else max(sum(f_cu.values()), float(len(dong)))
+    for d in sorted((d for d in dong if 1.0 / moi[d["ma"]] > f_cu[d["ma"]] + 1e-9), key=lambda d: d.get("da") or 0):
+        if tong_f() <= tran_tong + 1e-9:
             break
-        moi[d["ma"]] = d["khe"]
-    for d in sorted(dong, key=lambda d: (-d["khe"], d.get("da") or 0)):
-        if sum(moi.values()) <= tran_tong:
+        moi[d["ma"]] = cu[d["ma"]]
+    for d in sorted(dong, key=lambda d: (moi[d["ma"]], d.get("da") or 0)):
+        if tong_f() <= tran_tong + 1e-9:
             break
-        if moi[d["ma"]] == d["khe"] and d["khe"] > KHE_MIN:
-            moi[d["ma"]] = d["khe"] - 1
+        if moi[d["ma"]] < CHU_KY_MAX:
+            moi[d["ma"]] += 1
     ra = []
     for d in dong:
-        if moi[d["ma"]] != d["khe"]:
-            ly = ("kênh {0} (đà {1})".format(TEN_LOAI[d["loai"]], d.get("da")) if d["loai"] != "chung"
-                  else "máy vượt trần {0}".format(tran_tong))
-            ra.append({"ma": d["ma"], "khe_cu": d["khe"], "khe_moi": moi[d["ma"]], "ly_do": ly})
+        f_moi = 1.0 / moi[d["ma"]]
+        if moi[d["ma"]] != cu[d["ma"]] or abs(f_moi - f_cu[d["ma"]]) > 1e-9:
+            ly = ("kênh {0} (đà {1})".format(TEN_LOAI[d["loai"]], d.get("da")) if not (
+                d["loai"] == "len" and f_moi < f_cu[d["ma"]] - 1e-9 and f_cu[d["ma"]] <= 1)
+                else "máy vượt trần {0:.1f} video/ngày".format(tran_tong))
+            if f_cu[d["ma"]] > 1:
+                ly += "; {0:g} khe/ngày → 1 video/ngày (đăng dày làm view lẹt đẹt)".format(f_cu[d["ma"]])
+            ra.append({"ma": d["ma"], "khe_cu": round(f_cu[d["ma"]], 2), "khe_moi": round(f_moi, 2),
+                       "chu_ky_cu": cu[d["ma"]], "chu_ky_moi": moi[d["ma"]], "ly_do": ly})
     return ra
 
 
@@ -235,8 +289,9 @@ def thuc_don(goc: str, bang: List[Dict[str, Any]], tran: float, so_: Dict[str, A
     for c in chia_khe(bang, tran):
         d = theo[c["ma"]]
         k = d["chay"][0]
-        moi_nhip = nhip_moi(k["nhip"], len(k["nhip"]) + (c["khe_moi"] - c["khe_cu"]), d.get("_video"))
-        n = len(moi_nhip)
+        # Nhịp ngày: MỘT khe/ngày (giữ khe đang có; nhiều khe → giữ khe hiển thị 48h tốt nhất), đổi `chu_ky_dang_ngay`.
+        moi_nhip = nhip_moi(k["nhip"], 1, d.get("_video")) if len(k["nhip"]) > 1 else list(k["nhip"])
+        n = 1
         ns = max(k["ngan_sach_ngay"], int(_uoc_vnd(goc, k["ma"]) * n * 1.3))
         cuoi = next((t for t in reversed(so_["thay_doi"]) if t.get("ma") == k["ma"]), None)
         duoc, ly = True, ""
@@ -245,13 +300,16 @@ def thuc_don(goc: str, bang: List[Dict[str, Any]], tran: float, so_: Dict[str, A
             if tuoi < NGHI_NGAY:
                 duoc, ly = False, "vừa đổi {0} ngày trước — nghỉ {1} ngày".format(tuoi, NGHI_NGAY)
             elif (tuoi < CHU_GIU_NGAY and cuoi.get("trang_thai") != "quay_lui"
-                  and ", ".join(k["nhip"]) != (cuoi.get("moi") or {}).get("nhip_dang")):
-                duoc, ly = False, "chủ đã sửa nhip_dang tay — giữ {0} ngày".format(CHU_GIU_NGAY)
+                  and (", ".join(k["nhip"]) != (cuoi.get("moi") or {}).get("nhip_dang")
+                       or _chu_ky(k.get("chu_ky")) != _chu_ky((cuoi.get("moi") or {}).get("chu_ky_dang_ngay",
+                                                                                         k.get("chu_ky"))))):
+                duoc, ly = False, "chủ đã sửa nhịp tay — giữ {0} ngày".format(CHU_GIU_NGAY)
         ra.append({"id": "t{0}".format(len(ra) + 1), "ma": k["ma"], "kenh_youtube": d["ma"], "loai": d["loai"],
                    "khe_cu": c["khe_cu"], "khe_moi": c["khe_moi"], "ly_do": c["ly_do"],
                    "cu": {"nhip_dang": ", ".join(k["nhip"]), "video_toi_da_ngay": k["video_toi_da_ngay"],
-                          "ngan_sach_ngay": k["ngan_sach_ngay"]},
-                   "moi": {"nhip_dang": ", ".join(moi_nhip), "video_toi_da_ngay": n, "ngan_sach_ngay": ns},
+                          "ngan_sach_ngay": k["ngan_sach_ngay"], "chu_ky_dang_ngay": c["chu_ky_cu"]},
+                   "moi": {"nhip_dang": ", ".join(moi_nhip), "video_toi_da_ngay": n, "ngan_sach_ngay": ns,
+                           "chu_ky_dang_ngay": c["chu_ky_moi"]},
                    "duoc": duoc, "ly_do_kiem": ly})
     return ra
 
@@ -303,8 +361,9 @@ def can_quay_lui(bang: List[Dict[str, Any]], cs: Dict[str, Any], so_: Dict[str, 
 def _ghi_kenh(goc: str, ma: str, gt: Dict[str, Any]) -> None:
     from ..trung_tam import ghi_cai_kenh  # noqa: PLC0415
 
+    them = {"chu_ky_dang_ngay": int(gt["chu_ky_dang_ngay"])} if gt.get("chu_ky_dang_ngay") else {}
     ghi_cai_kenh(goc, ma, nhip_dang=gt["nhip_dang"], video_toi_da_ngay=int(gt["video_toi_da_ngay"]),
-                 ngan_sach_ngay=int(gt["ngan_sach_ngay"]))
+                 ngan_sach_ngay=int(gt["ngan_sach_ngay"]), **them)
 
 
 # ── họp tuần ───────────────────────────────────────────────────────────────
@@ -321,7 +380,7 @@ def _so_lieu(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float) -> Dic
     ra: Dict[str, Any] = {"may/tran_video_ngay": round(tran, 1), "may/con_du_video_ngay": cs.get("con_du_video_ngay"),
                           "may/khe_nang_pct": cs.get("phan_tram_khe_nang")}
     for d in bang:
-        for k in ("khe", "hien_thi_7", "hien_thi_7_truoc", "da", "gio_xem_7", "sub_7", "ti_le_thang", "thang_28",
+        for k in ("khe", "video_ngay", "hien_thi_7", "hien_thi_7_truoc", "da", "gio_xem_7", "sub_7", "ti_le_thang", "thang_28",
                   "kl_28", "tv_48h_14", "ypp_sub", "ypp_gio"):
             if d.get(k) is not None:
                 ra["k:{0}/{1}".format(d["ma"], k)] = round(d[k], 2) if isinstance(d[k], float) else d[k]
@@ -330,19 +389,23 @@ def _so_lieu(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float) -> Dic
 
 def loi_nhac(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float, td: List[Dict[str, Any]],
              kenh_moi: List[str], so_lieu: Dict[str, Any], gio_online: Sequence[str] = ()) -> str:
-    dong_td = ["{0} {1} [{2}]: khe {3} → {4} ({5}); nhip_dang “{6}” → “{7}”{8}".format(
-        t["id"], t["ma"], TEN_LOAI[t["loai"]], t["khe_cu"], t["khe_moi"], t["ly_do"], t["cu"]["nhip_dang"],
-        t["moi"]["nhip_dang"], "" if t["duoc"] else " — CHẶN: " + t["ly_do_kiem"]) for t in td]
+    dong_td = ["{0} {1} [{2}]: nhịp {3} → {4} ({5}); nhip_dang “{6}” → “{7}”{8}".format(
+        t["id"], t["ma"], TEN_LOAI[t["loai"]], ten_tan_suat(t["khe_cu"]), ten_tan_suat(t["khe_moi"]), t["ly_do"],
+        t["cu"]["nhip_dang"], t["moi"]["nhip_dang"], "" if t["duoc"] else " — CHẶN: " + t["ly_do_kiem"]) for t in td]
     return "\n\n".join([
         "Bạn là TỔNG GIÁM ĐỐC một công ty làm YouTube (nhiều kênh trên một máy). View = Hiển thị × CTR × Giữ chân. "
-        "Việc của bạn mỗi tuần: dồn khe đăng cho kênh đang lên, bớt cho kênh tụt, không vượt sức máy.",
+        "Việc của bạn mỗi tuần: chỉnh NHỊP ĐĂNG theo ngày — kênh đang lên đăng dày hơn (tối đa 1 video/ngày), kênh "
+        "chững hoặc tụt đăng thưa hơn (tới 1 video/3 ngày), không vượt sức máy. Chủ dự án đã chốt: đăng nhiều video "
+        "mỗi ngày làm view lẹt đẹt; kênh đăng thưa có trung vị view ≈ 5× kênh đăng dày; TL4 thắng ở 1 video/2 ngày.",
         "BẢNG SỐ (khoá = giá trị; da = hiển thị 7 ngày ÷ 7 ngày trước; ti_le_thang = video thắng @48h / video đã có "
         "kết luận, 28 ngày; tv_48h_14 = trung vị hiển thị 48h video 14 ngày)\n"
         + "\n".join("{0} = {1}".format(k, v) for k, v in so_lieu.items()),
         "XẾP LOẠI (luật: lên = đà ≥ 1,2 và thắng ≥ 25%; tụt = đà ≤ 0,8)\n" + "\n".join(
-            "- {0} ({1}): {2}, {3} khe — giám đốc kênh: {4}".format(d["ma"], "+".join(d["cac_ma"]), TEN_LOAI[d["loai"]],
-                                                                    d["khe"], d["bao_cao_kenh"] or "—") for d in bang),
-        "MÁY: " + str(cs.get("cau") or cs.get("de_xuat") or "") + " · trần ≈ {0:.1f} video/ngày, tổng khe ≤ 85% trần".format(tran),
+            "- {0} ({1}): {2}, {3} — giám đốc kênh: {4}".format(
+                d["ma"], "+".join(d["cac_ma"]), TEN_LOAI[d["loai"]],
+                ten_tan_suat(d.get("video_ngay") or 0) if d.get("chay") else "không tự chạy",
+                d["bao_cao_kenh"] or "—") for d in bang),
+        "MÁY: " + str(cs.get("cau") or cs.get("de_xuat") or "") + " · trần ≈ {0:.1f} video/ngày, tổng video/ngày ≤ 85% trần".format(tran),
         "THỰC ĐƠN (chỉ chọn id trong đây; không đáng đổi thì \"chon\": [])\n" + ("\n".join(dong_td) or "(trống)"),
         "KÊNH MỚI (chỉ gợi ý cho chủ): " + (" | ".join(kenh_moi) or "máy chưa dư ≥ 2 video/ngày — chưa nên mở"),
     ] + (["GIỜ KHÁN GIẢ ONLINE (đặt khe mới gần giờ đông; lệch nhiều thì ghi gợi ý vào viec_cua_ban)\n"
@@ -461,14 +524,15 @@ def _s(x: Any, le: int = 0) -> str:
 def chu_bao_cao(kq: Dict[str, Any]) -> str:
     q = kq.get("quyet") or {}
     ra = ["# Báo cáo công ty — {0} ({1}{2})".format(kq["luc"][:10], kq["che_do"], ", thử" if kq.get("thu") else ""), "",
-          "| Kênh YouTube | Loại | Khe | Hiển thị 7 ngày | 7 ngày trước | Đà | Giờ xem 7 ngày | Sub 7 ngày | Thắng 28 ngày | YPP sub / giờ |",
+          "| Kênh YouTube | Loại | Nhịp | Hiển thị 7 ngày | 7 ngày trước | Đà | Giờ xem 7 ngày | Sub 7 ngày | Thắng 28 ngày | YPP sub / giờ |",
           "|---|---|---|---|---|---|---|---|---|---|"]
     for d in kq["bang"]:
         ra.append("| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} / {10} |".format(
-            "+".join(d["cac_ma"]), TEN_LOAI[d["loai"]], d["khe"], _s(d["hien_thi_7"]), _s(d["hien_thi_7_truoc"]),
+            "+".join(d["cac_ma"]), TEN_LOAI[d["loai"]],
+            ten_tan_suat(d["video_ngay"]) if d.get("video_ngay") else d["khe"], _s(d["hien_thi_7"]), _s(d["hien_thi_7_truoc"]),
             _s(d["da"], 2), _s(d["gio_xem_7"], 1), _s(d["sub_7"]),
             "{0}/{1}".format(d["thang_28"], d["kl_28"]) if d["kl_28"] else "—", _s(d["ypp_sub"]), _s(d["ypp_gio"])))
-    ra += ["", "**Máy:** {0} — trần ≈ {1} video/ngày, tổng khe ≤ 85%.".format((kq.get("may") or {}).get("cau") or "?", kq["tran"])]
+    ra += ["", "**Máy:** {0} — trần ≈ {1} video/ngày, tổng video/ngày ≤ 85%.".format((kq.get("may") or {}).get("cau") or "?", kq["tran"])]
     if q.get("chan_doan"):
         ra += ["", "**Chẩn đoán:** " + q["chan_doan"]]
     hq = (kq.get("hoi_dong") or {}).get("quyet") or {}
@@ -477,18 +541,19 @@ def chu_bao_cao(kq: Dict[str, Any]) -> str:
             hq.get("ten"), hq.get("do_tin"), kq["hoi_dong"].get("cong"),
             " · chưa có quyền tự áp chia khe (cần ≥ 70% đúng trên ≥ 10 lần)"
             if kq.get("che_do") == "tu_ap" and kq.get("quyen_chia_khe") == "goi_y" else "")]
-    ra += ["", "## Đổi khe"]
+    ra += ["", "## Đổi nhịp đăng"]
     chon = {t["id"]: t for t in (q.get("chon") or [])}
     da = {t["id"] for t in kq["da_lam"]}
     for t in kq["thuc_don"]:
         t = chon.get(t["id"], t)
         trang = ("ĐÃ ÁP" if t["id"] in da else "SẼ ĐỔI (gợi ý)" if t["id"] in chon and t["duoc"] else
                  "chặn: " + t["ly_do_kiem"] if not t["duoc"] else "không chọn")
-        ra.append("- {0} {1}: khe {2} → {3} ({4}) — nhip “{5}” → “{6}” · {7}{8}".format(
-            t["id"], t["ma"], t["khe_cu"], t["khe_moi"], t["ly_do"], t["cu"]["nhip_dang"], t["moi"]["nhip_dang"], trang,
+        ra.append("- {0} {1}: nhịp {2} → {3} ({4}) — nhip “{5}” → “{6}” · {7}{8}".format(
+            t["id"], t["ma"], ten_tan_suat(t["khe_cu"]), ten_tan_suat(t["khe_moi"]), t["ly_do"], t["cu"]["nhip_dang"],
+            t["moi"]["nhip_dang"], trang,
             " — " + t["ly_do_llm"] if t.get("ly_do_llm") else ""))
     if not kq["thuc_don"]:
-        ra.append("- Không kênh nào cần đổi khe tuần này.")
+        ra.append("- Không kênh nào cần đổi nhịp tuần này.")
     for x in kq["quay_lui"]:
         ra.append("- QUAY LUI {0}: {1}{2}".format(x["ma"], x["ly_do"], "" if x["ap"] else " (gợi ý)"))
     ra += ["", "## Kênh mới (chỉ gợi ý)"] + ["- " + x for x in kq["kenh_moi"] or ["Máy chưa dư ≥ 2 video/ngày — chưa nên mở."]]
@@ -517,10 +582,12 @@ def cau_the(goc: str) -> Dict[str, str]:
         return {"cau": "", "bao_cao": ""}
     dem = {k: sum(1 for d in bc["bang"] if d.get("loai") == k) for k in TEN_LOAI}
     doi = [t for t in bc.get("da_lam") or bc.get("se_lam") or []]
-    cau = "{0} {1}: {2} kênh · lên {3} · chững {4} · tụt {5} · {6} khe{7}".format(
+    tong_f = sum(float(d.get("video_ngay") if d.get("video_ngay") is not None else d.get("khe") or 0) for d in bc["bang"])
+    cau = "{0} {1}: {2} kênh · lên {3} · chững {4} · tụt {5} · {6:g} video/ngày{7}".format(
         "Công ty" + (" (gợi ý)" if bc.get("che_do") != "tu_ap" else ""), str(bc.get("luc"))[5:10].replace("-", "/"),
-        len(bc["bang"]), dem["len"], dem["chung"], dem["tut"], sum(d.get("khe") or 0 for d in bc["bang"]),
-        " — " + ", ".join("{0} {1}→{2}".format(t["ma"], t["khe_cu"], t["khe_moi"]) for t in doi) if doi else "")
+        len(bc["bang"]), dem["len"], dem["chung"], dem["tut"], round(tong_f, 2),
+        " — " + ", ".join("{0} {1}→{2}".format(t["ma"], ten_tan_suat(t["khe_cu"]), ten_tan_suat(t["khe_moi"]))
+                          for t in doi) if doi else "")
     return {"cau": cau, "bao_cao": _tm(goc, TEP_MD) if os.path.isfile(_tm(goc, TEP_MD)) else ""}
 
 

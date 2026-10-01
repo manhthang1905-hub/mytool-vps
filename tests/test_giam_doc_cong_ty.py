@@ -214,22 +214,26 @@ def test_goi_quyet_thang_mo_hinh_va_so_lieu(monkeypatch):
 
 # ── tổng giám đốc ──────────────────────────────────────────────────────────
 
-def _dong(ma, loai, khe, da=1.0):
+def _dong(ma, loai, khe, da=1.0, chu_ky=1):
     return {"ma": ma, "cac_ma": [ma], "loai": loai, "khe": khe, "da": da,
             "chay": [{"ma": ma, "nhip": ["0{0}:00".format(i) for i in range(khe)], "video_toi_da_ngay": khe,
-                      "ngan_sach_ngay": 100}]}
+                      "ngan_sach_ngay": 100, "chu_ky": chu_ky}]}
 
 
-def test_xep_loai_va_chia_khe_cong_tru_mot_trong_tran():
+def test_xep_loai_va_chia_khe_theo_nhip_ngay():
+    """01/10/2026: luật NHỊP NGÀY — lên dày hơn một bậc (tối đa 1/ngày), chững/tụt thưa hơn (tối đa 1/3 ngày),
+    kênh nhiều khe/ngày về 1/ngày; tổng video/ngày ≤ 85% trần máy."""
     assert tong.xep_loai({"da": 1.3, "ti_le_thang": 0.3}) == "len"
     assert tong.xep_loai({"da": 1.3, "ti_le_thang": 0.1}) == "chung"
     assert tong.xep_loai({"da": 0.7}) == "tut" and tong.xep_loai({"da": None}) == "chung"
-    bang = [_dong("A", "len", 3, 1.5), _dong("B", "tut", 3, 0.5), _dong("C", "chung", 6), _dong("D", "len", 6, 2.0)]
-    ra = {x["ma"]: x["khe_moi"] for x in tong.chia_khe(bang, 100)}
-    assert ra == {"A": 4, "B": 2}                                  # D đã 6 khe (trần kênh), C giữ
-    # trần máy 18 → tổng ≤ 15: bỏ tăng trước, rồi bớt kênh nhiều khe (mỗi kênh tối đa ±1)
-    assert {x["ma"]: x["khe_moi"] for x in tong.chia_khe(bang, 18)} == {"B": 2, "C": 5, "D": 5}
-    assert all(abs(x["khe_moi"] - x["khe_cu"]) == 1 for x in tong.chia_khe(bang, 5))
+    bang = [_dong("A", "len", 1, 1.5, chu_ky=2), _dong("B", "tut", 1, 0.5, chu_ky=2),
+            _dong("C", "chung", 1, chu_ky=3), _dong("D", "len", 1, 2.0, chu_ky=1), _dong("E", "chung", 3)]
+    ra = {x["ma"]: (x["khe_moi"], x["chu_ky_moi"]) for x in tong.chia_khe(bang, 100)}
+    # A lên 1/2 → 1/ngày; B tụt 1/2 → 1/3; C đã 1/3 (trần thưa) giữ; D đã 1/ngày (trần dày) giữ; E 3 khe → 1/ngày
+    assert ra == {"A": (1.0, 1), "B": (0.33, 3), "E": (1.0, 1)}
+    # trần máy 3 → tổng ≤ 2,55: bỏ bước dày lên của A, rồi giãn kênh dày nhất (D, E → 1/2 ngày)
+    assert {x["ma"]: x["khe_moi"] for x in tong.chia_khe(bang, 3)} == {"B": 0.33, "D": 0.5, "E": 0.5}
+    assert tong.ten_tan_suat(0.5) == "1 video/2 ngày" and tong.ten_tan_suat(1.0) == "1 video/ngày"
 
 
 def test_nhip_moi_them_giua_khoang_trong_bot_khe_yeu_nhat():
@@ -267,7 +271,9 @@ def test_hop_tuan_thu_khong_ghi_tu_ap_doi_khe_va_nghi(tmp_path, monkeypatch):
 
     kq = tong.hop_tuan(goc, llm, thu=True, bay_gio=BAY)
     assert kq["se_lam"] and not os.path.exists(os.path.join(goc, tong.THU_MUC))
-    assert "k:T1/da = 1.4" in kq["loi_nhac"] and kq["thuc_don"][0]["moi"]["nhip_dang"] == "00:00, 05:00, 12:00, 20:00"
+    # nhịp ngày: kênh 3 khe/ngày (dù đang lên) → MỘT khe/ngày, chu kỳ 1 ngày
+    assert "k:T1/da = 1.4" in kq["loi_nhac"] and kq["thuc_don"][0]["moi"]["nhip_dang"] == "05:00"
+    assert kq["thuc_don"][0]["moi"]["chu_ky_dang_ngay"] == 1
     # tu_ap nhưng chưa có thành tích chia khe (n < 10) → chỉ gợi ý (Đợt F: quyền tự áp theo độ chính xác)
     from core.giam_doc import hoi_dong
 
@@ -279,9 +285,10 @@ def test_hop_tuan_thu_khong_ghi_tu_ap_doi_khe_va_nghi(tmp_path, monkeypatch):
     from core.kenh import doc_yaml
 
     cai = doc_yaml(os.path.join(goc, "CHANNEL", "T1", "kenh.yaml"))
-    assert int(cai["video_toi_da_ngay"]) == 4 and int(cai["ngan_sach_ngay"]) == 1040000
-    assert str(cai["nhip_dang"]) == "00:00, 05:00, 12:00, 20:00"
-    assert os.path.isfile(os.path.join(goc, tong.THU_MUC, tong.TEP_MD)) and "T1 3→4" in tong.cau_the(goc)["cau"]
+    assert int(cai["video_toi_da_ngay"]) == 1 and int(cai["ngan_sach_ngay"]) == 500000
+    assert str(cai["nhip_dang"]) == "05:00" and int(cai["chu_ky_dang_ngay"]) == 1
+    assert os.path.isfile(os.path.join(goc, tong.THU_MUC, tong.TEP_MD))
+    assert "T1 3 video/ngày→1 video/ngày" in tong.cau_the(goc)["cau"]
     # tuần sau: đang nghỉ 14 ngày → chặn
     _kenh_tong(goc, khe="00:00, 05:00, 12:00, 20:00")
     monkeypatch.setattr(tong, "bang_cong_ty", lambda g, b=None: [dict(

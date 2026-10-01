@@ -300,3 +300,80 @@ def test_chay_mot_ngay_tran_video_toi_da_ngay(tmp_path):
         bay_gio=_dt.datetime(2026, 9, 29, 16, 0), chay_mot_nut=lambda *a, **k: None,
         doc_danh_sach=lambda g, k: {"moi": []})
     assert "đã đủ 1 video hôm nay" in ket["tom_tat"]
+
+
+# ── nhịp ngày `chu_ky_dang_ngay` (01/10/2026 — giãn lịch đăng) ──────────────
+
+def _kenh_thua(goc, ma="K2", chu_ky=2, **them):
+    _ghi_kenh(goc, ma, tu_duyet=True, nhip_dang="05:00", chu_ky_dang_ngay=chu_ky, kho_dem_ngay=4,
+              video_toi_da_ngay=1, **them)
+    return doc_kenh(goc, ma)
+
+
+def test_khe_trong_ton_trong_nhip_tinh_ca_so_may_dang(tmp_path):
+    goc = str(tmp_path)
+    k = _kenh_thua(goc)
+    assert xep_lich.chu_ky_ngay(k) == 2
+    # đã đăng 01/10 20:00 (kế hoạch) + một video đã HẸN 03/10 05:00 chỉ có trong sổ máy đăng
+    _ghi_ke_hoach(goc, "K2", {"Mã gói": "K2-0001", "Ngày đăng": "01/10/2026", "Giờ đăng": "20:00",
+                              "Sẵn sàng": "x", "Trạng thái đăng": "ĐÃ ĐĂNG"})
+    os.makedirs(os.path.join(goc, "vm", "logs"))
+    with open(os.path.join(goc, "vm", "logs", "so-video-id.json"), "w", encoding="utf-8") as tep:
+        json.dump({"K2/K2-0002": {"video_id": "abc", "trang_thai": "xac-nhan", "lich": "03/10/2026 05:00"}}, tep)
+    bay = _dt.datetime(2026, 10, 1, 17, 0)
+    # 02/10 05:00 (cách 01/10 một ngày) và 03/10, 04/10 (cách 03/10 < 2 ngày) đều không hợp nhịp
+    assert xep_lich.khe_trong_som_nhat(goc, "K2", k, bay_gio=bay) == ("05/10/2026", "05:00")
+    # nhịp 1 ngày (mặc định) → đường cũ: khe trống sớm nhất
+    k1 = _kenh_thua(goc, chu_ky=1)
+    assert xep_lich.khe_trong_som_nhat(goc, "K2", k1, bay_gio=bay) == ("02/10/2026", "05:00")
+
+
+def test_kho_dem_theo_nhip_ngay(tmp_path):
+    goc = str(tmp_path)
+    k = _kenh_thua(goc)
+    assert xep_lich.dem_kho_dem(goc, "K2", k)["can"] == 2          # 4 ngày ở nhịp 2 ngày = 2 video
+    assert xep_lich.dem_kho_dem(goc, "K2", _kenh_thua(goc, chu_ky=3))["can"] == 2   # ⌈4/3⌉
+    assert xep_lich.dem_kho_dem(goc, "K2", _kenh_thua(goc, chu_ky=1))["can"] == 4   # đường cũ: 4 × 1 khe
+
+
+def test_xep_lai_theo_nhip_va_chat_luong(tmp_path):
+    goc = str(tmp_path)
+    k = _kenh_thua(goc)
+    _ghi_ke_hoach(goc, "K2",
+                  {"Mã gói": "K2-0001", "Ngày đăng": "01/10/2026", "Giờ đăng": "20:00", "Sẵn sàng": "x",
+                   "Trạng thái đăng": "ĐÃ ĐĂNG", "Video ID": "v1"},
+                  {"Mã gói": "K2-0002", "Ngày đăng": "02/10/2026", "Giờ đăng": "12:00", "Sẵn sàng": "x"},
+                  {"Mã gói": "K2-0003", "Ngày đăng": "02/10/2026", "Giờ đăng": "16:00", "Sẵn sàng": "x"})
+    tc = os.path.join(goc, "CHANNEL", "K2", "tu-chay")
+    os.makedirs(tc)
+    with open(os.path.join(tc, "2026-10-01.json"), "w", encoding="utf-8") as tep:
+        json.dump({"runs": [
+            {"ban_giao": {"ma_goi": "K2-0002"}, "nguon": {"bien_tap": {"diem": 60, "hang": "TAM"}}},
+            {"ban_giao": {"ma_goi": "K2-0003"}, "nguon": {"bien_tap": {"diem": 82, "hang": "TOT",
+                                                                        "du_doan": {"ket_cuc": "thắng"}}}}]}, tep)
+    assert xep_lich.diem_goi(goc, "K2", "K2-0003")[0] == 87.0
+    doi = xep_lich.xep_lai_goi_lo_lich(goc, "K2", k, bay_gio=_dt.datetime(2026, 10, 1, 17, 0),
+                                       so_video_id={}, co_dang_do=False)
+    lich = {d["Mã gói"]: (d["Ngày đăng"], d["Giờ đăng"]) for d in _dong(goc, "K2")}
+    # gói điểm cao (0003) lấy khe hợp nhịp sớm nhất, gói kia cách thêm 2 ngày; gói đã đăng đứng yên
+    assert lich == {"K2-0001": ("01/10/2026", "20:00"), "K2-0003": ("03/10/2026", "05:00"),
+                    "K2-0002": ("05/10/2026", "05:00")}
+    assert {m for m, _c, _m in doi} == {"K2-0002", "K2-0003"}
+    # lượt sau: không đổi gì nữa (ổn định)
+    assert xep_lich.xep_lai_goi_lo_lich(goc, "K2", k, bay_gio=_dt.datetime(2026, 10, 1, 18, 0),
+                                        so_video_id={}, co_dang_do=False) == []
+
+
+def test_cong_nguon_dang_thua_chi_nhan_tot(tmp_path, monkeypatch):
+    from core import tu_chay
+
+    tam = [{"tieu_de": "t", "bien_tap": {"hang": "TAM", "diem": 80, "ly_do": "lý do đủ dài"}}]
+    log = []
+    assert tu_chay._cong_chat_luong(tam, log.append) == tam                       # luật cũ: TẠM ≥ 65 qua
+    assert tu_chay._cong_chat_luong(tam, log.append, chi_tot="kho còn 1") == []   # đăng thưa, kho còn → chỉ TỐT
+    goc = str(tmp_path)
+    _kenh_thua(goc)
+    assert tu_chay._chi_nhan_tot(goc, "K2") == ""                                  # kho cạn → luật cũ
+    _ghi_ke_hoach(goc, "K2", {"Mã gói": "K2-0001", "Ngày đăng": "01/01/2099", "Giờ đăng": "05:00",
+                              "Sẵn sàng": "x"})
+    assert "kho đệm còn 1" in tu_chay._chi_nhan_tot(goc, "K2")

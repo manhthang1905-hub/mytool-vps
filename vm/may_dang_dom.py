@@ -86,6 +86,12 @@ DUONG_HANG_SUA = os.path.join(THU_MUC_LOG, "hang-sua.json")
 DUONG_SUA_CUOI = os.path.join(THU_MUC_LOG, "sua-cuoi.json")
 SUA_TOI_DA_DEM = 2
 SUA_TOI_DA_LOI = 3
+#: 01/10/2026 — DỜI LỊCH video ĐÃ hẹn giờ (giãn nhịp đăng 1 video/2 ngày): hàng `logs/hang-doi-lich.json`
+#: ({"viec": [{id, kenh, ma_goi, video_id, lich_cu, lich_moi, trang_thai}]}, cùng khoá `.khoa` với hàng sửa).
+#: Video sắp công khai trong < `DOI_LICH_BIEN_PHUT` phút thì để nguyên (không kịp, dễ lỡ giờ).
+DUONG_HANG_DOI_LICH = os.path.join(THU_MUC_LOG, "hang-doi-lich.json")
+DOI_LICH_BIEN_PHUT = 90
+DOI_LICH_TOI_DA_LOI = 3
 #: YouTube chỉ cho màn hình kết thúc với video ≥25 giây; Shorts không có mục MHKT.
 MHKT_NGAN_NHAT_GIAY = 25
 SHORTS_TOI_DA_GIAY = 180
@@ -839,6 +845,75 @@ def cap_nhat_hang_sua(id_viec: str, duong: str = None, **truong) -> bool:
             os.remove(khoa)
         except OSError:
             pass
+
+
+def hang_doi_lich_kenh(hang: list, kenh: str, bay_gio: datetime, bien_phut: int = DOI_LICH_BIEN_PHUT,
+                       toi_da_loi: int = DOI_LICH_TOI_DA_LOI) -> list:
+    """Hàm THUẦN: việc DỜI LỊCH của `kenh` còn phải làm — chờ, hoặc hỏng chưa quá `toi_da_loi` lần — mà
+    CẢ giờ cũ lẫn giờ mới còn ≥ `bien_phut` phút nữa (video sắp công khai thì để nguyên). Gấp trước
+    (giờ cũ sớm nhất trước)."""
+    han = bay_gio + timedelta(minutes=int(bien_phut))
+    ds = []
+    for v in hang or []:
+        if v.get("kenh") != kenh or not v.get("video_id"):
+            continue
+        tt = v.get("trang_thai") or "cho"
+        if not (tt == "cho" or (tt == "loi" and int(v.get("lan_loi") or 0) < toi_da_loi)):
+            continue
+        cu, moi = phan_tich_ngay_gio(v.get("lich_cu") or ""), phan_tich_ngay_gio(v.get("lich_moi") or "")
+        if moi is None or moi <= han or (cu is not None and cu <= han):
+            continue
+        ds.append((cu or datetime.max, str(v.get("id") or ""), v))
+    ds.sort(key=lambda x: x[:2])
+    return [v for _c, _i, v in ds]
+
+
+def vi_pham_nhip(d: dict, so: dict, kenh: str, chu_ky: int) -> str:
+    """Hàm THUẦN (01/10/2026, nhịp `chu_ky_dang_ngay`): lịch của dòng `d` cách một video KHÁC của kênh đã hẹn /
+    đã đăng trong sổ (< `chu_ky` ngày lịch) → trả lý do (máy đăng KHÔNG tải, chờ tool xếp lại lịch theo nhịp);
+    hợp nhịp hoặc chu_ky ≤ 1 → ""."""
+    if int(chu_ky or 1) <= 1:
+        return ""
+    lich = phan_tich_ngay_gio("{0} {1}".format(d.get("ngay") or "", d.get("gio") or ""))
+    if lich is None:
+        return ""
+    for k, m in (so or {}).items():
+        if not isinstance(m, dict) or not str(k).startswith(kenh + "/") or str(k).split("/", 1)[-1] == d.get("ma"):
+            continue
+        if not m.get("video_id") or m.get("trang_thai") not in TT_SO_DA_HEN:
+            continue
+        khac = phan_tich_ngay_gio(m.get("lich") or "")
+        if khac is not None and abs((lich.date() - khac.date()).days) < int(chu_ky):
+            return "lịch {0} cách {1} ({2}) dưới {3} ngày — chờ tool xếp lại theo nhịp".format(
+                lich.strftime("%d/%m %H:%M"), str(k).split("/", 1)[-1], khac.strftime("%d/%m %H:%M"), chu_ky)
+    return ""
+
+
+def ghi_lich_moi_tool(goc_tool: str, kenh: str, ma: str, video_id: str, lich_s: str) -> list:
+    """Sau khi dời lịch trên YouTube (ĐÃ đọc lại): ghi giờ mới vào kế hoạch (`Ngày đăng`/`Giờ đăng` của
+    dòng `ma`) và hồ sơ video (`lich_dang`) của tool cùng máy. Trả danh sách nơi đã ghi; lỗi → ném."""
+    if goc_tool not in sys.path:
+        sys.path.insert(0, goc_tool)
+    from core import ke_hoach_dang  # noqa: PLC0415
+    from core import ho_so_video  # noqa: PLC0415
+    ngay, gio = lich_s.split(" ", 1)
+    da = []
+    cot, hang = ke_hoach_dang.doc_bang(goc_tool, kenh)
+    if "Mã gói" in cot and "Ngày đăng" in cot and "Giờ đăng" in cot:
+        im, i_n, i_g = cot.index("Mã gói"), cot.index("Ngày đăng"), cot.index("Giờ đăng")
+        thay = False
+        for d in hang:
+            if len(d) > im and str(d[im]).strip() == ma:
+                while len(d) <= max(i_n, i_g):
+                    d.append("")
+                d[i_n], d[i_g] = ngay, gio
+                thay = True
+        if thay:
+            ke_hoach_dang.luu_bang(goc_tool, kenh, hang, cot)
+            da.append("ke-hoach")
+    if video_id and ho_so_video.ghi_video_id(goc_tool, kenh, ma, video_id, lich_s):
+        da.append("ho-so")
+    return da
 
 
 def url_anh_cua_goi(goi) -> set:
@@ -1898,6 +1973,203 @@ class MayDangDom:
                           ensure_ascii=False, indent=1)
         except OSError:
             pass
+        return MA_HONG if hong else MA_XONG
+
+    # ── DỜI LỊCH video đã hẹn giờ (01/10/2026, giãn nhịp đăng) ───────────
+    def _mo_hop_lich_sua(self, tb) -> None:
+        """Trang sửa đang mở: mở hộp Chế độ hiển thị và phần «Lên lịch» tới khi thấy ô ngày + ô giờ
+        (cùng khoá đã đo của `_doc_lich_hop` / `_kiem_lich_trang_sua`). Ném lỗi nếu không mở được."""
+        # 01/10 đo: lần bấm đầu ngay sau khi trang vừa mở có thể chưa bật hộp → thử lại tới 3 lần.
+        loi_cuoi = None
+        for lan in range(3):
+            pt = tb.tim("sua_hien_thi_mo", han=10)
+            if not pt:
+                raise Exception("không thấy ô Chế độ hiển thị ở trang sửa")
+            try:
+                tb.bam(pt, hau_dieu_kien=lambda: tb.co("o_ngay_mo") or tb.co("o_gio") or tb.co("sua_hop_hien_thi"),
+                       han_hau=15)
+                loi_cuoi = None
+                break
+            except Exception as loi:  # noqa: BLE001
+                loi_cuoi = loi
+                self.nk("mở hộp Chế độ hiển thị lần {0} hỏng: {1}".format(lan + 1, str(loi)[:100]))
+                self.ngu(3)
+        if loi_cuoi is not None:
+            raise loi_cuoi
+        self.ngu(1)
+        if not (tb.co("o_ngay_mo") and tb.co("o_gio")) and tb.co("len_lich_mo"):
+            tb.bam("len_lich_mo", hau_dieu_kien=lambda: tb.co("o_ngay_mo") and tb.co("o_gio"), han_hau=10)
+            self.ngu(1)
+        if not (tb.co("o_ngay_mo") and tb.co("o_gio")):
+            raise Exception("hộp Chế độ hiển thị không hiện ô ngày/giờ Lên lịch")
+
+    def _doc_o_lich(self, tb):
+        ngay, _ = phan_tich_ngay(tb.doc_chu("o_ngay_mo") or "")
+        gio = phan_tich_gio(tb.doc_thuoc_tinh("o_gio", "value") or tb.doc_chu("o_gio") or "")
+        if ngay and gio:
+            return datetime(ngay.year, ngay.month, ngay.day, gio[0], gio[1])
+        return None
+
+    def _dong_hop_lich(self, tb) -> None:
+        for _ in range(2):
+            if not (tb.co("sua_hop_hien_thi") or tb.co("o_ngay_mo")):
+                break
+            tb.phim("Escape")
+            self.ngu(1)
+
+    def _dat_o_lich(self, tb, ma: str, lich: datetime) -> None:
+        """Gõ NGÀY (thử các mẫu định dạng, đọc lại) rồi GIỜ (đọc lại) vào ô Lên lịch đang mở — cùng cách
+        `_hien_thi` của luồng đăng. Ném lỗi nếu đọc lại lệch."""
+        da_ngay = False
+        for mau in self.bo.get("dinh_dang_ngay") or ["{d} thg {m}, {Y}", "{dd}/{mm}/{Y}"]:
+            try:
+                if not tb.co("o_ngay"):
+                    tb.bam("o_ngay_mo", hau_dieu_kien=lambda: tb.co("o_ngay"), han_hau=8)
+                tb.go_tho("o_ngay", dinh_dang_ngay(lich.date(), mau))
+                tb.phim("Enter")
+                self.ngu(0.8)
+                doc = tb.doc_chu("o_ngay_mo") or tb.doc_thuoc_tinh("o_ngay", "value") or ""
+                dd, _ = phan_tich_ngay(doc)
+                if dd == lich.date():
+                    da_ngay = True
+                    break
+                self.nk("dời lịch {0}: ô ngày đọc lại {1!r} ≠ {2} (mẫu {3})".format(ma, doc, lich.date(), mau))
+            except Exception as loi:  # noqa: BLE001
+                self.nk("dời lịch {0}: gõ ngày mẫu {1} lỗi: {2}".format(ma, mau, loi))
+        if not da_ngay:
+            raise Exception("không đặt được NGÀY {0}".format(lich.strftime("%d/%m/%Y")))
+        gio = lich.strftime("%H:%M")
+        tb.go_tho("o_gio", gio)
+        tb.phim("Enter")
+        self.ngu(0.8)
+        doc_g = phan_tich_gio(tb.doc_thuoc_tinh("o_gio", "value") or tb.doc_chu("o_gio") or "")
+        if doc_g != (lich.hour, lich.minute):
+            raise Exception("ô giờ đọc lại {0} ≠ {1}".format(doc_g, gio))
+        luc = self._doc_o_lich(tb)
+        if luc != lich:
+            raise Exception("đọc lại ô lịch {0} ≠ {1}".format(luc, lich))
+
+    def doi_lich_mot(self, khoa: str, vid: str, lich_moi: datetime, chi_kiem: bool = False) -> dict:
+        """DỜI LỊCH MỘT video đã hẹn giờ qua TRANG SỬA: mở trang → hộp Chế độ hiển thị → Lên lịch → đọc
+        giờ đang hẹn → gõ ngày/giờ mới → ĐỌC LẠI ô → Xong (`sua_hop_xong`) → Lưu (nút Lưu của trang) →
+        mở lại trang ĐỌC LẠI giờ hẹn. Trả {ket: ok|khong-the|loi, ly_do, lich_truoc, lich_doc_lai}.
+        Video đã công khai / không còn «Đã lên lịch» / giờ đang hẹn còn < `DOI_LICH_BIEN_PHUT` phút →
+        `khong-the` (để nguyên). `chi_kiem`: chỉ mở hộp, đọc, chụp bằng chứng, Escape — không gõ, không lưu."""
+        nhan = "{0}/{1}".format(str(khoa).split("/", 1)[-1] or khoa, vid)
+        self.vid_dang = vid
+        tb = self.tab_b()
+        lich_s = lich_moi.strftime("%d/%m/%Y %H:%M")
+        ra = {"ket": "loi", "ly_do": "", "lich_truoc": "", "lich_doc_lai": "", "lich_moi": lich_s}
+
+        def ket(k, ly_do="", **them):
+            ra.update(ket=k, ly_do=ly_do, **them)
+            muc = ("XONG" if k == "ok" else "BỎ" if k == "khong-the" else "HỎNG")
+            (self.nk if k != "loi" else self._canh_bao)("dời lịch {0} → {1} {2}{3}".format(
+                nhan, lich_s, muc, " — " + ly_do if ly_do else ""))
+            return ra
+        han = self.bay_gio() + timedelta(minutes=DOI_LICH_BIEN_PHUT)
+        try:
+            co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
+            if not co_trang:
+                if bat_duoc and goi is None:
+                    return ket("khong-the", "video không còn trên kênh (Studio không trả video này)")
+                return ket("loi", "không mở được trang sửa video")
+            chu = tb.doc_chu("hien_thi_trang_sua") or ""
+            loai, _luc = phan_tich_trang_thai(chu, self.bo.get("chu_trang_thai"))
+            if loai in ("cong_khai", "khong_cong_khai", "rieng_tu"):
+                return ket("khong-the", "video đang «{0}» — không còn hẹn giờ".format(chuan_hoa_tieu_de(chu)[:60]))
+            self._mo_hop_lich_sua(tb)
+            truoc = self._doc_o_lich(tb)
+            ra["lich_truoc"] = truoc.strftime("%d/%m/%Y %H:%M") if truoc else ""
+            tb.ghi_bang_chung("doi-lich-hop-" + vid)
+            if chi_kiem:
+                xong = tb.tim("sua_hop_xong", han=5, cho_tat=True)   # chưa đổi gì thì Xong TẮT (đo 01/10)
+                ra["nut_xong"] = (xong or {}).get("mo_ta") or ""
+                ra["nut_xong_cach"] = (xong or {}).get("cach") or ""
+                self._dong_hop_lich(tb)
+                self._huy_sua(tb, nhan)
+                return ket("ok" if (truoc and xong) else "loi",
+                           "KIỂM: đang hẹn {0}, nút Xong {1}".format(ra["lich_truoc"] or "?", ra.get("nut_xong") or "KHÔNG THẤY"))
+            if truoc is None:
+                self._dong_hop_lich(tb)
+                self._huy_sua(tb, nhan)
+                return ket("loi", "không đọc được giờ đang hẹn trong hộp Lên lịch")
+            if truoc <= han:
+                self._dong_hop_lich(tb)
+                self._huy_sua(tb, nhan)
+                return ket("khong-the", "đang hẹn {0} — còn dưới {1} phút, để nguyên".format(
+                    ra["lich_truoc"], DOI_LICH_BIEN_PHUT))
+            if truoc == lich_moi:
+                self._dong_hop_lich(tb)
+                self._huy_sua(tb, nhan)
+                return ket("ok", "đã đúng giờ mới — không gõ", lich_doc_lai=lich_s)
+            self._dat_o_lich(tb, nhan, lich_moi)
+            tb.bam("sua_hop_xong", hau_dieu_kien=lambda: not tb.co("o_ngay_mo"), han_hau=10)
+            self.ngu(1)
+            luu = tb.tim("sua_luu", han=10, cho_tat=True)
+            if not luu or luu.get("tat"):
+                self._huy_sua(tb, nhan)
+                return ket("loi", "đã bấm Xong nhưng nút Lưu của trang {0}".format("tắt" if luu else "không thấy"))
+            tb.bam("sua_luu", hau_dieu_kien=lambda: bool((tb.tim("sua_luu", han=0, cho_tat=True) or {}).get("tat")),
+                   han_hau=45)
+            self.nk("dời lịch {0}: đã bấm Lưu ({1} → {2})".format(nhan, ra["lich_truoc"], lich_s))
+        except Exception as loi:  # noqa: BLE001 — một video hỏng, video kế vẫn làm
+            try:
+                self._dong_hop_lich(tb)
+            except Exception:  # noqa: BLE001
+                pass
+            self._huy_sua(tb, nhan)
+            return ket("loi", "dời lịch hỏng: {0}".format(str(loi)[:160]))
+        # ĐỌC LẠI sau khi lưu: mở lại trang sửa, đọc ô lịch trong hộp (Escape, không lưu)
+        self.ngu(3)
+        try:
+            doc, _chu_hop = self._doc_lich_hop(tb, vid)
+            tb.ghi_bang_chung("doi-lich-doc-lai-" + vid)
+        except Exception as loi:  # noqa: BLE001
+            return ket("loi", "đã lưu nhưng đọc lại hỏng: {0}".format(str(loi)[:120]))
+        ra["lich_doc_lai"] = doc.strftime("%d/%m/%Y %H:%M") if doc else ""
+        if doc != lich_moi:
+            return ket("loi", "đã lưu nhưng đọc lại {0} ≠ {1}".format(ra["lich_doc_lai"] or "?", lich_s))
+        return ket("ok")
+
+    def doi_lich(self, cac: list, duong_hang: str = None) -> int:
+        """Làm các việc dời lịch [{id, video_id, ma_goi, lich_moi, ...}]: sau MỖI việc cập nhật hàng; ok →
+        sổ (`lich`, `lich_dat`, `lich_truoc_doi`), kế hoạch + hồ sơ của tool (khi là sổ thật trên VPS)."""
+        hong = 0
+        for v in cac:
+            if not self.con_han(180):
+                self.nk("dời lịch: gần hết hạn phiên — dừng, việc còn lại lượt sau")
+                break
+            lich_moi = phan_tich_ngay_gio(v.get("lich_moi") or "")
+            ma = str(v.get("ma_goi") or "")
+            khoa = "{0}/{1}".format(self.kenh, ma)
+            kq = self.doi_lich_mot(khoa, str(v["video_id"]), lich_moi)
+            luc = self.bay_gio().strftime("%Y-%m-%d %H:%M:%S")
+            truong = {"trang_thai": {"ok": "xong"}.get(kq["ket"], kq["ket"]), "ly_do": kq.get("ly_do") or "",
+                      "lich_truoc": kq.get("lich_truoc") or "", "lich_doc_lai": kq.get("lich_doc_lai") or "",
+                      "ket_luc": luc}
+            if kq["ket"] == "loi":
+                hong += 1
+                truong["lan_loi"] = int(v.get("lan_loi") or 0) + 1
+            if kq["ket"] == "ok":
+                muc = self.so.lay(khoa) or {}
+                if str(muc.get("video_id") or "") == str(v["video_id"]):
+                    lich_s = lich_moi.strftime("%d/%m/%Y %H:%M")
+                    self.so.cap_nhat(khoa, lich=lich_s, lich_dat=lich_s, trang_thai="xac-nhan",
+                                     lich_truoc_doi=kq.get("lich_truoc") or muc.get("lich") or "",
+                                     doi_lich_luc=luc, lan_chua_xac_nhan=0)
+                    if os.path.normcase(os.path.abspath(self.so.duong)) == os.path.normcase(os.path.abspath(DUONG_SO)) \
+                            and os.path.isfile(os.path.join(os.path.dirname(GOC), "vps.json")):
+                        try:
+                            truong["ghi_tool"] = ghi_lich_moi_tool(os.path.dirname(GOC), self.kenh, ma,
+                                                                   str(v["video_id"]), lich_s)
+                        except Exception as loi:  # noqa: BLE001 — YouTube đã đúng; kế hoạch lệch thì báo
+                            truong["ghi_tool"] = "loi: {0}".format(str(loi)[:120])
+                            self._canh_bao("dời lịch {0}: YouTube đã {1} nhưng ghi kế hoạch/hồ sơ lỗi: {2}".format(
+                                ma, lich_s, loi))
+                else:
+                    truong["ghi_chu"] = "sổ không khớp video_id — không ghi sổ"
+            cap_nhat_hang_sua(v["id"], duong_hang or DUONG_HANG_DOI_LICH, **truong)
         return MA_HONG if hong else MA_XONG
 
     def link_the(self, d: dict, vid_dang: str = "") -> list:
@@ -3059,11 +3331,15 @@ def _cai_dat_kenh(kenh: str) -> dict:
         pass
     try:
         with open(os.path.join(goc_tool, "CHANNEL", kenh, "kenh.yaml"), "r", encoding="utf-8") as tep:
+            da_nn = False
             for dong in tep:
                 m = re.match(r'^ngon_ngu:\s*"?([A-Za-z-]+)"?', dong)
-                if m:
+                if m and not da_nn:
                     ra["ngon_ngu"] = m.group(1)
-                    break
+                    da_nn = True
+                m = re.match(r'^chu_ky_dang_ngay:\s*"?(\d+)"?', dong)
+                if m:
+                    ra["chu_ky_dang_ngay"] = int(m.group(1))
     except OSError:
         pass
     return ra
@@ -3151,6 +3427,9 @@ def _doc_lenh(argv):
     ap.add_argument("--sua-video", action="store_true",
                     help="SỬA video cũ theo logs/hang-sua.json (đổi tiêu đề / bìa, cứu CTR thấp) — agent gọi giờ "
                          "vắng; kèm --kiem-dom = CHỈ ĐỌC trang sửa (không gõ, không lưu)")
+    ap.add_argument("--doi-lich", action="store_true",
+                    help="DỜI LỊCH video đã hẹn giờ theo logs/hang-doi-lich.json (trang sửa → Lên lịch → Lưu → đọc "
+                         "lại); kèm --kiem-dom = CHỈ ĐỌC hộp Lên lịch của --video (không gõ, không lưu)")
     ap.add_argument("--video", help="với --sua-video --kiem-dom: videoId để kiểm (mặc định: việc đầu hàng)")
     ap.add_argument("--han-giay", type=float, default=0.0,
                     help="hạn phiên (giây); 0 = theo config phien_han_dang_giay")
@@ -3185,7 +3464,25 @@ def main(argv=None) -> int:
         if loi_bo:
             log.error("studio-selectors.json lỗi: %s", "; ".join(loi_bo))
             return MA_LUI
-        if a.sua_video:
+        if a.doi_lich:
+            # DỜI LỊCH: hàng `logs/hang-doi-lich.json`, không cần kế hoạch. Phải bấm Lưu của trang sửa.
+            hang = [[]]
+            if a.kiem_dom:
+                if not a.video:
+                    log.error("--doi-lich --kiem-dom cần --video")
+                    return MA_HONG
+                cac = [{"id": "kiem", "video_id": a.video, "ma_goi": a.ma or "kiem"}]
+            else:
+                cac = hang_doi_lich_kenh(doc_hang_sua(DUONG_HANG_DOI_LICH), a.kenh, datetime.now())
+                if not cac:
+                    log.info("kênh %s: không có video nào cần dời lịch", a.kenh)
+                    return MA_XONG
+            log.info("kênh %s: dời lịch %s: %s", a.kenh, "(KIỂM, chỉ đọc)" if a.kiem_dom else len(cac),
+                     ", ".join("{0}→{1}".format(v["video_id"], v.get("lich_moi") or "kiem") for v in cac))
+            cam = dict(bo.get("cam_bam_sua_video") or {}) or dict(bo.get("cam_bam") or {}, chon=[
+                s for s in (bo.get("cam_bam") or {}).get("chon") or [] if "#save" not in s])
+            bo = dict(bo, cam_bam={k: x for k, x in cam.items() if k != "ghi_chu"})
+        elif a.sua_video:
             # SỬA VIDEO CŨ: hàng `logs/hang-sua.json` (giám đốc kênh xếp), không cần kế hoạch.
             hang = [[]]
             cac = hang_sua_kenh(doc_hang_sua(), a.kenh, date.today().isoformat(), a.toi_da_video)
@@ -3260,6 +3557,19 @@ def main(argv=None) -> int:
                 if cua_so:
                     cac = gioi_han_tai_moi(cac, SoVideoId().doc(), a.kenh,
                                            date.today().isoformat(), a.toi_da_ngay)
+                # 01/10/2026 — nhịp ngày: KHÔNG tải gói mà lịch chưa hợp nhịp (tool xếp lại trong ≤ 10 phút;
+                # lượt tool đang chạy dở có thể bàn giao bằng mã xếp lịch đời cũ).
+                chu_ky = int(_cai_dat_kenh(a.kenh).get("chu_ky_dang_ngay") or 1)
+                if not a.ma and chu_ky >= 2:
+                    so_nhip = SoVideoId().doc()
+                    giu = []
+                    for d in cac:
+                        ly = vi_pham_nhip(d, so_nhip, a.kenh, chu_ky)
+                        if ly:
+                            log.warning("%s: KHÔNG tải — %s", d["ma"], ly)
+                        else:
+                            giu.append(d)
+                    cac = giu
             if not cac:
                 log.info("kênh %s: không có mã cần đăng%s", a.kenh,
                          " (mã {0})".format(a.ma) if a.ma else "")
@@ -3272,7 +3582,7 @@ def main(argv=None) -> int:
             return loi.ma
         log.info("đã nối Chrome kênh %s (%s, cổng %s%s)", a.kenh, cdp.phien_ban, cdp.cong,
                  ", máy này tự mở" if cdp.tu_mo else "")
-        if a.kiem_dom and not a.sua_video:
+        if a.kiem_dom and not a.sua_video and not a.doi_lich:
             kq = kiem_dom(cdp, a.kenh, bo, sau=a.sau, nhat_ky=log.info, ghi_dom_day_du=a.ghi_dom_day_du)
             duong = ghi_bao_cao_kiem(kq)
             dong = "máy đăng DOM kiểm {0} mức {1}: {2}{3}{4}".format(
@@ -3304,7 +3614,24 @@ def main(argv=None) -> int:
                                if x.get("ma") and x.get("kenh") == a.kenh}
         ma_thoat = MA_HONG
         try:
-            if a.sua_video and a.kiem_dom:
+            if a.doi_lich and a.kiem_dom:
+                may.lay_uc()
+                kq = may.doi_lich_mot("{0}/{1}".format(a.kenh, cac[0]["ma_goi"]), cac[0]["video_id"],
+                                      datetime.now() + timedelta(days=30), chi_kiem=True)
+                kq.update(kenh=a.kenh, luc=time.strftime("%Y-%m-%d %H:%M:%S"),
+                          du_phong=dict(getattr(may.tab_b(), "du_phong", {}) or {}))
+                try:
+                    os.makedirs(THU_MUC_KIEM, exist_ok=True)
+                    with open(os.path.join(THU_MUC_KIEM, "doi-lich-{0}.json".format(a.kenh)), "w",
+                              encoding="utf-8") as tep:
+                        json.dump(kq, tep, ensure_ascii=False, indent=1, default=str)
+                except OSError:
+                    pass
+                ma_thoat = MA_XONG if kq["ket"] == "ok" else MA_LUI
+            elif a.doi_lich:
+                may.lay_uc()
+                ma_thoat = may.doi_lich(cac)
+            elif a.sua_video and a.kiem_dom:
                 may.lay_uc()
                 kq = may.kiem_sua_video(cac[0]["video_id"])
                 kq.update(kenh=a.kenh, luc=time.strftime("%Y-%m-%d %H:%M:%S"))
