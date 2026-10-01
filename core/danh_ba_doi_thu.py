@@ -42,6 +42,16 @@ Ba trạng thái, không phải hai:
 
 `tạm ngưng` có mặt vì kênh đối thủ ngừng đăng vài tháng là chuyện thường —
 xoá đi thì mất cả lịch sử, mà quét tiếp thì tốn thì giờ cho một kênh đứng im.
+
+01/10/2026 — trạng thái thứ tư **`hết`** (đối thủ chết). Chủ dự án: *"đối thủ cũng có die
+(kênh bé và không phát triển tiếp)"*. Kênh ĐÚNG chủ đề nhưng không còn làm (không video dài
+30 ngày) hoặc kênh bé mà không còn phát triển → `hết`, Ghi chú nói lý do. `hết` không phải
+nguồn, không quét content; lượt kiểm định kỳ (`kiem_ngach_doi_thu.kiem`) đo lại nó và tự
+đưa về `theo dõi` khi lại đạt. Khác `bỏ` (= sai chủ đề, nhớ để khỏi nhặt lại).
+
+Cột `AI` (01/10/2026): `có` = kênh làm bằng AI (giọng AI, ảnh/hoạt hình AI, không người
+thật quay) — LLM thị giác đọc bìa thật; `không` = người thật quay, vẫn giữ làm dữ liệu
+thị trường. Nguồn remake ưu tiên kênh `có`.
 """
 
 from __future__ import annotations
@@ -55,7 +65,7 @@ from urllib.parse import unquote
 from .doi_thu_kenh import TEP_DOI_THU, doc_doi_thu, thu_muc_nghien_cuu
 from .so_csv import chi_so_cot, doc_csv, luu_csv, so_nguyen
 
-__all__ = ["COT", "COT_CUA_KHACH", "TRANG_THAI", "THEO_DOI", "TAM_NGUNG", "BO",
+__all__ = ["COT", "COT_CUA_KHACH", "TRANG_THAI", "THEO_DOI", "TAM_NGUNG", "BO", "HET", "COT_AI",
            "TEP", "khoa", "duong_so", "doc", "luu", "theo_khoa",
            "dang_theo_doi", "hop_thu", "nhap_hop_thu", "gop_cham",
            "dat_tuyen", "dat_trang_thai", "BanGhi"]
@@ -74,6 +84,8 @@ COT = (
     "Kênh",
     "Tuyến",
     "Trạng thái",
+    #: `có` / `không` / trống (chưa phán) — kênh làm bằng AI? (`kiem_ngach_doi_thu.hoi_lam_ai`)
+    "AI",
     "Subs",
     #: Hai cột trả lời "kênh nào còn trẻ" và "kênh nào đang đứng đầu ngách".
     #:
@@ -118,7 +130,10 @@ COT_CUA_KHACH = ("Tuyến", "Trạng thái", "Ghi chú")
 THEO_DOI = "theo dõi"
 TAM_NGUNG = "tạm ngưng"
 BO = "bỏ"
-TRANG_THAI = (THEO_DOI, TAM_NGUNG, BO)
+#: Đối thủ chết (đúng chủ đề, không còn làm / không còn phát triển) — tự hồi sinh. Xem đầu tệp.
+HET = "hết"
+TRANG_THAI = (THEO_DOI, TAM_NGUNG, HET, BO)
+COT_AI = "AI"
 
 
 def khoa(link: str) -> str:

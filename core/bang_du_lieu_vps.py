@@ -224,7 +224,7 @@ def hop_loc_nhanh(loai: str, ma_loc: str, dong: Dict[str, Any],
                                         hom_nay or dt.date.today())}.get(ma_loc, True)
     if loai == DOI_THU:
         tt = str(dong.get("Trạng thái") or "").strip().casefold()
-        return {"theo_doi": tt not in ("bỏ", "bo"),
+        return {"theo_doi": tt not in ("bỏ", "bo", "hết", "het"),
                 "vuot5": _so(dong.get("Vượt quy mô")) >= 5,
                 "moi": _so(dong.get("Mới 7 ngày")) > 0 or
                        _trong_7_ngay(dong.get("Lần đầu thấy"), hom_nay or dt.date.today()),

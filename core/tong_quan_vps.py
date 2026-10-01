@@ -81,7 +81,7 @@ def tom_tat_phan_tich(goc: str, ma_kenh: str) -> Dict[str, Any]:
         so_link = 0
 
     doi_thu = _doc_csv(tep_dt)
-    dang_theo_doi = [d for d in doi_thu if str(d.get("Trạng thái") or "").lower() != "bỏ"]
+    dang_theo_doi = [d for d in doi_thu if str(d.get("Trạng thái") or "").lower() not in ("bỏ", "hết")]
     top_doi_thu = _top(
         dang_theo_doi,
         lambda d: (_so(d.get("Điểm")), _so(d.get("Vượt quy mô")), _so(d.get("Subs"))),

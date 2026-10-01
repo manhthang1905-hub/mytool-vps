@@ -1321,6 +1321,10 @@ def xu_huong_cum(goc: str, kenh: str, ch: Dict,
     return ra, ghi
 
 
+#: Điểm trừ nguồn từ kênh người thật quay (danh bạ cột "AI" = "không") — ưu tiên, không loại.
+TRU_KHONG_AI = 8
+
+
 def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQua:
     """Chấm toàn bộ sổ content của kênh theo Công thức V7."""
     ch, tep_ch = nap_cau_hinh(goc, kenh)
@@ -1446,12 +1450,17 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
     c2, h2 = db.doc(goc, kenh)
     o2 = db.chi_so_cot(list(c2))
     danh_ba: Dict[str, Tuple[str, Optional[float]]] = {}
+    #: 01/10/2026 — cột "AI" của danh bạ (`kiem_ngach_doi_thu.hoi_lam_ai`): nguồn remake ƯU TIÊN kênh làm
+    #: bằng AI (công thức làm được tương tự mình); kênh người thật quay bị trừ `TRU_KHONG_AI` điểm.
+    kenh_khong_ai: set = set()
     if "Kênh" in o2:
         for r in h2:
             ten = str(r[o2["Kênh"]]).strip()
             tt = str(r[o2["Trạng thái"]]).strip() if "Trạng thái" in o2 else ""
             tv = _so(r[o2["View TV"]]) if "View TV" in o2 else None
             danh_ba[ten] = (tt, tv)
+            if "AI" in o2 and o2["AI"] < len(r) and str(r[o2["AI"]]).strip() == "không":
+                kenh_khong_ai.add(ten)
     # Trung vị dự phòng khi danh bạ chưa có View TV: tính từ chính sổ content.
     theo_kenh: Dict[str, List[float]] = {}
     # Catalogue từng kênh nguồn — để phán đoán NGÁCH (AI đọc, hoặc từ khoá dự phòng).
@@ -1528,6 +1537,8 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
             dong.bi_loai = "đã làm ({0})".format(da_lam.get(ma) or o_(d, so.COT_DA_LAM))
         elif tt == db.BO:
             dong.bi_loai = "kênh nguồn đã bỏ"
+        elif tt == getattr(db, "HET", "hết"):
+            dong.bi_loai = "kênh nguồn đã hết (không còn làm / không còn phát triển)"
         elif any(t and t in td for t in tu_tuoi):
             dong.bi_loai = "nhắm người lớn tuổi"
         elif ket_ai and ket_ai.get("tep") == "lon-tuoi" and not tep_gia:
@@ -1717,6 +1728,9 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
             dong.diem = max(0, dong.diem - int(ch_ai["tru_trung"]))
             dong.ly_do.append("AI: trùng đề tài {0}% với video đã đăng “{1}” (−{2})".format(
                 dong.trung, (ten_minh.get(dong.trung_voi) or dong.trung_voi)[:40], ch_ai["tru_trung"]))
+        if dong.kenh in kenh_khong_ai and TRU_KHONG_AI:
+            dong.diem = max(0, dong.diem - TRU_KHONG_AI)
+            dong.ly_do.append("kênh nguồn người thật quay, không làm bằng AI (−{0})".format(TRU_KHONG_AI))
         dong.loai = _xep_loai(dong.diem, ch)
 
     trong_so = {so.ma_video(o_(d, so.COT_LINK)) for d in hang}

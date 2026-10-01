@@ -366,6 +366,20 @@ def chot(goc: str, kenh: str, *, links: Optional[Sequence[str]] = None, lang: st
     là 雑学. Mặc định `False`: hành vi cũ không đổi.
     """
     la_hop_thu = links is None
+    if la_hop_thu:
+        # 01/10/2026 — BA ĐƯỜNG VÀO, MỘT CỬA: (a) `doi-thu-them.txt` của chủ dự án và (b) khán giả cùng
+        # xem của Studio vào hộp thư ngay đây; (b) pool traffic-related đã vào ở `mot_nut`, (c) trang chủ
+        # do máy ảo đổ. Rồi tất cả qua cùng một cửa duyệt bên dưới.
+        try:
+            from . import kiem_ngach_doi_thu as kn  # noqa: PLC0415
+
+            vao = kn.nap_duong_vao(goc, kenh)
+            if any(vao.values()) and on_log is not None:
+                on_log("  hộp thư: +{0} kênh chủ dự án đưa (doi-thu-them.txt) · +{1} kênh khán giả cùng xem "
+                       "(Studio)".format(vao.get("chu_du_an", 0), vao.get("studio", 0)))
+        except Exception as loi:  # noqa: BLE001 — đường vào hỏng không giết lượt chốt
+            if on_log is not None:
+                on_log("  nạp đường vào đối thủ hỏng: {0}".format(str(loi)[:100]))
     if client is not None and mo_ta_kenh is None:
         mo_ta_kenh = _mo_ta_kenh_cho_ai(goc, kenh)
     tham = dict(lang=lang, phut_muc_tieu=phut_muc_tieu, lay_kenh=lay_kenh, tu_khop=tu_khop, client=client,
@@ -389,7 +403,7 @@ def chot(goc: str, kenh: str, *, links: Optional[Sequence[str]] = None, lang: st
 
             kq = kn.kiem_dinh_ky(goc, kenh, client, goi=goi_kiem, on_log=on_log)
             dem["kiem_ngach"] = {x: sum(1 for d in kq["theo_kenh"].get(kenh, []) if d["ket"] == x)
-                                 for x in (kn.GIU, kn.BO, kn.NGHI)}
+                                 for x in (kn.GIU, kn.BO, getattr(kn, "HET", "het"), kn.NGHI)}
         except Exception as loi:  # noqa: BLE001
             if on_log is not None:
                 on_log("  kiểm ngách định kỳ hỏng: {0}".format(str(loi)[:100]))
@@ -424,7 +438,7 @@ def _cua_suc_song(goc: str, kenh: str, uv: UngVien, nguong: Dict[str, float]) ->
         from . import kiem_ngach_doi_thu as kn  # noqa: PLC0415
 
         ket, ly = kn.cua_suc_song(uv.suc_song, nguong)
-        return ket == kn.BO, ly
+        return ket in (kn.BO, getattr(kn, "HET", kn.BO)), ly
     except Exception:  # noqa: BLE001
         return False, ""
 
@@ -549,7 +563,8 @@ def _chot(goc: str, kenh: str, *, links: Optional[Sequence[str]], lang: str, phu
         # hoặc quá yếu so với nhóm (không video nổi, không tăng trưởng) → bỏ, kể cả kênh bạn đưa.
         bo_song, ly_song = _cua_suc_song(goc, kenh, uv, nguong_ss)
         if bo_song:
-            tt, ly_do = db.BO, "không phải đối thủ — " + ly_song
+            # 01/10/2026 — chết ≠ sai chủ đề: "hết" (lượt kiểm định kỳ đo lại, tự hồi sinh).
+            tt, ly_do = getattr(db, "HET", db.BO), "Hết — " + ly_song
             la_ban_dua = False
         # Hỏi AI: máy định theo dõi/để lại (như cũ) — VÀ, theo nghĩa, cả kênh máy định BỎ bằng từ
         # khoá; chỉ kênh bỏ HIỂN NHIÊN (chết, sai tiếng, tóm sách/tin tức/nhạc…, ngừng hoạt động)
@@ -607,6 +622,9 @@ def _chot(goc: str, kenh: str, *, links: Optional[Sequence[str]], lang: str, phu
             dem["theo_doi_links"].append(link)
         elif tt == db.TAM_NGUNG:
             dem["tam_ngung"] = dem.get("tam_ngung", 0) + 1
+        elif tt == getattr(db, "HET", None):
+            dem["het"] = dem.get("het", 0) + 1
+            dem["bo_links"].append(link)
         else:
             dem["bo"] += 1
             dem["bo_links"].append(link)
@@ -614,7 +632,7 @@ def _chot(goc: str, kenh: str, *, links: Optional[Sequence[str]], lang: str, phu
         return dem
     cot, hang = db.doc(goc, kenh)
     hang = db.gop_cham(cot, hang, ban_ghi)
-    for tt in (db.THEO_DOI, db.TAM_NGUNG, db.BO):
+    for tt in (db.THEO_DOI, db.TAM_NGUNG, getattr(db, "HET", db.BO), db.BO):
         nhom = [l for l, t in trang_thai.items() if t == tt]
         if nhom:
             hang = db.dat_trang_thai(cot, hang, nhom, tt)
@@ -630,8 +648,8 @@ def _chot(goc: str, kenh: str, *, links: Optional[Sequence[str]], lang: str, phu
                 if k and k == db.khoa(link) and not str(dong[i_tuyen]).strip():
                     dong[i_tuyen] = " · ".join(tuyen)[:120]
     db.luu(goc, kenh, cot, hang)
-    log("  chốt danh bạ: +{0} theo dõi · {1} bỏ · {2} để lại hộp thư · {3} không đo được · AI hỏi {4}, loại {5}"
+    log("  chốt danh bạ: +{0} theo dõi · {1} bỏ · {7} hết · {2} để lại hộp thư · {3} không đo được · AI hỏi {4}, loại {5}"
         ", cứu {6} (từ khoá định bỏ, AI đọc nghĩa thấy là đối thủ)"
         .format(dem["theo_doi"], dem["bo"], dem["o_lai"], dem["loi"], dem["ai_hoi"], dem["ai_loai"],
-                dem.get("ai_cuu", 0)))
+                dem.get("ai_cuu", 0), dem.get("het", 0)))
     return dem

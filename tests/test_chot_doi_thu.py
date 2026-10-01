@@ -271,7 +271,27 @@ def test_kenh_ngung_dang_hon_30_ngay_thi_bo_khong_hoi_ai(tmp_path):
              lay_kenh=_lay({link: _kenh("静かな心理", link, 9000, LECH * 5, 8000, 900, cach_ngay=45)}))
     cot, hang = db.doc(goc, KENH)
     o = db.chi_so_cot(list(cot))
-    assert hoi_roi == [] and hang[0][o["Trạng thái"]] == db.BO and "ngừng hoạt động" in hang[0][o["Ghi chú"]]
+    # 01/10/2026: chết ≠ sai chủ đề → "hết" (tự hồi sinh), không còn "bỏ"
+    assert hoi_roi == [] and hang[0][o["Trạng thái"]] == db.HET and "không còn làm" in hang[0][o["Ghi chú"]]
+
+
+def test_hop_thu_nhan_tep_chu_du_an_va_khan_gia_cung_xem(tmp_path):
+    """Đường vào (a) `doi-thu-them.txt` + (b) khán giả cùng xem → hộp thư, rồi qua cùng cửa duyệt."""
+    from core import kiem_ngach_doi_thu as kn
+    from core import nghien_cuu_chung as ncc
+
+    goc = _goc(tmp_path)
+    with open(os.path.join(goc, "CHANNEL", KENH, "kenh.yaml"), "a", encoding="utf-8") as t:
+        t.write("\nnhom: ng\n")
+    nhom = os.path.dirname(ncc.thu_muc(goc, KENH))
+    os.makedirs(nhom, exist_ok=True)
+    with open(os.path.join(nhom, kn.TEP_THEM), "w", encoding="utf-8") as t:
+        t.write("# mỗi dòng một link\nhttps://www.youtube.com/@ban\n\nhttps://www.youtube.com/@ban\n")
+    ncc.khan_gia_cung_xem_ghi(goc, KENH, {KENH: {"ung_vien_doi_thu_uu_tien": [
+        {"link": "https://www.youtube.com/channel/UCxyz"}]}})
+    assert kn.nap_duong_vao(goc, KENH) == {"chu_du_an": 1, "studio": 1}
+    assert kn.nap_duong_vao(goc, KENH) == {"chu_du_an": 0, "studio": 0}, "chạy lại không nhân đôi"
+    assert set(db.hop_thu(goc, KENH)) == {"https://www.youtube.com/@ban", "https://www.youtube.com/channel/UCxyz"}
 
 
 def test_do_ung_vien_dem_dung_phan_tram():
