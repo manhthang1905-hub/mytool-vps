@@ -7465,14 +7465,15 @@ def _khau_clip(bc: BoiCanh):
 KIEU_THUMB = (
     ("portrait_main", "close-up portrait of the reference character, direct "
                       "emotional gaze, single clear feeling"),
-    ("dramatic_scene", "the most emotionally charged moment of the story, "
-                       "character small in a meaningful environment"),
+    # 01/10/2026: "character small" → nhân vật TO (≥ 30% chiều cao khung, chuẩn ngách — TL1 từng ~15%)
+    ("dramatic_scene", "the most emotionally charged moment of the story, the character "
+                       "LARGE in the foreground (at least 30% of frame height) inside a meaningful environment"),
     ("youtube_ctr", "one strong symbolic object in the foreground with the "
                     "character reacting behind it"),
     ("goc_portrait", "competitor layout, character closer and centred, one "
                      "clear feeling, strong single light source"),
-    ("goc_scene", "competitor layout, character small in the room, the place "
-                  "around them carrying the tension"),
+    ("goc_scene", "competitor layout, the character in the room still at least 30% of "
+                  "frame height, the place around them carrying the tension"),
     ("goc_object", "competitor layout, one symbolic object lit in the "
                    "foreground, character behind it in the dark"),
     # ═══ VIỆC 4 (28/09/2026) — KHUÔN ẢNH BÌA THẮNG THẬT ═══
@@ -7689,6 +7690,13 @@ def _loi_nhac_bia(bc: BoiCanh, luot: LuotChay, khuon: str, tieu_de: str,
                      "\"maximum 2 text blocks and 14 characters TOTAL\" use at most 12 characters per "
                      "text line and 20 in total (shorter is better). The background is a concrete "
                      "illustrated scene with warm light, not a plain empty field.\n")
+    # 01/10/2026 (bìa nhỏ ngày 01/10): TL3-0015 có người chụp kiểu ẢNH THẬT ở nền; nhân vật TL1 ~15% khung.
+    try:
+        from . import bia_theo_khuon as _btk_luat  # noqa: PLC0415
+        loi_nhac += ("\n\n## EVERY CONCEPT — REQUIRED\n- " + _btk_luat.CAM_ANH_THAT + "\n- "
+                     + _btk_luat.NHAN_VAT_LON + "\n")
+    except Exception:  # noqa: BLE001 — tiến trình cũ còn giữ bản bia_theo_khuon trước đó
+        pass
     if kieu:
         loi_nhac += _LUAT_SO_BIA.format(
             len(kieu), "\n".join("  {0}. `{1}` — {2}".format(i, t, m)

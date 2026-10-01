@@ -425,6 +425,19 @@ _MUC_EN = {"rat_cao": "very high", "cao": "high", "vua": "medium", "trung": "med
            "5": "very high", "4": "high", "3": "medium", "2": "low", "1": "very low"}
 
 
+#: 01/10/2026 (bìa nhỏ ngày 01/10) — hai luật thêm vào MỌI lời nhắc bìa:
+#: (1) TL3-0015 có người chụp kiểu ẢNH THẬT ở nền, lạc nét so với phong cách vẽ của kênh → cấm người thật /
+#:     ảnh chụp; (2) nhân vật TL1 chỉ ~15% chiều cao khung → chuẩn ngách: biểu cảm rõ, ≥ 30% chiều cao khung
+#:     (giám khảo `chon_bia` chấm theo cùng luật).
+NHAN_VAT_TOI_THIEU_PCT = 30
+CAM_ANH_THAT = ("NO real people and NO photographs anywhere — not even in the background: every figure is DRAWN in "
+                "the same illustration style as the reference character (no photo-realistic faces, crowds, stock "
+                "photos or camera-shot scenery)")
+NHAN_VAT_LON = ("the character is BIG: at least {0}% of the frame height (head and upper body at least), face large "
+                "enough that the expression reads at phone size — never a tiny figure lost in the scene").format(
+                    NHAN_VAT_TOI_THIEU_PCT)
+
+
 def khoi_khuon_tieng_anh(khuon_chu: Dict[str, Any], *, co_chu: bool = True) -> str:
     """Khuôn cấu trúc → các dòng tiếng Anh cho lời nhắc sinh ảnh / giám khảo."""
     kc = khuon_chu or {}
@@ -443,7 +456,9 @@ def khoi_khuon_tieng_anh(khuon_chu: Dict[str, Any], *, co_chu: bool = True) -> s
     if nv:
         vt = {"trai": "left third", "giua": "CENTRE of the frame", "phai": "right third"}.get(
             nv.get("vi_tri", ""), nv.get("vi_tri", ""))
-        co = "about {0:.0f}% of frame height".format(nv["co_pct"]) if nv.get("co_pct") else ""
+        # 01/10/2026: chuẩn ngách — nhân vật biểu cảm rõ, ≥ 30% chiều cao khung (TL1 từng ~15%: lọt thỏm)
+        co = "about {0:.0f}% of frame height".format(max(float(nv["co_pct"]), float(NHAN_VAT_TOI_THIEU_PCT))) \
+            if nv.get("co_pct") else ""
         dong.append("the reference character placed in the {0}{1}".format(vt, (", " + co) if co else ""))
     if kc.get("sac_thai"):
         dong.append("mood: " + kc["sac_thai"])
@@ -503,6 +518,8 @@ def loi_nhac_theo_khuon(khuon_chu: Dict[str, Any], *, phong_cach: str, bien_the:
         "",
         khoi_khuon_tieng_anh(kc, co_chu=not chu_do_ma_ve),
         "character: {0}, expression: {1} — a strong, readable emotion on the face".format(tu_the, net_mat),
+        NHAN_VAT_LON,
+        CAM_ANH_THAT,
     ]
     if dao_cu:
         dong.append("one symbolic prop tied to this story, drawn in the same style, behind or beside "
@@ -587,8 +604,10 @@ def khoi_chuan_ngach(cn: Dict[str, Any]) -> str:
                         {"am": "warm", "lanh": "cool"}.get(nen.get("anh_sang", "am"), "warm")))
     if nv.get("bieu_cam_ro"):
         tranh = ", ".join(nv.get("tranh_net_mat") or [])
-        dong.append("- character: a CLEAR, strong facial expression readable at phone size{0}".format(
-            " (avoid: {0})".format({"buon": "a sad face"}.get(tranh, tranh)) if tranh else ""))
+        dong.append("- character: a CLEAR, strong facial expression readable at phone size, at least {0}% of the "
+                    "frame height{1}".format(NHAN_VAT_TOI_THIEU_PCT,
+                                             " (avoid: {0})".format({"buon": "a sad face"}.get(tranh, tranh)) if tranh else ""))
+    dong.append("- illustration only: no real people, no photographs, no photo-realistic faces anywhere")
     dong.append("- must stay readable when shrunk to 120 px wide")
     return "\n".join(dong)
 
@@ -637,6 +656,8 @@ def loi_nhac_chuan_ngach(cn: Dict[str, Any], *, bo_ao: Dict[str, str], bien_the:
          "behind or beside the character" if chu_do_ma_ve else
          "composition: the character on one side (about 45-60% of frame height), text lines stacked on "
          "the other side and across the bottom, the key prop behind the character"),
+        NHAN_VAT_LON,
+        CAM_ANH_THAT,
     ]
     if chu_do_ma_ve:
         dong += ["", "ABSOLUTELY NO TEXT, NO LETTERS anywhere in the image — the title text is added later. "

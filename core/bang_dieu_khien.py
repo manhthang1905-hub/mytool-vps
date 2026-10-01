@@ -1245,6 +1245,24 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — giám đốc hỏng không làm hỏng khối việc
         pass
 
+    # 16) Cứu video CTR thấp (01/10/2026): hội đồng đề xuất đổi tiêu đề — 3 lần đầu mỗi kênh chờ chủ DUYỆT.
+    # Bấm chỉ GHI sổ `giam-doc/duyet-sua.json` (`cuu_ctr.ghi_duyet`); nhịp gác tổng xếp hàng sửa giờ vắng.
+    try:
+        from .giam_doc import cuu_ctr as _cc  # noqa: PLC0415
+
+        for k in kenh_ds:
+            ma = str(k.get("ma") or "")
+            for m in _cc.cho_duyet(goc, ma):
+                ts = {"ma": ma, "id": str(m.get("id") or "")}
+                ra.append(_viec(
+                    "duyet-sua:" + ts["id"], CANH_BAO, kenh=ma, chu="Giám đốc kênh: " + _cat_chu(_cc.dong_viec_cua_ban(m), 320),
+                    goi_y="→ Duyệt: máy đổi tiêu đề giờ vắng, đo CTR trước/sau, tệ hơn thì tự đổi lại (3 lần đầu cần bạn)",
+                    nut=[("Duyệt", "duyet_sua", ts), ("Bỏ", "bo_sua", ts),
+                         ("Chép link Studio", "chep_link",
+                          {"url": "https://studio.youtube.com/video/{0}/edit".format(m.get("video_id"))})]))
+    except Exception:  # noqa: BLE001
+        pass
+
     # 6) ví sắp cạn.
     ma_cac_kenh = [str(k.get("ma") or "") for k in kenh_ds]
     may = dong_may(goc, anh, bay_gio=bay_gio, so_du_micro=so_du_micro,

@@ -229,7 +229,9 @@ For EACH labelled tile (use exactly the labels you see, one entry per tile), sco
 - suc_hut_click: would a scrolling phone viewer stop and tap this over neighbouring videos?
 - doc_duoc_co_nho: is the text readable and memorable at THUMBNAIL SIZE (tiny, blurry edges)?
 - tuong_phan: contrast between subject/text and background — does it pop out of a feed?
-- cam_xuc: does the expression/composition carry a clear, single emotion?
+- cam_xuc: does the expression/composition carry a clear, single emotion? The character must be BIG — at \
+least ~30% of the frame height with a face whose expression reads at phone size; a tiny figure lost in the \
+scene (under ~20% of the frame height) scores 3 or less.
 - hop_noi_dung: does the promise implied by the text/image actually match the video content \
 described above? Penalise a thumbnail that implies something the video does not deliver.
 - bam_khuon_thang: 0 if no winning template was given above; otherwise how closely this tile \
@@ -237,13 +239,16 @@ matches that template's layout/colour/text placement (NOT literal wording).
 - dung_chuan_ngach: 0 if no niche standard was given above; otherwise how fully the tile meets it \
 (bare outlined text, yellow/white with a red key word, text covering ~40-55% of the frame, every \
 text tier at least ~18% of the frame height and the main tier at least ~25%, no big empty areas, \
-a warm or high-contrast background — never pale grey).
+a warm or high-contrast background — never pale grey; an expressive character at least ~30% of the frame \
+height).
 - khac_video_gan_day: does this avoid repeating the layout of the recent thumbnails shown?
 
 Also report per tile: "chu_doc_ra" (the text you can actually read on it, empty if none), and \
 "loi_nang" — a list of strings from this fixed set ONLY, whichever apply: "sai_chu" (readable \
 text does not match the expected text above), "chu_vo" (text broken/overlapping/unreadable), \
-"nhan_vat_di_dang" (a character/face is deformed or has extra/missing limbs).
+"nhan_vat_di_dang" (a character/face is deformed or has extra/missing limbs), "anh_that" (a REAL \
+person, a photograph or a photo-realistic human/face anywhere in the tile, even in the background — the \
+channel only uses drawn illustration).
 
 Return JSON only:
 {{"cac_anh": [{{"nhan": "A", "diem": {{"suc_hut_click": 0, "doc_duoc_co_nho": 0, "tuong_phan": 0, \
@@ -378,6 +383,8 @@ def _kiem_loai(ket: _KetQuaCham, *, chu_bia_mong_doi: str, doi_chieu_chu: bool,
         return "chữ vỡ"
     if "nhan_vat_di_dang" in loi:
         return "nhân vật dị dạng"
+    if "anh_that" in loi:  # 01/10/2026: TL3-0015 — người chụp kiểu ảnh thật ở nền, lạc phong cách kênh
+        return "người thật / ảnh chụp"
     if toi_da_ky_tu and ket.chu_doc_ra:
         so_ky_tu = len(_chuan_hoa_chu(ket.chu_doc_ra))
         if so_ky_tu > toi_da_ky_tu:

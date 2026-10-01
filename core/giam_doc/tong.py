@@ -22,7 +22,7 @@ import math
 import os
 import re
 import statistics
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 THU_MUC = os.path.join("workspace", "tong-giam-doc")
 TEP_SO = "so.json"
@@ -329,7 +329,7 @@ def _so_lieu(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float) -> Dic
 
 
 def loi_nhac(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float, td: List[Dict[str, Any]],
-             kenh_moi: List[str], so_lieu: Dict[str, Any]) -> str:
+             kenh_moi: List[str], so_lieu: Dict[str, Any], gio_online: Sequence[str] = ()) -> str:
     dong_td = ["{0} {1} [{2}]: khe {3} → {4} ({5}); nhip_dang “{6}” → “{7}”{8}".format(
         t["id"], t["ma"], TEN_LOAI[t["loai"]], t["khe_cu"], t["khe_moi"], t["ly_do"], t["cu"]["nhip_dang"],
         t["moi"]["nhip_dang"], "" if t["duoc"] else " — CHẶN: " + t["ly_do_kiem"]) for t in td]
@@ -345,6 +345,8 @@ def loi_nhac(bang: List[Dict[str, Any]], cs: Dict[str, Any], tran: float, td: Li
         "MÁY: " + str(cs.get("cau") or cs.get("de_xuat") or "") + " · trần ≈ {0:.1f} video/ngày, tổng khe ≤ 85% trần".format(tran),
         "THỰC ĐƠN (chỉ chọn id trong đây; không đáng đổi thì \"chon\": [])\n" + ("\n".join(dong_td) or "(trống)"),
         "KÊNH MỚI (chỉ gợi ý cho chủ): " + (" | ".join(kenh_moi) or "máy chưa dư ≥ 2 video/ngày — chưa nên mở"),
+    ] + (["GIỜ KHÁN GIẢ ONLINE (đặt khe mới gần giờ đông; lệch nhiều thì ghi gợi ý vào viec_cua_ban)\n"
+          + "\n".join("- " + x for x in gio_online)] if gio_online else []) + [
         DANG_TRA_LOI,
     ])
 
@@ -392,7 +394,11 @@ def hop_tuan(goc: str, goi_chat: Optional[Callable[..., str]], *, ep_che_do: Opt
     td = thuc_don(goc, bang, tran, so_, bay_gio)
     kenh_moi = de_xuat_kenh_moi(goc, cs)
     sl = _so_lieu(bang, cs, tran)
-    ln = loi_nhac(bang, cs, tran, td, kenh_moi, sl)
+    from . import goi_y_gio_dang  # noqa: PLC0415 — giờ khán giả online (chỉ khi kênh đã có gio-online.json)
+
+    ln = loi_nhac(bang, cs, tran, td, kenh_moi, sl,
+                  gio_online=[x for x in ("{0}: {1}".format(d["ma"], goi_y_gio_dang(goc, d["ma"])) for d in bang
+                                          if goi_y_gio_dang(goc, d["ma"]))])
     kq: Dict[str, Any] = {"luc": bay_gio.replace(microsecond=0).isoformat(), "che_do": cd, "thu": thu,
                           "bang": [{k: v for k, v in d.items() if k != "_video"} for d in bang], "tran": round(tran, 1),
                           "may": {k: cs.get(k) for k in ("cau", "con_du_video_ngay", "phan_tram_khe_nang")},

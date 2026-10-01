@@ -139,9 +139,10 @@ def doc_ban_chup(thu_muc_video: str) -> List[Dict[str, Any]]:
     """Mọi bản chụp `<N>h/` của một video, theo tuổi tăng dần. Tuổi = tuổi THẬT lúc chụp (lùi về nhãn
     thư mục khi gói chưa có `captured_at`). Mỗi bản: tuoi, hien_thi, ctr, xem, sub, gio_xem, avd_giay,
     avd_pct, pct_browse, pct_de_xuat, ctr_browse, gx_1k (giờ xem / 1.000 hiển thị)."""
-    from ..chi_so_ytb.gom import tuoi_that_gio  # noqa: PLC0415
+    from ..chi_so_ytb.gom import _captured_at_that, dang_that_cua_video, tuoi_that_gio  # noqa: PLC0415
 
     ra: List[Dict[str, Any]] = []
+    dang: Any = False  # giờ đăng thật (epoch) — chỉ đọc khi cần
     try:
         ten = os.listdir(thu_muc_video)
     except OSError:
@@ -157,11 +158,19 @@ def doc_ban_chup(thu_muc_video: str) -> List[Dict[str, Any]]:
             continue
         try:
             tuoi = tuoi_that_gio(duong)
+            if tuoi is None:  # mốc thiếu `_thong-tin.json`: giờ đăng lấy từ mốc khác của video
+                if dang is False:
+                    dang = dang_that_cua_video(thu_muc_video)
+                cap = _captured_at_that(duong) if dang else None
+                tuoi = (cap - dang) / 3600.0 if cap else None
         except Exception:  # noqa: BLE001
             tuoi = None
         tr = tq.get("traffic_chuan") or tq.get("traffic") or {}
         gio = so(tq.get("watch_hours"))
-        b = {"moc": con, "tuoi": round(float(tuoi if tuoi is not None else int(m.group(1))), 1),
+        # Nhãn mốc = TUỔI THẬT ("125h"), không phải tên thư mục: một lượt bù từng ghi cùng bản 125h vào
+        # thư mục 6h…96h (một video TL3 từng bị đọc thành "13h"). Tên thư mục giữ ở `thu_muc`.
+        b = {"moc": "{0}h".format(int(round(tuoi))) if tuoi is not None else con, "thu_muc": con,
+             "tuoi": round(float(tuoi if tuoi is not None else int(m.group(1))), 1),
              "hien_thi": imp, "ctr": so(tq.get("ctr")), "xem": so(tq.get("views")),
              "sub": so(tq.get("subs")), "gio_xem": gio, "avd_giay": so(tq.get("avd_giay")),
              "avd_pct": so(tq.get("avd_pct")), "dai_giay": so(tq.get("thoi_luong_giay")),
@@ -170,8 +179,13 @@ def doc_ban_chup(thu_muc_video: str) -> List[Dict[str, Any]]:
              "gx_1k": round(1000.0 * gio / imp, 2) if gio is not None and imp else None}
         b.update(_dong_browse(duong))
         ra.append(b)
-    ra.sort(key=lambda x: x["tuoi"])
-    return ra
+    # cùng một tuổi (làm tròn giờ) = một bản chụp chép nhiều nơi → giữ bản đủ trường nhất
+    gop: Dict[str, Dict[str, Any]] = {}
+    for b in ra:
+        cu = gop.get(b["moc"])
+        if cu is None or sum(v is not None for v in b.values()) > sum(v is not None for v in cu.values()):
+            gop[b["moc"]] = b
+    return sorted(gop.values(), key=lambda x: x["tuoi"])
 
 
 def ban_chup_gan(v: Dict[str, Any], gio: float, lo: float, hi: float) -> Optional[Dict[str, Any]]:
@@ -323,6 +337,7 @@ def _video(goc: str, ma: str, bs: BangSo) -> None:
             "tham_do": bool(n.get("tham_do")), "thang": bool(vm.thang),
             "ket_luan": ket_qua.ket_luan(vm, hs, bs.nguong_thang_48h),
             "hien_thi_13h": vm.hien_thi_13h, "hien_thi_48h": vm.hien_thi_48h,
+            "cach_48h": getattr(vm, "cach_48h", ""), "lech_48h": getattr(vm, "lech_48h", None),
             "sub_tron_doi": su, "xem_tron_doi": xem,
             "sub_1k": round(1000.0 * su / xem, 2) if su is not None and xem else None,
             "chup": chup, "tieu_de_da_cham": list(((hs.get("tieu_de_cham") or {}).get("ung_vien")) or []),

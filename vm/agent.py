@@ -3230,6 +3230,132 @@ def chay_bu_mhkt(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: float 
     return True
 
 
+# ── SỬA VIDEO CŨ — cứu CTR thấp (01/10/2026) ────────────────────────────────
+#
+# Giám đốc kênh (`core/giam_doc/cuu_ctr.py`) xếp việc đổi tiêu đề / bìa vào
+# `logs/hang-sua.json` (chủ đã duyệt, hoặc kênh đã đủ thành tích tự áp). Bước này
+# chạy ĐÚNG khe giờ vắng của bù MHKT (`han_bu_mhkt`: 02:00–05:00, sau QUÉT NGÀY
+# của kênh, nhường quét kênh khác, tránh :55–:05), giữ khe Chrome dùng chung
+# (viec "sua_video"), và KHÔNG sửa trong 60 phút trước phiên đăng của bất kỳ
+# kênh nào (`SUA_NHUONG_PHIEN_PHUT`). Máy DOM: `may_dang_dom.py --sua-video`
+# (trang sửa → gõ/tải lên → đọc lại → Lưu → đọc lại), kết quả `logs/sua-cuoi.json`.
+
+SUA_NHUONG_PHIEN_PHUT = 60
+CHU_KY_SUA_VIDEO_GIAY = 5 * 60
+SUA_LUOT_DEM = 2
+_SUA_VIDEO = {"luc": 0.0}
+
+
+def han_sua_video(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, kenh: str, luc: float,
+                  tt: dict = None) -> tuple:
+    """(số giây được chạy lượt sửa của `kenh`, lý do nếu 0) — luật khe của bù MHKT + nhường 60' trước MỌI
+    phiên đăng còn chưa chạy hôm nay. Hàm (gần) thuần, chỉ đọc trạng thái đã cất."""
+    tt = _doc_trang_thai(cau_hinh) if tt is None else tt
+    con, ly_do = han_bu_mhkt(cau_hinh, hieu_luc, cac_kenh, kenh, luc, tt)
+    if con <= 0:
+        return con, ly_do
+    hom_nay = time.strftime("%Y-%m-%d", time.localtime(luc))
+    for k in cac_kenh:
+        muc_phien = tt.get("phien_muc_tieu@{0}@{1}".format(k, hom_nay))
+        if isinstance(muc_phien, str) and muc_phien and str(tt.get("phien_cuoi@" + k) or "") != hom_nay:
+            moc = _moc_gio_hom_nay(muc_phien, luc)
+            if moc is not None and moc - luc < SUA_NHUONG_PHIEN_PHUT * 60 + BU_MHKT_TOI_THIEU_PHUT * 60:
+                return 0.0, "phiên kênh {0} lúc {1} trong 60 phút tới — không sửa video".format(k, muc_phien)
+            if moc is not None:
+                con = min(con, moc - SUA_NHUONG_PHIEN_PHUT * 60 - luc)
+    if con < BU_MHKT_TOI_THIEU_PHUT * 60:
+        return 0.0, "không đủ {0} phút trước việc kế".format(BU_MHKT_TOI_THIEU_PHUT)
+    return con, ""
+
+
+def chay_sua_video(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: float = None,
+                   chay_con=None) -> bool:
+    """MỘT bước SỬA VIDEO CŨ (mỗi nhịp tim sau bù MHKT; tự giãn `CHU_KY_SUA_VIDEO_GIAY`). Chọn MỘT kênh có
+    việc trong `logs/hang-sua.json` (ít lượt đêm nay nhất trước), chạy `may_dang_dom.py --sua-video` trong
+    khe Chrome. Trả True nếu vừa chạy."""
+    luc = time.time() if bay_gio is None else bay_gio
+    if luc - _SUA_VIDEO["luc"] < CHU_KY_SUA_VIDEO_GIAY:
+        return False
+    _SUA_VIDEO["luc"] = luc
+    chay_con = chay_con or _chay_mot_lan
+    hom_nay = time.strftime("%Y-%m-%d", time.localtime(luc))
+    try:
+        mdd = _mdd()
+    except Exception as loi:  # noqa: BLE001
+        ghi("sửa video: không nạp được may_dang_dom ({0})".format(str(loi)[:100]))
+        return False
+    hang = mdd.doc_hang_sua(os.path.join(GOC, "logs", "hang-sua.json"))
+    if not hang:
+        return False
+    tt = _doc_trang_thai(cau_hinh)
+    ung_vien = []
+    for thu_tu, kenh in enumerate(cac_kenh):
+        ch = hieu_luc.get(kenh) or {}
+        if ch.get("sua_video") is False or str(ch.get("cach_dang") or "anh") == "anh":
+            continue
+        viec = mdd.hang_sua_kenh(hang, kenh, hom_nay, mdd.SUA_TOI_DA_DEM)
+        if not viec:
+            continue
+        khoa_dem = "sua_video@{0}@{1}".format(kenh, hom_nay)
+        da_chay = int(tt.get(khoa_dem) or 0)
+        if da_chay >= SUA_LUOT_DEM:
+            continue
+        ung_vien.append((da_chay, thu_tu, kenh, ch, viec, khoa_dem))
+    if not ung_vien:
+        return False
+    ung_vien.sort(key=lambda x: x[:2])
+    chon, con = None, 0.0
+    for uv in ung_vien:
+        con, _ly_do = han_sua_video(cau_hinh, hieu_luc, cac_kenh, uv[2], luc, tt)
+        if con > 0:
+            chon = uv
+            break
+    if chon is None:
+        return False
+    da_chay, _tt, kenh, ch, viec, khoa_dem = chon
+    if van_ipv4_mo():
+        ghi("sửa video kênh {0} hoãn: van IPv4 đang mở".format(kenh))
+        return False
+    if os.path.exists(os.path.join(GOC, "logs", "dang-dodang.json")):
+        ghi("sửa video kênh {0} hoãn: đang có máy đăng dở (dang-dodang.json)".format(kenh))
+        return False
+    if not tim_chrome(ch):
+        return False
+    if not giu_khoa_may_chung(viec="sua_video", kenh=kenh, uu_tien=1):
+        ghi("sửa video kênh {0} hoãn: máy đang bận việc nặng".format(kenh))
+        return False
+    try:
+        _luu_trang_thai(cau_hinh, **{khoa_dem: da_chay + 1})
+        ghi("── SỬA VIDEO kênh {0}: {1} (hạn {2:.0f} phút) ──".format(
+            kenh, ", ".join("{0}[{1}]".format(v["video_id"], v.get("buoc")) for v in viec), con / 60))
+        chrome = tim_chrome(ch)
+        ghi_che_do_mat_cao(ch, False)   # Chrome mở để sửa video — mắt cào KHÔNG quét
+        if chrome and not _chrome_dang_chay(chrome):
+            mo_chrome_kenh(ch, ch.get("studio_url") or "https://studio.youtube.com", chrome, da_chay=False)
+            _cho_devtools(_cong_devtools(ch), CHO_DEVTOOLS_GIAY)
+        msg, _ma = chay_con(
+            os.path.join(GOC, "may_dang_dom.py"), kenh, "sửa video (DOM)", han_giay=con + 3 * 60,
+            co_gi_them=("--sua-video", "--trong-phien", "--toi-da-video", str(mdd.SUA_TOI_DA_DEM),
+                        "--han-giay", str(int(con + 5 * 60))))
+        ghi("sửa video kênh {0}: {1}".format(kenh, msg))
+        try:
+            for v in mdd.doc_hang_sua(os.path.join(GOC, "logs", "hang-sua.json")):
+                if v.get("kenh") == kenh and v.get("thu_ngay") == hom_nay and any(v.get("id") == x.get("id") for x in viec):
+                    ghi("sửa video {0} [{1}]: {2}{3}".format(v.get("video_id"), v.get("buoc"), v.get("trang_thai"),
+                                                         " — " + str(v.get("ly_do")) if v.get("ly_do") else ""))
+                    if v.get("trang_thai") == "loi" and int(v.get("lan_loi") or 0) >= mdd.SUA_TOI_DA_LOI:
+                        ghi("CẢNH BÁO sửa video {0}: hỏng {1} lần — thôi, giám đốc kênh ghi lỗi vào sổ duyệt".format(
+                            v.get("video_id"), v.get("lan_loi")))
+        except Exception:  # noqa: BLE001 — chỉ là dòng nhật ký
+            pass
+    finally:
+        try:
+            dong_chrome_kenh(ch)
+        finally:
+            nha_khoa_may_chung()
+    return True
+
+
 # ── Vòng đời ─────────────────────────────────────────────────────────────────
 
 
@@ -3500,6 +3626,12 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                     vua_chay_phien = chay_bu_mhkt(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("bù MHKT hỏng: {0}".format(loi))
+            # SỬA VIDEO CŨ (01/10/2026, cứu CTR thấp) — cùng khe giờ vắng của bù MHKT.
+            if not vua_chay_phien and not mot_vong:
+                try:
+                    vua_chay_phien = chay_sua_video(cau_hinh, hieu_luc, cac_kenh)
+                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
+                    ghi("sửa video hỏng: {0}".format(loi))
             # Tải lên BỔ SUNG (gói xong sau phiên sáng) — chỉ khi nhịp này không
             # vừa chạy phiên; tự giãn 25 phút/lần, tự nhường khoá/van/khe :00.
             if not vua_chay_phien and not mot_vong:

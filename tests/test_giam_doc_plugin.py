@@ -170,7 +170,7 @@ def test_cuu_ctr_goi_y_doi_tieu_de_dung_cong():
 
 
 def test_cuu_ctr_ngoai_khung_khong_chay():
-    bs = _bs([_v("gia", tuoi_gio=120.0, ket_luan="truot", chup=[_chup(100, 3000, 1.0)])])
+    bs = _bs([_v("gia", tuoi_gio=130.0, ket_luan="truot", chup=[_chup(100, 3000, 1.0)])])  # khung 52–120h
     assert cuu_ctr.ap_dung(bs) == 0.0
 
 

@@ -73,6 +73,12 @@ def bang_so_chu(bs: BangSo, toi_da: int = TOI_DA_KY_TU_BANG) -> str:
     cuoi = []
     if bh:
         cuoi.append("BÀI HỌC KÊNH (n ≥ 3):\n" + "\n".join(bh))
+    if bs.goc:  # 01/10/2026: giờ khán giả online (chỉ khi kênh đã có `gio-online.json` — không thì y hệt)
+        from . import goi_y_gio_dang  # noqa: PLC0415
+
+        gy = goi_y_gio_dang(bs.goc, bs.ma_kenh)
+        if gy:
+            cuoi.append(gy + " Nhịp đăng hiện tại: {0}.".format(bs.cai.get("nhip_dang") or bs.cai.get("gio_dang") or "?"))
     if bs.luat_chon:
         cuoi.append("LUẬT CHỌN ĐANG DÙNG: " + " | ".join(bs.luat_chon[:4])[:600])
     if bs.bien_tap_cuoi.get("nhan_dinh"):

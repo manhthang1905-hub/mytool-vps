@@ -781,6 +781,14 @@ def cap_nhat_chi_so(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = No
 
         if video_id and video_id in theo_video:
             chi_so = dict(ho_so.get("chi_so") or {})
+            # 01/10/2026 — SỬA NHÃN MỐC SAI: mốc nay tính theo tuổi THẬT (`gom.dang_that_cua_video`);
+            # khung cũ mang CÙNG lúc chụp mà nay thuộc khung khác (một video TL3: bản 38h từng nằm ở "24h")
+            # thì bỏ — bản đó chỉ còn ở đúng khung.
+            khung_dung = {b.luc_chup: _ten_moc(b.moc_gio) for b in theo_video[video_id] if b.luc_chup}
+            for k in [k for k, gt in chi_so.items() if isinstance(gt, dict)
+                      and khung_dung.get(gt.get("luc_chup")) not in (None, "", k)]:
+                chi_so.pop(k, None)
+                thay = True
             for b in theo_video[video_id]:
                 ten_moc = _ten_moc(b.moc_gio)
                 if not ten_moc:

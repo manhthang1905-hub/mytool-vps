@@ -8,6 +8,7 @@ Cách chạy:
     python vm/may_dang_dom.py --kenh TL1-T7 --mot-lan [--trong-phien]
     python vm/may_dang_dom.py --kiem-dom --kenh TL1-T7 [--sau] [--ghi-dom-day-du]
     python vm/may_dang_dom.py --kenh TL1-T7 --ma TL1-T7-0007 --bo-loc-ngay
+    python vm/may_dang_dom.py --kenh TL3-T7 --sua-video [--kiem-dom [--video <id>]]   # sửa video cũ (hang-sua.json)
 
 Mã thoát (hợp đồng mục 8 — agent dựa vào đây để quyết có lùi đường ảnh không):
 
@@ -78,6 +79,13 @@ TT_SO_DA_LEN_KENH = ("xac-nhan", "da-len-lich", "lech-lich", "chua-xac-nhan")
 #: video/kênh/đêm; hỏng ngần này đêm liền thì thôi (vẫn nằm trong mhkt-thieu.json kèm lý do).
 BU_MHKT_TOI_DA_DEM = 3
 BU_MHKT_TOI_DA_LOI = 3
+#: 01/10/2026 — SỬA VIDEO CŨ (cứu CTR thấp của giám đốc kênh, `core/giam_doc/cuu_ctr.py`): hàng
+#: `logs/hang-sua.json` (giám đốc thêm việc, máy này cập nhật trạng thái — cùng khoá `.khoa`), kết quả lượt
+#: cuối `logs/sua-cuoi.json`. Agent gọi `--sua-video` giờ vắng (`agent.chay_sua_video`).
+DUONG_HANG_SUA = os.path.join(THU_MUC_LOG, "hang-sua.json")
+DUONG_SUA_CUOI = os.path.join(THU_MUC_LOG, "sua-cuoi.json")
+SUA_TOI_DA_DEM = 2
+SUA_TOI_DA_LOI = 3
 #: YouTube chỉ cho màn hình kết thúc với video ≥25 giây; Shorts không có mục MHKT.
 MHKT_NGAN_NHAT_GIAY = 25
 SHORTS_TOI_DA_GIAY = 180
@@ -745,6 +753,109 @@ def hang_bu_mhkt(so: dict, kenh: str, hom_nay: str, toi_da: int = BU_MHKT_TOI_DA
         ds.append((phan_tich_ngay_gio(m.get("lich") or "") or datetime.max, str(k), str(m["video_id"])))
     ds.sort()
     return [(k, vid) for _l, k, vid in ds][:max(0, int(toi_da) - da_thu)]
+
+
+# ── hàng SỬA VIDEO CŨ (01/10/2026) ────────────────────────────────────────
+
+def doc_hang_sua(duong: str = None) -> list:
+    """Mọi việc trong `hang-sua.json` (hỏng/thiếu → [])."""
+    try:
+        with open(duong or DUONG_HANG_SUA, "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+    except (OSError, ValueError):
+        return []
+    return [x for x in ((du or {}).get("viec") or []) if isinstance(x, dict)] if isinstance(du, dict) else []
+
+
+def hang_sua_kenh(hang: list, kenh: str, hom_nay: str = "", toi_da: int = SUA_TOI_DA_DEM,
+                  toi_da_loi: int = SUA_TOI_DA_LOI) -> list:
+    """Hàm THUẦN: việc sửa của `kenh` còn phải làm (chờ, hoặc hỏng chưa quá `toi_da_loi` lần và chưa thử
+    đêm `hom_nay`), cũ trước. Bước QUAY LUI (đổi lại tiêu đề cũ / bìa gốc) đi trước việc mới. Trần
+    `toi_da` việc MỚI mỗi đêm (quay lui không tính)."""
+    ds = []
+    for v in hang or []:
+        if v.get("kenh") != kenh or not v.get("video_id") or not (v.get("tieu_de") or v.get("anh")):
+            continue
+        tt = v.get("trang_thai") or "cho"
+        if tt == "cho" or (tt == "loi" and int(v.get("lan_loi") or 0) < toi_da_loi
+                           and str(v.get("thu_ngay") or "") != hom_nay):
+            ds.append(v)
+    ds.sort(key=lambda v: (not str(v.get("buoc") or "").startswith("quay_lui"), str(v.get("them_luc") or "")))
+    ra, moi = [], 0
+    for v in ds:
+        if not str(v.get("buoc") or "").startswith("quay_lui"):
+            if moi >= int(toi_da):
+                continue
+            moi += 1
+        ra.append(v)
+    return ra
+
+
+def _khoa_hang_sua(duong: str, han: float = 20.0):
+    """Giữ khoá `<hàng>.khoa` (dùng chung với giám đốc kênh phía tool). Trả đường khoá hoặc None."""
+    khoa = duong + ".khoa"
+    het = time.monotonic() + han
+    while True:
+        try:
+            fd = os.open(khoa, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return khoa
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(khoa) > 15 * 60:
+                    os.remove(khoa)
+                    continue
+            except OSError:
+                pass
+        except OSError:
+            return None
+        if time.monotonic() >= het:
+            return None
+        time.sleep(0.5)
+
+
+def cap_nhat_hang_sua(id_viec: str, duong: str = None, **truong) -> bool:
+    """Cập nhật MỘT việc của hàng (giữ khoá, ghi nguyên tử). False khi không giữ được khoá / không có việc."""
+    duong = duong or DUONG_HANG_SUA
+    khoa = _khoa_hang_sua(duong)
+    if khoa is None:
+        return False
+    try:
+        hang = doc_hang_sua(duong)
+        thay = False
+        for v in hang:
+            if v.get("id") == id_viec:
+                v.update(truong)
+                thay = True
+        if thay:
+            tam = duong + ".tam"
+            with open(tam, "w", encoding="utf-8") as tep:
+                json.dump({"viec": hang}, tep, ensure_ascii=False, indent=1)
+            os.replace(tam, duong)
+        return thay
+    finally:
+        try:
+            os.remove(khoa)
+        except OSError:
+            pass
+
+
+def url_anh_cua_goi(goi) -> set:
+    """Mọi URL ảnh bìa (ytimg) trong gói `get_creator_videos` của một video — so trước/sau khi đổi bìa."""
+    ra = set()
+
+    def duyet(o):
+        if isinstance(o, dict):
+            for x in o.values():
+                duyet(x)
+        elif isinstance(o, list):
+            for x in o:
+                duyet(x)
+        elif isinstance(o, str) and "ytimg" in o:
+            ra.add(o.split("?")[0] + ("?" + o.split("?", 1)[1] if "sqp=" in o else ""))
+    duyet((goi or {}).get("thumbnailDetails") or (goi or {}).get("thumbnail") or {})
+    return ra
 
 
 def doc_view_tong(thu_muc_chi_so: str) -> dict:
@@ -1617,6 +1728,176 @@ class MayDangDom:
                 break
             if self.bu_mhkt_mot(khoa, vid).get("ket") == "loi":
                 hong += 1
+        return MA_HONG if hong else MA_XONG
+
+    # ── SỬA VIDEO CŨ: đổi tiêu đề / bìa (01/10/2026, cứu CTR thấp) ───────
+    def _huy_sua(self, tb, nhan: str) -> None:
+        """Bỏ thay đổi chưa lưu (nút "Huỷ thay đổi" của trang sửa) — để rời trang không lưu nhầm."""
+        try:
+            luu = tb.tim("sua_luu", han=2, cho_tat=True)
+            if luu and not luu.get("tat") and tb.co("sua_huy_thay_doi"):
+                tb.bam("sua_huy_thay_doi", han_hau=5)
+        except Exception as loi:  # noqa: BLE001
+            self.nk("{0}: huỷ thay đổi hỏng: {1}".format(nhan, str(loi)[:120]))
+        try:
+            tb.ghi_bang_chung("sua-huy-" + nhan)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _dat_bia_trang_sua(self, tb, anh: str) -> str:
+        """Tải ảnh bìa lên trang sửa (đo DOM thật 01/10, TL3): video CHƯA có bìa tuỳ chỉnh → ô "Tải tệp lên"
+        (`sua_bia_tai`); ĐÃ có → nút ⋮ (`sua_bia_menu`) → "Thay đổi" (`sua_bia_doi`). Dự phòng: ô
+        `input#file-loader` ẩn (`sua_bia_input`), rồi nút của hộp tải lên (`nut_thumbnail`). Trả cách đã
+        dùng; ném lỗi nếu không tải được."""
+        loi = []
+        # ô tệp ẩn đứng thứ hai: nút ⋮ chỉ hiện khi rê chuột (đo 01/10: `tim` không thấy), còn ô
+        # `input#file-loader` luôn có — đặt tệp thẳng vào đó là đường ít bấm nhất.
+        for duong in (("sua_bia_tai",), ("sua_bia_input",), ("sua_bia_menu", "sua_bia_doi"), ("nut_thumbnail",)):
+            try:
+                if len(duong) == 2:
+                    if not tb.tim(duong[0], han=5):
+                        loi.append("không thấy " + duong[0])
+                        continue
+                    tb.bam(duong[0], hau_dieu_kien=lambda: tb.co(duong[1]), han_hau=8)
+                elif not tb.tim(duong[0], han=5, hien=duong[0] != "sua_bia_input", cho_tat=True):
+                    loi.append("không thấy " + duong[0])
+                    continue
+                return "{0}:{1}".format(duong[-1], tb.dat_tep(duong[-1], anh, khoa_input="sua_bia_input"))
+            except Exception as e:  # noqa: BLE001
+                loi.append("{0}: {1}".format(duong[-1], str(e)[:100]))
+                for _ in range(2):  # menu ⋮ còn mở thì đóng
+                    if tb.co("sua_bia_doi"):
+                        tb.phim("Escape")
+        raise Exception("không tải được bìa (" + "; ".join(loi) + ")")
+
+    def sua_video_mot(self, khoa: str, vid: str, tieu_de: str = None, anh: str = None,
+                      tieu_de_cu: str = None) -> dict:
+        """SỬA MỘT video đã đăng qua TRANG SỬA: mở trang → gõ tiêu đề / tải bìa → ĐỌC LẠI (trước khi lưu)
+        → Lưu (nút Lưu của trang) → mở lại trang ĐỌC LẠI lần nữa. Trả {ket: ok|khong-the|loi, ly_do,
+        doc_lai, anh_doi}. `tieu_de_cu`: tiêu đề máy biết — Studio đang mang tiêu đề khác (chủ sửa tay)
+        thì KHÔNG đè (`khong-the`). Bìa: so URL ảnh bìa trong gói Studio trước/sau (`anh_doi`)."""
+        nhan = "{0}/{1}".format(str(khoa).split("/", 1)[-1] or khoa, vid)
+        self.vid_dang = vid
+        tb = self.tab_b()
+        ra = {"ket": "loi", "ly_do": "", "doc_lai": "", "anh_doi": None}
+
+        def ket(k, ly_do="", **them):
+            ra.update(ket=k, ly_do=ly_do, **them)
+            muc = ("XONG" if k == "ok" else "BỎ" if k == "khong-the" else "HỎNG")
+            (self.nk if k != "loi" else self._canh_bao)("sửa video {0} {1}{2}".format(
+                nhan, muc, " — " + ly_do if ly_do else ""))
+            return ra
+        try:
+            co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
+            if not co_trang:
+                if bat_duoc and goi is None:
+                    return ket("khong-the", "video không còn trên kênh (Studio không trả video này)")
+                return ket("loi", "không mở được trang sửa video")
+            hien = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or (goi or {}).get("title") or "")
+            anh_truoc = url_anh_cua_goi(goi)
+            if tieu_de:
+                if hien == chuan_hoa_tieu_de(tieu_de):
+                    self.nk("sửa video {0}: tiêu đề đã đúng — không gõ".format(nhan))
+                elif tieu_de_cu and hien != chuan_hoa_tieu_de(tieu_de_cu):
+                    return ket("khong-the", "tiêu đề trên Studio «{0}» khác tiêu đề máy biết — chủ sửa tay? "
+                                            "không đè".format(hien[:60]))
+                else:
+                    tb.go("tieu_de", tieu_de)
+            cach_anh = ""
+            if anh:
+                if not os.path.isfile(anh):
+                    return ket("khong-the", "không có tệp bìa {0}".format(anh))
+                cach_anh = self._dat_bia_trang_sua(tb, anh)
+                self.ngu(6)
+            # ĐỌC LẠI trước khi lưu
+            if tieu_de:
+                doc = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or "")
+                if doc != chuan_hoa_tieu_de(tieu_de):
+                    self._huy_sua(tb, nhan)
+                    return ket("loi", "đọc lại trước khi lưu lệch: «{0}»".format(doc[:80]))
+            luu = tb.tim("sua_luu", han=10, cho_tat=True)
+            if not luu:
+                self._huy_sua(tb, nhan)
+                return ket("loi", "không thấy nút Lưu của trang sửa")
+            if not luu.get("tat"):
+                tb.bam("sua_luu", hau_dieu_kien=lambda: bool((tb.tim("sua_luu", han=0, cho_tat=True) or {}).get("tat")),
+                       han_hau=45)
+                self.nk("sửa video {0}: đã bấm Lưu{1}".format(nhan, " (bìa: " + cach_anh + ")" if cach_anh else ""))
+            elif anh:
+                return ket("loi", "đã tải bìa nhưng nút Lưu vẫn tắt — Studio không nhận ảnh")
+        except Exception as loi:  # noqa: BLE001 — một video hỏng, video kế vẫn làm
+            self._huy_sua(tb, nhan)
+            return ket("loi", "sửa hỏng: {0}".format(str(loi)[:160]))
+        # ĐỌC LẠI sau khi lưu: mở lại trang sửa
+        self.ngu(3)
+        try:
+            co_trang, _bat, goi2 = self._mo_trang_sua_bu(tb, vid)
+            doc2 = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or (goi2 or {}).get("title") or "") if co_trang else ""
+            tb.ghi_bang_chung("sua-doc-lai-" + vid)
+        except Exception as loi:  # noqa: BLE001
+            return ket("loi", "đã lưu nhưng đọc lại hỏng: {0}".format(str(loi)[:120]))
+        ra["doc_lai"] = doc2
+        if tieu_de and doc2 != chuan_hoa_tieu_de(tieu_de):
+            return ket("loi", "đã lưu nhưng đọc lại tiêu đề lệch: «{0}»".format(doc2[:80]))
+        if anh:
+            anh_sau = url_anh_cua_goi(goi2)
+            ra["anh_doi"] = (anh_sau != anh_truoc) if (anh_truoc and anh_sau) else None
+        return ket("ok", "" if ra["anh_doi"] is not False else "bìa: URL ảnh chưa đổi (Studio xử lý chậm?)")
+
+    def kiem_sua_video(self, vid: str) -> dict:
+        """`--sua-video --kiem-dom`: CHỈ ĐỌC trang sửa của `vid` — ô tiêu đề, nút Lưu (phải TẮT), nút tải bìa
+        / menu đổi bìa. Không gõ, không bấm gì."""
+        tb = self.tab_b()
+        kq = {"video_id": vid, "ok": False, "co": {}, "tieu_de": "", "du_phong": {}}
+        co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
+        kq["co"]["trang_sua"] = bool(co_trang)
+        kq["tieu_de"] = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or "") if co_trang else ""
+        for k in ("tieu_de", "sua_luu", "sua_huy_thay_doi", "sua_bia_tai", "sua_bia_menu", "sua_bia_input"):
+            try:
+                pt = tb.tim(k, han=5, cho_tat=True)
+            except Exception:  # noqa: BLE001
+                pt = None
+            kq["co"][k] = bool(pt)
+            if pt and k == "sua_luu":
+                kq["sua_luu_tat"] = bool(pt.get("tat"))
+                kq["sua_luu_cam"] = pt.get("cam")
+        kq["anh_bia"] = sorted(url_anh_cua_goi(goi))[:3]
+        kq["du_phong"] = dict(getattr(tb, "du_phong", {}) or {})
+        tb.ghi_bang_chung("kiem-sua-" + vid)
+        kq["ok"] = bool(co_trang and kq["co"]["tieu_de"] and kq["co"]["sua_luu"] and kq.get("sua_luu_tat")
+                        and (kq["co"]["sua_bia_tai"] or kq["co"]["sua_bia_menu"] or kq["co"]["sua_bia_input"]))
+        self.nk("KIỂM sửa video {0}: {1} — {2}".format(vid, "ĐẠT" if kq["ok"] else "CHƯA ĐẠT",
+                                                      ", ".join("{0}={1}".format(k, v) for k, v in kq["co"].items())))
+        return kq
+
+    def sua_video(self, cac: list, duong_hang: str = None) -> int:
+        """Làm các việc sửa [{id, video_id, tieu_de?, anh?, tieu_de_cu?, kenh, ma_goi}] — cập nhật hàng sau MỖI
+        việc, dừng khi gần hết hạn phiên. Mã thoát MA_XONG nếu không việc nào hỏng."""
+        hong, ket_ca = 0, []
+        hom_nay = self.bay_gio().date().isoformat()
+        for v in cac:
+            if not self.con_han(240):
+                self.nk("sửa video: gần hết hạn phiên — dừng, việc còn lại để đêm sau")
+                break
+            kq = self.sua_video_mot("{0}/{1}".format(self.kenh, v.get("ma_goi") or ""), str(v["video_id"]),
+                                    tieu_de=v.get("tieu_de") or None, anh=v.get("anh") or None,
+                                    tieu_de_cu=v.get("tieu_de_cu") or None)
+            luc = self.bay_gio().strftime("%Y-%m-%d %H:%M:%S")
+            truong = {"trang_thai": {"ok": "xong"}.get(kq["ket"], kq["ket"]), "ly_do": kq.get("ly_do") or "",
+                      "doc_lai": kq.get("doc_lai") or "", "anh_doi": kq.get("anh_doi"), "thu_ngay": hom_nay,
+                      "ket_luc": luc}
+            if kq["ket"] == "loi":
+                hong += 1
+                truong["lan_loi"] = int(v.get("lan_loi") or 0) + 1
+            cap_nhat_hang_sua(v["id"], duong_hang, **truong)
+            ket_ca.append(dict(truong, id=v["id"], video_id=v["video_id"], buoc=v.get("buoc")))
+        try:
+            with open(DUONG_SUA_CUOI if duong_hang is None else duong_hang.replace("hang-sua", "sua-cuoi"),
+                      "w", encoding="utf-8") as tep:
+                json.dump({"kenh": self.kenh, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "ket": ket_ca}, tep,
+                          ensure_ascii=False, indent=1)
+        except OSError:
+            pass
         return MA_HONG if hong else MA_XONG
 
     def link_the(self, d: dict, vid_dang: str = "") -> list:
@@ -2866,7 +3147,11 @@ def _doc_lenh(argv):
     ap.add_argument("--bu-mhkt", action="store_true",
                     help="BÙ MHKT video đã đăng mà thiếu (sổ mhkt=bo/lỗi/rỗng) qua trang sửa — agent gọi giờ vắng")
     ap.add_argument("--toi-da-video", type=int, default=BU_MHKT_TOI_DA_DEM,
-                    help="với --bu-mhkt: tối đa số video/kênh/đêm")
+                    help="với --bu-mhkt / --sua-video: tối đa số video/kênh/đêm")
+    ap.add_argument("--sua-video", action="store_true",
+                    help="SỬA video cũ theo logs/hang-sua.json (đổi tiêu đề / bìa, cứu CTR thấp) — agent gọi giờ "
+                         "vắng; kèm --kiem-dom = CHỈ ĐỌC trang sửa (không gõ, không lưu)")
+    ap.add_argument("--video", help="với --sua-video --kiem-dom: videoId để kiểm (mặc định: việc đầu hàng)")
     ap.add_argument("--han-giay", type=float, default=0.0,
                     help="hạn phiên (giây); 0 = theo config phien_han_dang_giay")
     return ap.parse_args(argv)
@@ -2900,7 +3185,29 @@ def main(argv=None) -> int:
         if loi_bo:
             log.error("studio-selectors.json lỗi: %s", "; ".join(loi_bo))
             return MA_LUI
-        if a.bu_mhkt:
+        if a.sua_video:
+            # SỬA VIDEO CŨ: hàng `logs/hang-sua.json` (giám đốc kênh xếp), không cần kế hoạch.
+            hang = [[]]
+            cac = hang_sua_kenh(doc_hang_sua(), a.kenh, date.today().isoformat(), a.toi_da_video)
+            if a.kiem_dom:
+                vid_kiem = a.video or (cac[0]["video_id"] if cac else "") or next(
+                    (str(m.get("video_id")) for k, m in sorted(SoVideoId().doc().items(), reverse=True)
+                     if str(k).startswith(a.kenh + "/") and isinstance(m, dict) and m.get("video_id")
+                     and m.get("trang_thai") in TT_SO_DA_LEN_KENH), "")
+                if not vid_kiem:
+                    log.error("--sua-video --kiem-dom: không có video nào để kiểm (truyền --video)")
+                    return MA_HONG
+                cac = [{"id": "kiem", "video_id": vid_kiem}]
+            elif not cac:
+                log.info("kênh %s: không có video nào cần sửa đêm nay", a.kenh)
+                return MA_XONG
+            log.info("kênh %s: sửa video %s: %s", a.kenh, "(KIỂM, chỉ đọc)" if a.kiem_dom else len(cac),
+                     ", ".join("{0}[{1}]".format(v["video_id"], v.get("buoc") or "kiem") for v in cac))
+            # Nút Lưu của trang sửa nằm trong `cam_bam` cho mọi luồng khác — riêng luồng sửa được bấm.
+            cam = dict(bo.get("cam_bam_sua_video") or {}) or dict(bo.get("cam_bam") or {}, chon=[
+                s for s in (bo.get("cam_bam") or {}).get("chon") or [] if "#save" not in s])
+            bo = dict(bo, cam_bam={k: x for k, x in cam.items() if k != "ghi_chu"})
+        elif a.bu_mhkt:
             # BÙ MHKT: hàng lấy từ SỔ (không cần kế hoạch); kế hoạch chỉ để tìm video
             # nguồn theo tiêu đề — đọc hỏng thì vẫn làm (tìm theo videoId).
             cac = hang_bu_mhkt(SoVideoId().doc(), a.kenh, date.today().isoformat(), a.toi_da_video)
@@ -2965,7 +3272,7 @@ def main(argv=None) -> int:
             return loi.ma
         log.info("đã nối Chrome kênh %s (%s, cổng %s%s)", a.kenh, cdp.phien_ban, cdp.cong,
                  ", máy này tự mở" if cdp.tu_mo else "")
-        if a.kiem_dom:
+        if a.kiem_dom and not a.sua_video:
             kq = kiem_dom(cdp, a.kenh, bo, sau=a.sau, nhat_ky=log.info, ghi_dom_day_du=a.ghi_dom_day_du)
             duong = ghi_bao_cao_kiem(kq)
             dong = "máy đăng DOM kiểm {0} mức {1}: {2}{3}{4}".format(
@@ -2997,7 +3304,21 @@ def main(argv=None) -> int:
                                if x.get("ma") and x.get("kenh") == a.kenh}
         ma_thoat = MA_HONG
         try:
-            if a.bu_mhkt:
+            if a.sua_video and a.kiem_dom:
+                may.lay_uc()
+                kq = may.kiem_sua_video(cac[0]["video_id"])
+                kq.update(kenh=a.kenh, luc=time.strftime("%Y-%m-%d %H:%M:%S"))
+                try:
+                    os.makedirs(THU_MUC_KIEM, exist_ok=True)
+                    with open(os.path.join(THU_MUC_KIEM, "sua-{0}.json".format(a.kenh)), "w", encoding="utf-8") as tep:
+                        json.dump(kq, tep, ensure_ascii=False, indent=1, default=str)
+                except OSError:
+                    pass
+                ma_thoat = MA_XONG if kq["ok"] else MA_LUI
+            elif a.sua_video:
+                may.lay_uc()
+                ma_thoat = may.sua_video(cac)
+            elif a.bu_mhkt:
                 may.lay_uc()
                 ma_thoat = may.bu_mhkt(cac)
             elif a.them_the or a.them_mhkt:

@@ -36,7 +36,9 @@ TOI_DA_TOKEN = 2500
 NGAY_BAI_HOC = 90
 N_BOM = 3
 #: mốc → (giờ chuẩn, khung tuổi bản chụp). Studio không chụp đúng giờ nên khung rộng hơn 44–85 / 144–240.
-MOC = {"48h": (52.0, 40.0, 100.0), "7d": (168.0, 120.0, 260.0)}
+#: 01/10/2026: mốc 48h nhận bản chụp từ 36h (48 ± 12, cùng `cong_thuc_v7.CUA_SO_48H_RONG`) nhưng chỉ khi
+#: video đã qua 48h (`moc_cua`) — Chrome mở mỗi ngày một lần nên có video chỉ có bản 38h rồi 125h.
+MOC = {"48h": (52.0, 36.0, 100.0), "7d": (168.0, 120.0, 260.0)}
 CONG = ("hien_thi", "ctr", "giu_chan", "khong")
 KIEU_TIEU_DE = ("so_dem", "hai_ve", "to_mo", "chan_dung", "cau_hoi", "khang_dinh", "khac")
 KIEU_HOOK = ("nghich_ly", "cau_hoi", "so_lieu", "chan_dung", "ke_chuyen", "khac")
@@ -111,6 +113,8 @@ def moc_cua(v: Dict[str, Any]) -> Optional[Tuple[str, Dict[str, Any]]]:
     for moc in ("7d", "48h"):
         gio, lo, hi = MOC[moc]
         b = ban_chup_gan(v, gio, lo, hi)
+        if b is not None and moc == "48h" and b["tuoi"] < 44 and (v.get("tuoi_gio") or 0) < 48:
+            continue  # video chưa qua 48h: chưa khám ở mốc 48h bằng bản chụp sớm
         if b is not None:
             return moc, b
     return None
@@ -240,7 +244,7 @@ def ho_so_kham(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str,
             so_lieu[k] = round(x, 2)
     tmv = os.path.join(thu_muc_kenh(goc, ma), "chi-so", vid)
     try:
-        gc = _giu_chan(tmv, str(b.get("moc") or ""))
+        gc = _giu_chan(tmv, str(b.get("thu_muc") or b.get("moc") or ""))
     except Exception:  # noqa: BLE001
         gc = {}
     for k in ("giu_30s", "giu_2p", "vach_giay", "vach_rot"):
@@ -274,7 +278,7 @@ def ho_so_kham(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str,
         "hook_30s": _gon(" ".join(t for a, _b, t in srt if a < 30), 320),
         "cau_tai_vach": _cau_quanh(srt, gc.get("vach_giay")), "vach": gc.get("vach") or "",
         "su_that_luot": su_that_tu_luot(luot, gc.get("_r") or None) if luot else [],
-        "pool": _pool(os.path.join(tmv, str(b.get("moc")))) if b.get("moc") else [],
+        "pool": _pool(os.path.join(tmv, str(b.get("thu_muc") or b.get("moc")))) if b.get("moc") else [],
         "binh_luan": ["({0}) {1}".format(c.get("like"), _gon(c.get("chu"), 120)) for c in doc_binh_luan(goc, ma, vid)[:8]]
         if moc == "7d" else [],
         "du_doan_giam_doc": {k: dd.get(k) for k in ("ket", "ly_do", "ket_that") if dd.get(k)},

@@ -1095,6 +1095,16 @@ class TrangBangDieuKhien(QWidget):
         elif ma_hanh_dong == "danh_dau_xong":
             bdk.danh_dau_xong(goc, str(tham_so.get("khoa") or ""))
             self.lam_moi()
+        elif ma_hanh_dong in ("duyet_sua", "bo_sua"):
+            # Cứu video CTR thấp: CHỈ ghi sổ duyệt (`giam-doc/duyet-sua.json`); gác tổng xếp hàng sửa.
+            try:
+                from core.giam_doc import cuu_ctr  # noqa: PLC0415
+
+                cuu_ctr.ghi_duyet(goc, ma, str(tham_so.get("id") or ""), duyet=ma_hanh_dong == "duyet_sua")
+            except Exception as loi:  # noqa: BLE001
+                self._app.show_error(loi)
+                return
+            self.lam_moi()
         elif ma_hanh_dong == "mo_vi":
             # 29/09/2026 (kiểm toán #12): "may-vi" không nằm trong
             # `core.che_do_vps.TRANG_VPS` nên trên VPS (trang này CHỈ dựng ở

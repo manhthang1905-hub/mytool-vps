@@ -104,6 +104,7 @@ class KetQua:
     se_lam: List[Dict[str, Any]] = field(default_factory=list)   # chế độ gợi ý: việc ĐÃ CHỌN mà không áp
     tu_cham: Dict[str, Any] = field(default_factory=dict)        # {tong, dung, moi, cho} dự đoán thắng/trượt
     kham: List[Dict[str, Any]] = field(default_factory=list)     # khám nghiệm video của lượt (`kham_nghiem.chay`)
+    cuu_ctr: List[Dict[str, Any]] = field(default_factory=list)  # đề xuất đổi tiêu đề của hội đồng (`cuu_ctr.xu_ly`)
 
 
 def _thuc_don(bs: BangSo, viec: List[Dict[str, Any]], so_: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -178,10 +179,24 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
         con_mo = {t["id"] for t in stn.dang_mo(stn.doc(goc, ma))}
         kq.thi_nghiem = [t for t in kq.thi_nghiem if t["id"] in con_mo]
 
+    from . import cuu_ctr  # noqa: PLC0415
+
+    studio = cuu_ctr.bat_studio(bs)
     if not kq.bao_dong and goi_chat is not None:
         qs = {v["ten"]: v["quan_sat"] for v in kq.viec if v["quan_sat"]}
-        kq.quyet_dinh = quan_ly.nghi(bs, qs, [d for d in kq.thuc_don if d["duoc"]], kq.thi_nghiem,
-                                     gioi_han.ngan_sach(so_, bs.bay_gio), goi_chat, tuan=tuan, ghi=ghi, luu=viet)
+        # `giam_doc_studio: true`: việc Studio đi HỘI ĐỒNG RIÊNG (`cuu_ctr.xu_ly`), không qua thực đơn chung
+        kq.quyet_dinh = quan_ly.nghi(bs, qs, [d for d in kq.thuc_don if d["duoc"] and not (
+            studio and d["loai"] == "viec_studio")], kq.thi_nghiem,
+            gioi_han.ngan_sach(so_, bs.bay_gio), goi_chat, tuan=tuan, ghi=ghi, luu=viet)
+        if studio:
+            try:
+                kq.cuu_ctr = cuu_ctr.xu_ly(goc, ma, bs, kq.thuc_don, goi_chat, viet=viet, ghi=ghi)
+            except Exception as loi:  # noqa: BLE001 — cứu CTR hỏng không chặn lượt giám đốc
+                _log.warning("giam_doc: cứu CTR %s hỏng: %s", ma, loi)
+            if viet:
+                kq.da_lam += [{"viec": "cuu_ctr", "video_id": m["video_id"], "trang_thai": m["trang_thai"],
+                               "cu": m["tieu_de_cu"], "moi": m["tieu_de_moi"], "do_tin": m.get("do_tin")}
+                              for m in kq.cuu_ctr]
     if not viet:
         return kq
 
@@ -350,7 +365,18 @@ def _sinh(goc: str) -> int:
 def nhip(goc: str, *, thu: bool = False, bay_gio: Optional[_dt.datetime] = None,
          sinh: Optional[Callable[[str], int]] = None) -> Dict[str, Any]:
     """Gác tổng gọi mỗi nhịp: chỉ QUYẾT có việc hay không; có thì sinh tiến trình tách rời (không chạy
-    trong tiến trình gác tổng). `thu=True`: chỉ trả danh sách, không sinh."""
+    trong tiến trình gác tổng). `thu=True`: chỉ trả danh sách, không sinh.
+
+    Mỗi nhịp (trừ thử) còn hai việc nhẹ, 0 đồng: `cuu_ctr.dong_bo` (hàng sửa Studio ↔ sổ duyệt ↔ đo trước/
+    sau) và `lam_moi_gio_online` (giải mã giờ khán giả online từ lượt quét kênh mới)."""
+    if not thu:
+        from . import cuu_ctr  # noqa: PLC0415
+
+        for ten, f in (("cứu CTR", lambda: cuu_ctr.dong_bo(goc)), ("giờ online", lambda: lam_moi_gio_online(goc))):
+            try:
+                f()
+            except Exception as loi:  # noqa: BLE001 — việc phụ của nhịp, hỏng không chặn giám đốc
+                _log.warning("giam_doc.nhip: %s hỏng: %s", ten, loi)
     viec = viec_den_han(goc, bay_gio)
     if not viec:
         from . import tong  # noqa: PLC0415
@@ -363,6 +389,75 @@ def nhip(goc: str, *, thu: bool = False, bay_gio: Optional[_dt.datetime] = None,
         return {"viec": viec, "pid": 0, "ly_do": "chế độ thử — không sinh tiến trình"}
     pid = (sinh or _sinh)(goc)
     return {"viec": viec, "pid": pid, "ly_do": "đã sinh tiến trình {0}".format(pid) if pid else "không sinh được"}
+
+
+TEP_GIO_ONLINE_DA_QUET = "gio-online-da-quet.json"
+
+
+def lam_moi_gio_online(goc: str) -> Dict[str, Any]:
+    """Giải mã giờ khán giả online (`audienceOnlineCardData`, tiện ích chụp ở tab-build_audience của lượt
+    quét kênh — `chi-so/kenh/kenh-<ngày>/raw/`) → `chi-so/gio-online.json` qua `giai_ma.cap_nhat_gio_online`.
+    Chỉ đọc lại khi có thư mục quét kênh mới (dấu ở `workspace/giam-doc/gio-online-da-quet.json`). Kênh mới
+    (Studio trả mảng toàn số 0) thì chưa có tệp — đúng, không đoán. Trả {mã kênh: "ghi" | "chưa có số"}."""
+    import glob  # noqa: PLC0415
+
+    from ..chi_so_ytb import giai_ma  # noqa: PLC0415
+    from ..kenh import duong_kenh  # noqa: PLC0415
+
+    duong_dau = os.path.join(goc, THU_MUC_KHOA, TEP_GIO_ONLINE_DA_QUET)
+    try:
+        with io.open(duong_dau, encoding="utf-8") as tep:
+            dau = json.load(tep)
+        dau = dau if isinstance(dau, dict) else {}
+    except (OSError, ValueError):
+        dau = {}
+    ra: Dict[str, Any] = {}
+    try:
+        ten = sorted(os.listdir(duong_kenh(goc)))
+    except OSError:
+        return ra
+    moi = dict(dau)
+    for ma in ten:
+        kenh_dir = os.path.join(duong_kenh(goc, ma), "chi-so")
+        raws = sorted(glob.glob(os.path.join(kenh_dir, "kenh", "kenh-*", "raw")), reverse=True)[:5]
+        if ma.startswith("_") or not raws:
+            continue
+        try:
+            nhan = "{0}|{1:.0f}".format(os.path.basename(os.path.dirname(raws[0])), os.path.getmtime(raws[0]))
+        except OSError:
+            continue
+        if dau.get(ma) == nhan:
+            continue
+        ra[ma] = "chưa có số"
+        for raw in raws:
+            if giai_ma.cap_nhat_gio_online(raw, kenh_dir) is not None:
+                ra[ma] = "ghi"
+                break
+        moi[ma] = nhan
+    if moi != dau:
+        os.makedirs(os.path.dirname(duong_dau), exist_ok=True)
+        with io.open(duong_dau + ".tam", "w", encoding="utf-8") as tep:
+            json.dump(moi, tep, ensure_ascii=False, indent=1)
+        os.replace(duong_dau + ".tam", duong_dau)
+    return ra
+
+
+def goi_y_gio_dang(goc: str, ma: str) -> str:
+    """Một dòng "giờ khán giả online → gợi ý khe đăng" (`xep_lich.goi_y_khe`) cho lời nhắc giám đốc / tổng
+    giám đốc; "" khi kênh chưa có `gio-online.json` (lời nhắc y hệt như cũ). CHỈ GỢI Ý — nhịp đăng là quyền chủ."""
+    try:
+        from ..xep_lich import goi_y_khe  # noqa: PLC0415
+
+        g = goi_y_khe(goc, ma)
+    except Exception:  # noqa: BLE001
+        return ""
+    if not g.get("khe_de_xuat"):
+        return ""
+    d_vps, d_jst = g.get("dinh_online_vps") or {}, g.get("dinh_online_jst") or {}
+    return ("Giờ khán giả online (Studio, {0}): đỉnh {1:02d}:00 giờ VPS ({2:02d}:00 JST) — gợi ý khe đăng {3} "
+            "(đợt thử trang chủ ~12h sau đăng rơi vào giờ đông). Chỉ gợi ý cho chủ (nhip_dang ngoài tầm).").format(
+                str(g.get("cap_nhat_gio_online") or "")[:10], int(d_vps.get("gio") or 0), int(d_jst.get("gio") or 0),
+                ", ".join(g["khe_de_xuat"]))
 
 
 KET_SAU_GIO = 6.0

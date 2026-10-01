@@ -150,6 +150,23 @@ def tuoi_that_gio(thu_muc_moc):
     return (cap - dang_ts) / 3600.0
 
 
+def dang_that_cua_video(thu_muc_video):
+    """Epoch giây GIỜ ĐĂNG THẬT của video — `ngay_dang` (ISO có giờ, UTC) trong `_thong-tin.json`
+    của BẤT KỲ mốc nào của video (không phải mốc nào cũng có tệp này). `None` khi không có giờ.
+
+    01/10/2026 (vá lỗ dữ liệu): `gio_dang()` suy giờ đăng từ NHÃN thư mục — nhưng một lượt bù
+    từng ghi CÙNG bản chụp 125h vào mọi thư mục 6h…96h (một video TL3, 01/10), trung vị nhãn lệch hẳn và
+    bản 125h bị gắn nhãn 33h/36h. Giờ đăng ghi trong gói là sự thật duy nhất không phụ thuộc nhãn."""
+    for p in sorted(glob.glob(os.path.join(thu_muc_video, "*", "_thong-tin.json"))):
+        try:
+            ngay = str((json.load(io.open(p, encoding="utf-8")) or {}).get("ngay_dang") or "")
+            t = datetime.datetime.strptime(ngay[:19], "%Y-%m-%dT%H:%M:%S")
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+        return t.replace(tzinfo=datetime.timezone.utc).timestamp()
+    return None
+
+
 def gio_dang(ban_ghi):
     """Giờ đăng thật của từng video, suy ngược từ các bản có nhãn mốc của extension:
     giờ đăng = lúc chụp − mốc. Lấy TRUNG VỊ vì một vài thư mục bị ghi đè muộn nên lệch hẳn
@@ -286,7 +303,20 @@ def gom(kenh_dir, nganh):
     # Mốc giờ tính lại đồng loạt trên một gốc duy nhất mỗi video, để mọi bản chụp — kể cả tay-* —
     # nằm trên cùng một trục và so sánh được với nhau.
     goc = gio_dang(ban_ghi)
+    # 01/10/2026: có GIỜ ĐĂNG THẬT (`_thong-tin.json`) + `captured_at` thì mốc = tuổi thật lúc chụp
+    # — không tin nhãn thư mục (xem `dang_that_cua_video`). Thiếu một trong hai → cách cũ.
+    dang_that = {}
     for b in ban_ghi:
+        vid = b["video_id"]
+        if vid and vid != "kenh" and vid not in dang_that:
+            dang_that[vid] = dang_that_cua_video(os.path.dirname(b["thu_muc"]))
+    for b in ban_ghi:
+        d = dang_that.get(b["video_id"])
+        cap = _captured_at_that(b["thu_muc"]) if d else None
+        if d and cap:
+            b["moc_gio"] = int(round((cap - d) / 3600.0))
+            b["gio_dang"] = datetime.datetime.fromtimestamp(d).strftime("%Y-%m-%d %H:%M")
+            continue
         g = goc.get(b["video_id"])
         if g and b["luc_chup"]:
             t = datetime.datetime.strptime(b["luc_chup"], "%Y-%m-%d %H:%M").timestamp()

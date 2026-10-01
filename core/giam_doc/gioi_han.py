@@ -6,7 +6,8 @@
     chu_da_sua(goc, ma, bs)                    chủ sửa tay khoá giám đốc đã ghi → `chu_giu` 30 ngày
     ly_do_quay_lui(bs, tn, bao_dong)           3 cò quay lui tự động
 
-Ngoài tầm (chỉ gợi ý trong "Việc của bạn"): `NGOAI_TAM`. Việc Studio đợt 1: CHỈ gợi ý, không vào hàng.
+Ngoài tầm (chỉ gợi ý trong "Việc của bạn"): `NGOAI_TAM`. Việc Studio: `giam_doc_studio: false` → CHỈ gợi ý;
+`true` → `cuu_ctr.xu_ly` (hội đồng → chủ duyệt 3 lần đầu → hàng sửa `vm/logs/hang-sua.json`).
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ TOI_DA_THAM_SO_TUAN = 2
 NGHI_NGAY = 14
 CHU_GIU_NGAY = 30
 STUDIO_TOI_DA_TUAN = 2
+STUDIO_TUOI = (52.0, 120.0)      # tuổi video được cứu (giờ) — cùng `cuu_ctr.TUOI`
 TRANH_PHIEN_PHUT = 60
 CHI_DAO_TOI_DA_DONG = 5
 CHI_DAO_TOI_DA_KY_TU = 200
@@ -248,6 +250,9 @@ def kiem(de_xuat: Dict[str, Any], so_: Dict[str, Any], bs: BangSo, *,
             return False, "video đang thắng — không bao giờ đụng"
         if v.get("ket_luan") != "truot":
             return False, "video chưa bị phán trượt"
+        if v.get("tuoi_gio") is not None and not STUDIO_TUOI[0] <= float(v["tuoi_gio"]) <= STUDIO_TUOI[1]:
+            return False, "video {0:.0f}h tuổi — chỉ cứu video {1:.0f}–{2:.0f}h".format(
+                float(v["tuoi_gio"]), STUDIO_TUOI[0], STUDIO_TUOI[1])
         if not v.get("ma_goi"):
             return False, "video không có hồ sơ của tool"
         if v.get("lich_su_sua") or any(d.get("viec") == "viec_studio" and d.get("video_id") == v["id"]

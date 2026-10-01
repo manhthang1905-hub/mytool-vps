@@ -671,6 +671,10 @@ class VideoMinh:
     tuoi_gio: Optional[float] = None
     hien_thi_13h: Optional[float] = None
     hien_thi_48h: Optional[float] = None
+    #: Số 48h lấy bằng cách nào: "dung" (44–54h) | "noi_suy" | "gan" (36–60h, `CUA_SO_48H_RONG`) |
+    #: "sau" (bản chụp SAU gần nhất — trần trên); `lech_48h` = tuổi bản chụp − 48 (giờ; nội suy = 0).
+    cach_48h: str = ""
+    lech_48h: Optional[float] = None
     cum: List[str] = field(default_factory=list)
     thang: bool = False
     #: Sức thắng 0..1 (thang log giữa ngưỡng thắng và video mạnh nhất).
@@ -717,6 +721,29 @@ def _sai_so_moc(duong_con: str, con: str, muc: int) -> Optional[float]:
 #: Nội suy xa nhất cho phép, mỗi bên mốc (giờ). Rộng hơn thì hai đầu quá xa, đường hiển thị không
 #: còn thẳng để nội suy — thà không có số còn hơn có số sai.
 NOI_SUY_TOI_DA = 30.0
+
+#: Cửa sổ RỘNG cho mốc 48h (01/10/2026, vá lỗ dữ liệu): Chrome mở một lần/ngày nên có video chỉ có
+#: bản 38h + 51h rỗng hay chỉ bản 122–125h (hai video TL3, 01/10) — không bản nào lọt 44–54, không
+#: nội suy được → KHÔNG phán quyết, không khám, không tự chấm. Thứ tự: 44–54 → nội suy → 36–60 gần nhất
+#: → bản SAU gần nhất (số cộng dồn chỉ tăng nên đó là TRẦN TRÊN của số 48h: trượt ở đó là chắc trượt).
+CUA_SO_48H_RONG: Tuple[float, float] = (36.0, 60.0)
+
+
+def lay_48h_du_phong(duong_thoi_gian: Sequence[Tuple[float, float]]) -> Tuple[Optional[float], str, Optional[float]]:
+    """Khi không bản nào lọt 44–54h: (hiển thị, cách, lệch giờ) theo nội suy → 36–60h → bản sau gần nhất."""
+    noi = _noi_suy(duong_thoi_gian, 48)
+    if noi is not None:
+        return noi, "noi_suy", 0.0
+    lo, hi = CUA_SO_48H_RONG
+    gan = [(t, v) for t, v in duong_thoi_gian if lo <= t <= hi]
+    if gan:
+        t, v = min(gan, key=lambda x: abs(x[0] - 48.0))
+        return v, "gan", round(t - 48.0, 1)
+    sau = [(t, v) for t, v in duong_thoi_gian if t > hi]
+    if sau:
+        t, v = min(sau, key=lambda x: x[0])
+        return v, "sau", round(t - 48.0, 1)
+    return None, "", None
 
 
 def _noi_suy(duong_thoi_gian: Sequence[Tuple[float, float]], muc: int) -> Optional[float]:
@@ -821,9 +848,13 @@ def video_cua_kenh(goc: str, kenh: str, ch: Optional[Dict] = None,
             for muc in CUA_SO_TUOI_THAT:
                 sai_so = _sai_so_moc(duong_con, con, muc)
                 if sai_so is not None:
-                    ung_vien.setdefault(muc, []).append((sai_so, hien_thi))
+                    ung_vien.setdefault(muc, []).append((sai_so, hien_thi, tuoi_that))
+        if 48 in ung_vien:
+            x = min(ung_vien[48], key=lambda x: x[0])
+            vm.cach_48h = "dung"
+            vm.lech_48h = round(float(x[2]) - 48.0, 1) if x[2] is not None else round(float(x[0]), 1)
         for muc in CUA_SO_TUOI_THAT:
-            if muc not in ung_vien:
+            if muc not in ung_vien and muc != 48:
                 noi = _noi_suy(duong_thoi_gian, muc)
                 if noi is not None:
                     ung_vien[muc] = [(0.0, noi)]
@@ -837,6 +868,13 @@ def video_cua_kenh(goc: str, kenh: str, ch: Optional[Dict] = None,
                     dang = None
             if dang is not None:
                 vm.tuoi_gio = (bay_gio - dang).total_seconds() / 3600.0
+        # Mốc 48h dự phòng — CHỈ khi video đã qua 48h (tuổi hiện tại, hoặc có bản chụp ≥ 48h tuổi):
+        # video 40h có bản 38h không được phán sớm.
+        if 48 not in ung_vien and ((vm.tuoi_gio or 0) >= 48 or any(t >= 48 for t, _v in duong_thoi_gian)):
+            gt, cach, lech = lay_48h_du_phong(duong_thoi_gian)
+            if gt is not None:
+                ung_vien[48] = [(0.0, gt)]
+                vm.cach_48h, vm.lech_48h = cach, lech
         if 13 in ung_vien:
             vm.hien_thi_13h = min(ung_vien[13], key=lambda x: x[0])[1]
         if 48 in ung_vien:

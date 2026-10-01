@@ -15,7 +15,7 @@ python -m core.giam_doc --nhip                       # kênh nào đến hạn
 | khoá | mặc định | nghĩa |
 |---|---|---|
 | `giam_doc` | `tat` | `goi_y` = chế độ bóng (ghi sổ + báo cáo, không đổi kenh.yaml) · `tu_ap` = tự áp qua giới hạn |
-| `giam_doc_studio` | `false` | đợt 1 việc Studio (đổi tiêu đề) CHỈ là gợi ý trong "Việc của bạn" |
+| `giam_doc_studio` | `false` | `false`: việc Studio (đổi tiêu đề) CHỈ là gợi ý trong "Việc của bạn" · `true`: CỨU THẬT (mục 10) — 3 lần đầu chủ duyệt |
 | `giam_doc_khong_dung` | — | `"phut_muc_tieu, chien_luoc"` — khoá chủ cấm chạm |
 | `giam_doc_cho_phep_ab` | `false` | kênh có cặp `-v2` tối đa `goi_y` trừ khi bật |
 
@@ -52,7 +52,7 @@ Ba tay: tham số kenh.yaml (danh sách trắng) · chỉ đạo chữ ≤ 5 dò
 | việc | nhịp | đọc | đề xuất |
 |---|---|---|---|
 | `suc_khoe` | ngày | hiển thị 7 ngày / trung vị 14 ngày trước; 3 video mới nhất @48h; CTR cùng tụt | phanh: đóng băng + quay lui + báo chủ. Hiển thị nguội sau video nổ mà video mới vẫn khoẻ → chỉ cảnh báo |
-| `cuu_ctr` | ngày | video 52–85h: CTR trang chủ vs 0,8 × mục tiêu | đổi tiêu đề (gợi ý); CTR ổn mà trượt = lỗi cổng hiển thị, không sửa |
+| `cuu_ctr` | ngày | video 52–120h: CTR trang chủ vs 0,8 × mục tiêu | đổi tiêu đề (gợi ý, hoặc cứu thật — mục 10); CTR ổn mà trượt = lỗi cổng hiển thị, không sửa |
 | `dan_cum` | tuần | thắng/trượt theo cụm của chính kênh | ưu tiên / tạm bỏ 3 tuần, `luat_chon_tuan`, tỉ trọng, bật tự học |
 | `muc_tieu_ypp` | tuần | sub/1k view, giờ xem/1k hiển thị theo cụm | xen cụm kéo thứ YPP đang thiếu; lời mời đăng ký trước vách rơi |
 | `do_dai` | tuần | giờ xem / 1.000 hiển thị @52h theo nhóm độ dài (không theo AVD%) | thí nghiệm `phut_muc_tieu` ±2–3, cỡ mẫu 4 |
@@ -80,3 +80,44 @@ Thiết kế: `workspace/THIET-KE-CONG-TY.md` (khung BẢN GỌN ở đầu tệ
 - **Giám đốc kênh đọc khám nghiệm**: `quan_ly.loi_nhac` có khối "KHÁM NGHIỆM GẦN ĐÂY" (≤ 5 chẩn đoán + bảng đếm theo nhãn: thắng/trượt) sau QUAN SÁT; LLM đổi "chuẩn" bằng thực đơn sẵn có (`luat_chon_tuan`, `phut_muc_tieu`, `chien_luoc`, chỉ đạo sửa câu được). Chưa có bản khám → lời nhắc y hệt.
 - **Tổng giám đốc** (`core/giam_doc/tong.py`, khoá `workspace/cai-dat.json: tong_giam_doc: tat|goi_y|tu_ap`): thứ Hai, sau lượt tuần của mọi giám đốc kênh (`den_han`, trong `chay_het`; `nhip` cũng sinh tiến trình khi chỉ tổng đến hạn). Bảng công ty (cặp `-v2` gộp một kênh YouTube): hiển thị/giờ xem/sub 7 ngày so 7 ngày trước, thắng 28 ngày, YPP, khe. Xếp loại lên (đà ≥ 1,2 và thắng ≥ 25%) / tụt (đà ≤ 0,8) / chững. Luật ±1 khe/kênh/tuần, mỗi kênh 1..6, tổng ≤ 0,85 × trần máy (`cong_suat.cong_suat_hien_tai(gio=168)`); khe mới ở giữa khoảng trống lớn nhất, bớt khe có hiển thị 48h trung vị thấp nhất; `video_toi_da_ngay` = số khe, `ngan_sach_ngay` chỉ nâng (ước/video × khe × 1,3). Một lượt LLM chọn id trong thực đơn. `tu_ap`: `trung_tam.ghi_cai_kenh`, sổ `workspace/tong-giam-doc/so.json`, nghỉ 14 ngày, chủ sửa tay giữ 30 ngày, quay lui sau ≥ 7 ngày khi hiển thị 48h trung vị tụt ≥ 30% hoặc khe nặng ≥ 90%. Báo cáo `workspace/tong-giam-doc/BAO-CAO-CONG-TY.md`; kênh mới chỉ gợi ý (từ `workspace/khoang-trong-kenh-*.md`, khi máy dư ≥ 2 video/ngày).
 - **CLI**: `python -m core.giam_doc --kham <vid> [--llm]` (không `--llm`: in lời nhắc 0 đồng; có `--llm`: khám và GHI) · `--tong --thu|--llm` (không ghi). **Bảng điều khiển**: ô "Công ty" ở dòng MÁY (ẩn khi chưa họp), bấm = Báo cáo công ty.
+
+## 10. Cứu video CTR thấp — đổi tiêu đề, rồi bìa (01/10/2026)
+
+Bật bằng `kenh.yaml: giam_doc_studio: true` (kênh cần `giam_doc` khác `tat`). Mã: `core/giam_doc/cuu_ctr.py`.
+
+- **Chọn video** (luật cứng `gioi_han.kiem`): đã phán TRƯỢT, tuổi 52–120h, có hồ sơ của tool, CTR trang chủ < 0,8 × mục
+  tiêu với ≥ 500 hiển thị; không bao giờ video thắng; mỗi video một lần cứu trong đời; ≤ 2 video/kênh/tuần (nhật ký
+  `viec_studio`); không trong 60' trước phiên đăng.
+- **Hội đồng** (`quan_ly.goi_quyet("cuu_ctr")`: 3 chuyên gia + phản biện + chấm): MỘT tiêu đề mới theo khung tiêu đề
+  thắng (`con-duong-kenh-thang.md` §3) + tiêu đề thắng của kênh và các kênh cùng ngách + pool, ≤ 100 ký tự, giữ nhãn
+  đầu 【…】, kèm độ tin. Tin thấp (cổng `quan_sat`) → không đề xuất. Việc Studio KHÔNG qua thực đơn chung khi bật.
+- **Duyệt**: `giam-doc/duyet-sua.json`. 3 lần sửa đầu của MỖI kênh chờ chủ bấm Duyệt / Bỏ ở "Việc của bạn" (Phòng điều
+  hành: tiêu đề cũ → mới + lý do + độ tin; bấm chỉ GHI sổ). Chủ đã duyệt ≥ 3 lần và ≥ 2 lần kết quả TỐT → kênh tự áp
+  (`quyen_studio`).
+- **Hàng** `vm/logs/hang-sua.json` (khoá `.khoa` chung) → `vm/agent.py: chay_sua_video` (khe giờ vắng của bù MHKT
+  02:00–05:00 sau QUÉT NGÀY, khe Chrome dùng chung, nhường 60' trước MỌI phiên chưa chạy, ≤ 2 lượt/kênh/đêm) →
+  `vm/may_dang_dom.py --sua-video` (`sua_video_mot`: trang sửa → gõ tiêu đề / tải bìa → ĐỌC LẠI → Lưu → mở lại
+  ĐỌC LẠI; Studio mang tiêu đề khác tiêu đề máy biết = chủ sửa tay → không đè). Kết quả lượt cuối `vm/logs/sua-cuoi.json`.
+  `--sua-video --kiem-dom [--video <id>]` = chỉ đọc trang sửa (`vm/logs/kiem-dom/sua-<kênh>.json`). Luồng này dùng
+  `cam_bam_sua_video` (được bấm nút Lưu của trang sửa; mọi luồng khác vẫn cấm).
+- **Đo** (`dong_bo`, mỗi nhịp gác tổng qua `giam_doc.nhip`, 0 đồng): máy sửa xong → `ho_so_video.ghi_sua` (`lich_su_sua`,
+  `moc_truoc` = bản chụp mới nhất). CTR trước = cộng dồn tới lúc sửa; sau = HIỆU bản chụp mới nhất − bản trước; trang chủ
+  khi mỗi phía ≥ 500 hiển thị trang chủ, không thì CTR chung ≥ 500/phía. Sau/trước ≥ 1,10 → `tot`; ≥ 1,00 → `giu`;
+  thấp hơn → ĐỔI LẠI tiêu đề cũ + thử bìa hạng nhì (`ho-so-video/anh/<mã gói>-bia-2.jpg`, so CTR gốc); bìa cũng thấp
+  hơn → trả bìa gốc. 14 ngày chưa đủ số → `chua_du` (giữ nguyên).
+
+## 11. Bản chụp 48h thiếu — chỗ chung (01/10/2026)
+
+- `cong_thuc_v7.video_cua_kenh` (nguồn chung của số 48h, thắng/trượt, khám nghiệm, tự chấm): 44–54h → nội suy (≤ 30h mỗi
+  bên) → bản gần nhất 36–60h → bản SAU gần nhất (trần trên: trượt ở đó là chắc trượt). Chỉ khi video đã qua 48h. Ghi
+  `cach_48h` (dung | noi_suy | gan | sau) + `lech_48h` (giờ) — `du_lieu` chép vào video.
+- Nhãn mốc = tuổi THẬT: `gom.dang_that_cua_video` (giờ đăng trong `_thong-tin.json` của bất kỳ mốc nào) + `captured_at`
+  → `moc_gio` của `gom()` (hồ sơ video bỏ khung cũ mang nhầm cùng lúc chụp), `du_lieu.doc_ban_chup` (`moc` = "125h",
+  `thu_muc` = tên thư mục; bản trùng tuổi gộp một). Khám nghiệm mốc 48h nhận bản từ 36h khi video đã qua 48h.
+
+## 12. Giờ khán giả online (01/10/2026)
+
+Tiện ích đã chụp `audienceOnlineCardData` (tab-build_audience của lượt quét kênh); thiếu là bước GIẢI MÃ. `giam_doc.nhip`
+gọi `lam_moi_gio_online` mỗi nhịp (chỉ khi có thư mục `kenh-<ngày>` mới) → `giai_ma.cap_nhat_gio_online` →
+`chi-so/gio-online.json`. Kênh mới (Studio trả 168 số 0) chưa có tệp — đúng. Có tệp thì bảng số của giám đốc kênh và lời
+nhắc tổng giám đốc có dòng "Giờ khán giả online … gợi ý khe đăng" (`xep_lich.goi_y_khe`) — CHỈ gợi ý, nhịp đăng là quyền chủ.
