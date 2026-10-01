@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.137.0** — 2026-10-01 — `vps-jp1` — Giám đốc kênh: nối vào gác tổng/biên tập/hồ sơ; sửa ngưỡng thắng kênh ít video; TL3 chế độ gợi ý
 - **2.136.1** — 2026-10-01 — `vps-jp1` — Golden giữ LF trên clone Windows (.gitattributes)
 - **2.136.0** — 2026-10-01 — `vps-jp1` — VPS mới: khởi tạo ngách bằng AI + bỏ chỗ cứng Nhật
 - **2.135.0** — 2026-10-01 — `vps-jp1` — Giám đốc kênh: gói lõi + 5 plugin đợt 1 (chưa nối)
