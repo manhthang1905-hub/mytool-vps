@@ -758,6 +758,151 @@ def _video_ban_giao(goc: str, tu_luc: float, bo_truoc: Optional[float] = None,
     return dem
 
 
+# ═══ TRẦN THEO Ổ ĐĨA (01/10/2026) ═══════════════════════════════════════════
+#
+# Mô hình "đang dọn đều" (luật dọn `core/don_dep.py`):
+#   * PROJECTS: mỗi kênh giữ `giu_toi_da_luot` lượt xong + 1 lượt đang dựng →
+#     phần CỐ ĐỊNH = số kênh × (giữ + 1) × GB/lượt, KHÔNG tăng theo nhịp.
+#   * DONE: mỗi video nằm đó từ lúc bàn giao tới giờ công khai + 48 giờ (luật
+#     BỐN) → phần TỈ LỆ = video/ngày × ngày nằm DONE × GB/video, trừ phần trùng
+#     liên kết cứng với `giữ` lượt mới nhất trong PROJECTS.
+#   * Sàn: luôn chừa `NGUONG_O_CHAN_GB` (dưới mức ấy van ổ chặn mở lượt mới).
+# Mọi cỡ đo theo inode (hardlink PROJECTS↔DONE chỉ tính một lần).
+
+NGUONG_O_CHAN_GB = 12.0
+GIO_CHO_DONE_SAU_CONG_KHAI = 48.0
+_MB = 1024.0 ** 2
+_GB = 1024.0 ** 3
+
+
+def _tep_inode(thu_muc: str, da_thay: Optional[set] = None) -> int:
+    """Byte của mọi tệp dưới `thu_muc`, mỗi inode tính một lần (cập nhật `da_thay`)."""
+    da_thay = da_thay if da_thay is not None else set()
+    tong = 0
+    for cha, _thu, tep in os.walk(thu_muc):
+        for t in tep:
+            try:
+                st = os.stat(os.path.join(cha, t))
+            except OSError:
+                continue
+            khoa = (st.st_dev, st.st_ino) if st.st_ino else os.path.join(cha, t)
+            if khoa in da_thay:
+                continue
+            da_thay.add(khoa)
+            tong += st.st_size
+    return tong
+
+
+def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
+                    so_kenh: Optional[int] = None) -> Dict[str, Any]:
+    """Mỗi video cần bao nhiêu GB, ổ chịu được bao nhiêu video/ngày khi dọn đều.
+
+    `tran_video_ngay` = None khi chưa đo được (chưa có lượt/gói thật trên đĩa)."""
+    from .kenh import doc_kenh  # noqa: PLC0415
+
+    ma_cac: List[str] = []
+    for d in sorted(glob.glob(os.path.join(goc, "CHANNEL", "*", "kenh.yaml"))):
+        try:
+            if re.search(r"(?m)^tu_chay:\s*true", open(d, encoding="utf-8", errors="replace").read()):
+                ma_cac.append(os.path.basename(os.path.dirname(d)))
+        except OSError:
+            continue
+    n_kenh = int(so_kenh) if so_kenh is not None else len(ma_cac)
+    giu_ds: List[int] = []
+    done_ds: List[str] = []
+    for ma in ma_cac:
+        try:
+            k = doc_kenh(goc, ma)
+        except Exception:  # noqa: BLE001
+            continue
+        giu_ds.append(int(getattr(k, "giu_toi_da_luot", 0) or 0))
+        if (k.thu_muc_done or "").strip() and os.path.isdir(k.thu_muc_done):
+            done_ds.append(k.thu_muc_done)
+    giu = max(giu_ds) if giu_ds else 3
+    giu = giu if giu > 0 else 3
+
+    # Đang dùng (PROJECTS + DONE, mỗi inode một lần)
+    da_thay: set = set()
+    dung = _tep_inode(os.path.join(goc, "PROJECTS", "AUTO"), da_thay)
+    for d in done_ds:
+        dung += _tep_inode(d, da_thay)
+
+    # GB / lượt: lượt còn nguyên (có 8-video.mp4, chưa `da-don.json`)
+    mau_luot: List[float] = []
+    for v in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", "*", "*", "8-video.mp4")):
+        thu = os.path.dirname(v)
+        if os.path.exists(os.path.join(thu, "da-don.json")):
+            continue
+        b = _tep_inode(thu)
+        if b >= 50 * _MB:
+            mau_luot.append(b / _GB)
+    # GB / video DONE + số ngày nằm DONE (bàn giao → công khai + 48 giờ)
+    so = _doc_json(os.path.join(goc, "vm", "logs", "so-video-id.json")) or {}
+    mau_video: List[float] = []
+    mau_tre: List[float] = []
+    for d in done_ds:
+        for v in glob.glob(os.path.join(d, "*", "*.mp4")):
+            try:
+                kt, mt = os.path.getsize(v), os.path.getmtime(v)
+            except OSError:
+                continue
+            if kt < 10 * _MB:
+                continue
+            mau_video.append(kt / _GB)
+            ma = os.path.basename(os.path.dirname(v))
+            muc = so.get("{0}/{1}".format(ma.rsplit("-", 1)[0], ma)) if isinstance(so, dict) else None
+            try:
+                lich = datetime.strptime(str((muc or {}).get("lich") or ""), "%d/%m/%Y %H:%M")
+                mau_tre.append(max(0.0, (lich.timestamp() - mt) / 86400.0))
+            except ValueError:
+                pass
+    g_luot = statistics.median(mau_luot) if mau_luot else None
+    g_video = statistics.median(mau_video) if mau_video else None
+    tre = statistics.median(mau_tre) if mau_tre else 1.0
+    ngay_done = tre + GIO_CHO_DONE_SAU_CONG_KHAI / 24.0 + 1.0 / 24.0
+    if con_trong_gb is None:
+        try:
+            import shutil  # noqa: PLC0415
+
+            con_trong_gb = shutil.disk_usage(goc)[2] / _GB
+        except OSError:
+            con_trong_gb = None
+    ra: Dict[str, Any] = {"so_kenh": n_kenh, "giu_luot": giu, "con_trong_gb": _r(con_trong_gb),
+                          "dang_dung_gb": round(dung / _GB, 2), "gb_moi_luot": _r(g_luot),
+                          "gb_moi_video_done": _r(g_video), "ngay_nam_done": round(ngay_done, 2),
+                          "nguong_chan_gb": NGUONG_O_CHAN_GB, "mau_luot": len(mau_luot),
+                          "mau_video": len(mau_video), "tran_video_ngay": None}
+    if g_luot is None and g_video is None or con_trong_gb is None or n_kenh <= 0:
+        return ra
+    g_video = g_video if g_video is not None else 0.4
+    g_luot = g_luot if g_luot is not None else g_video * 2.5
+    co_dinh = n_kenh * (giu + 1) * g_luot
+    ngan_sach = con_trong_gb + dung / _GB - NGUONG_O_CHAN_GB
+    gb_ngay = g_video * ngay_done  # GB·ngày mỗi video (phần tỉ lệ)
+    trung = n_kenh * giu  # video nằm cả PROJECTS lẫn DONE (một inode)
+    tran = max(0.0, (ngan_sach - co_dinh) / gb_ngay + trung / ngay_done) if ngan_sach > co_dinh \
+        else 0.0
+    ra.update({"co_dinh_projects_gb": round(co_dinh, 1), "ngan_sach_gb": round(ngan_sach, 1),
+               "gb_ngay_moi_video": round(gb_ngay, 2),
+               "gb_moi_video": round(g_luot + g_video, 2),
+               "tran_video_ngay": round(tran, 1)})
+    return ra
+
+
+def _r(x: Optional[float]) -> Optional[float]:
+    return round(float(x), 2) if x is not None else None
+
+
+def cau_o_dia(o: Dict[str, Any]) -> str:
+    if not o or o.get("tran_video_ngay") is None:
+        return ""
+    return ("Ổ đĩa: mỗi video ~{0} GB lúc dựng + {1} GB nằm DONE ~{2} ngày; cố định PROJECTS "
+            "{3} GB ({4} kênh × {5}+1 lượt) → ổ chịu ≈ {6} video/ngày (chừa sàn {7:g} GB)").format(
+                o.get("gb_moi_luot"), o.get("gb_moi_video_done"), o.get("ngay_nam_done"),
+                o.get("co_dinh_projects_gb"), o.get("so_kenh"), o.get("giu_luot"),
+                o.get("tran_video_ngay"), o.get("nguong_chan_gb"))
+
+
 def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
                        bay_gio: Optional[float] = None) -> Dict[str, Any]:
     """Máy đang dùng X% khe nặng, Y làn API; còn dư ≈ Z video/ngày → đề xuất.
@@ -797,10 +942,19 @@ def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
     tran_api = ((lan * 24 * 60.0) / api_moi_video if api_moi_video
                 else lan * VIDEO_MOI_LAN_NGAY_MAC_DINH)
     tran = min(tran_nang, tran_api)
+    nut = "khe nặng" if tran_nang <= tran_api else "làn API"
+    # 01/10/2026: trần theo Ổ ĐĨA (chỉ khi đo được lượt/gói thật) — tổng giám đốc
+    # đọc `tran_video_ngay_o_dia` qua `giam_doc.tong.tran_may`.
+    try:
+        o_dia = tran_theo_o_dia(goc, so_kenh=so_kenh)
+    except Exception:  # noqa: BLE001 — phần phụ
+        o_dia = {}
+    tran_o = o_dia.get("tran_video_ngay")
+    if tran_o is not None and tran_o < tran:
+        tran, nut = float(tran_o), "ổ đĩa"
     video_ngay = video * 24.0 / gio
     con_du = round(max(0.0, tran - video_ngay), 1)
     them_kenh = int(con_du // VIDEO_MOI_KENH_NGAY)
-    nut = "khe nặng" if tran_nang <= tran_api else "làn API"
     if them_kenh >= 1:
         de_xuat = "có thể thêm {0} kênh (2 video/ngày) hoặc nâng nhịp kênh hiện có".format(them_kenh)
     elif con_du >= 1:
@@ -821,6 +975,7 @@ def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
             "phut_api_moi_video": round(api_moi_video, 1) if api_moi_video else None,
             "tran_video_ngay_khe_nang": round(tran_nang, 1),
             "tran_video_ngay_lan_api": round(tran_api, 1), "nut_that": nut,
+            "tran_video_ngay_o_dia": tran_o, "o_dia": o_dia,
             "con_du_video_ngay": con_du, "co_the_them_kenh": them_kenh, "de_xuat": de_xuat,
             "vuot_han_khe": nk["vuot_han"], "cho_khe_trung_vi_phut": nk["cho_trung_vi_phut"]}
 
@@ -829,12 +984,17 @@ def cau_mot_dong(cs: Dict[str, Any]) -> str:
     """Một dòng cho Bảng điều khiển (dòng Máy)."""
     if not cs:
         return ""
-    return ("Công suất 24h: khe nặng {0}% · làn API TB {1}/{2} (đang chạy {6} lượt) · {3} video — "
-            "còn dư ≈ {4} video/ngày → {5}").format(
-                cs.get("phan_tram_khe_nang") if cs.get("phan_tram_khe_nang") is not None else "?",
-                cs.get("lan_api_trung_binh_dang_dung"), cs.get("lan_api"),
-                cs.get("video_ban_giao"), cs.get("con_du_video_ngay"), cs.get("de_xuat"),
-                cs.get("so_luot_dang_chay") if cs.get("so_luot_dang_chay") is not None else "?")
+    cau = ("Công suất 24h: khe nặng {0}% · làn API TB {1}/{2} (đang chạy {6} lượt) · {3} video — "
+           "còn dư ≈ {4} video/ngày → {5}").format(
+               cs.get("phan_tram_khe_nang") if cs.get("phan_tram_khe_nang") is not None else "?",
+               cs.get("lan_api_trung_binh_dang_dung"), cs.get("lan_api"),
+               cs.get("video_ban_giao"), cs.get("con_du_video_ngay"), cs.get("de_xuat"),
+               cs.get("so_luot_dang_chay") if cs.get("so_luot_dang_chay") is not None else "?")
+    o = cs.get("o_dia") or {}
+    if o.get("tran_video_ngay") is not None:
+        cau += " · ổ: ~{0} GB/video, trần ≈ {1} video/ngày".format(
+            o.get("gb_moi_video"), o.get("tran_video_ngay"))
+    return cau
 
 
 def ghi_hien_tai(goc: str, cs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -889,7 +1049,16 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--hien-tai", action="store_true",
                         help="Công suất 24h qua từ nhật ký khe (điều phối) → "
                              "workspace/cong-suat/hien-tai.json + một dòng.")
+    parser.add_argument("--o-dia", action="store_true",
+                        help="In ước tính GB/video và trần video/ngày theo ổ đĩa (khi dọn đều).")
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.o_dia:
+        goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        o = tran_theo_o_dia(goc, so_kenh=args.kenh)
+        print(json.dumps(o, ensure_ascii=False, indent=1))
+        print(cau_o_dia(o) or "Chưa đo được (chưa có lượt/gói thật trên đĩa).")
+        return 0
 
     if args.hien_tai:
         goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

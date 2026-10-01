@@ -681,6 +681,21 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
             if thang >= nst_may:
                 chan = "trần ngân sách tháng máy {0}/{1}".format(thang, nst_may)
     ung_vien = sorted((c for c in cac if c.get("chay")), key=lambda c: (c["diem"], c["ma"]))
+    # Van Ổ ĐĨA (01/10/2026, `core/don_dep_mo_rong.van_o`), cạnh van ví: ổ < 12 GB
+    # → không sinh lượt MỚI (lượt dở vẫn làm nốt); < 6 GB → chặn cả lượt dở,
+    # báo khẩn + dọn mạnh. Chạy MỌI nhịp (kể cả khi đã bị chặn vì lý do khác) để
+    # dọn mạnh không bị bỏ lỡ; ổ đủ lại thì nhịp sau tự mở. Hỏng → không chặn.
+    try:
+        from . import don_dep_mo_rong  # noqa: PLC0415
+
+        o = don_dep_mo_rong.van_o(goc, danh_sach, con_trong_gb=dia_gb, bay_gio=bay_gio)
+        ra["o_dia"] = {k: o.get(k) for k in ("muc", "con_gb", "ly_do")}
+        if not chan and ung_vien and not o.get("duoc_mo_moi", True):
+            ung_vien = [c for c in ung_vien if o.get("duoc_lam_do") and c["diem"] <= -1000]
+            if not ung_vien:
+                chan = "ổ đĩa: " + str(o.get("ly_do") or "")
+    except Exception:  # noqa: BLE001 — van hỏng không được chặn cả điều phối
+        pass
     # Van VÍ (30/09/2026, `core/van_vi.py`): ví < ước 1 video x 1,5 → không sinh lượt
     # MỚI; lượt đang dở (điểm <= -1000) vẫn được sinh để làm nốt nếu ví ≥ ước 1
     # video. Không đọc được số dư → không chặn. Ví được nạp thì nhịp sau tự mở lại.

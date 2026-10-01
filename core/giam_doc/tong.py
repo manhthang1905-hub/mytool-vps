@@ -198,8 +198,9 @@ def _cai(goc: str, ma: str) -> Dict[str, Any]:
 
 
 def tran_may(cs: Dict[str, Any]) -> float:
-    """Trần video/ngày của máy (`cong_suat`: min(khe nặng, làn API))."""
-    xs = [cs.get("tran_video_ngay_khe_nang"), cs.get("tran_video_ngay_lan_api")]
+    """Trần video/ngày của máy (`cong_suat`: min(khe nặng, làn API, ổ đĩa — 01/10/2026))."""
+    xs = [cs.get("tran_video_ngay_khe_nang"), cs.get("tran_video_ngay_lan_api"),
+          cs.get("tran_video_ngay_o_dia")]
     xs = [float(x) for x in xs if x is not None]
     return min(xs) if xs else 0.0
 

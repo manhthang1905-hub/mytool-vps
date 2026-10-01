@@ -332,7 +332,10 @@ def test_marker_va_log_duoc_ghi(tmp_path):
 # ── gói bàn giao (thu_muc_done) ──────────────────────────────────────────────
 
 
-def test_xoa_ca_goi_ban_giao(tmp_path):
+def test_luat_mot_khong_con_xoa_goi_ban_giao(tmp_path):
+    """01/10/2026: luật MỘT thôi xoá cả gói DONE (kèm .srt/bìa/qa) sau 24 giờ.
+    Gói DONE chỉ mất media nặng qua luật BỐN (sổ xác nhận + hậu kiểm + 48 giờ)
+    — xem tests/test_don_dep_done.py. Không có sổ máy đăng → gói còn nguyên."""
     goc = str(tmp_path)
     _dung_luot(goc)
     thu_muc_done = os.path.join(goc, "ban-giao")
@@ -344,7 +347,7 @@ def test_xoa_ca_goi_ban_giao(tmp_path):
     _ke_hoach(goc)
 
     don_dep.don(goc, KENH, thuc_hien=True, bay_gio=BAY_GIO_QUA_HAN)
-    assert not os.path.isdir(goi)
+    assert os.path.isfile(os.path.join(goi, "8-video.mp4"))
 
 
 # ── tu_don false → no-op ─────────────────────────────────────────────────────

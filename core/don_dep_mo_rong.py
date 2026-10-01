@@ -65,6 +65,7 @@ __all__ = [
     "ung_vien_bao_cao_tat_ca_cu", "ung_vien_bao_cao_kenh_cu",
     "don_bao_cao_cu", "don_theo_cai_dat", "don_tat_ca_theo_cai_dat",
     "suc_khoe_dia", "dinh_dang_suc_khoe_dia_md",
+    "NGUONG_O_CHAN_GB", "NGUONG_O_KHAN_GB", "don_manh", "van_o", "doc_trang_thai_o",
 ]
 
 #: Giữ báo cáo ngày trong ngần này ngày. Mặc định RỘNG RÃI (nửa năm) — mục
@@ -408,6 +409,258 @@ def dinh_dang_suc_khoe_dia_md(sk: Dict[str, Any]) -> str:
         dong.append("- models/: {0}".format(_gb(sk["models_bytes"])))
     dong.append("")
     return "\n".join(dong)
+
+
+# ── VAN Ổ ĐĨA + DỌN MẠNH (01/10/2026) ─────────────────────────────────────────
+#
+# Sắp 6 kênh ≈ 24–27 video/ngày ≈ 10 GB/ngày. Van này đứng CẠNH van ví trong
+# nhịp điều phối (`core/dieu_phoi._nhip_trong_khoa`):
+#   * ổ < NGUONG_O_CHAN_GB (12): không mở lượt sản xuất MỚI (lượt dở làm nốt);
+#   * ổ < NGUONG_O_KHAN_GB (6): chặn cả lượt dở, báo KHẨN ("Việc của bạn" +
+#     bao_dong), chạy DỌN MẠNH (`don_manh`), tối đa 1 lần / 20 phút;
+#   * ổ đủ lại → nhịp kế tự mở lại, không ai phải bấm.
+# Trạng thái: `workspace/o-dia/trang-thai.json`.
+
+NGUONG_O_CHAN_GB = 12.0
+NGUONG_O_KHAN_GB = 6.0
+GIU_NGAY_DON_MANH = 14
+_GIAN_CACH_DON_MANH_GIAY = 20 * 60.0
+
+
+def _duong_trang_thai_o(goc: str) -> str:
+    return os.path.join(goc, "workspace", "o-dia", "trang-thai.json")
+
+
+def doc_trang_thai_o(goc: str) -> Dict[str, Any]:
+    try:
+        import json  # noqa: PLC0415
+
+        with open(_duong_trang_thai_o(goc), "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+        return du if isinstance(du, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _tuoi_ngay(duong: str, hom_nay: datetime.datetime) -> float:
+    """Tuổi (ngày) của một thư mục/tệp = theo mtime TỆP mới nhất bên trong
+    (thư mục rỗng: mtime của chính nó)."""
+    moc = 0.0
+    if os.path.isdir(duong):
+        for cha, _thu, tep in os.walk(duong):
+            for t in [os.path.join(cha, x) for x in tep]:
+                try:
+                    moc = max(moc, os.path.getmtime(t))
+                except OSError:
+                    pass
+        if not moc:
+            try:
+                moc = os.path.getmtime(duong)
+            except OSError:
+                return 0.0
+    else:
+        try:
+            moc = os.path.getmtime(duong)
+        except OSError:
+            return 0.0
+    return (hom_nay.timestamp() - moc) / 86400.0 if moc else 0.0
+
+
+def _xoa_cay(duong: str, giu_ten: Sequence[str] = ()) -> int:
+    """Xoá mọi tệp dưới `duong` trừ tên trong `giu_ten` (ở mọi cấp); dọn thư
+    mục rỗng. Trả byte đã xoá. Không theo liên kết."""
+    from .don_dep import _la_lien_ket  # noqa: PLC0415
+
+    tong = 0
+    if _la_lien_ket(duong):
+        return 0
+    for cha, thu, tep in os.walk(duong, topdown=False):
+        for t in tep:
+            if t in giu_ten:
+                continue
+            p = os.path.join(cha, t)
+            if _la_lien_ket(p):
+                continue
+            try:
+                kt = os.path.getsize(p)
+                os.remove(p)
+                tong += kt
+            except OSError:
+                continue
+        for d in thu:
+            try:
+                os.rmdir(os.path.join(cha, d))
+            except OSError:
+                pass
+    if not giu_ten:
+        try:
+            os.rmdir(duong)
+        except OSError:
+            pass
+    return tong
+
+
+def don_manh(goc: str, danh_sach_kenh: Sequence[str], *,
+             bay_gio: Optional[datetime.datetime] = None,
+             nguong_gb: float = NGUONG_O_KHAN_GB) -> Dict[str, Any]:
+    """DỌN MẠNH khi ổ dưới ngưỡng khẩn. Xoá THẬT, theo thứ tự rẻ → đắt:
+
+    1. Gói DONE đủ luật BỐN (`don_dep.don_done` — không nới điều kiện).
+    2. Phần nặng của lượt ĐÃ BÀN GIAO (`don_dep.ung_vien_da_ban_giao`) — kể cả
+       trong N lượt mới nhất; lượt đang dựng / chưa xong không bao giờ đụng.
+    3. Cache tạm: `workspace/pytest-*` cũ hơn 1 ngày.
+    4. Log cũ: báo cáo ngày cũ hơn `GIU_NGAY_DON_MANH` ngày.
+    5. `workspace/ban-va/*` cũ hơn 14 ngày — GIỮ `GHI-CHU.md`.
+    6. Bản thử bìa cũ: `workspace/thu-bia*` cũ hơn 14 ngày.
+
+    Mục 1–2 chỉ cho kênh đã bật `tu_don` (khẩn cấp không lật lựa chọn của chủ).
+    Trả `{"theo_muc": {mục: byte}, "tong_bytes", "da_don": [...]}`.
+    """
+    from . import don_dep  # noqa: PLC0415
+
+    bay_gio = bay_gio or datetime.datetime.now()
+    theo_muc: Dict[str, int] = {}
+    da_don: List[Dict[str, Any]] = []
+
+    def cong(muc: str, so: int) -> None:
+        theo_muc[muc] = theo_muc.get(muc, 0) + int(so or 0)
+
+    for ma in danh_sach_kenh:
+        try:
+            if not doc_kenh(goc, ma).tu_don:
+                continue
+            ket = don_dep.don_done(goc, ma, thuc_hien=True, bay_gio=bay_gio)
+            da_don.extend(ket.get("da_don") or [])
+            cong("done", ket.get("tong_bytes") or 0)
+            for u in don_dep.ung_vien_da_ban_giao(goc, ma, nguong_gb=nguong_gb, bay_gio=bay_gio):
+                k = don_dep._xoa_tep_giai_phong(u, goc, ma, bay_gio)  # noqa: SLF001
+                if k is not None:
+                    da_don.append(k)
+                    cong("projects_ban_giao", k["bytes"])
+        except Exception:  # noqa: BLE001 — một kênh hỏng không chặn dọn mạnh
+            continue
+
+    ws = os.path.join(goc, "workspace")
+    try:
+        ten_ws = sorted(os.listdir(ws))
+    except OSError:
+        ten_ws = []
+    for ten in ten_ws:
+        p = os.path.join(ws, ten)
+        if not os.path.isdir(p):
+            continue
+        if ten.startswith("pytest-") and _tuoi_ngay(p, bay_gio) >= 1.0:
+            cong("cache_tam", _xoa_cay(p))
+        elif ten.startswith("thu-bia") and _tuoi_ngay(p, bay_gio) >= GIU_NGAY_DON_MANH:
+            cong("thu_bia_cu", _xoa_cay(p))
+
+    try:
+        bc = don_bao_cao_cu(goc, danh_sach_kenh, thuc_hien=True,
+                            giu_ngay=GIU_NGAY_DON_MANH, bay_gio=bay_gio.date())
+        cong("log_cu", bc.get("tong_bytes") or 0)
+    except Exception:  # noqa: BLE001
+        pass
+
+    ban_va = os.path.join(ws, "ban-va")
+    try:
+        ten_bv = sorted(os.listdir(ban_va))
+    except OSError:
+        ten_bv = []
+    for ten in ten_bv:
+        p = os.path.join(ban_va, ten)
+        if os.path.isdir(p) and _tuoi_ngay(p, bay_gio) >= GIU_NGAY_DON_MANH:
+            cong("ban_va_cu", _xoa_cay(p, giu_ten=("GHI-CHU.md",)))
+
+    return {"luc": bay_gio.isoformat(timespec="seconds"), "theo_muc": theo_muc,
+            "tong_bytes": sum(theo_muc.values()), "da_don": da_don}
+
+
+def van_o(goc: str, danh_sach_kenh: Sequence[str], *,
+          con_trong_gb: Optional[float] = None,
+          con_trong_gb_fn: Optional[Any] = None,
+          bay_gio: Optional[datetime.datetime] = None,
+          don_manh_fn: Optional[Any] = None) -> Dict[str, Any]:
+    """Van ổ đĩa — `{"duoc_mo_moi", "duoc_lam_do", "muc", "con_gb", "ly_do", ...}`.
+
+    `muc`: "ok" | "chan" (< 12 GB: không mở lượt mới) | "khan" (< 6 GB: chặn cả
+    lượt dở, dọn mạnh) | "khong_ro" (không đo được: KHÔNG chặn ở đây — van đĩa
+    cũ `tu_chay._kiem_dia` vẫn đứng sau). `con_trong_gb`: số đo sẵn (seam test/
+    nhịp đã đo); có thì không đo lại sau dọn mạnh. Ghi `workspace/o-dia/trang-thai.json`.
+    """
+    import json  # noqa: PLC0415
+
+    bay_gio = bay_gio or datetime.datetime.now()
+    do = con_trong_gb_fn or (lambda g: (shutil.disk_usage(g)[2] / 1024 ** 3))
+
+    def _do() -> Optional[float]:
+        try:
+            return float(do(goc))
+        except Exception:  # noqa: BLE001
+            return None
+
+    con = con_trong_gb if con_trong_gb is not None else _do()
+    cu = doc_trang_thai_o(goc)
+    tt: Dict[str, Any] = {k: v for k, v in cu.items() if k in ("don_manh", "don_manh_luc", "chan_tu")}
+    if con is not None and con < NGUONG_O_KHAN_GB:
+        try:
+            lan_truoc = float(cu.get("don_manh_luc") or 0)
+        except (TypeError, ValueError):
+            lan_truoc = 0.0
+        if bay_gio.timestamp() - lan_truoc >= _GIAN_CACH_DON_MANH_GIAY:
+            try:
+                ket = (don_manh_fn or don_manh)(goc, danh_sach_kenh, bay_gio=bay_gio)
+            except Exception as loi:  # noqa: BLE001
+                ket = {"loi": str(loi)[:200], "tong_bytes": 0}
+            tt["don_manh"] = {"luc": bay_gio.isoformat(timespec="seconds"),
+                              "tong_bytes": int(ket.get("tong_bytes") or 0),
+                              "theo_muc": ket.get("theo_muc") or {}, "loi": ket.get("loi", "")}
+            tt["don_manh_luc"] = bay_gio.timestamp()
+            if con_trong_gb is None:
+                con = _do()
+    if con is None:
+        muc = "khong_ro"
+    elif con < NGUONG_O_KHAN_GB:
+        muc = "khan"
+    elif con < NGUONG_O_CHAN_GB:
+        muc = "chan"
+    else:
+        muc = "ok"
+    if muc == "khan":
+        ly_do = ("ổ đĩa còn {0:.1f} GB < {1:g} GB — KHẨN: dừng mọi lượt sản xuất, đã chạy dọn "
+                 "mạnh; máy tự chạy lại khi ổ ≥ {2:g} GB.").format(con, NGUONG_O_KHAN_GB, NGUONG_O_CHAN_GB)
+    elif muc == "chan":
+        ly_do = ("ổ đĩa còn {0:.1f} GB < {1:g} GB — không mở video mới (video dở làm nốt); "
+                 "máy tự chạy lại khi ổ đủ chỗ.").format(con, NGUONG_O_CHAN_GB)
+    else:
+        ly_do = ""
+    if muc in ("chan", "khan"):
+        tt.setdefault("chan_tu", bay_gio.isoformat(timespec="seconds"))
+    elif cu.get("muc") in ("chan", "khan") and muc == "ok":
+        tt.pop("chan_tu", None)
+        tt["mo_lai_luc"] = bay_gio.isoformat(timespec="seconds")
+    tt.update({"luc": bay_gio.isoformat(timespec="seconds"), "con_gb": con, "muc": muc,
+               "ly_do": ly_do, "nguong_chan_gb": NGUONG_O_CHAN_GB,
+               "nguong_khan_gb": NGUONG_O_KHAN_GB,
+               "duoc_mo_moi": muc in ("ok", "khong_ro"),
+               "duoc_lam_do": muc != "khan"})
+    try:
+        duong = _duong_trang_thai_o(goc)
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        tam = duong + ".tam"
+        with open(tam, "w", encoding="utf-8") as tep:
+            json.dump(tt, tep, ensure_ascii=False, indent=1)
+        os.replace(tam, duong)
+    except OSError:
+        pass
+    if muc == "khan":
+        try:
+            from . import bao_dong  # noqa: PLC0415
+
+            bao_dong.bao_dong("o_dia_khan", "Ổ đĩa sắp đầy — máy đã dừng sản xuất.", ly_do,
+                              goc=goc, muc=bao_dong.MUC_KHAN)
+        except Exception:  # noqa: BLE001
+            pass
+    return tt
 
 
 # ── Dòng lệnh: `python -m core.don_dep_mo_rong --goc . --thu` ───────────────
