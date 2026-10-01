@@ -18,3 +18,7 @@
 *.bat -text
 *.cmd -text
 *.vbs -text
+
+# Golden cua bo chon nguon so TUNG BYTE (tests/test_chien_luoc_golden.py): giu LF ca khi clone tren
+# Windows (core.autocrlf=true) - khong thi may moi chay test la lech golden.
+*.golden.json text eol=lf
