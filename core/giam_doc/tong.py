@@ -10,8 +10,15 @@ view ≈ 5× kênh đăng dày). Bậc nhịp `chu_ky_dang_ngay`: 1 → 2 → 3 
 1 video/ngày); kênh CHỮNG hoặc TỤT → thưa hơn một bậc (tối đa 1 video/3 ngày). Kênh còn nhiều khe/ngày → về
 1 khe/ngày. `khe_cu`/`khe_moi` trong thực đơn = số VIDEO/NGÀY (1, 0,5, 0,33).
 
+01/10/2026 — LUẬT SỐ KÊNH (chủ dự án: số kênh theo ĐỘ LỚN THỊ TRƯỜNG, không theo số tệp; chỉ gợi ý):
+(1) Số kênh tối đa của một tệp = số nguồn nổ mới mỗi tháng của tệp ÷ 15 (nhịp 1 video/2 ngày), chỉ khi trang chủ
+của tệp đang lên hoặc ổn định (giảm → 0). (2) Mỗi kênh trong cùng tệp giữ MỘT góc đề tài, phong cách hình và giọng
+riêng; hai kênh của mình không bao giờ remake cùng một nguồn (cơ chế giữ nguồn chung của nhóm). (3) Kênh thứ 2+ của
+một tệp chỉ mở khi kênh đầu của tệp đã thắng ≥ 2 video và còn dư nguồn. (4) `bang_so_kenh` tính bảng "tệp → tối đa
+/ đang có / đề xuất mở" từ `workspace/chuan-bi-kenh-moi/thi-truong.json`, ghi vào báo cáo công ty.
+
     bang_cong_ty(goc) · xep_loai(dong) · chia_khe(bang, tran) · hop_tuan(goc, goi_chat) · bao_cao(goc, kq)
-    den_han(goc) · cau_the(goc) · de_xuat_kenh_moi(goc, cs)
+    den_han(goc) · cau_the(goc) · de_xuat_kenh_moi(goc, cs, bang) · so_kenh_toi_da(nguon, xu_huong) · bang_so_kenh(goc, bang)
 
 Khoá `workspace/cai-dat.json: tong_giam_doc: tat | goi_y | tu_ap` (mặc định `tat`). Gợi ý = chỉ ghi báo cáo.
 Chỉ đổi `chu_ky_dang_ngay`, `nhip_dang`, `video_toi_da_ngay`, `ngan_sach_ngay` (chỉ nâng); nghỉ 14 ngày sau mỗi
@@ -49,6 +56,11 @@ KHE_NANG_QUA_TAI = 90.0
 #: cắt TL1–3 6→5 khe sai.
 GIO_CONG_SUAT = 48
 TEN_LOAI = {"len": "lên", "chung": "chững", "tut": "tụt"}
+#: LUẬT SỐ KÊNH: nhịp một kênh ≈ 15 video/tháng (1 video/2 ngày); kênh thứ 2+ cần kênh đầu thắng ≥ 2 video.
+NHIP_THANG = 15
+THANG_MO_THEM = 2
+TEP_THI_TRUONG = os.path.join("workspace", "chuan-bi-kenh-moi", "thi-truong.json")
+TEN_XU_HUONG = {"len": "lên", "on": "ổn định", "giam": "giảm"}
 
 
 def _doc_json(duong: str, mac_dinh: Any = None) -> Any:
@@ -181,6 +193,7 @@ def bang_cong_ty(goc: str, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[
              "hien_thi_7": so7["hien_thi"], "hien_thi_7_truoc": truoc, "gio_xem_7": so7["gio_xem"], "sub_7": so7["sub"],
              "xem_7": so7["xem"], "da": round(so7["hien_thi"] / truoc, 2) if so7["hien_thi"] is not None and truoc else None,
              "thang_28": sum(1 for v in kl if v["ket_luan"] == "thang"), "kl_28": len(kl), "video_28": len(v28),
+             "thang_tong": sum(1 for v in bs.video if v.get("ket_luan") == "thang"),
              "ti_le_thang": round(sum(1 for v in kl if v["ket_luan"] == "thang") / len(kl), 2) if kl else None,
              "tv_48h_14": statistics.median(v14) if v14 else None,
              "ypp_sub": (bs.ypp or {}).get("sub"), "ypp_gio": (bs.ypp or {}).get("gio_xem"),
@@ -315,20 +328,71 @@ def thuc_don(goc: str, bang: List[Dict[str, Any]], tran: float, so_: Dict[str, A
     return ra
 
 
-def de_xuat_kenh_moi(goc: str, cs: Dict[str, Any]) -> List[str]:
-    """CHỈ gợi ý: ứng viên kênh mới từ bản đồ khoảng trống mới nhất, khi máy còn dư ≥ 2 video/ngày."""
+def so_kenh_toi_da(nguon_no_thang: Any, xu_huong: Any) -> int:
+    """LUẬT SỐ KÊNH (1): nguồn nổ mới/tháng ÷ 15, chỉ khi trang chủ của tệp lên / ổn định; giảm hay thiếu số → 0."""
+    if str(xu_huong or "").strip().lower() not in ("len", "on"):
+        return 0
+    try:
+        return max(0, int(float(nguon_no_thang or 0) // NHIP_THANG))
+    except (TypeError, ValueError):
+        return 0
+
+
+def bang_so_kenh(goc: str, bang: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    """Bảng "tệp → tối đa / đang có / đề xuất mở" (luật 1 + 3). Đang có = kênh tool có `tep` khớp (mọi kênh, kể cả
+    chưa tự chạy; cặp `-v2` tính một). Mở mỗi lần MỘT kênh; kênh thứ 2+ chờ kênh đầu thắng ≥ 2 video."""
+    from ..tuyen_noi_dung import ma_tep  # noqa: PLC0415
+
+    tt = (_doc_json(os.path.join(goc, TEP_THI_TRUONG), {}) or {}).get("tep") or {}
+    if not isinstance(tt, dict) or not tt:
+        return []
+    thang = {d["ma"]: int(d.get("thang_tong") or 0) for d in bang or []}
+    co: Dict[str, List[str]] = {}
+    for ma in _cac_kenh(goc):
+        t = ma_tep(_cai(goc, ma).get("tep"), goc) or str(_cai(goc, ma).get("tep") or "")
+        if t:
+            co.setdefault(t, []).append(ma)
+    ra = []
+    for t, s in tt.items():
+        s = s if isinstance(s, dict) else {}
+        t = ma_tep(t, goc) or t
+        toi_da = so_kenh_toi_da(s.get("nguon_no_thang"), s.get("trang_chu"))
+        kenh = sorted(co.get(t, []))
+        du = toi_da - len(kenh)
+        # thắng của kênh đầu: số máy này đo; kênh sản xuất ở máy khác (TL4) → số ghi tay trong thi-truong.json
+        dau = max([thang.get(m, 0) for m in kenh] + [int(s.get("thang_kenh_dau") or 0)] if kenh else [0])
+        if du <= 0:
+            mo, ghi = 0, "đủ kênh" if toi_da else "trang chủ giảm hoặc nguồn < 15/tháng"
+        elif not kenh:
+            mo, ghi = 1, "mở kênh đầu"
+        elif dau >= THANG_MO_THEM:
+            mo, ghi = 1, "kênh đầu đã thắng {0} video".format(dau)
+        else:
+            mo, ghi = 0, "chờ kênh đầu thắng ≥ {0} video (đang {1})".format(THANG_MO_THEM, dau)
+        ra.append({"tep": t, "ten": str(s.get("ten") or t), "nguon_no_thang": s.get("nguon_no_thang"),
+                   "trang_chu": str(s.get("trang_chu") or ""), "toi_da": toi_da, "dang_co": len(kenh),
+                   "kenh": kenh, "de_xuat_mo": mo, "ghi_chu": ghi, "luu_y": str(s.get("ghi_chu") or "")})
+    return ra
+
+
+def de_xuat_kenh_moi(goc: str, cs: Dict[str, Any], bang: Optional[List[Dict[str, Any]]] = None) -> List[str]:
+    """CHỈ gợi ý, khi máy còn dư ≥ 2 video/ngày: tệp được mở thêm kênh theo LUẬT SỐ KÊNH (`bang_so_kenh`), rồi
+    ứng viên từ bản đồ khoảng trống mới nhất."""
     if float(cs.get("con_du_video_ngay") or 0) < 2:
         return []
+    ra = ["Mở 1 kênh tệp {0} ({1}): tối đa {2}, đang có {3} — {4}".format(
+        d["ten"], d["tep"], d["toi_da"], d["dang_co"], d["ghi_chu"]) for d in bang_so_kenh(goc, bang) if d["de_xuat_mo"]]
     tep = sorted(glob.glob(os.path.join(goc, "workspace", "khoang-trong-kenh-*.md")))
     if not tep:
-        return []
+        return ra
     try:
         with io.open(tep[-1], encoding="utf-8") as f:
             dong = [x.strip("# ").strip() for x in f if x.startswith("### ")]
     except OSError:
-        return []
+        return ra
     chot = [x for x in dong if x.upper().startswith("CHỐT")]
-    return (chot + [x for x in dong if x.startswith("Ứng viên")])[:4] + ["(nguồn: {0})".format(os.path.basename(tep[-1]))]
+    return ra + (chot + [x for x in dong if x.startswith("Ứng viên")])[:4] + [
+        "(nguồn: {0})".format(os.path.basename(tep[-1]))]
 
 
 # ── quay lui (luật cứng) ───────────────────────────────────────────────────
@@ -456,7 +520,11 @@ def hop_tuan(goc: str, goi_chat: Optional[Callable[..., str]], *, ep_che_do: Opt
         cs.get("lan_api_trung_binh_dang_dung", "?"), cs.get("lan_api", "?"), cs.get("con_du_video_ngay", "?"),
         cs.get("cua_so_gio", GIO_CONG_SUAT), " (từ mốc đổi {0})".format(cs["tu_moc_doi"]) if cs.get("tu_moc_doi") else "")
     td = thuc_don(goc, bang, tran, so_, bay_gio)
-    kenh_moi = de_xuat_kenh_moi(goc, cs)
+    kenh_moi = de_xuat_kenh_moi(goc, cs, bang)
+    try:
+        so_kenh = bang_so_kenh(goc, bang)
+    except Exception:  # noqa: BLE001 — bảng gợi ý, không được làm hỏng họp tuần
+        so_kenh = []
     sl = _so_lieu(bang, cs, tran)
     from . import goi_y_gio_dang  # noqa: PLC0415 — giờ khán giả online (chỉ khi kênh đã có gio-online.json)
 
@@ -466,7 +534,7 @@ def hop_tuan(goc: str, goi_chat: Optional[Callable[..., str]], *, ep_che_do: Opt
     kq: Dict[str, Any] = {"luc": bay_gio.replace(microsecond=0).isoformat(), "che_do": cd, "thu": thu,
                           "bang": [{k: v for k, v in d.items() if k != "_video"} for d in bang], "tran": round(tran, 1),
                           "may": {k: cs.get(k) for k in ("cau", "con_du_video_ngay", "phan_tram_khe_nang")},
-                          "thuc_don": td, "kenh_moi": kenh_moi, "quyet": None, "da_lam": [], "se_lam": [],
+                          "thuc_don": td, "kenh_moi": kenh_moi, "so_kenh": so_kenh, "quyet": None, "da_lam": [], "se_lam": [],
                           "quay_lui": [], "loi": "", "loi_nhac": ln}
     if not thu:
         for t in can_quay_lui(bang, cs, so_, bay_gio):
@@ -558,6 +626,15 @@ def chu_bao_cao(kq: Dict[str, Any]) -> str:
     for x in kq["quay_lui"]:
         ra.append("- QUAY LUI {0}: {1}{2}".format(x["ma"], x["ly_do"], "" if x["ap"] else " (gợi ý)"))
     ra += ["", "## Kênh mới (chỉ gợi ý)"] + ["- " + x for x in kq["kenh_moi"] or ["Máy chưa dư ≥ 2 video/ngày — chưa nên mở."]]
+    if kq.get("so_kenh"):
+        ra += ["", "**Số kênh theo thị trường** (tối đa = nguồn nổ/tháng ÷ {0}, chỉ khi trang chủ lên/ổn định; kênh thứ "
+               "2+ chờ kênh đầu thắng ≥ {1} video):".format(NHIP_THANG, THANG_MO_THEM), "",
+               "| Tệp | Nguồn nổ/tháng | Trang chủ | Tối đa | Đang có | Đề xuất mở | Ghi chú |", "|---|---|---|---|---|---|---|"]
+        for d in kq["so_kenh"]:
+            ra.append("| {0} | {1} | {2} | {3} | {4}{5} | {6} | {7}{8} |".format(
+                d["ten"], _s(d["nguon_no_thang"], 1), TEN_XU_HUONG.get(d["trang_chu"], d["trang_chu"] or "—"), d["toi_da"],
+                d["dang_co"], " ({0})".format(", ".join(d["kenh"])) if d["kenh"] else "", d["de_xuat_mo"], d["ghi_chu"],
+                "; " + d["luu_y"] if d.get("luu_y") else ""))
     vcb = q.get("viec_cua_ban") or []
     if vcb:
         ra += ["", "## Việc của bạn"] + ["- " + x for x in vcb]

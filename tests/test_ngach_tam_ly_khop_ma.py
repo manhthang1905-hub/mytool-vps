@@ -57,6 +57,9 @@ HANG_SO = {
         # 30/09/2026 — kênh 5: tệp 65+ (workspace/chuan-bi-kenh-5/de-xuat-ngach.yaml).
         {"ma": "7", "ten": "Người 65+ đang sống tuổi già", "ten_ngan": "Tuổi già",
          "ma_tuyen": "nguoi-cao-tuoi-dang-song-tuoi-gia"},
+        # 01/10/2026 — kênh 7: tệp gia đình (workspace/chuan-bi-kenh-7/README-KENH-7.md).
+        {"ma": "6", "ten": "Vợ chồng và con đã lớn", "ten_ngan": "Gia đình",
+         "ma_tuyen": "nguoi-vo-chong-con-da-lon"},
     )],
     "chu_de_con_mac_dinh": True,
     # 01/10/2026 (khởi tạo ngách bằng AI): nhóm tâm lý Nhật KHÔNG khai bốn khoá mới — để TRỐNG là

@@ -310,6 +310,15 @@ tep_khan_gia:
     ten: Người 65+ đang sống tuổi già
     ten_ngan: Tuổi già
     ma_tuyen: nguoi-cao-tuoi-dang-song-tuoi-gia
+  # 01/10/2026 — kênh 7 (workspace/chuan-bi-kenh-7/README-KENH-7.md). Tệp MỚI "T9" của báo cáo khoảng trống;
+  # dùng số '6' vì '9' đang là mã "không nhận" trong tests/test_ngach_tam_ly_khop_ma.py (số 6 cũ đã bỏ 04/09).
+  - ma: '6'
+    ten: Vợ chồng và con đã lớn
+    ten_ngan: Gia đình
+    ma_tuyen: nguoi-vo-chong-con-da-lon
+  # 01/10/2026 — KHÔNG mở kênh cho tệp '6' (12,5 nguồn nổ/tháng < 15, trang chủ giảm); giữ mã để tool
+  # vẫn nhận ra tuyến. Số kênh mỗi tệp: LUẬT SỐ KÊNH ở core/giam_doc/tong.py
+  # (workspace/chuan-bi-kenh-moi/thi-truong.json).
 
 # ---- Tiền lọc rẻ: ca HIỂN NHIÊN (core/trang_chu.py) ----
 tu_kenh_hien_nhien:

@@ -236,6 +236,54 @@ def test_xep_loai_va_chia_khe_theo_nhip_ngay():
     assert tong.ten_tan_suat(0.5) == "1 video/2 ngày" and tong.ten_tan_suat(1.0) == "1 video/ngày"
 
 
+def test_luat_so_kenh_theo_thi_truong(tmp_path):
+    """01/10/2026 LUẬT SỐ KÊNH: tối đa = nguồn nổ/tháng ÷ 15 khi trang chủ lên/ổn định; kênh thứ 2+ chờ kênh đầu
+    thắng ≥ 2 video; mở mỗi lần một kênh; bảng vào báo cáo công ty."""
+    assert tong.so_kenh_toi_da(33.3, "len") == 2 and tong.so_kenh_toi_da(14.9, "on") == 0
+    assert tong.so_kenh_toi_da(40, "giam") == 0 and tong.so_kenh_toi_da(None, "len") == 0
+    goc = str(tmp_path)
+    for ma, tep in (("A1", "tep-a"), ("A1-v2", "tep-a"), ("B1", "tep-b")):
+        os.makedirs(os.path.join(goc, "CHANNEL", ma))
+        with io.open(os.path.join(goc, "CHANNEL", ma, "kenh.yaml"), "w", encoding="utf-8") as f:
+            f.write('tep: "{0}"\n'.format(tep))
+    os.makedirs(os.path.join(goc, "workspace", "chuan-bi-kenh-moi"))
+    with io.open(os.path.join(goc, tong.TEP_THI_TRUONG), "w", encoding="utf-8") as f:
+        json.dump({"tep": {"tep-a": {"ten": "A", "nguon_no_thang": 31, "trang_chu": "on"},
+                           "tep-b": {"ten": "B", "nguon_no_thang": 45, "trang_chu": "len"},
+                           "tep-c": {"ten": "C", "nguon_no_thang": 20, "trang_chu": "len"},
+                           "tep-d": {"ten": "D", "nguon_no_thang": 60, "trang_chu": "giam"}}}, f)
+    bang = [{"ma": "A1", "thang_tong": 1}, {"ma": "B1", "thang_tong": 3}]
+    ra = {d["tep"]: (d["toi_da"], d["dang_co"], d["de_xuat_mo"]) for d in tong.bang_so_kenh(goc, bang)}
+    assert ra == {"tep-a": (2, 1, 0), "tep-b": (3, 1, 1), "tep-c": (1, 0, 1), "tep-d": (0, 0, 0)}
+    assert len(tong.de_xuat_kenh_moi(goc, {"con_du_video_ngay": 3}, bang)) == 2
+    assert tong.de_xuat_kenh_moi(goc, {"con_du_video_ngay": 1}, bang) == []
+    kq = {"luc": "2026-10-05T09:00:00", "che_do": "goi_y", "bang": [], "tran": 5, "thuc_don": [], "da_lam": [],
+          "quay_lui": [], "kenh_moi": [], "so_kenh": tong.bang_so_kenh(goc, bang)}
+    md = tong.chu_bao_cao(kq)
+    assert "Số kênh theo thị trường" in md and "| B | 45,0 | lên | 3 | 1 (B1) | 1 |" in md
+
+
+def test_kenh_nhan_ban_K2_la_kenh_youtube_rieng(tmp_path):
+    """01/10/2026: kênh nhân bản đặt đuôi `-K2` (TL4-T7-K2, TL6-T7-K2) là MỘT KÊNH YOUTUBE RIÊNG — chỉ `-v<n>` mới
+    gộp với kênh gốc (cùng kênh YouTube). Bảng công ty, bảng số kênh và `ma_youtube` đều tách."""
+    from core.bang_dieu_khien import ma_youtube
+
+    goc = str(tmp_path)
+    for ma in ("TL4-T7", "TL4-T7-v2", "TL4-T7-K2", "TL6-T7", "TL6-T7-K2"):
+        os.makedirs(os.path.join(goc, "CHANNEL", ma))
+        with io.open(os.path.join(goc, "CHANNEL", ma, "kenh.yaml"), "w", encoding="utf-8") as f:
+            f.write('tep: "{0}"\n'.format("t1" if ma.startswith("TL4") else "t8"))
+    assert {k: sorted(v) for k, v in tong._cac_kenh(goc).items()} == {
+        "TL4-T7": ["TL4-T7", "TL4-T7-v2"], "TL4-T7-K2": ["TL4-T7-K2"], "TL6-T7": ["TL6-T7"], "TL6-T7-K2": ["TL6-T7-K2"]}
+    assert ma_youtube("TL4-T7-v2") == "TL4-T7" and ma_youtube("TL4-T7-K2") == "TL4-T7-K2"
+    os.makedirs(os.path.join(goc, "workspace", "chuan-bi-kenh-moi"))
+    with io.open(os.path.join(goc, tong.TEP_THI_TRUONG), "w", encoding="utf-8") as f:
+        json.dump({"tep": {"t1": {"nguon_no_thang": 31, "trang_chu": "on"},
+                           "t8": {"nguon_no_thang": 30, "trang_chu": "len"}}}, f)
+    ra = {d["tep"]: (d["dang_co"], d["kenh"]) for d in tong.bang_so_kenh(goc, [])}
+    assert ra == {"t1": (2, ["TL4-T7", "TL4-T7-K2"]), "t8": (2, ["TL6-T7", "TL6-T7-K2"])}
+
+
 def test_nhip_moi_them_giua_khoang_trong_bot_khe_yeu_nhat():
     assert tong.nhip_moi(["08:00", "20:00"], 3) == ["02:00", "08:00", "20:00"]
     video = [(_dt.datetime(2026, 9, 1, 8, 0), 9000), (_dt.datetime(2026, 9, 2, 20, 0), 300),
