@@ -41,21 +41,21 @@ def _dung(goc, so=None, ghi_chu=""):
     return g, luot
 
 
-def test_da_len_qua_3_ngay_xoa_nang_ca_hai_phia_giu_nho(tmp_path):
+def test_da_len_youtube_xoa_ngay_ca_hai_phia_giu_chu(tmp_path):
+    """Chủ kênh 01/10: lên YouTube xong (kể cả lịch còn ở tương lai) là xoá ngay; chỉ giữ tệp chữ."""
     goc = str(tmp_path)
-    g, luot = _dung(goc, {"video_id": "v1", "trang_thai": "da-len-lich", "lich": "02/10/2026 12:00"})
+    g, luot = _dung(goc, {"video_id": "v1", "trang_thai": "da-len-lich", "lich": "09/10/2026 05:00"})
     don_dep.don(goc, KENH, thuc_hien=True, bay_gio=BAY_GIO)
-    assert not os.path.exists(os.path.join(g, "8-video.mp4"))
+    for t in ("8-video.mp4", "CHON-thumb.jpg"):
+        assert not os.path.exists(os.path.join(g, t))
     assert not os.path.exists(os.path.join(luot, "5-anh"))
-    for t in ("3-phu-de.srt", "CHON-thumb.jpg", "1-binh-luan.txt", "qa.json"):
+    for t in ("3-phu-de.srt", "1-binh-luan.txt", "qa.json"):
         assert os.path.isfile(os.path.join(g, t))
     assert os.path.isfile(os.path.join(luot, "3-phu-de.srt"))
 
 
-def test_chua_du_3_ngay_chua_len_hoac_dang_tai_thi_giu(tmp_path):
+def test_chua_len_hoac_dang_tai_thi_giu(tmp_path):
     goc = str(tmp_path)
-    _dung(goc, {"video_id": "v1", "trang_thai": "xac-nhan", "lich": "03/10/2026 12:00"})
-    assert don_dep.ung_vien_done(goc, KENH, bay_gio=BAY_GIO) == []
     _dung(goc, {"video_id": "", "trang_thai": "dang-tai", "lich": "01/09/2026 12:00"})
     assert don_dep.ung_vien_done(goc, KENH, bay_gio=BAY_GIO) == []
     _dung(goc, {"video_id": "v1", "trang_thai": "xac-nhan", "lich": "01/09/2026 12:00"})
@@ -63,11 +63,10 @@ def test_chua_du_3_ngay_chua_len_hoac_dang_tai_thi_giu(tmp_path):
     assert don_dep.ung_vien_done(goc, KENH, bay_gio=BAY_GIO) == []
 
 
-def test_goi_bo_qua_7_ngay(tmp_path):
+def test_goi_bo_xoa_ngay(tmp_path):
     goc = str(tmp_path)
     g, _ = _dung(goc, ghi_chu="Bỏ, trùng nội dung")
-    assert don_dep.ung_vien_done(goc, KENH, bay_gio=datetime.datetime.now()) == []
-    u = don_dep.ung_vien_done(goc, KENH, bay_gio=datetime.datetime.now() + datetime.timedelta(days=8))
+    u = don_dep.ung_vien_done(goc, KENH, bay_gio=datetime.datetime.now() + datetime.timedelta(seconds=1))
     assert [x["ma_goi"] for x in u] == [MA]
 
 

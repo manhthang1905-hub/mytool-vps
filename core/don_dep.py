@@ -614,13 +614,16 @@ def don_sao_luu(goc: str) -> List[str]:
 
 # ── Gói DONE (01/10/2026) — MỘT luật ─────────────────────────────────────────
 
-NGAY_SAU_CONG_KHAI = 3
-NGAY_GOI_BO = 7
+#: Chủ kênh 01/10: "video đã lên thì xoá hết — xử lý dứt điểm". Lên YouTube xong (có video_id,
+#: lịch đã xác nhận) là xoá NGAY; gói "Bỏ" cũng xoá ngay. Chỉ giữ tệp chữ vài KB (.srt kịch bản,
+#: .txt, .json) vì khám nghiệm đọc câu kịch bản tại điểm khán giả thoát.
+NGAY_SAU_CONG_KHAI = 0
+NGAY_GOI_BO = 0
 TRANG_THAI_SO_DA_LEN = ("xac-nhan", "da-len-lich")
-LY_DO_DONE = "DONE: đã lên YouTube, quá {0} ngày công khai".format(NGAY_SAU_CONG_KHAI)
-LY_DO_DONE_BO = "DONE: gói Bỏ quá {0} ngày".format(NGAY_GOI_BO)
-#: Chỉ những đuôi này bị xoá; .srt, ảnh, .txt, .json ở lại.
-_DUOI_NANG = (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a")
+LY_DO_DONE = "DONE: đã lên YouTube"
+LY_DO_DONE_BO = "DONE: gói Bỏ"
+_DUOI_NANG = (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a",
+              ".jpg", ".jpeg", ".png", ".webp")
 
 
 def ung_vien_done(goc: str, ma_kenh: str, *,
@@ -667,9 +670,8 @@ def ung_vien_done(goc: str, ma_kenh: str, *,
             lich = datetime.datetime.strptime(str(muc.get("lich") or ""), "%d/%m/%Y %H:%M")
         except ValueError:
             pass
-        if muc.get("video_id") and muc.get("trang_thai") in TRANG_THAI_SO_DA_LEN and lich \
-                and bay_gio - lich >= datetime.timedelta(days=NGAY_SAU_CONG_KHAI):
-            ly_do, moc = LY_DO_DONE, lich
+        if muc.get("video_id") and muc.get("trang_thai") in TRANG_THAI_SO_DA_LEN:
+            ly_do, moc = LY_DO_DONE, lich or bay_gio
         elif str(ghi_chu.get(ma) or "").strip().lower().startswith("bỏ") and not muc \
                 and bay_gio.timestamp() - os.path.getmtime(goi) >= NGAY_GOI_BO * 86400:
             ly_do, moc = LY_DO_DONE_BO, datetime.datetime.fromtimestamp(os.path.getmtime(goi))
