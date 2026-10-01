@@ -763,14 +763,14 @@ def _video_ban_giao(goc: str, tu_luc: float, bo_truoc: Optional[float] = None,
 # Mô hình "đang dọn đều" (luật dọn `core/don_dep.py`):
 #   * PROJECTS: mỗi kênh giữ `giu_toi_da_luot` lượt xong + 1 lượt đang dựng →
 #     phần CỐ ĐỊNH = số kênh × (giữ + 1) × GB/lượt, KHÔNG tăng theo nhịp.
-#   * DONE: mỗi video nằm đó từ lúc bàn giao tới giờ công khai + 48 giờ (luật
-#     BỐN) → phần TỈ LỆ = video/ngày × ngày nằm DONE × GB/video, trừ phần trùng
+#   * DONE: mỗi video nằm đó từ lúc bàn giao tới giờ công khai + 3 ngày (luật
+#     DONE) → phần TỈ LỆ = video/ngày × ngày nằm DONE × GB/video, trừ phần trùng
 #     liên kết cứng với `giữ` lượt mới nhất trong PROJECTS.
 #   * Sàn: luôn chừa `NGUONG_O_CHAN_GB` (dưới mức ấy van ổ chặn mở lượt mới).
 # Mọi cỡ đo theo inode (hardlink PROJECTS↔DONE chỉ tính một lần).
 
-NGUONG_O_CHAN_GB = 12.0
-GIO_CHO_DONE_SAU_CONG_KHAI = 48.0
+NGUONG_O_CHAN_GB = 10.0  # = don_dep_mo_rong.NGUONG_O_GB
+GIO_CHO_DONE_SAU_CONG_KHAI = 72.0  # = don_dep.NGAY_SAU_CONG_KHAI
 _MB = 1024.0 ** 2
 _GB = 1024.0 ** 3
 
@@ -836,7 +836,7 @@ def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
         b = _tep_inode(thu)
         if b >= 50 * _MB:
             mau_luot.append(b / _GB)
-    # GB / video DONE + số ngày nằm DONE (bàn giao → công khai + 48 giờ)
+    # GB / video DONE + số ngày nằm DONE (bàn giao → công khai + 3 ngày)
     so = _doc_json(os.path.join(goc, "vm", "logs", "so-video-id.json")) or {}
     mau_video: List[float] = []
     mau_tre: List[float] = []

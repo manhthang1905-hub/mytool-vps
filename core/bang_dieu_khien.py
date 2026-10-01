@@ -1285,27 +1285,17 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     # 8) ổ đĩa sắp đầy.
     o_dia = may["o_dia"]
     if o_dia["muc"] in (HONG, LUU_Y) and o_dia["con_gb"] is not None:
-        # 01/10/2026: van ổ (`don_dep_mo_rong.van_o`) — < 6 GB KHẨN (dừng hết, đã dọn
-        # mạnh), < 12 GB không mở video mới; cả hai tự chạy lại khi ổ đủ chỗ.
-        try:
-            from .don_dep_mo_rong import NGUONG_O_CHAN_GB, NGUONG_O_KHAN_GB  # noqa: PLC0415
-        except Exception:  # noqa: BLE001
-            NGUONG_O_CHAN_GB, NGUONG_O_KHAN_GB = 12.0, 6.0
+        # 01/10/2026: van ổ (`don_dep_mo_rong.NGUONG_O_GB`) — dưới ngưỡng thì máy không
+        # mở video mới, tự chạy lại khi ổ đủ chỗ.
+        from .don_dep_mo_rong import NGUONG_O_GB  # noqa: PLC0415
+
         con = float(o_dia["con_gb"])
-        if con < NGUONG_O_KHAN_GB:
-            chu_dia = ("KHẨN: ổ đĩa chỉ còn {0:.1f} GB — máy đã DỪNG sản xuất và tự dọn "
-                       "mạnh".format(con))
-            goi_y_dia = "→ dọn tay thư mục DONE/PROJECTS cũ; máy tự chạy lại khi ổ ≥ {0:g} GB".format(
-                NGUONG_O_CHAN_GB)
-        elif con < NGUONG_O_CHAN_GB:
-            chu_dia = "Ổ đĩa chỉ còn {0:.0f} GB — máy tạm ngừng mở video mới".format(con)
-            goi_y_dia = "→ máy tự dọn và tự chạy lại khi ổ ≥ {0:g} GB".format(NGUONG_O_CHAN_GB)
-        else:
-            chu_dia = "Ổ đĩa chỉ còn {0:.0f} GB".format(con)
-            goi_y_dia = "→ bật “Tự dọn” ở ⚙ Cài đặt của từng kênh, hoặc dọn tay"
+        ngung = con < NGUONG_O_GB
         ra.append(_viec(
-            "dia", HONG if (o_dia["muc"] == HONG or con < NGUONG_O_CHAN_GB) else CANH_BAO,
-            chu=chu_dia, goi_y=goi_y_dia,
+            "dia", HONG if o_dia["muc"] == HONG else CANH_BAO,
+            chu="Ổ đĩa chỉ còn {0:.0f} GB{1}".format(con, " — máy đã ngừng mở video mới" if ngung else ""),
+            goi_y=("→ dọn tay DONE/PROJECTS cũ; máy tự chạy lại khi ổ ≥ {0:g} GB".format(NGUONG_O_GB)
+                   if ngung else "→ bật “Tự dọn” ở ⚙ Cài đặt của từng kênh, hoặc dọn tay"),
             nut=[("Mở thư mục", "mo_thu_muc", {"duong": goc})]))
 
     # 11) máy chạy nền đã tắt — máy đăng/trả lời chỉ báo khi KHÔNG ở chế độ phiên.

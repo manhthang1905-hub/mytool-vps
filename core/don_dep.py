@@ -6,14 +6,6 @@
 ═══ LUẬT HAI: QUÁ N LƯỢT, KHÔNG HỎI ĐÃ ĐĂNG CHƯA (24/09/2026) ═══
     `ung_vien_qua_so_luot` · khoá `giu_toi_da_luot` trong `kenh.yaml`.
 
-═══ LUẬT BỐN: GÓI DONE ĐÃ ĐĂNG + ĐÃ XÁC NHẬN + HẬU KIỂM OK (01/10/2026) ═══
-    `ung_vien_done` · `don_done`. Xem docstring `ung_vien_done`.
-
-    Trước 01/10/2026 luật MỘT xoá CẢ thư mục gói trong `thu_muc_done` (kèm
-    `.srt`, bìa, `qa`) chỉ 24 giờ sau giờ đăng ghi trong kế hoạch, không hỏi sổ
-    xác nhận lẫn hậu kiểm. Từ nay luật MỘT KHÔNG đụng DONE nữa; DONE chỉ mất
-    tệp media NẶNG, qua luật BỐN, giữ lại tệp nhỏ cho khám nghiệm.
-
 Vì sao phải có luật hai: đo thật trên VPS ngày 24/09/2026, `PROJECTS/` đã
 **10,4 GB với 12 lượt** (TL1 5 lượt, TL2 3, TL3 4 — lượt `TL3-T7/0002` một mình
 2,4 GB) trên ổ C chỉ 49,4 GB, vì máy tự chạy hai ngày liền. Mà cửa dọn duy nhất
@@ -88,10 +80,7 @@ __all__ = [
     "LY_DO_QUA_SO_LUOT", "LY_DO_SAO_LUU", "KHOA_CON_TUOI_GIAY",
     "SO_BAN_SAO_LUU_GIU",
     "ung_vien_don", "ung_vien_qua_so_luot", "ung_vien_sao_luu", "don",
-    "don_sao_luu", "don_tat_ca", "don_theo_cai_dat", "don_khan",
-    "LY_DO_DONE_DA_DANG", "LY_DO_DONE_BO", "LY_DO_DA_BAN_GIAO",
-    "GIO_CHO_SAU_CONG_KHAI", "NGAY_CHO_GOI_BO",
-    "ung_vien_done", "don_done", "ung_vien_da_ban_giao", "byte_giai_phong",
+    "don_sao_luu", "don_tat_ca", "don_theo_cai_dat", "don_khan", "ung_vien_done",
 ]
 
 #: Tên tệp đánh dấu "lượt này đã dọn", nằm ngay trong thư mục lượt.
@@ -220,42 +209,19 @@ def _thoi_diem_dang(dong: Dict[str, str]) -> Optional[datetime.datetime]:
 
 
 def _kich_thuoc(duong: str) -> int:
-    """Byte THẬT SỰ được giải phóng nếu xoá `duong` (01/10/2026: không tính tệp
-    còn liên kết cứng ở chỗ khác — `8-video.mp4` của lượt là hardlink với bản
-    trong DONE, xoá một phía không trả lại byte nào). Xem `byte_giai_phong`."""
-    return byte_giai_phong([duong])
-
-
-def _tep_duoi(duong: str) -> List[str]:
-    """Mọi TỆP dưới `duong` (chính nó nếu là tệp). Không đi theo liên kết."""
-    if os.path.isfile(duong):
-        return [duong]
-    ra: List[str] = []
-    if os.path.isdir(duong) and not _la_lien_ket(duong):
+    if os.path.isdir(duong):
+        tong = 0
         for cha, _thu, tep in os.walk(duong):
-            ra.extend(os.path.join(cha, t) for t in tep)
-    return ra
-
-
-def byte_giai_phong(duong: Sequence[str]) -> int:
-    """Số byte ổ đĩa THẬT SỰ lấy lại được khi xoá CẢ danh sách `duong` (tệp hoặc
-    thư mục).
-
-    Gom theo (thiết bị, inode): một tệp có `st_nlink` liên kết chỉ trả lại byte
-    khi MỌI liên kết của nó đều nằm trong danh sách xoá. Còn liên kết ở chỗ
-    khác (ví dụ `8-video.mp4` trong `PROJECTS` và trong `DONE` là một tệp) thì
-    tính 0 — đúng thứ mà `shutil.disk_usage` sẽ thấy sau khi xoá."""
-    nhom: Dict[Any, List[Any]] = {}
-    for goc_duong in duong:
-        for p in _tep_duoi(goc_duong):
-            try:
-                st = os.stat(p)
-            except OSError:
-                continue
-            khoa = (st.st_dev, st.st_ino) if st.st_ino else ("p", _duong_thuc(p))
-            muc = nhom.setdefault(khoa, [st.st_size, max(1, int(st.st_nlink or 1)), set()])
-            muc[2].add(_duong_thuc(p))
-    return sum(kt for kt, nlink, tap in nhom.values() if len(tap) >= nlink)
+            for t in tep:
+                try:
+                    tong += os.path.getsize(os.path.join(cha, t))
+                except OSError:
+                    pass
+        return tong
+    try:
+        return os.path.getsize(duong)
+    except OSError:
+        return 0
 
 
 def _anh_bia_chua_chon(thu_muc_luot: str) -> List[str]:
@@ -380,9 +346,8 @@ def ung_vien_don(goc: str, ma_kenh: str, *,
             continue  # video mới hơn lúc đăng — vừa dựng lại, đừng đụng
 
         duong_xoa = _muc_nang_trong_luot(thu_muc_luot)
-        # 01/10/2026: KHÔNG còn gom cả thư mục gói trong `thu_muc_done` vào đây
-        # (trước đó xoá luôn `.srt`/bìa/`qa` chỉ 24 giờ sau giờ đăng, không hỏi
-        # sổ xác nhận/hậu kiểm). Gói DONE giờ do luật BỐN (`ung_vien_done`) lo.
+        # 01/10/2026: KHÔNG gom cả gói DONE nữa (từng xoá luôn .srt/bìa) — gói DONE
+        # do `ung_vien_done` lo, chỉ xoá tệp nặng.
 
         if not duong_xoa:
             continue  # đã sạch từ trước — không có gì để dọn
@@ -393,7 +358,7 @@ def ung_vien_don(goc: str, ma_kenh: str, *,
             "ma_goi": ma,
             "thu_muc_luot": thu_muc_luot,
             "duong": duong_xoa,
-            "bytes": byte_giai_phong(duong_xoa),
+            "bytes": sum(_kich_thuoc(p) for p in duong_xoa),
             #: Mốc đăng THẬT của lượt này, dạng CHUỖI ISO (không phải `datetime`
             #: sống) — dùng để xếp thứ tự "cũ nhất trước" ở `don_khan` (dọn
             #: khẩn, xem đó). Chuỗi, không phải `datetime`, vì `dict` này có
@@ -535,7 +500,7 @@ def ung_vien_qua_so_luot(goc: str, ma_kenh: str, *,
             "ma_goi": "{0}-{1}".format(ma_kenh, luot),
             "thu_muc_luot": thu_muc_luot,
             "duong": duong_xoa,
-            "bytes": byte_giai_phong(duong_xoa),
+            "bytes": sum(_kich_thuoc(p) for p in duong_xoa),
             #: Lượt này CHƯA đăng nên không có mốc đăng. Dùng lúc sửa thư mục
             #: lượt làm khoá xếp thứ tự cho `don_khan` (cũ nhất xoá trước) —
             #: cùng định dạng chuỗi ISO với `ung_vien_don` để hai nguồn ứng
@@ -647,354 +612,81 @@ def don_sao_luu(goc: str) -> List[str]:
     return da_xoa
 
 
-# ── Ứng viên theo luật BỐN: gói DONE đã đăng + xác nhận + hậu kiểm (01/10/2026) ─
+# ── Gói DONE (01/10/2026) — MỘT luật ─────────────────────────────────────────
 
-#: Phải qua giờ CÔNG KHAI (`lich` trong sổ máy đăng) ngần này giờ mới dọn DONE.
-GIO_CHO_SAU_CONG_KHAI = 48.0
-#: Gói có ghi chú "Bỏ" trong kế hoạch: chỉ dọn khi đã nằm yên ngần này ngày.
-NGAY_CHO_GOI_BO = 7.0
-LY_DO_DONE_DA_DANG = "DONE: đã đăng + xác nhận + hậu kiểm OK, quá {0:g} giờ công khai"
-LY_DO_DONE_BO = "DONE: gói ghi chú Bỏ, nằm yên quá {0:g} ngày"
-LY_DO_DA_BAN_GIAO = "dọn mạnh (ổ dưới {0:g} GB): lượt đã bàn giao"
-
-#: Tệp media NẶNG trong một gói DONE — CHỈ những đuôi này bị xoá. Còn lại
-#: (`.srt`, ảnh bìa, `1-*.txt`, `qa-*`, `.json`) được GIỮ cho khám nghiệm.
-_DUOI_MEDIA_NANG = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v",
-                    ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".tam")
-_TEN_SO_VIDEO = os.path.join("vm", "logs", "so-video-id.json")
-_TEN_DANG_DO = os.path.join("vm", "logs", "dang-dodang.json")
-
-
-def _doc_json_an_toan(duong: str) -> Any:
-    try:
-        with open(duong, "r", encoding="utf-8") as tep:
-            return json.load(tep)
-    except (OSError, ValueError):
-        return None
-
-
-def _gio_so(chu: Any, mau: Sequence[str]) -> Optional[datetime.datetime]:
-    chu = str(chu or "").strip()
-    for m in mau:
-        try:
-            return datetime.datetime.strptime(chu, m)
-        except ValueError:
-            continue
-    return None
-
-
-def _dang_tai_cua_kenh(goc: str, ma_kenh: str) -> Optional[set]:
-    """Mã gói ĐANG tải lên của kênh này, hoặc `None` = không biết chắc → bỏ qua
-    CẢ kênh. Hai nguồn: `vm/logs/dang-dodang.json` (máy đăng ghi khi bắt đầu
-    một mã, xoá khi xong) và khe "nang" đang giữ việc `tai_len`."""
-    ra: set = set()
-    duong = os.path.join(goc, _TEN_DANG_DO)
-    if os.path.exists(duong):
-        du = _doc_json_an_toan(duong)
-        kenh = str(du.get("kenh") or "").strip() if isinstance(du, dict) else ""
-        ma = str(du.get("ma") or "").strip() if isinstance(du, dict) else ""
-        if not kenh or not ma:
-            return None  # có tệp mà không đọc được ai đang tải → không đoán
-        if kenh == ma_kenh:
-            ra.add(ma)
-    try:
-        from . import khe  # noqa: PLC0415 — chỉ đọc trạng thái khe
-
-        giu = khe.trang_thai(goc).get("nang")
-    except Exception:  # noqa: BLE001
-        giu = None
-    if isinstance(giu, dict) and str(giu.get("viec") or "") == "tai_len":
-        kenh = str(giu.get("kenh") or "")
-        if not kenh or kenh == ma_kenh:
-            return None  # đang tải một gói của kênh này (không ghi mã) → chờ
-    return ra
-
-
-def _ghi_chu_theo_ma(goc: str, ma_kenh: str) -> Dict[str, str]:
-    try:
-        cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
-    except Exception:  # noqa: BLE001
-        return {}
-    if "Mã gói" not in cot or "Ghi chú" not in cot:
-        return {}
-    o_ma, o_gc = cot.index("Mã gói"), cot.index("Ghi chú")
-    ra: Dict[str, str] = {}
-    for h in hang:
-        ma = (h[o_ma] if o_ma < len(h) else "").strip()
-        if ma:
-            ra[ma] = (h[o_gc] if o_gc < len(h) else "").strip()
-    return ra
-
-
-def _la_ghi_chu_bo(chu: str) -> bool:
-    return str(chu or "").strip().lower().startswith("bỏ")
-
-
-def _media_nang_trong_goi(thu_muc_goi: str) -> List[str]:
-    ra: List[str] = []
-    for cha, _thu, tep in os.walk(thu_muc_goi):
-        if _la_lien_ket(cha):
-            continue
-        for t in tep:
-            p = os.path.join(cha, t)
-            if os.path.splitext(t)[1].lower() in _DUOI_MEDIA_NANG \
-                    and os.path.isfile(p) and not _la_lien_ket(p):
-                ra.append(p)
-    return sorted(ra)
-
-
-def _moc_moi_nhat(thu_muc: str) -> float:
-    moc = 0.0
-    for cha, _thu, tep in os.walk(thu_muc):
-        for t in [cha] + [os.path.join(cha, x) for x in tep]:
-            try:
-                moc = max(moc, os.path.getmtime(t))
-            except OSError:
-                pass
-    return moc
-
-
-def _ban_sinh_doi_trong_luot(goc: str, ma_kenh: str, ma_goi: str,
-                             teps: Sequence[str]) -> List[str]:
-    """Liên kết CỨNG còn lại của các tệp gói nằm trong thư mục lượt (cùng tên,
-    `os.path.samefile`) — chỉ khi lượt đã XONG hết (không phải lượt đang dựng)."""
-    tien_to = ma_kenh + "-"
-    if not ma_goi.startswith(tien_to):
-        return []
-    luot = ma_goi[len(tien_to):]
-    auto_goc = os.path.join(goc, "PROJECTS", "AUTO", ma_kenh)
-    thu_muc_luot = duong_luot(goc, ma_kenh, luot)
-    if not luot or not os.path.isdir(thu_muc_luot) or _la_lien_ket(thu_muc_luot) \
-            or not _trong_thu_muc(thu_muc_luot, auto_goc):
-        return []
-    try:
-        tt = doc_luot(thu_muc_luot)
-    except Exception:  # noqa: BLE001
-        return []
-    if tt is None or not tt.xong_het:
-        return []
-    ra: List[str] = []
-    for p in teps:
-        try:
-            if os.stat(p).st_nlink <= 1:
-                continue
-        except OSError:
-            continue
-        ung = os.path.join(thu_muc_luot, os.path.basename(p))
-        try:
-            if os.path.isfile(ung) and not _la_lien_ket(ung) and os.path.samefile(ung, p):
-                ra.append(ung)
-        except OSError:
-            continue
-    return ra
+NGAY_SAU_CONG_KHAI = 3
+NGAY_GOI_BO = 7
+TRANG_THAI_SO_DA_LEN = ("xac-nhan", "da-len-lich")
+LY_DO_DONE = "DONE: đã lên YouTube, quá {0} ngày công khai".format(NGAY_SAU_CONG_KHAI)
+LY_DO_DONE_BO = "DONE: gói Bỏ quá {0} ngày".format(NGAY_GOI_BO)
+#: Chỉ những đuôi này bị xoá; .srt, ảnh, .txt, .json ở lại.
+_DUOI_NANG = (".mp4", ".mov", ".mkv", ".webm", ".mp3", ".wav", ".m4a")
 
 
 def ung_vien_done(goc: str, ma_kenh: str, *,
-                  bay_gio: Optional[datetime.datetime] = None,
-                  so_video: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """Gói trong `thu_muc_done` của kênh được bỏ media NẶNG ngay bây giờ. CHỈ ĐỌC.
+                  bay_gio: Optional[datetime.datetime] = None) -> List[Dict[str, Any]]:
+    """Gói DONE được xoá tệp NẶNG (chỉ đọc). Một luật:
 
-    Một gói đủ điều kiện khi (a) HOẶC (b):
+    * sổ `vm/logs/so-video-id.json` có `video_id`, `trang_thai` ∈ xac-nhan/da-len-lich,
+      giờ công khai `lich` đã qua ≥ `NGAY_SAU_CONG_KHAI` ngày; hoặc
+    * ghi chú kế hoạch bắt đầu "Bỏ" và gói nằm yên ≥ `NGAY_GOI_BO` ngày.
 
-    (a) ĐÃ ĐĂNG THẬT — sổ máy đăng `vm/logs/so-video-id.json` khoá
-        `"<kênh>/<mã gói>"` có `trang_thai == "xac-nhan"`, `hau_kiem` bắt đầu
-        bằng `"ok"` (thời lượng trên YouTube khớp tệp), và giờ công khai
-        `lich` đã qua ≥ `GIO_CHO_SAU_CONG_KHAI`. Thiếu một trong ba (sổ cũ
-        trước 30/09 chưa có `hau_kiem`) → KHÔNG đụng. Video bị dựng lại SAU
-        lúc tải xong (`mtime > tai_xong_luc`) → không đụng.
-    (b) Ghi chú kế hoạch bắt đầu bằng "Bỏ" và gói nằm yên ≥ `NGAY_CHO_GOI_BO`
-        ngày (mtime mới nhất trong gói), sổ không ghi đang tải.
-
-    Không bao giờ đụng: gói đang tải lên (`dang-dodang.json`, khe nặng
-    `tai_len` — không rõ mã thì bỏ cả kênh), gói chưa đăng / đang chờ / lỗi.
-    Chỉ xoá đuôi trong `_DUOI_MEDIA_NANG`; `.srt`, bìa, mô tả, `qa` ở lại.
-    Tệp còn liên kết cứng trong thư mục lượt đã XONG (`8-video.mp4`) thì xoá
-    luôn bản ấy — không thì không lấy lại được byte nào. `bytes` = byte THẬT
-    giải phóng (`byte_giai_phong`), `bytes_tep` = tổng cỡ tệp bị xoá.
-    """
+    Xoá cả tệp nặng của lượt PROJECTS tương ứng (nếu lượt đã xong). Bỏ qua gói
+    đang tải lên (`vm/logs/dang-dodang.json`)."""
     bay_gio = bay_gio or datetime.datetime.now()
-    kenh = doc_kenh(goc, ma_kenh)
-    thu_muc_done = (kenh.thu_muc_done or "").strip()
-    if not thu_muc_done or not os.path.isdir(thu_muc_done) or _la_lien_ket(thu_muc_done):
+    done = (doc_kenh(goc, ma_kenh).thu_muc_done or "").strip()
+    if not done or not os.path.isdir(done):
         return []
-    dang_tai = _dang_tai_cua_kenh(goc, ma_kenh)
-    if dang_tai is None:
-        return []
-    if so_video is None:
-        so_video = _doc_json_an_toan(os.path.join(goc, _TEN_SO_VIDEO))
-    so_video = so_video if isinstance(so_video, dict) else {}
-    ghi_chu = _ghi_chu_theo_ma(goc, ma_kenh)
-    han_dang = datetime.timedelta(hours=GIO_CHO_SAU_CONG_KHAI)
-    han_bo = NGAY_CHO_GOI_BO * 86400.0
-
-    ra: List[Dict[str, Any]] = []
     try:
-        ten_goi = sorted(os.listdir(thu_muc_done))
-    except OSError:
-        return []
-    for ma in ten_goi:
-        goi = os.path.join(thu_muc_done, ma)
-        if not ma.startswith(ma_kenh + "-") or ma in dang_tai:
+        with open(os.path.join(goc, "vm", "logs", "so-video-id.json"), encoding="utf-8") as tep:
+            so = json.load(tep)
+    except (OSError, ValueError):
+        so = {}
+    dang_tai = ""
+    try:
+        with open(os.path.join(goc, "vm", "logs", "dang-dodang.json"), encoding="utf-8") as tep:
+            dang_tai = str(json.load(tep).get("ma") or "?")
+    except (OSError, ValueError, AttributeError):
+        dang_tai = "?" if os.path.exists(os.path.join(goc, "vm", "logs", "dang-dodang.json")) else ""
+    if dang_tai == "?":
+        return []  # có người đang tải mà không rõ gói nào — chờ
+    cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
+    ghi_chu = {}
+    if "Mã gói" in cot and "Ghi chú" in cot:
+        ghi_chu = {h[cot.index("Mã gói")]: h[cot.index("Ghi chú")] for h in hang
+                   if len(h) > max(cot.index("Mã gói"), cot.index("Ghi chú"))}
+    ra: List[Dict[str, Any]] = []
+    for ma in sorted(os.listdir(done)):
+        goi = os.path.join(done, ma)
+        if not ma.startswith(ma_kenh + "-") or ma == dang_tai or not os.path.isdir(goi) \
+                or _la_lien_ket(goi):
             continue
-        if not os.path.isdir(goi) or _la_lien_ket(goi) or not _trong_thu_muc(goi, thu_muc_done):
-            continue
-        muc = so_video.get("{0}/{1}".format(ma_kenh, ma))
-        muc = muc if isinstance(muc, dict) else {}
-        trang = str(muc.get("trang_thai") or "")
-        moc_cong_khai: Optional[datetime.datetime] = None
-        if trang == "xac-nhan":
-            if not str(muc.get("hau_kiem") or "").lower().startswith("ok"):
-                continue  # chưa hậu kiểm (hay hậu kiểm lệch) — không đụng
-            moc_cong_khai = _gio_so(muc.get("lich"), ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"))
-            if moc_cong_khai is None or bay_gio - moc_cong_khai < han_dang:
-                continue
-            ly_do = LY_DO_DONE_DA_DANG.format(GIO_CHO_SAU_CONG_KHAI)
-        elif _la_ghi_chu_bo(ghi_chu.get(ma, "")) and not trang:
-            if bay_gio.timestamp() - _moc_moi_nhat(goi) < han_bo:
-                continue
-            ly_do = LY_DO_DONE_BO.format(NGAY_CHO_GOI_BO)
+        muc = so.get("{0}/{1}".format(ma_kenh, ma)) or {}
+        lich = None
+        try:
+            lich = datetime.datetime.strptime(str(muc.get("lich") or ""), "%d/%m/%Y %H:%M")
+        except ValueError:
+            pass
+        if muc.get("video_id") and muc.get("trang_thai") in TRANG_THAI_SO_DA_LEN and lich \
+                and bay_gio - lich >= datetime.timedelta(days=NGAY_SAU_CONG_KHAI):
+            ly_do, moc = LY_DO_DONE, lich
+        elif str(ghi_chu.get(ma) or "").strip().lower().startswith("bỏ") and not muc \
+                and bay_gio.timestamp() - os.path.getmtime(goi) >= NGAY_GOI_BO * 86400:
+            ly_do, moc = LY_DO_DONE_BO, datetime.datetime.fromtimestamp(os.path.getmtime(goi))
         else:
-            continue  # chưa đăng / đang chờ / đang tải / lỗi — không đụng
-        teps = _media_nang_trong_goi(goi)
-        if not teps:
             continue
-        if moc_cong_khai is not None:
-            tai_xong = _gio_so(muc.get("tai_xong_luc") or muc.get("cap_nhat"),
-                               ("%Y-%m-%d %H:%M:%S",))
-            if tai_xong is not None and any(
-                    os.path.getmtime(p) > tai_xong.timestamp() for p in teps
-                    if p.lower().endswith(".mp4")):
-                continue  # video mới hơn lúc tải xong — có ai vừa dựng lại
-        duong_xoa = teps + _ban_sinh_doi_trong_luot(goc, ma_kenh, ma, teps)
-        ra.append({
-            "kenh": ma_kenh, "luot": "done:" + ma, "ma_goi": ma, "loai": "done",
-            "thu_muc_luot": goi, "duong": duong_xoa,
-            "bytes": byte_giai_phong(duong_xoa),
-            "bytes_tep": sum(os.path.getsize(p) for p in duong_xoa if os.path.isfile(p)),
-            "moc_dang": (moc_cong_khai or datetime.datetime.fromtimestamp(
-                _moc_moi_nhat(goi))).isoformat(),
-            "ly_do": ly_do,
-        })
-    return ra
-
-
-def _xoa_tep_giai_phong(u: Dict[str, Any], goc: str, ma_kenh: str,
-                        bay_gio: datetime.datetime) -> Optional[Dict[str, Any]]:
-    """Xoá TỆP trong `u["duong"]` (luật BỐN / dọn mạnh), đo byte THẬT giải
-    phóng: đo nhóm inode TRƯỚC khi xoá, chỉ cộng nhóm mà mọi liên kết đều đã
-    xoá được. Ghi `da-don.json` + `don-dep.log` như các luật khác."""
-    nhom: Dict[Any, List[Any]] = {}
-    for p in u["duong"]:
-        for t in _tep_duoi(p):
-            try:
-                st = os.stat(t)
-            except OSError:
-                continue
-            khoa = (st.st_dev, st.st_ino) if st.st_ino else ("p", _duong_thuc(t))
-            nhom.setdefault(khoa, [st.st_size, max(1, int(st.st_nlink or 1)), set()])
-    da_xoa: List[str] = []
-    da_xoa_thuc: Dict[Any, int] = {}
-    for p in u["duong"]:
-        if _la_lien_ket(p):
-            continue
-        cac_tep = _tep_duoi(p)
-        khoa_tep = []
-        for t in cac_tep:
-            try:
-                st = os.stat(t)
-                khoa_tep.append((st.st_dev, st.st_ino) if st.st_ino else ("p", _duong_thuc(t)))
-            except OSError:
-                pass
+        duong = [os.path.join(goi, t) for t in os.listdir(goi)
+                 if os.path.splitext(t)[1].lower() in _DUOI_NANG]
+        luot = duong_luot(goc, ma_kenh, ma[len(ma_kenh) + 1:])
         try:
-            if os.path.isdir(p):
-                shutil.rmtree(p)
-            elif os.path.isfile(p):
-                os.remove(p)
-            else:
-                continue
-        except OSError:
-            continue
-        da_xoa.append(p)
-        for k in khoa_tep:
-            da_xoa_thuc[k] = da_xoa_thuc.get(k, 0) + 1
-    if not da_xoa:
-        return None
-    giai_phong = sum(nhom[k][0] for k, n in da_xoa_thuc.items()
-                     if k in nhom and n >= nhom[k][1])
-    ly_do = str(u.get("ly_do") or "")
-    _ghi_marker(u["thu_muc_luot"], u["ma_goi"], da_xoa, giai_phong, bay_gio, ly_do)
-    _ghi_log(goc, ma_kenh, u["ma_goi"], giai_phong, len(da_xoa), bay_gio, ly_do)
-    return {**u, "da_xoa": da_xoa, "bytes": giai_phong}
-
-
-def don_done(goc: str, ma_kenh: str, *, thuc_hien: bool = False,
-             bay_gio: Optional[datetime.datetime] = None) -> Dict[str, Any]:
-    """Luật BỐN cho một kênh. `thuc_hien=False`: chỉ tính. Trả `{"ung_vien",
-    "tong_bytes" (byte THẬT, đã/ sẽ giải phóng), "da_don"}`."""
-    bay_gio = bay_gio or datetime.datetime.now()
-    ke = ung_vien_done(goc, ma_kenh, bay_gio=bay_gio)
-    ra: Dict[str, Any] = {"kenh": ma_kenh, "thuc_hien": bool(thuc_hien), "ung_vien": ke,
-                          "tong_bytes": sum(int(u["bytes"]) for u in ke), "da_don": []}
-    if not thuc_hien:
-        return ra
-    for u in ke:
-        ket = _xoa_tep_giai_phong(u, goc, ma_kenh, bay_gio)
-        if ket is not None:
-            ra["da_don"].append(ket)
-    ra["tong_bytes"] = sum(int(d["bytes"]) for d in ra["da_don"])
-    return ra
-
-
-def ung_vien_da_ban_giao(goc: str, ma_kenh: str, *, nguong_gb: float,
-                         bay_gio: Optional[datetime.datetime] = None,
-                         yen_giay: float = 3600.0) -> List[Dict[str, Any]]:
-    """DỌN MẠNH (ổ dưới ngưỡng khẩn): phần nặng của lượt ĐÃ BÀN GIAO, kể cả
-    trong `giu_toi_da_luot` lượt mới nhất. Lượt phải XONG hết, `trang-thai.json`
-    yên ≥ `yen_giay`, và gói của nó đã nằm trong DONE (có .mp4) hoặc kế hoạch ghi
-    đã đăng. Lượt đang dựng (chưa xong) không bao giờ vào đây. Giữ đúng các tệp
-    nhỏ như luật HAI (`_muc_nang_trong_luot`)."""
-    bay_gio = bay_gio or datetime.datetime.now()
-    kenh = doc_kenh(goc, ma_kenh)
-    auto_goc = os.path.join(goc, "PROJECTS", "AUTO", ma_kenh)
-    if not os.path.isdir(auto_goc) or _la_lien_ket(auto_goc):
-        return []
-    thu_muc_done = (kenh.thu_muc_done or "").strip()
-    da_dang: set = set()
-    try:
-        cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
-        if "Mã gói" in cot and "Trạng thái đăng" in cot:
-            o_ma, o_tt = cot.index("Mã gói"), cot.index("Trạng thái đăng")
-            for h in hang:
-                if o_tt < len(h) and h[o_tt].strip() in TRANG_THAI_DA_DANG:
-                    da_dang.add(h[o_ma].strip())
-    except Exception:  # noqa: BLE001
-        pass
-    ly_do = LY_DO_DA_BAN_GIAO.format(nguong_gb)
-    ra: List[Dict[str, Any]] = []
-    for luot in _ma_luot_tren_dia(auto_goc):
-        thu_muc_luot = duong_luot(goc, ma_kenh, luot)
-        if _la_lien_ket(thu_muc_luot) or not _trong_thu_muc(thu_muc_luot, auto_goc):
-            continue
-        try:
-            tt = doc_luot(thu_muc_luot)
-            yen = bay_gio.timestamp() - os.path.getmtime(os.path.join(thu_muc_luot, "trang-thai.json"))
-        except Exception:  # noqa: BLE001
-            continue
-        if tt is None or not tt.xong_het or yen < yen_giay:
-            continue
-        ma = "{0}-{1}".format(ma_kenh, luot)
-        goi = os.path.join(thu_muc_done, ma) if thu_muc_done else ""
-        co_goi = bool(goi) and os.path.isdir(goi) and any(
-            t.lower().endswith(".mp4") for t in os.listdir(goi))
-        if not co_goi and ma not in da_dang:
-            continue
-        duong_xoa = _muc_nang_trong_luot(thu_muc_luot, _MUC_NANG_QUA_SO_LUOT)
-        if not duong_xoa:
-            continue
-        ra.append({"kenh": ma_kenh, "luot": luot, "ma_goi": ma, "loai": "ban_giao",
-                   "thu_muc_luot": thu_muc_luot, "duong": duong_xoa,
-                   "bytes": byte_giai_phong(duong_xoa),
-                   "moc_dang": _moc_thu_muc_iso(thu_muc_luot), "ly_do": ly_do})
+            if os.path.isdir(luot) and doc_luot(luot).xong_het:
+                duong += _muc_nang_trong_luot(luot, _MUC_NANG_QUA_SO_LUOT)
+        except Exception:  # noqa: BLE001 — lượt đọc hỏng: chỉ dọn phía DONE
+            pass
+        if duong:
+            ra.append({"kenh": ma_kenh, "luot": "done:" + ma, "ma_goi": ma, "thu_muc_luot": goi,
+                       "duong": duong, "bytes": sum(_kich_thuoc(p) for p in duong),
+                       "moc_dang": moc.isoformat(), "ly_do": ly_do})
     return ra
 
 
@@ -1110,19 +802,13 @@ def don(goc: str, ma_kenh: str, *, thuc_hien: bool = False,
     ke_hoach = _gop_ung_vien(
         ung_vien_don(goc, ma_kenh, bay_gio=bay_gio, cho_gio=cho_gio),
         ung_vien_qua_so_luot(goc, ma_kenh, giu=giu_toi_da_luot, bay_gio=bay_gio),
+        ung_vien_done(goc, ma_kenh, bay_gio=bay_gio),
     )
-    # Luật BỐN (01/10/2026): gói DONE đã đăng + xác nhận + hậu kiểm. Chạy SAU
-    # luật MỘT/HAI để bản sinh đôi trong lượt (nếu còn) đã được xoá trước.
-    try:
-        ke_done = ung_vien_done(goc, ma_kenh, bay_gio=bay_gio)
-    except Exception:  # noqa: BLE001 — sổ máy đăng hỏng không chặn dọn PROJECTS
-        ke_done = []
     ket_qua: Dict[str, Any] = {
         "kenh": ma_kenh,
         "thuc_hien": bool(thuc_hien),
         "ung_vien": ke_hoach,
-        "ung_vien_done": ke_done,
-        "tong_bytes": sum(u["bytes"] for u in ke_hoach) + sum(u["bytes"] for u in ke_done),
+        "tong_bytes": sum(u["bytes"] for u in ke_hoach),
     }
     if not thuc_hien:
         return ket_qua
@@ -1132,18 +818,7 @@ def don(goc: str, ma_kenh: str, *, thuc_hien: bool = False,
         ket = _xoa_mot_ung_vien(goc, ma_kenh, u, bay_gio)
         if ket is not None:
             da_don.append(ket)
-    # Đo lại ứng viên DONE sau khi PROJECTS đã xoá: liên kết cứng vừa mất một
-    # phía thì byte giải phóng của gói DONE đổi (0 → cỡ thật).
-    try:
-        ke_done = ung_vien_done(goc, ma_kenh, bay_gio=bay_gio)
-    except Exception:  # noqa: BLE001
-        ke_done = []
-    for u in ke_done:
-        ket = _xoa_tep_giai_phong(u, goc, ma_kenh, bay_gio)
-        if ket is not None:
-            da_don.append(ket)
     ket_qua["da_don"] = da_don
-    ket_qua["tong_bytes"] = sum(int(d.get("bytes") or 0) for d in da_don)
     return ket_qua
 
 
@@ -1258,7 +933,6 @@ def don_khan(goc: str, danh_sach_kenh: Sequence[str], *, nguong_gb: float,
                 # của chính kênh ấy. Kênh để `0` thì cửa này vẫn chỉ thấy lượt
                 # ĐÃ ĐĂNG, dù đĩa sắp đầy tới đâu.
                 ung_vien_qua_so_luot(goc, ma, giu=kenh.giu_toi_da_luot, bay_gio=bay_gio),
-                # Luật BỐN — cùng điều kiện như dọn thường, không nới lỏng.
                 ung_vien_done(goc, ma, bay_gio=bay_gio),
             ))
         except Exception:  # noqa: BLE001 — kế hoạch đăng của MỘT kênh hỏng không chặn kênh khác
@@ -1277,15 +951,12 @@ def don_khan(goc: str, danh_sach_kenh: Sequence[str], *, nguong_gb: float,
     for u in ung_vien_tat_ca:
         if con_hien_tai is not None and con_hien_tai >= nguong_gb:
             break
-        if u.get("loai") == "done":
-            ket = _xoa_tep_giai_phong(u, goc, u["kenh"], bay_gio)
-        else:
-            ket = _xoa_mot_ung_vien(goc, u["kenh"], u, bay_gio)
+        ket = _xoa_mot_ung_vien(goc, u["kenh"], u, bay_gio)
         if ket is None:
             continue
         da_don.append(ket)
-        theo_kenh[u["kenh"]] = theo_kenh.get(u["kenh"], 0) + int(ket["bytes"])
-        tong_bytes += int(ket["bytes"])
+        theo_kenh[u["kenh"]] = theo_kenh.get(u["kenh"], 0) + int(u["bytes"])
+        tong_bytes += int(u["bytes"])
         con_hien_tai = do_dia(goc)
 
     return {"da_chay": True, "con_truoc_gb": con_luc_dau, "con_sau_gb": con_hien_tai,
