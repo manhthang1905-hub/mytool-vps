@@ -44,6 +44,8 @@ GIAY_DEM_KHOI_DONG_LAI = 120
 
 #: Câu lặp báo (giờ) cho từng loại — ví lặp 4 giờ; hạn ngày (license/VPS/giọng) 24 giờ.
 LAP_VI_GIO = 4.0
+#: Ví còn 1–3 ngày: nhắc 1 lần/ngày (dưới 1 ngày thì lặp 4 giờ).
+LAP_VI_SOM_GIO = 24.0
 LAP_NGAY_GIO = 24.0
 
 
@@ -109,7 +111,9 @@ def kiem_vi(goc: str, *, client: Any = None, bay_gio: Optional[float] = None,
         ra.append(_su_co(
             "vi_sap_can", _muc("khan"), dg["cau"], dg["viec_can_lam"],
             "Hết tiền giữa lượt sản xuất, kênh dừng ra video mới.",
-            khoa="vi:" + dg["muc"], lap_gio=LAP_VI_GIO))
+            khoa="vi:" + dg["muc"],
+            lap_gio=LAP_VI_GIO if (dg["muc"] == "het" or (dg.get("ngay_con") or 0) < van_vi.NGUONG_KHAN_NGAY)
+            else LAP_VI_SOM_GIO))
     return ra, dg.get("so_du_vnd")
 
 

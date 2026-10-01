@@ -18,8 +18,10 @@ rõ bằng câu người thường, rồi TỰ CHẠY LẠI khi thấy ví đã 
   KHÔNG chặn (đừng dừng cả máy vì một lỗi đọc) — chỉ ghi lại là "không rõ".
 * Hết tiền giữa chừng (402 / thiếu tiền): :func:`ghi_het_tien` nhớ số dư lúc
   đó; van CHẶN cho tới khi số dư thấy tăng lên (đã nạp) — rồi tự mở lại.
-* Cảnh báo sớm: còn đủ dưới `NGUONG_SOM_NGAY` (2) ngày sản xuất theo nhịp chi
-  tiêu 7 ngày gần nhất (`workspace/chi-phi/<ngày>.json`).
+* Cảnh báo sớm: còn đủ dưới `NGUONG_SOM_NGAY` (3) ngày. Chi/ngày = SỐ LỚN NHẤT của
+  (a) độ tụt ví 72 giờ (`workspace/vi/lich-su-so-du.jsonl`, 1 dòng/30 phút), (b) chi các
+  lượt 24 giờ (sổ lượt `CHANNEL/*/tu-chay`), (c) nhịp đăng x ước 1 video, (d) nhịp cũ
+  `workspace/chi-phi/` (usage ShopAPI ghi thiếu: 01/10/2026 chỉ ~65k/ngày khi thật ~1,5 triệu).
 
 Trạng thái ghi ra `workspace/vi/trang-thai.json` (giao diện + gác tổng đọc).
 Module KHÔNG gửi tin nào — việc báo (giao diện / loi-chay-max.md / bản tin gác
@@ -38,10 +40,18 @@ __all__ = [
     "HE_SO_AN_TOAN", "NGUONG_SOM_NGAY", "TTL_SO_DU_GIAY",
     "doc_so_du", "uoc_mot_video_vnd", "nhip_chi_vnd_ngay", "danh_gia",
     "cho_phep_mo_luot", "ghi_het_tien", "doc_trang_thai", "duong_trang_thai",
+    "ghi_lich_su_so_du", "chi_theo_tut_vi", "chi_theo_luot_24h", "chi_du_phong",
+    "chi_ngay_that", "chi_that_moi_video_vnd",
 ]
 
 HE_SO_AN_TOAN = 1.5
-NGUONG_SOM_NGAY = 2.0
+NGUONG_SOM_NGAY = 3.0
+#: Còn dưới ngần này ngày thì báo lặp 4 giờ/lần (chốt an toàn); 1–3 ngày: báo 1 lần/ngày.
+NGUONG_KHAN_NGAY = 1.0
+#: Lịch sử số dư: tối đa 1 dòng/30 phút; chi theo độ tụt ví cần ít nhất ngần này giờ dữ liệu.
+CACH_LICH_SU_GIAY = 1800.0
+CUA_SO_TUT_GIO = 72.0
+TOI_THIEU_TUT_GIO = 6.0
 #: Số dư nhớ đệm bao lâu thì hỏi lại (giây). Khi đang bị chặn hỏi thường hơn để
 #: TỰ CHẠY LẠI nhanh sau khi nạp tiền.
 TTL_SO_DU_GIAY = 600.0
@@ -145,7 +155,55 @@ def doc_so_du(goc: str, client: Any = None, *, ttl: float = TTL_SO_DU_GIAY,
         return None
     vnd = micro / 1_000_000.0
     _ghi_json(_duong_so_du(goc), {"luc": bay_gio, "vnd": vnd})
+    ghi_lich_su_so_du(goc, vnd, bay_gio)
     return vnd
+
+
+def _duong_lich_su(goc: str) -> str:
+    return os.path.join(_thu_muc(goc), "lich-su-so-du.jsonl")
+
+
+def _doc_lich_su(goc: str) -> List[Tuple[float, float]]:
+    ra: List[Tuple[float, float]] = []
+    try:
+        with open(_duong_lich_su(goc), "r", encoding="utf-8") as tep:
+            for dong in tep:
+                try:
+                    d = json.loads(dong)
+                    ra.append((float(d["luc"]), float(d["vnd"])))
+                except (ValueError, KeyError, TypeError):
+                    continue
+    except OSError:
+        pass
+    ra.sort()
+    return ra
+
+
+def ghi_lich_su_so_du(goc: str, vnd: float, bay_gio: Optional[float] = None) -> bool:
+    """Thêm `{"luc","vnd"}` vào `workspace/vi/lich-su-so-du.jsonl` (tối đa 1 dòng/30 phút).
+    Lỗi ghi thì nuốt (không được làm hỏng việc đọc số dư). True nếu đã ghi."""
+    bay_gio = bay_gio if bay_gio is not None else time.time()
+    try:
+        cu = _doc_lich_su(goc)
+        if cu and 0 <= bay_gio - cu[-1][0] < CACH_LICH_SU_GIAY:
+            return False
+        os.makedirs(_thu_muc(goc), exist_ok=True)
+        if len(cu) > 1500:  # gọn: giữ ~ 10 ngày cuối
+            cu = cu[-500:]
+            _ghi_text(_duong_lich_su(goc), "".join(
+                json.dumps({"luc": a, "vnd": b}) + "\n" for a, b in cu))
+        with open(_duong_lich_su(goc), "a", encoding="utf-8") as tep:
+            tep.write(json.dumps({"luc": bay_gio, "vnd": vnd}) + "\n")
+        return True
+    except OSError:
+        return False
+
+
+def _ghi_text(duong: str, noi_dung: str) -> None:
+    tam = duong + ".tmp"
+    with open(tam, "w", encoding="utf-8") as tep:
+        tep.write(noi_dung)
+    os.replace(tam, duong)
 
 
 # ── ước tính ────────────────────────────────────────────────────────────────
@@ -189,8 +247,122 @@ def nhip_chi_vnd_ngay(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Optio
     return (tong / so) if so else None
 
 
+def chi_theo_tut_vi(goc: str, bay_gio: Optional[float] = None) -> Optional[float]:
+    """(a) VND/ngày theo độ TỤT ví trong 72 giờ qua (tổng các lần số dư giảm, bỏ qua
+    lúc nạp tức là số dư tăng). None nếu lịch sử chưa đủ ~6 giờ."""
+    bay_gio = bay_gio if bay_gio is not None else time.time()
+    diem = [(t, v) for t, v in _doc_lich_su(goc)
+            if 0 <= bay_gio - t <= CUA_SO_TUT_GIO * 3600.0]
+    if len(diem) < 2:
+        return None
+    gio = (diem[-1][0] - diem[0][0]) / 3600.0
+    if gio < TOI_THIEU_TUT_GIO:
+        return None
+    tut = sum(max(0.0, a[1] - b[1]) for a, b in zip(diem, diem[1:]))
+    return tut / gio * 24.0
+
+
+def _chi_mot_luot_vnd(run: Mapping[str, Any]) -> float:
+    """Chi phí 1 lượt: số thật nếu sổ có (`chi_that_vnd`/`chi_phi_vnd`), không thì số ước đã giữ."""
+    for k in ("chi_that_vnd", "chi_phi_vnd"):
+        try:
+            if run.get(k) is not None:
+                return float(run[k])
+        except (TypeError, ValueError):
+            pass
+    ns = run.get("ngan_sach")
+    try:
+        return float((ns or {}).get("uoc_tinh_vnd") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+
+
+def _tong_luot_ngay(goc: str, ngay: str) -> Tuple[float, int]:
+    """(tổng VND, số lượt đã chạy sản xuất) của mọi kênh tự chạy trong sổ ngày `ngay`."""
+    from . import tu_chay  # noqa: PLC0415
+
+    tong, so = 0.0, 0
+    for ma in tu_chay.kenh_tu_chay(goc):
+        bc = _doc_json(tu_chay.duong_bao_cao_ngay(goc, ma, ngay))
+        for run in (bc.get("runs") if isinstance(bc, dict) else None) or []:
+            if isinstance(run, dict) and (run.get("san_xuat") or {}).get("da_chay"):
+                tong += _chi_mot_luot_vnd(run)
+                so += 1
+    return tong, so
+
+
+def chi_theo_luot_24h(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Optional[float]:
+    """(b) VND chi cho các lượt trong 24 giờ qua, từ sổ lượt `CHANNEL/*/tu-chay/<ngày>.json`:
+    hôm nay + phần hôm qua còn nằm trong 24 giờ (sổ lượt chỉ có ngày, không có giờ)."""
+    try:
+        bay_gio = bay_gio or _dt.datetime.now()
+        hn = bay_gio.strftime("%Y-%m-%d")
+        hq = (bay_gio - _dt.timedelta(days=1)).strftime("%Y-%m-%d")
+        t_nay, _ = _tong_luot_ngay(goc, hn)
+        t_qua, _ = _tong_luot_ngay(goc, hq)
+        da_qua = (bay_gio - bay_gio.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+        tong = t_nay + t_qua * max(0.0, 1.0 - da_qua / 86400.0)
+        return tong if tong > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def chi_du_phong(goc: str, uoc_video_vnd: Optional[float]) -> Optional[float]:
+    """(c) số video/ngày theo NHỊP ĐĂNG thật (số giờ đăng `nhip_dang` mỗi kênh tự chạy,
+    chia chu kỳ đăng) x ước 1 video."""
+    if not uoc_video_vnd:
+        return None
+    try:
+        from . import tu_chay  # noqa: PLC0415
+        from .kenh import doc_kenh  # noqa: PLC0415
+
+        so = 0.0
+        for ma in tu_chay.kenh_tu_chay(goc):
+            k = doc_kenh(goc, ma)
+            khe = len(getattr(k, "nhip_dang", None) or []) or 1
+            so += khe / max(1, int(getattr(k, "chu_ky_dang_ngay", 1) or 1))
+        return so * uoc_video_vnd if so else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def chi_that_moi_video_vnd(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Optional[float]:
+    """Chi thật mỗi video (VND) từ `chi-phi/<ngày>.json` ĐÃ CHỐT (gọi sau nửa đêm) chia số lượt
+    sản xuất cùng ngày, gộp các ngày có đủ hai số. Để so với `uoc_mot_video_vnd`."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    tong, so = 0.0, 0
+    for i in range(1, 8):
+        ngay = (bay_gio - _dt.timedelta(days=i)).strftime("%Y-%m-%d")
+        du = _doc_json(os.path.join(goc, "workspace", "chi-phi", ngay + ".json"))
+        if not isinstance(du, dict) or not str(du.get("goi_luc") or "")[:10] > ngay:
+            continue  # chưa chốt (gọi trong chính ngày đó) thì còn thiếu
+        try:
+            _t, n = _tong_luot_ngay(goc, ngay)
+            v = float(du.get("tong_micro") or 0) / 1_000_000.0
+        except Exception:  # noqa: BLE001
+            continue
+        if n > 0 and v > 0:
+            tong += v
+            so += n
+    return (tong / so) if so else None
+
+
+def chi_ngay_that(goc: str, uoc_video_vnd: Optional[float], bay_gio: Optional[float] = None
+                  ) -> Tuple[Optional[float], Dict[str, Optional[float]]]:
+    """`(chi/ngày, chi tiết)` = SỐ LỚN NHẤT trong: tụt ví 72 giờ (a), chi lượt 24 giờ (b),
+    dự phóng theo nhịp đăng (c), và nhịp cũ 7 ngày `chi-phi/` (d, hay thấp vì sổ usage
+    của ShopAPI ghi muộn/thiếu — chỉ giữ làm sàn). Nguồn nào lỗi thì bỏ nguồn đó."""
+    bay_gio = bay_gio if bay_gio is not None else time.time()
+    dt = _dt.datetime.fromtimestamp(bay_gio)
+    ct = {"tut_vi": chi_theo_tut_vi(goc, bay_gio), "luot_24h": chi_theo_luot_24h(goc, dt),
+          "du_phong": chi_du_phong(goc, uoc_video_vnd), "chi_phi_7_ngay": nhip_chi_vnd_ngay(goc, dt)}
+    co = [v for v in ct.values() if v]
+    return (max(co) if co else None), ct
+
+
 def danh_gia(so_du_vnd: Optional[float], uoc_video_vnd: Optional[float],
-             chi_ngay_vnd: Optional[float]) -> Dict[str, Any]:
+             chi_ngay_vnd: Optional[float],
+             bay_gio_dt: Optional[_dt.datetime] = None) -> Dict[str, Any]:
     """Hàm THUẦN. `muc`: "khong_ro" | "ok" | "som" (còn <2 ngày) | "het" (không
     đủ mở lượt mới). Kèm câu người thường."""
     ra: Dict[str, Any] = {"so_du_vnd": so_du_vnd, "uoc_video_vnd": uoc_video_vnd,
@@ -213,9 +385,12 @@ def danh_gia(so_du_vnd: Optional[float], uoc_video_vnd: Optional[float],
         ra["viec_can_lam"] = goi_y
     elif ngay_con is not None and ngay_con < NGUONG_SOM_NGAY:
         ra["muc"] = "som"
-        ra["cau"] = ("Ví sắp hết: còn {0}, đủ khoảng {1} video (chừng {2:.1f} ngày sản "
-                     "xuất theo nhịp hiện tại) — cần nạp sớm.").format(
-                         _vnd_chu(so_du_vnd), du_video, ngay_con)
+        han = (bay_gio_dt or _dt.datetime.now()) + _dt.timedelta(days=ngay_con)
+        ra["cau"] = ("Ví còn {0}, máy đang chi khoảng {1}/ngày, đủ khoảng {2} ngày "
+                     "(~{3} video), nên nạp trước ngày {4}.").format(
+                         _vnd_chu(so_du_vnd), _vnd_chu(chi_ngay_vnd),
+                         "{0:.1f}".format(ngay_con).replace(".", ","), du_video,
+                         han.strftime("%d/%m"))
         ra["viec_can_lam"] = goi_y
     else:
         ra["muc"] = "ok"
@@ -268,7 +443,10 @@ def cho_phep_mo_luot(goc: str, client: Any = None, *, dang_do: bool = False,
     so_du = doc_so_du(goc, client, bay_gio=bay_gio, lay=lay,
                       ttl=TTL_KHI_CHAN_GIAY if dang_chan else TTL_SO_DU_GIAY)
     uoc = uoc_video_vnd if uoc_video_vnd is not None else uoc_mot_video_vnd(goc)
-    dg = danh_gia(so_du, uoc, nhip_chi_vnd_ngay(goc, _dt.datetime.fromtimestamp(bay_gio)))
+    chi_ngay, chi_ct = chi_ngay_that(goc, uoc, bay_gio)
+    dg = danh_gia(so_du, uoc, chi_ngay, _dt.datetime.fromtimestamp(bay_gio))
+    dg["chi_ngay_chi_tiet"] = chi_ct
+    dg["chi_that_moi_video_vnd"] = chi_that_moi_video_vnd(goc, _dt.datetime.fromtimestamp(bay_gio))
 
     def _xet(he_so: float, viec: str) -> Tuple[bool, str]:
         if dg["muc"] == "khong_ro":

@@ -910,6 +910,17 @@ def dong_may(goc: str, anh: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] =
     ma_cac_kenh = [str(k.get("ma") or "") for k in (anh.get("kenh") or [])]
     so_ngay = so_ngay_con_chay(goc, ma_cac_kenh, so_du_micro, bay_gio=bay_gio)
     so_du_vnd = (so_du_micro / MICRO_PER_VND) if so_du_micro is not None else None
+    try:  # số ngày của van ví (chi/ngày = số lớn nhất của các nguồn thật) nếu còn tươi (<1 giờ)
+        from . import van_vi as _vv  # noqa: PLC0415
+
+        _dg = (_vv.doc_trang_thai(goc).get("danh_gia") or {})
+        _t = _vv.doc_trang_thai(goc).get("luc")
+        _bg = (bay_gio or _dt.datetime.now()).timestamp()
+        if (_dg.get("ngay_con") is not None and _t and 0 <= _bg - float(_t) < 3600
+                and (so_ngay is None or float(_dg["ngay_con"]) < so_ngay)):
+            so_ngay = float(_dg["ngay_con"])
+    except Exception:  # noqa: BLE001
+        pass
     muc_vi = TOT
     if so_ngay is not None:
         if so_ngay < NGUONG_VI_NGAY_HONG or (so_du_vnd is not None

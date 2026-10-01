@@ -84,14 +84,66 @@ def test_vi_phan_hoi_la_khong_phai_so_thi_khong_chan(tmp_path):
     assert duoc and dg["muc"] == "khong_ro"
 
 
-def test_vi_canh_bao_som_duoi_2_ngay(tmp_path):
+def test_vi_canh_bao_som_duoi_3_ngay(tmp_path):
     goc = str(tmp_path)
     os.makedirs(os.path.join(goc, "workspace", "chi-phi"))
     ngay = (_dt.datetime.fromtimestamp(1_000_000.0) - _dt.timedelta(days=1)).strftime("%Y-%m-%d")
     with open(os.path.join(goc, "workspace", "chi-phi", ngay + ".json"), "w") as tep:
         json.dump({"tong_micro": 100_000 * 1_000_000}, tep)   # 100k₫/ngày
     duoc, _ly, dg = _chan(goc, 150_000)                        # đủ 7 video nhưng chỉ 1,5 ngày
-    assert duoc and dg["muc"] == "som" and "cần nạp sớm" in dg["cau"]
+    assert duoc and dg["muc"] == "som"
+    assert "Ví còn 150.000₫, máy đang chi khoảng 100.000₫/ngày, đủ khoảng 1,5 ngày" in dg["cau"]
+    assert "nên nạp trước ngày" in dg["cau"]
+
+
+def test_vi_lich_su_toi_da_1_dong_30_phut_va_chi_theo_tut_bo_qua_nap(tmp_path):
+    goc = str(tmp_path)
+    t0 = 1_000_000.0
+    assert van_vi.ghi_lich_su_so_du(goc, 1_000_000, t0) is True
+    assert van_vi.ghi_lich_su_so_du(goc, 999_000, t0 + 600) is False          # < 30 phút
+    assert van_vi.ghi_lich_su_so_du(goc, 900_000, t0 + 12 * 3600) is True       # tụt 100k / 12h
+    assert van_vi.ghi_lich_su_so_du(goc, 2_000_000, t0 + 13 * 3600) is True     # nạp: bỏ qua
+    assert van_vi.ghi_lich_su_so_du(goc, 1_900_000, t0 + 24 * 3600) is True     # tụt 100k / 11h
+    chi = van_vi.chi_theo_tut_vi(goc, t0 + 24 * 3600)
+    assert abs(chi - 200_000) < 1                                               # 200k / 24h
+    assert van_vi.chi_theo_tut_vi(goc, t0 + 24 * 3600 + 80 * 3600) is None      # quá cửa sổ 72h
+
+
+def _so_luot(goc, ma, ngay, so, uoc=100_000):
+    d = os.path.join(goc, "CHANNEL", ma, "tu-chay")
+    os.makedirs(d, exist_ok=True)
+    runs = [{"san_xuat": {"da_chay": True}, "ngan_sach": {"uoc_tinh_vnd": uoc}} for _ in range(so)]
+    with open(os.path.join(d, ngay + ".json"), "w", encoding="utf-8") as tep:
+        json.dump({"ngay": ngay, "runs": runs}, tep)
+
+
+def test_chi_ngay_lay_so_lon_nhat_va_khong_theo_so_usage_thap(tmp_path, monkeypatch):
+    goc = str(tmp_path)
+    mo = _dt.datetime(2026, 10, 1, 12, 0, 0)
+    _so_luot(goc, "K1", "2026-10-01", 3)      # 300k hôm nay
+    _so_luot(goc, "K1", "2026-09-30", 10)     # 1.000k hôm qua, còn 50% trong 24h => 500k
+    os.makedirs(os.path.join(goc, "workspace", "chi-phi"))
+    with open(os.path.join(goc, "workspace", "chi-phi", "2026-09-30.json"), "w") as tep:
+        json.dump({"tong_micro": 65_000 * 1_000_000}, tep)   # usage thấp: 65k
+    from core import tu_chay
+    monkeypatch.setattr(tu_chay, "kenh_tu_chay", lambda g: ["K1"])
+    monkeypatch.setattr("core.kenh.doc_kenh", lambda g, m: type("K", (), {"nhip_dang": ["1", "2", "3"], "chu_ky_dang_ngay": 1})())
+    chi, ct = van_vi.chi_ngay_that(goc, 100_000, mo.timestamp())
+    assert abs(ct["luot_24h"] - 800_000) < 1 and ct["du_phong"] == 300_000
+    assert chi == 800_000 and ct["chi_phi_7_ngay"] == 65_000
+
+
+def test_vi_canh_bao_lap_4_gio_khi_con_duoi_1_ngay(tmp_path, monkeypatch):
+    monkeypatch.setattr(van_vi, "uoc_mot_video_vnd", lambda g: UOC)
+    goc = str(tmp_path)
+    os.makedirs(os.path.join(goc, "workspace", "chi-phi"))
+    ngay = (_dt.datetime.fromtimestamp(1_000_000.0) - _dt.timedelta(days=1)).strftime("%Y-%m-%d")
+    with open(os.path.join(goc, "workspace", "chi-phi", ngay + ".json"), "w") as tep:
+        json.dump({"tong_micro": 100_000 * 1_000_000}, tep)
+    r, _ = chot_an_toan.kiem_vi(goc, client=object(), bay_gio=1_000_000.0, lay=_lay(250_000), )
+    assert r and r[0]["lap_gio"] == chot_an_toan.LAP_VI_SOM_GIO            # 2,5 ngày
+    r, _ = chot_an_toan.kiem_vi(goc, client=object(), bay_gio=1_000_000.0 + 7200, lay=_lay(60_000))
+    assert r and r[0]["lap_gio"] == chot_an_toan.LAP_VI_GIO                # 0,6 ngày
 
 
 def test_vi_su_co_len_giao_dien_qua_gac_tong(tmp_path):
