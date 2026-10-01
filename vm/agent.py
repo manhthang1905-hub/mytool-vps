@@ -2726,8 +2726,9 @@ CHU_KY_TAI_BO_SUNG_GIAY = 25 * 60
 #: Gói hẹn SỚM hơn bây giờ + chừng này giờ thì để phiên kênh lo (phiên chạy trước
 #: giờ đăng 60 phút) — không chen tải bổ sung sát giờ.
 BIEN_TAI_BO_SUNG_GIO = 2.0
-#: Nhìn xa tối đa (ngày).
-CUA_SO_TAI_BO_SUNG_NGAY = 7
+#: Nhìn xa tối đa (ngày). Chủ kênh 01/10: video làm xong là tải + hẹn lịch luôn, không để nằm
+#: chờ trên máy (nhịp thưa 1 video/2 ngày làm lịch xa hơn 7 ngày) → 30 ngày.
+CUA_SO_TAI_BO_SUNG_NGAY = 30
 #: Trần số LƯỢT tải bổ sung mỗi kênh mỗi ngày.
 #: 30/09/2026: 3 → 8. Nhịp mới 6 khe/ngày (TL1–TL3) + lượt hỏng phải tải lại —
 #: trần 3 làm TL1 hết lượt từ 12:14 (0009 hỏng, 0012 chờ) trong khi còn 2 khe

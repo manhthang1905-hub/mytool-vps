@@ -63,7 +63,7 @@ class TestMaCanTaiBoSung:
                    _d("M6", "02/10/2026", "20:00"),              # đã có id trong sổ
                    _d("M7", "", ""))
         so = {"TL2-T7/M6": {"video_id": "AAAAAAAAAAA"}}
-        assert ag.ma_can_tai_bo_sung(chu, "TL2-T7", so, BAY_GIO) == ["M1"]
+        assert ag.ma_can_tai_bo_sung(chu, "TL2-T7", so, BAY_GIO, cua_so_ngay=7) == ["M1"]
 
     def test_goi_hong_de_nhap_duoc_tai_moi(self, tmp_path, monkeypatch):
         # 30/09/2026 TL1-T7-0009: lượt hỏng để nháp, trạm ghi "ĐANG ĐĂNG · nháp …"
@@ -129,7 +129,8 @@ class TestChayTaiBoSung:
         assert ag.chay_tai_bo_sung({}, hl, ["TL4-T7", "TL2-T7"], bay_gio=BAY_GIO,
                                    tai_ke_hoach=lambda ch, k: ke[k], chay_con=cc) is True
         assert goi["con"] == [("may_dang_dom.py", "TL2-T7",
-                               ("--mot-lan", "--trong-phien", "--cua-so-gio", "168", "--bien-gio", "2.0",
+                               ("--mot-lan", "--trong-phien", "--cua-so-gio",
+                                str(int(ag.CUA_SO_TAI_BO_SUNG_NGAY * 24)), "--bien-gio", "2.0",
                                 "--toi-da-ngay", str(ag.TAI_LEN_TOI_DA_KENH_NGAY)))]
         assert goi["chrome"] and goi["dong"] == ["TL2-T7"] and goi["nha"] == 1
         # chu kỳ 25 phút: nhịp kế KHÔNG chạy lại
