@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.141.8** — 2026-10-01 — `vps-jp1` — feat: tu chon danh sach phat theo de tai (kenh.yaml danh_sach_phat_kenh -> cot Danh sach phat -> may dang)
 - **2.141.7** — 2026-10-01 — `vps-jp1` — doi thu: ba duong vao mot cua duyet, 4 dieu kien, trang thai het tu hoi sinh, co AI (thi giac)
 - **2.141.6** — 2026-10-01 — `vps-jp1` — feat(tong giam doc): LUAT SO KENH theo do lon thi truong + kenh -K2 la kenh YouTube rieng - tong.py: so_kenh_toi_da (nguon no/thang / 15, chi khi trang chu len/on dinh), bang_so_kenh (tep -> toi da / dang co / de xuat mo, kenh thu 2+ cho k…
 - **2.141.5** — 2026-10-01 — `vps-jp1` — Máy đăng: video làm xong tải + hẹn lịch luôn (cửa sổ 7 → 30 ngày)
