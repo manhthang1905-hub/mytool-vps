@@ -10,8 +10,9 @@ Hai chế độ (khoá kenh.yaml `giam_doc_studio`):
       1. HỘI ĐỒNG (`quan_ly.goi_quyet("cuu_ctr")`: 3 chuyên gia + phản biện + chấm) viết tiêu đề mới theo
          khung tiêu đề thắng (`docs/kien-thuc/con-duong-kenh-thang.md` §3) + tiêu đề thắng của kênh và
          ngách, ≤ 100 ký tự, kèm độ tin. Tin thấp (cổng "quan_sat") → không đề xuất.
-      2. DUYỆT: 3 lần sửa đầu của MỖI kênh chờ chủ bấm "Duyệt" (Phòng điều hành → Việc của bạn); sổ
-         `giam-doc/duyet-sua.json`. Chủ đã duyệt ≥ 3 lần và ≥ 2 lần kết quả TỐT → kênh tự áp.
+      2. DUYỆT: kênh < 1.000 sub TỰ ÁP ngay (đã có đo trước/sau + tự đổi lại); kênh ≥ 1.000 sub: lần sửa đầu chờ chủ
+         bấm "Duyệt" (Phòng điều hành → Việc của bạn); sổ `giam-doc/duyet-sua.json`. Đã duyệt ≥ 1 lần và ≥ 1 lần
+         kết quả TỐT → kênh tự áp.
       3. HÀNG `vm/logs/hang-sua.json` → máy DOM sửa giờ vắng (`vm/agent.py: chay_sua_video` →
          `vm/may_dang_dom.py: sua_video_mot`), kết quả lượt cuối `vm/logs/sua-cuoi.json`.
       4. `dong_bo` (mỗi nhịp gác tổng, qua `giam_doc.nhip`): xếp hàng mục đã duyệt; máy sửa xong → ghi
@@ -44,8 +45,9 @@ HIEN_THI_TOI_THIEU = 500
 TIEU_DE_TOI_DA = 100
 TEP_DUYET = "duyet-sua.json"
 TEP_HANG = os.path.join("vm", "logs", "hang-sua.json")
-SO_LAN_DUYET = 3          # 3 lần sửa đầu của mỗi kênh: chủ duyệt
-SO_LAN_TOT = 2            # … và ≥ 2 lần tốt → kênh được tự áp
+SUB_KENH_NHO = 1000       # dưới ngần này sub: tự áp NGAY (đã có đo trước/sau + tự đổi lại nếu tệ hơn) — 04/10/2026
+SO_LAN_DUYET = 1          # kênh ≥ 1.000 sub: chủ duyệt 1 lần sửa đầu
+SO_LAN_TOT = 1            # … và ≥ 1 lần tốt → kênh được tự áp
 TI_LE_TOT = 1.10          # CTR sau / trước ≥ 1,10 → tốt
 TI_LE_GIU = 1.00          # < 1,00 → quay lui
 DO_TOI_DA_NGAY = 14       # quá hạn mà chưa đủ hiển thị → chua_du (giữ nguyên)
@@ -184,14 +186,17 @@ def _ghi_duyet(goc: str, ma: str, ds: List[Dict[str, Any]]) -> None:
     _ghi_json(duong_duyet(goc, ma), {"kenh": ma, "muc": ds})
 
 
-def quyen_studio(goc: str, ma: str, ds: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    """{"quyen": "can_duyet" | "tu_ap", "duyet", "tot"}. Tự áp khi chủ đã duyệt ≥ 3 lần và ≥ 2 lần có kết
-    quả TỐT (tiêu đề hoặc bìa)."""
+def quyen_studio(goc: str, ma: str, ds: Optional[List[Dict[str, Any]]] = None,
+                 sub: Optional[float] = None) -> Dict[str, Any]:
+    """{"quyen": "can_duyet" | "tu_ap", "duyet", "tot", "nho"}. Kênh dưới `SUB_KENH_NHO` sub (hoặc chưa biết sub)
+    TỰ ÁP ngay — đã có đo CTR trước/sau và tự đổi lại khi tệ hơn. Kênh ≥ 1.000 sub: chủ duyệt `SO_LAN_DUYET` lần đầu
+    và ≥ `SO_LAN_TOT` lần có kết quả TỐT (tiêu đề hoặc bìa) mới tự áp."""
     ds = doc_duyet(goc, ma) if ds is None else ds
     da = [m for m in ds if m.get("duyet_boi") == "chu"]
     tot = sum(1 for m in da if "tot" in (m.get("ket"), m.get("ket_bia")))
-    return {"quyen": "tu_ap" if len(da) >= SO_LAN_DUYET and tot >= SO_LAN_TOT else "can_duyet",
-            "duyet": len(da), "tot": tot}
+    nho = sub is None or sub < SUB_KENH_NHO
+    tu_ap = nho or (len(da) >= SO_LAN_DUYET and tot >= SO_LAN_TOT)
+    return {"quyen": "tu_ap" if tu_ap else "can_duyet", "duyet": len(da), "tot": tot, "nho": nho}
 
 
 def cho_duyet(goc: str, ma: str) -> List[Dict[str, Any]]:
@@ -365,7 +370,7 @@ def xu_ly(goc: str, ma: str, bs: Any, thuc_don: List[Dict[str, Any]], goi_chat: 
 
     ds = doc_duyet(goc, ma) if goc else []
     da_co = {m.get("video_id") for m in ds}
-    q = quyen_studio(goc, ma, ds)
+    q = quyen_studio(goc, ma, ds, sub=_so(((getattr(bs, "ypp", None) or {}).get("sub"))))
     ra = []
     for d in thuc_don:
         if d.get("plugin") != TEN or d.get("loai") != "viec_studio" or not d.get("duoc") or d["video_id"] in da_co:

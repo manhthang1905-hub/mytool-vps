@@ -160,10 +160,63 @@ class KetQua:
     tim_kiem: Dict[str, Any] = field(default_factory=dict)
     nghien_cuu: str = ""
     viec_cua_ban: List[str] = field(default_factory=list)
+    tu_thu_lai: List[str] = field(default_factory=list)   # lỗi mà lượt tự chạy sẽ thử lại — chưa báo người
+    khoa_loi: List[str] = field(default_factory=list)     # khoá lỗi tự thử lại xảy ra ở lượt này (xem `_viec_tu_thu_lai`)
     nhat_ky: List[str] = field(default_factory=list)
 
 
 # ── Tiện ích ─────────────────────────────────────────────────────────────────────────────────────
+
+#: Lỗi lượt tự chạy sẽ tự thử lại (hồ sơ ngách AI, viết lại lời nhắc, ảnh nhân vật, nghiên cứu khởi động): chỉ báo
+#: NGƯỜI khi cùng lỗi vẫn còn sau ngần này ngày (04/10/2026: "mọi thứ auto 100%").
+NGAY_BAO_NGUOI_LOI_TU_THU = 3
+
+
+def _viec_tu_thu_lai(goc: str, kq: KetQua, khoa: str, cau: str) -> None:
+    """Ghi nhớ ngày lỗi `khoa` xuất hiện đầu tiên (`workspace/khoi-tao-ngach/loi-tu-thu-lai.json`). Dưới
+    `NGAY_BAO_NGUOI_LOI_TU_THU` ngày → `kq.tu_thu_lai` (máy tự thử lại, không báo người); đủ ngày vẫn hỏng →
+    `kq.viec_cua_ban`."""
+    key = "{0}|{1}".format(kq.ma_kenh or "?", khoa)
+    kq.khoa_loi.append(key)
+    hom = _dt.date.today()
+    duong = os.path.join(goc, "workspace", "khoi-tao-ngach", "loi-tu-thu-lai.json")
+    try:
+        with io.open(duong, encoding="utf-8") as tep:
+            du = json.load(tep)
+        du = du if isinstance(du, dict) else {}
+    except (OSError, ValueError):
+        du = {}
+    dau = None
+    try:
+        dau = _dt.date.fromisoformat(str(du.get(key) or ""))
+    except ValueError:
+        dau = None
+    if dau is None:
+        dau = hom
+        du[key] = hom.isoformat()
+        try:
+            os.makedirs(os.path.dirname(duong), exist_ok=True)
+            with io.open(duong, "w", encoding="utf-8", newline="\n") as tep:
+                json.dump(du, tep, ensure_ascii=False, indent=1)
+        except OSError:
+            pass
+    (kq.viec_cua_ban if (hom - dau).days >= NGAY_BAO_NGUOI_LOI_TU_THU else kq.tu_thu_lai).append(cau)
+
+
+def _quen_loi_da_het(goc: str, kq: KetQua) -> None:
+    """Lượt này không gặp lại lỗi nào của kênh → quên ngày bắt đầu của lỗi đó (lần sau tính lại từ đầu)."""
+    if not kq.ma_kenh:
+        return
+    duong = os.path.join(goc, "workspace", "khoi-tao-ngach", "loi-tu-thu-lai.json")
+    try:
+        with io.open(duong, encoding="utf-8") as tep:
+            du = json.load(tep)
+        moi = {k: v for k, v in du.items() if not k.startswith(kq.ma_kenh + "|") or k in kq.khoa_loi}
+        if moi != du:
+            with io.open(duong, "w", encoding="utf-8", newline="\n") as tep:
+                json.dump(moi, tep, ensure_ascii=False, indent=1)
+    except (OSError, ValueError, AttributeError):
+        pass
 
 
 def slug(chu: str, toi_da: int = 48) -> str:
@@ -586,8 +639,8 @@ def buoc_ho_so(goc: str, yc: YeuCau, ai: BoGoiAI, kq: KetQua, log: Callable[[str
             except Exception as loi:  # noqa: BLE001
                 log("  AI viết hồ sơ hỏng: {0}".format(str(loi)[:160]))
         if du is None:
-            kq.viec_cua_ban.append("AI chưa viết được hồ sơ ngách — tool dùng BẢN NHÁP. Chạy lại lệnh khi ví/mạng "
-                                   "ổn (kèm --lam-lai-ngach), hoặc sửa tay {0}.".format(duong))
+            _viec_tu_thu_lai(goc, kq, "ho_so_ngach", "AI chưa viết được hồ sơ ngách — tool dùng BẢN NHÁP. Chạy lại lệnh khi "
+                             "ví/mạng ổn (kèm --lam-lai-ngach), hoặc sửa tay {0}.".format(duong))
     else:
         log("a) [THỬ] Hồ sơ ngách: bản nháp từ khuôn (không gọi AI).")
     nhap = du is None
@@ -888,14 +941,14 @@ def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,
                         loi = kiem_loi_nhac(cu, moi_chu)
                         if loi:
                             log("  prompt/{0}: bản viết lại hỏng ({1}) — giữ bản khuôn.".format(ten, loi))
-                            kq.viec_cua_ban.append("Xem lại prompt/{0} của kênh {1}: AI viết lại hỏng ({2}), "
-                                                   "đang dùng bản khuôn ngách cũ.".format(ten, ma, loi))
+                            _viec_tu_thu_lai(goc, kq, "prompt:" + ten, "Xem lại prompt/{0} của kênh {1}: AI viết lại "
+                                             "hỏng ({2}), đang dùng bản khuôn ngách cũ.".format(ten, ma, loi))
                         else:
                             noi = moi_chu.rstrip() + "\n"
                     except Exception as loi_ai:  # noqa: BLE001
                         log("  prompt/{0}: AI hỏng ({1}) — giữ bản khuôn.".format(ten, str(loi_ai)[:100]))
-                        kq.viec_cua_ban.append("Xem lại prompt/{0} của kênh {1}: AI chưa viết lại được.".format(
-                            ten, ma))
+                        _viec_tu_thu_lai(goc, kq, "prompt:" + ten, "Xem lại prompt/{0} của kênh {1}: AI chưa viết "
+                                         "lại được.".format(ten, ma))
                 (kq.loi_nhac_viet_lai if noi is not cu else kq.loi_nhac_giu_nguyen).append(ten)
             else:
                 kq.loi_nhac_giu_nguyen.append(ten)
@@ -925,8 +978,8 @@ def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,
             except Exception as loi:  # noqa: BLE001
                 log("  tạo ảnh nhân vật hỏng: {0}".format(str(loi)[:150]))
         if not os.path.isfile(nv):
-            kq.viec_cua_ban.append("Bỏ một ảnh nhân vật (.png) vào CHANNEL/{0}/nv/nv1.png — mỗi cảnh dùng nó làm "
-                                   "tham chiếu (gợi ý lời tả: style.yaml `default_character_prompt`).".format(ma))
+            _viec_tu_thu_lai(goc, kq, "anh_nhan_vat", "Bỏ một ảnh nhân vật (.png) vào CHANNEL/{0}/nv/nv1.png — mỗi "
+                             "cảnh dùng nó làm tham chiếu (gợi ý lời tả: style.yaml `default_character_prompt`).".format(ma))
 
     # ── sổ tuyến + Công thức V7 (giai đoạn "moi" → tự chuyển V7 khi có video thắng thật) ──
     try:
@@ -1072,8 +1125,8 @@ def buoc_nghien_cuu(goc: str, ma: str, hs: Dict[str, Any], yc: YeuCau, kq: KetQu
         kq.nghien_cuu = str(getattr(bc, "tom_tat", lambda: "")() or "xong")
     except Exception as loi:  # noqa: BLE001 — nghiên cứu hỏng không xoá kênh vừa dựng
         kq.nghien_cuu = "hỏng: " + str(loi)[:200]
-        kq.viec_cua_ban.append("Nghiên cứu khởi động hỏng ({0}) — lượt tự chạy sẽ thử lại; hoặc chạy "
-                               "`python tu_chay.py --kenh {1} --thu` để xem.".format(str(loi)[:120], ma))
+        _viec_tu_thu_lai(goc, kq, "nghien_cuu", "Nghiên cứu khởi động hỏng ({0}) — lượt tự chạy sẽ thử lại; hoặc "
+                         "chạy `python tu_chay.py --kenh {1} --thu` để xem.".format(str(loi)[:120], ma))
     log("c) nghiên cứu: " + kq.nghien_cuu[:300])
 
 
@@ -1083,6 +1136,7 @@ def buoc_nghien_cuu(goc: str, ma: str, hs: Dict[str, Any], yc: YeuCau, kq: KetQu
 def _viet_viec(goc: str, kq: KetQua, yc: YeuCau) -> None:
     from .ho_so_ngach import ten_tieng  # noqa: PLC0415
 
+    _quen_loi_da_het(goc, kq)
     viec = list(kq.viec_cua_ban)
     viec.append("Chọn giọng đọc: điền `voice_id` (một giọng {0} RIÊNG, khác mọi kênh trên máy) trong "
                 "CHANNEL/{1}/kenh.yaml hoặc Quản lý kênh.".format(ten_tieng(yc.ngon_ngu) or yc.ngon_ngu,
@@ -1102,6 +1156,9 @@ def _viet_viec(goc: str, kq: KetQua, yc: YeuCau) -> None:
             "Lời nhắc viết lại theo ngách: {0}".format(", ".join(kq.loi_nhac_viet_lai) or "(không)"),
             "Nghiên cứu khởi động: {0}".format(kq.nghien_cuu or "-"), "", "## Việc của bạn", ""]
     dong += ["{0}. {1}".format(i, v) for i, v in enumerate(viec, 1)]
+    if kq.tu_thu_lai:
+        dong += ["", "## Máy tự thử lại (chưa cần bạn; báo bạn nếu còn hỏng sau {0} ngày)".format(
+            NGAY_BAO_NGUOI_LOI_TU_THU), ""] + ["- " + v for v in kq.tu_thu_lai]
     _ghi(os.path.join(kq.duong_kenh, TEP_VIEC), "\n".join(dong) + "\n")
 
 

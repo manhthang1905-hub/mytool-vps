@@ -317,11 +317,13 @@ def test_gac_tong_su_co_giam_doc_ket_va_viec_cua_ban(tmp_path):
     assert loai == ["giam_doc_ket", "giam_doc_viec"]
     viec = next(s for s in sc if s["loai"] == "giam_doc_viec")
     assert viec["dedupe_khoa"].startswith("giam_doc:viec:GDK:") and viec["muc"] == "nhac"
-    # lọc lặp 4 giờ của gác tổng: cùng việc trong 4 giờ chỉ báo một lần
+    # lọc lặp của gác tổng: việc của NGƯỜI (04/10/2026) chỉ báo lại 1 lần / ngày, không phải mỗi 4 giờ
     bg = dt.datetime(2026, 10, 1, 7, 0)
     assert len(gac_tong._loc_lap_su_co(goc, [viec], bg)) == 1
     assert gac_tong._loc_lap_su_co(goc, [viec], bg + dt.timedelta(hours=3)) == []
-    assert len(gac_tong._loc_lap_su_co(goc, [viec], bg + dt.timedelta(hours=4, minutes=1))) == 1
+    assert gac_tong._loc_lap_su_co(goc, [viec], bg + dt.timedelta(hours=4, minutes=1)) == []
+    assert gac_tong._loc_lap_su_co(goc, [viec], bg + dt.timedelta(hours=23)) == []
+    assert len(gac_tong._loc_lap_su_co(goc, [viec], bg + dt.timedelta(hours=24, minutes=1))) == 1
     _kenh_bat(goc, "tat")
     assert gac_tong.kiem_giam_doc(goc, bay_gio=dt.datetime(2026, 10, 1, 7, 0)) == []
 

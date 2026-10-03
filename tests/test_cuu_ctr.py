@@ -117,13 +117,14 @@ def _kenh(goc, *dong):
     _ghi(os.path.join(goc, "CHANNEL", K, "kenh.yaml"), "\n".join(('ma: "{0}"'.format(K),) + dong) + "\n")
 
 
-def _bs_hong(goc):
+def _bs_hong(goc, sub=5000):
     hong = {"id": "FAKEhong001", "ma_goi": K + "-0007", "tieu_de": "【脳科学】高いIQを持つ人だけが見てる世界とは",
             "cum": [], "ket_luan": "truot", "thang": False, "hien_thi_48h": 900.0, "tuoi_gio": 70.0,
             "chup": [{"tuoi": 66.0, "moc": "66h", "hien_thi": 3000, "ctr": 3.0, "ctr_browse": 2.0}],
             "lich_su_sua": [], "tieu_de_da_cham": [], "tu_tool": True}
     bs = BangSo(goc=goc, ma_kenh=K, bay_gio=BAY, cai={"giam_doc": "goi_y", "giam_doc_studio": True},
                 ctr_muc_tieu=5.0, nguong_thang_48h=6000)
+    bs.ypp = {"sub": sub} if sub is not None else {}
     bs.video = [hong]
     return bs
 
@@ -156,12 +157,37 @@ def test_xu_ly_hoi_dong_lap_muc_cho_duyet_va_chu_duyet(tmp_path, monkeypatch):
     assert cuu_ctr.doc_duyet(goc, K)[0]["trang_thai"] == "duyet" and not cuu_ctr.cho_duyet(goc, K)
 
 
-def test_quyen_tu_ap_sau_3_lan_duyet_2_lan_tot():
-    ds = [{"duyet_boi": "chu", "ket": "tot"}, {"duyet_boi": "chu", "ket": "quay_lui", "ket_bia": "tot"},
-          {"duyet_boi": "chu", "ket": "giu"}]
-    assert cuu_ctr.quyen_studio("", K, ds)["quyen"] == "tu_ap"
-    assert cuu_ctr.quyen_studio("", K, ds[:2])["quyen"] == "can_duyet"
-    assert cuu_ctr.quyen_studio("", K, [dict(d, ket="giu", ket_bia="") for d in ds])["quyen"] == "can_duyet"
+def test_quyen_kenh_lon_duyet_1_lan_dau_roi_tu_ap_khi_co_ket_qua_tot():
+    # kênh ≥ 1.000 sub: duyệt 1 lần đầu + ≥ 1 lần tốt mới tự áp
+    ds = [{"duyet_boi": "chu", "ket": "tot"}, {"duyet_boi": "chu", "ket": "quay_lui", "ket_bia": "tot"}]
+    assert cuu_ctr.quyen_studio("", K, ds, sub=5000)["quyen"] == "tu_ap"
+    assert cuu_ctr.quyen_studio("", K, [], sub=5000)["quyen"] == "can_duyet"
+    assert cuu_ctr.quyen_studio("", K, [{"duyet_boi": "chu", "ket": ""}], sub=1000)["quyen"] == "can_duyet"
+    assert cuu_ctr.quyen_studio("", K, [dict(d, ket="giu", ket_bia="") for d in ds], sub=5000)["quyen"] == "can_duyet"
+
+
+def test_quyen_kenh_nho_duoi_1000_sub_tu_ap_ngay_khong_can_duyet():
+    q = cuu_ctr.quyen_studio("", K, [], sub=438)
+    assert q["quyen"] == "tu_ap" and q["nho"] is True and q["duyet"] == 0
+    assert cuu_ctr.quyen_studio("", K, [], sub=999)["quyen"] == "tu_ap"
+    assert cuu_ctr.quyen_studio("", K, [], sub=None)["quyen"] == "tu_ap", "chưa biết sub = kênh nhỏ"
+
+
+def test_xu_ly_kenh_nho_tu_ap_muc_ngay_khong_cho_duyet(tmp_path, monkeypatch):
+    from core import bien_tap_content
+
+    monkeypatch.setattr(bien_tap_content, "thang_mo_hinh", lambda _g, _k: ["m1"])
+    goc = str(tmp_path)
+    _kenh(goc, 'giam_doc: "goi_y"', "giam_doc_studio: true")
+    bs = _bs_hong(goc, sub=438)
+    td = [dict(d, plugin="cuu_ctr", duoc=True) for d in cuu_ctr.de_xuat(bs, cuu_ctr.quan_sat(bs))]
+
+    def llm(ln, mo_hinh="", khoa="", toi_da_token=0):
+        return json.dumps({"tieu_de_moi": "IQが高い人だけが気づく世界の違和感５選", "khung": "so_dem_tri_tue",
+                           "ly_do": "CTR trang chủ 2,0% < 4%"})
+    ra = cuu_ctr.xu_ly(goc, K, bs, td, llm)
+    assert ra and ra[0]["trang_thai"] == "tu_ap" and ra[0]["duyet_boi"] == "may"
+    assert not cuu_ctr.cho_duyet(goc, K)
 
 
 def test_gioi_han_tuoi_52_120_va_khong_dung_video_thang():

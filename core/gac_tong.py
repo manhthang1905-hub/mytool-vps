@@ -213,6 +213,15 @@ NGUONG_CPU_GIAY_DUNG_YEN = 5.0
 #: `ds_su_co` ĐẦY ĐỦ, trước khi lọc. Xem `_doc_da_bao_lap`/`_ghi_da_bao_lap`.
 NGUONG_LAP_BAO_GIO = 4.0
 
+#: Việc giám đốc kênh mà chỉ NGƯỜI làm được (cảnh báo chính sách TL4: nghi gậy/nội dung dùng lại…): nhắc lại 1 lần/ngày.
+NGUONG_LAP_VIEC_NGUOI_GIO = 24.0
+
+#: Kênh có `ngay_bat_dau` trong chừng này ngày mà chưa có video nào: đang làm video đầu, không phải "khan".
+NGAY_KENH_MOI = 3
+
+#: Thử lại một việc máy tự xử (`tu_xu_ly_viec_may`) tối đa 1 lần / chừng này giờ.
+NHIP_TU_XU_LY_GIO = 6.0
+
 TRANG_THAI_DANG_CHAY = "dang_chay"
 TRANG_THAI_TU_CHO = "tu_cho_co_han"
 TRANG_THAI_CHO_NGUOI = "cho_nguoi"
@@ -533,6 +542,15 @@ def _chup_ke_hoach(goc: str, ma: str, thu_muc_vm: str,
     return ra
 
 
+def _la_kenh_moi(goc: str, ma: str, bay_gio: _dt.datetime) -> bool:
+    """`ngay_bat_dau` của kênh cách nay < `NGAY_KENH_MOI` ngày (không đọc được → không phải kênh mới)."""
+    try:
+        moc = kenh_mod.doc_kenh(goc, ma).ngay_bat_dau
+        return 0 <= (bay_gio.date() - _dt.date.fromisoformat(str(moc)[:10])).days < NGAY_KENH_MOI
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _chup_kenh(goc: str, ma: str, thu_muc_vm: str, bay_gio: _dt.datetime,
                pid_nang: Optional[int] = None) -> Dict[str, Any]:
     try:
@@ -555,6 +573,7 @@ def _chup_kenh(goc: str, ma: str, thu_muc_vm: str, bay_gio: _dt.datetime,
         cai_vm.get("cach_dang") or "") in ("dom", "tu_dong")
     return {
         "tu_chay": tu_chay_bat,
+        "kenh_moi": _la_kenh_moi(goc, ma, bay_gio),
         "ke_hoach": _chup_ke_hoach(goc, ma, thu_muc_vm, bay_gio),
         "runs_hom_nay": list(bao_cao.get("runs") or []),
         "nhat_ky_hom_nay": list(bao_cao.get("nhat_ky") or []),
@@ -737,6 +756,8 @@ def _kiem_khong_video_moi(ma: str, snap: Dict[str, Any],
     mocs = [_ghep_ngay_gio(d.get("Ngày đăng", ""), d.get("Giờ đăng", "")) for d in da_dang]
     mocs = [m for m in mocs if m is not None]
     if not mocs:
+        if snap.get("kenh_moi"):
+            return []  # kênh mới (< NGAY_KENH_MOI ngày): đang làm video đầu — chỉ 1 dòng trạng thái trong bản tin
         return [_su_co(
             "khong_video_moi", bao_dong.MUC_KHAN, kenh=ma,
             chuyen_gi="Kênh {0} đang bật tự động nhưng chưa từng có video nào đăng.".format(ma),
@@ -1526,6 +1547,74 @@ def tu_sua(
     return hanh_dong
 
 
+def tu_xu_ly_viec_may(
+    goc: str,
+    anh: Dict[str, Any],
+    *,
+    bay_gio: Optional[_dt.datetime] = None,
+    ghi_dia: bool = True,
+    dang_ky_lich: Optional[Callable[[str], Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Việc máy TỰ làm thay vì hiện "Việc của bạn" (04/10/2026, chủ dự án: "mọi thứ auto 100%"):
+
+    * "lich": có kênh `tu_chay` mà lịch Windows tắt → đăng ký lại (`lich_tu_chay.dang_ky`, `/F` an toàn).
+      (Máy nền Agent/Máy đăng: đã có `core.giam_sat_vm` trong giao diện tự bật lại; gác tổng KHÔNG sinh được tiến
+      trình giao diện nên không tự xử ở đây.)
+    KHÔNG đụng `tu_don`/`tu_chay`/`tu_dang`/`ngan_sach_ngay` (CLAUDE.md: do chủ quyết). Mỗi việc thử tối đa 1 lần / 6 giờ;
+    sổ `workspace/gac-tong/tu-xu-ly.json` cho bảng điều khiển biết (`bang_dieu_khien.da_tu_xu_ly`): thử hỏng hoặc
+    ≥ 3 lần vẫn còn thì mới hiện cho người. `ghi_dia=False` (`--thu`): chỉ tính, không làm gì."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    may = anh.get("may") or {}
+    cu: Dict[str, Any] = _doc_json_an_toan(bang_dieu_khien.duong_tu_xu_ly(goc))
+    cu = cu if isinstance(cu, dict) else {}
+    co_tu_chay = any(bool(s.get("tu_chay")) for s in (anh.get("kenh") or {}).values())
+
+    def _lich() -> Any:
+        return (dang_ky_lich or (lambda g: lich_tu_chay.dang_ky(g, "02:00")))(goc)
+
+    viec = (("lich", co_tu_chay and not (may.get("schtasks_tu_chay") or {}).get("da_dang_ky"), _lich,
+             "Lịch tự chạy đang tắt — máy tự đăng ký lại 02:00 hằng ngày."),)
+    moi: Dict[str, Any] = {}
+    hanh_dong: List[Dict[str, Any]] = []
+    for khoa, dieu_kien, ham, cau in viec:
+        if not dieu_kien:
+            continue  # hết cớ → quên sổ
+        b = cu.get(khoa) if isinstance(cu.get(khoa), dict) else None
+        tuoi = None
+        if b:
+            try:
+                tuoi = (bay_gio - _dt.datetime.fromisoformat(str(b.get("luc"))[:19])).total_seconds() / 3600.0
+            except ValueError:
+                tuoi = None
+        if b and tuoi is not None and 0 <= tuoi < NHIP_TU_XU_LY_GIO:
+            moi[khoa] = b  # mới thử xong — giữ nguyên, chưa tới lượt thử lại
+            continue
+        so_lan = int(b.get("so_lan") or 1) + 1 if b and tuoi is not None and tuoi < 24.0 else 1
+        ok, ghi_chu = True, ""
+        if ghi_dia:
+            try:
+                kq = ham()
+                ok, ghi_chu = (bool(kq[0]), str(kq[1])) if isinstance(kq, tuple) else (bool(kq), "")
+            except Exception as loi:  # noqa: BLE001 — tự xử hỏng thì để người thấy, không sập gác tổng
+                ok, ghi_chu = False, "{0}: {1}".format(type(loi).__name__, str(loi)[:120])
+        moi[khoa] = {"luc": bay_gio.isoformat(timespec="seconds"), "ket": "ok" if ok else "loi",
+                     "so_lan": so_lan, "ghi_chu": ghi_chu[:160]}
+        hanh_dong.append({"loai": "tu_xu_ly:" + khoa, "kenh": "", "thuc_hien": ghi_dia and ok,
+                          "chuyen_gi": cau + ("" if ok or not ghi_dia else " (HỎNG: {0})".format(ghi_chu[:100]))})
+    if ghi_dia and moi != cu:
+        try:
+            duong = bang_dieu_khien.duong_tu_xu_ly(goc)
+            os.makedirs(os.path.dirname(duong), exist_ok=True)
+            with open(duong + ".tmp", "w", encoding="utf-8") as tep:
+                json.dump(moi, tep, ensure_ascii=False, indent=1)
+            os.replace(duong + ".tmp", duong)
+        except OSError:
+            pass
+    if hanh_dong and ghi_dia:  # chỉ nhật ký jsonl — KHÔNG ghi loi-chay-max.md (không phải sự cố cần người)
+        _ghi_nhat_ky_jsonl(goc, bay_gio, [_su_co(h["loai"], bao_dong.MUC_THUONG, h["chuyen_gi"]) for h in hanh_dong])
+    return hanh_dong
+
+
 def _co_video_moi(snap: Dict[str, Any], bay_gio: _dt.datetime) -> bool:
     for d in snap.get("ke_hoach") or []:
         if d.get("_loai") != "da_dang":
@@ -1562,8 +1651,9 @@ def ban_tin_ngay(
         video_moi = "có" if _co_video_moi(snap, bay_gio) else "không"
         so_hen = sum(1 for d in snap.get("ke_hoach") or [] if d.get("_loai") == "sap_dang")
         so_cong_khai = sum(1 for d in snap.get("ke_hoach") or [] if d.get("_loai") == "da_dang")
-        dong.append("{0}: {1} — video mới: {2} — đã hẹn lịch: {3} — đã công khai: {4}".format(
-            ma, _NHAN_TRANG_THAI[tk["trang_thai"]], video_moi, so_hen, so_cong_khai))
+        dong.append("{0}: {1} — video mới: {2} — đã hẹn lịch: {3} — đã công khai: {4}{5}".format(
+            ma, _NHAN_TRANG_THAI[tk["trang_thai"]], video_moi, so_hen, so_cong_khai,
+            " — kênh mới, đang làm video đầu" if snap.get("kenh_moi") and not so_cong_khai else ""))
 
     may = anh.get("may") or {}
     con_gb = (may.get("dia") or {}).get("con_gb")
@@ -1615,10 +1705,22 @@ def kiem_giam_doc(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
             dedupe_khoa="giam_doc:ket:" + k["ma"]))
     for ma in giam_doc._kenh_bat(goc):  # noqa: SLF001
         for viec in giam_doc.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio):
-            ra.append(_su_co(
+            loai = giam_doc.phan_loai_viec(viec)
+            if loai != "nguoi":
+                # 04/10/2026: "chờ N video qua 48h…" = máy tự đợi; "mở Studio xem / kiểm tra bảng pool…" = bộ não
+                # tự xem (`nao/viec-tu-giam-doc.json`). KHÔNG báo người, KHÔNG ghi loi-chay-max.md.
+                if ghi_dia:
+                    try:
+                        giam_doc.ghi_viec_may(goc, ma, viec, loai, bay_gio=bay_gio)
+                    except Exception:  # noqa: BLE001 — hàng đợi hỏng không được làm sập gác tổng
+                        pass
+                continue
+            sc = _su_co(
                 "giam_doc_viec", bao_dong.MUC_NHAC, kenh=ma,
                 chuyen_gi="Giám đốc kênh {0}: {1}".format(ma, viec[:300]), can_lam_gi=viec[:300],
-                dedupe_khoa="giam_doc:viec:{0}:{1}".format(ma, hashlib.sha1(viec.encode("utf-8")).hexdigest()[:12])))
+                dedupe_khoa="giam_doc:viec:{0}:{1}".format(ma, hashlib.sha1(viec.encode("utf-8")).hexdigest()[:12]))
+            sc["lap_gio"] = NGUONG_LAP_VIEC_NGUOI_GIO  # cảnh báo chính sách thật: 1 lần/ngày, không phải mỗi 4 giờ
+            ra.append(sc)
     return ra
 
 
@@ -1683,6 +1785,10 @@ def _main(argv: Optional[List[str]] = None) -> int:
             can_lam_gi="Báo người quản trị tool xem nhật ký.", dedupe_khoa="giam_doc:hong"))
     ket_qua = bao_cao_su_co(goc, anh, ds_su_co, ghi_dia=not thu)
     hanh_dong_tu_sua = tu_sua(goc, anh, ghi_dia=not thu)
+    try:
+        hanh_dong_tu_sua += tu_xu_ly_viec_may(goc, anh, ghi_dia=not thu)
+    except Exception:  # noqa: BLE001 — tự xử hỏng không được làm sập gác tổng
+        pass
 
     print(ban_tin_ngay(goc, anh, ds_su_co, so_du_vnd=so_du_vnd,
                        so_ngay_license_con_lai=ngay_license))

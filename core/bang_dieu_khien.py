@@ -50,7 +50,7 @@ __all__ = [
     "anh_bang", "muc_the", "video_ke_tiep", "video_gan_day", "may_dang_hoc",
     "doc_can_ghim", "doc_nhap_thua", "doc_kiem_dom",
     "so_ngay_con_chay", "dong_may", "doc_da_xong", "danh_dau_xong",
-    "doc_tinh_trang", "viec_cua_ban",
+    "doc_tinh_trang", "viec_cua_ban", "da_tu_xu_ly", "duong_tu_xu_ly",
     # Các đường ghi công tắc — thuần, trang mới lẫn trang cũ gọi được.
     "doi_cong_tac", "doi_ngan_sach", "doi_gio_dang", "doi_nhip_dang",
     "doi_phut_phien", "doi_giu_luot", "tam_dung_tat_ca", "bat_lai_tam_dung",
@@ -1090,10 +1090,32 @@ _VIEC_GD_CAN_NGUOI = ("Quyết định lớn chờ bạn duyệt:", "Đổi tiê
 
 
 def viec_gd_can_nguoi(chu: str) -> bool:
-    """Mục "Việc của bạn" trong báo cáo giám đốc có THẬT SỰ cần người không (còn lại chỉ là gợi ý)."""
-    from .giam_doc.suc_khoe import VIEC_CUA_BAN as _sk  # noqa: PLC0415
+    """Mục "Việc của bạn" trong báo cáo giám đốc có THẬT SỰ cần người không (còn lại: máy tự đợi số / bộ não tự
+    xem — `giam_doc.phan_loai_viec`, 04/10/2026)."""
+    from .giam_doc import phan_loai_viec as _pl  # noqa: PLC0415
 
-    return str(chu).startswith(_VIEC_GD_CAN_NGUOI) or str(chu).strip() == _sk.strip()
+    return _pl(chu) == "nguoi"
+
+
+#: Việc máy TỰ xử lý (gác tổng `tu_xu_ly_viec_may` ghi vào đây) — khoá: "lich" (đăng ký lại lịch). Còn "ket: ok" và mới thì KHÔNG hiện là việc của người; thử ≥ 3 lần vẫn còn / thử hỏng thì hiện.
+HAN_TU_XU_LY_GIO = 12.0
+SO_LAN_TU_XU_LY_TOI_DA = 3
+
+
+def duong_tu_xu_ly(goc: str) -> str:
+    return os.path.join(goc, "workspace", "gac-tong", "tu-xu-ly.json")
+
+
+def da_tu_xu_ly(goc: str, khoa: str, bay_gio: Optional[_dt.datetime] = None) -> bool:
+    """Máy đã tự xử việc `khoa` (còn mới, chưa lặp quá ngưỡng) → không phải việc của người. Hỏng đọc → False."""
+    try:
+        with open(duong_tu_xu_ly(goc), "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+        b = du[khoa]
+        tuoi = ((bay_gio or _dt.datetime.now()) - _dt.datetime.fromisoformat(str(b["luc"])[:19])).total_seconds() / 3600.0
+        return b.get("ket") == "ok" and int(b.get("so_lan") or 1) < SO_LAN_TU_XU_LY_TOI_DA and 0 <= tuoi < HAN_TU_XU_LY_GIO
+    except Exception:  # noqa: BLE001 — không có/hỏng sổ = chưa ai xử → hiện như cũ
+        return False
 
 
 def goi_y_giam_doc(goc: str, ma: str) -> List[Dict[str, str]]:
@@ -1211,7 +1233,7 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             tuoi_gio = (bay_gio.timestamp() - os.path.getmtime(duong_csv)) / 3600.0
         except OSError:
             tuoi_gio = None
-        if tuoi_gio is not None and tuoi_gio > 48 and bool(k.get("tu_chay")):
+        if tuoi_gio is not None and tuoi_gio > 72 and bool(k.get("tu_chay")):  # ≥ 3 đêm quét Studio hụt mới đáng báo
             ra.append(_viec(
                 "so-lieu-cu:" + ma, THUONG, kenh=ma,
                 chu="Số liệu Studio cũ {0:.0f} ngày".format(tuoi_gio / 24.0),
@@ -1283,7 +1305,7 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 ts = {"ma": ma, "id": str(m.get("id") or "")}
                 ra.append(_viec(
                     "duyet-sua:" + ts["id"], CANH_BAO, kenh=ma, chu="Giám đốc kênh: " + _cat_chu(_cc.dong_viec_cua_ban(m), 320),
-                    goi_y="→ Duyệt: máy đổi tiêu đề giờ vắng, đo CTR trước/sau, tệ hơn thì tự đổi lại (3 lần đầu cần bạn)",
+                    goi_y="→ Duyệt: máy đổi tiêu đề giờ vắng, đo CTR trước/sau, tệ hơn thì tự đổi lại (kênh ≥ 1.000 sub: lần đầu cần bạn)",
                     nut=[("Duyệt", "duyet_sua", ts), ("Bỏ", "bo_sua", ts),
                          ("Chép link Studio", "chep_link",
                           {"url": "https://studio.youtube.com/video/{0}/edit".format(m.get("video_id"))})]))
@@ -1340,7 +1362,7 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 nut=[("Bật lại", "bat_lai_may", {"ten": khoa_may})]))
 
     # 12) lịch Windows tắt mà có kênh tự làm video.
-    if not (gio_lich or "") and any(k.get("tu_chay") for k in kenh_ds):
+    if not (gio_lich or "") and any(k.get("tu_chay") for k in kenh_ds) and not da_tu_xu_ly(goc, "lich", bay_gio):
         ra.append(_viec(
             "lich", CANH_BAO, chu="Lịch tự chạy đang tắt — kênh sẽ không tự làm video",
             goi_y="→ bật lịch chạy hằng ngày", nut=[("Bật lịch", "bat_lich", {})]))
@@ -1349,7 +1371,7 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     try:
         from . import nao as _nao  # noqa: PLC0415
 
-        for dx in _nao.viec_de_xuat(goc):
+        for dx in _nao.viec_de_xuat(goc, bay_gio):
             if dx["khoa"] in da_xong:
                 continue
             ra.append(_viec(dx["khoa"], CANH_BAO, kenh=dx["kenh"], chu=dx["chu"], goi_y=dx["goi_y"],

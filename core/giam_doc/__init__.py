@@ -11,6 +11,8 @@ bằng `pkgutil.iter_modules` (khuôn sổ đăng ký của `core/chien_luoc`). 
     nhip(goc, *, thu, bay_gio)                           gác tổng gọi: có việc thì sinh tiến trình tách rời
     kiem_ket(goc, *, bay_gio, ghi)                       gác tổng: kênh đến hạn ≥ 6 giờ chưa chạy (`giam_doc_ket`)
     viec_cua_ban_kenh(goc, ma)                           "Việc của bạn" của báo cáo cuối (bảng điều khiển, gác tổng)
+    phan_loai_viec · ghi_viec_may                        nguoi / cho_so / may — chỉ "nguoi" mới báo chủ (`_tu_dong`)
+    tu_nang_ha_quyen(goc)                                hằng ngày: goi_y ⇄ tu_ap theo `do-chinh-xac.json`
     kham_nghiem.chay · tong.hop_tuan                     khám nghiệm video (trong chay_kenh) · tổng giám đốc (thứ Hai)
     doc_chi_dao(goc, ma)                                 chỉ đạo còn hạn (biên tập viên đọc)
 
@@ -35,6 +37,8 @@ from typing import Any, Callable, Dict, List, Optional
 from . import gioi_han, so_thi_nghiem as stn
 from .du_lieu import BangSo, tom_tat
 from .gioi_han import doc_chi_dao  # noqa: F401 — cửa công khai cho biên tập viên (Agent B)
+from ._tu_dong import (  # noqa: F401 — tự động hoá "Việc của bạn" + quyền theo thành tích (04/10/2026)
+    doc_viec_cho_nao, ghi_viec_may, la_viec_suc_khoe, phan_loai_viec, tu_nang_ha_quyen)
 
 _log = logging.getLogger(__name__)
 
@@ -545,6 +549,11 @@ def chay_het(goc: str, *, ghi: Optional[Callable[[str], None]] = None) -> List[K
         json.dump({"pid": os.getpid(), "bat_dau": time.time()}, tep)
     ra = []
     try:
+        try:  # quyền theo thành tích: đủ ngưỡng thì tự nâng, tụt thì tự lùi (ghi kenh.yaml + nhật ký có số)
+            for d in tu_nang_ha_quyen(goc):
+                _log.info("giam_doc: %s %s → %s (%s)", d["ma"], d["truoc"], d["sau"], d["ly_do"])
+        except Exception as loi:  # noqa: BLE001 — không chặn lượt giám đốc
+            _log.warning("giam_doc: tự nâng/hạ quyền hỏng: %s", loi)
         for v in viec_den_han(goc):
             try:
                 ra.append(chay_kenh(goc, v["ma"], goi_chat=quan_ly.goi_chat_that(goc, ghi), tuan=v["tuan"], ghi=ghi))
