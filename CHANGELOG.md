@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.147.0** — 2026-10-03 — `vps-jp1` — Nuoi trang chu (cong tac nuoi_trang_chu): Chrome kenh xem video doi thu THANG (view>=30k va >=2x trung vi kenh do, <=60 ngay), 70% ngach/30% chu de, tat tieng, thoi luong ngau nhien, Khong quan tam muc lac de; dat >90% chu de thi tu tat; s…
 - **2.146.0** — 2026-10-03 — `vps-jp1` — Bo nao (kieu Hermes/Claude Code): core/nao.py CLI an toan (thu/tranh/bai-hoc/uu-tien-nguon/de-xuat, gioi han + quyen theo ti le dung, ngay kiem >= luc co so 48h), phien Claude Code headless 04:10 hang ngay (ShopAPI-Nao), nao/CLAUDE.md 6 bu…
 - **2.145.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 3: so bai hoc co bo dem cong/tru (kieu ExpeL/ACE, delta <=3 thao tac/video, that khi >=3 video xac nhan, chu gach = bo); hieu chinh du doan bien tap (lech CTR/AVD, ti le dung) dua vao loi nhac + so do chinh xac
 - **2.144.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 2: truc kieu_tieu_de + hook (nhan theo nghia do LLM tra kem luc cham, regex chi la duong lui), Thompson he so 0.9-1.1 khi chon tieu de/hook/kieu bia, ghi nhan vao ho so + van
