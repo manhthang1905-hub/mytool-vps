@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.148.1** — 2026-10-04 — `vps-jp1` — thiet_lap_kenh: doc lai handle theo trang cong khai, doi o anh dung cham, sua bo chon danh sach phat
 - **2.148.0** — 2026-10-04 — `vps-jp1` — Thiet lap kenh tu dong (core/thiet_lap_kenh ho so: ten/handle/mo ta SEO/tu khoa/danh sach phat/mac dinh tai len + logo/banner/hinh mo; vm/thiet_lap_kenh_dom dien Studio, doc lai xac nhan, chi doi muc khac, luat doi ten/handle; agent tu cha…
 - **2.147.1** — 2026-10-03 — `vps-jp1` — Nuoi trang chu: chong loi NoneType khi trinh phat chua nap/dang quang cao
 - **2.147.0** — 2026-10-03 — `vps-jp1` — Nuoi trang chu (cong tac nuoi_trang_chu): Chrome kenh xem video doi thu THANG (view>=30k va >=2x trung vi kenh do, <=60 ngay), 70% ngach/30% chu de, tat tieng, thoi luong ngau nhien, Khong quan tam muc lac de; dat >90% chu de thi tu tat; s…
