@@ -408,8 +408,43 @@ def _luot_da_bi_bo(thu_muc_luot: str) -> bool:
         return False
 
 
+def _nguon_trung_kenh_anh_em(goc: str, ma_kenh: str, link: str) -> str:
+    """04/10/2026 — nguồn `link` đã/đang được kênh ANH EM (cùng nhóm) làm không.
+
+    Trả "<kênh>/<mã lượt>" (hoặc "<kênh>") của kênh trùng, rỗng nếu không trùng. DÙNG LẠI đúng dữ
+    liệu bước chọn nguồn đang dùng, không luật thứ hai: kho giữ nguồn của nhóm (`giu-nguon/`),
+    `da_lam` của từng anh em (lượt AUTO + da-lam.txt), và sổ `tu-chay/*.json` của anh em
+    (lượt chưa bỏ). Đọc hỏng thì coi như không trùng (cùng nếp fail-open của bước chọn nguồn).
+    Ca gốc: TL6-T7/0001 mồ côi nhận nuôi cùng nguồn TL6-T7-K2/0001 (cPh2ow-Mi_8)."""
+    ma = so.ma_video(link)
+    if not ma:
+        return ""
+    try:
+        giu = nghien_cuu_nhom.nguon_da_giu_boi_kenh_khac(goc, ma_kenh)
+        if ma in giu:
+            return str(giu[ma])
+        from . import nhom_kenh  # noqa: PLC0415
+        anh_em = [k for k in nhom_kenh.thanh_vien(goc, ma_kenh) if k != ma_kenh]
+        hom_nay = _dt.date.today()
+        for k in anh_em:
+            for i in range(SO_NGAY_QUET_LUOT_CHUA_XONG):
+                bc = _doc_bao_cao_ngay(goc, k, (hom_nay - _dt.timedelta(days=i)).isoformat())
+                for run in bc.get("runs") or []:
+                    if run.get("bo") or run.get("tham_chieu_ma_luot"):
+                        continue
+                    ng = run.get("nguon") or {}
+                    if ma in (str(ng.get("ma") or ""), so.ma_video(str(ng.get("link") or ""))):
+                        return "{0}/{1}".format(k, run.get("ma_luot") or "?")
+            lam = da_lam_mod.doc_ma_da_lam(goc, k)
+            if ma in lam:
+                return "{0}/{1}".format(k, lam[ma])
+    except Exception:  # noqa: BLE001 — kho nhóm hỏng không chặn lượt (như bước chọn nguồn)
+        return ""
+    return ""
+
+
 def _nhan_nuoi_luot_mo_coi(goc: str, ma_kenh: str, ngay_hien_tai_str: str,
-                           da_thay_ma_luot: set) -> str:
+                           da_thay_ma_luot: set, che_do: str = "that") -> str:
     """L1 (chẩn đoán 26/09/2026) — quét thẳng `PROJECTS/AUTO/<kênh>/` (qua
     `auto.liet_ke_luot`, đọc đĩa, KHÔNG qua sổ) tìm lượt CÓ `trang-thai.json`
     nhưng CHƯA XONG mà `da_thay_ma_luot` (mọi mã lượt đã gặp trong `so_ngay`
@@ -439,15 +474,44 @@ def _nhan_nuoi_luot_mo_coi(goc: str, ma_kenh: str, ngay_hien_tai_str: str,
     # và sản xuất lại nguồn cũ từ 05/10.
     ung_vien = [luot for luot in auto.liet_ke_luot(goc, ma_kenh)
                if luot.ma_luot not in da_thay_ma_luot and not _coi_nhu_da_xong(luot)
-               and not _luot_da_bi_bo(luot.thu_muc)]
-    if not ung_vien:
-        return ""
+               and not _luot_da_bi_bo(luot.thu_muc)
+               # 04/10/2026: lượt CHẠY THỬ (`che_do="thu"`, đánh dấu ở `dau_vao`) không phải mồ côi.
+               and str(luot.dau_vao.get("che_do") or "") != "thu"]
     ung_vien.sort(key=lambda l: (l.tao_luc, l.ma_luot))
-    luot = ung_vien[0]
-
+    luot = None
     bao_cao = _doc_bao_cao_ngay(goc, ma_kenh, ngay_hien_tai_str)
-    if any(str(r.get("ma_luot")) == luot.ma_luot for r in bao_cao.get("runs") or []):
-        return luot.ma_luot  # đã nhận nuôi ở một lần gọi trước, trong sổ hôm nay rồi
+    for uv in ung_vien:
+        if any(str(r.get("ma_luot")) == uv.ma_luot for r in bao_cao.get("runs") or []):
+            return uv.ma_luot  # đã nhận nuôi ở một lần gọi trước, trong sổ hôm nay rồi
+        link_uv = str(uv.dau_vao.get("link") or "")
+        trung = _nguon_trung_kenh_anh_em(goc, ma_kenh, link_uv)
+        ly_do_trung = ("trùng nguồn với {0}".format(trung)) if trung else ""
+        if not trung and che_do == "that":
+            # Khoá nguồn dùng chung nhóm (O_EXCL, `giu-nguon/`): hai kênh cùng nhận một nguồn
+            # trong cùng vài phút thì chỉ một bên được.
+            try:
+                duoc, ai = nghien_cuu_nhom.giu_nguon(goc, ma_kenh, so.ma_video(link_uv),
+                                                     ma_luot=uv.ma_luot)
+            except Exception:  # noqa: BLE001
+                duoc, ai = True, ""
+            if not duoc:
+                ly_do_trung = "trùng nguồn với {0} (vừa giành)".format(ai)
+        if ly_do_trung:
+            # Bỏ lượt mồ côi (sổ hôm nay `bo` + BO-VI-*.txt), kênh sẽ chọn nguồn mới.
+            run_bo = {"ma_luot": uv.ma_luot, "nhan_nuoi": True,
+                      "nguon": {"nguon": "nhan-nuoi", "ma": so.ma_video(link_uv), "kenh": "",
+                                "link": link_uv, "tieu_de": str(uv.dau_vao.get("tieu_de") or "")},
+                      "san_xuat": {"da_chay": False, "xong_het": False, "khau_hong": [], "loi": ""},
+                      "ban_giao": {"da_ban_giao": False, "ma_goi": "", "ngay_dang": "",
+                                   "gio_dang": "", "ly_do_trong": "", "loi": ""}}
+            bao_cao["runs"].append(run_bo)
+            _bo_luot_qua_han(goc, ma_kenh, run_bo, bao_cao, ngay_hien_tai_str, ly_do_trung,
+                             lambda _d: None)
+            continue
+        luot = uv
+        break
+    if luot is None:
+        return ""
 
     nguon = {
         "nguon": "nhan-nuoi", "ma": "", "kenh": "",
@@ -469,7 +533,8 @@ def _nhan_nuoi_luot_mo_coi(goc: str, ma_kenh: str, ngay_hien_tai_str: str,
 
 
 def _tim_run_chua_xong(goc: str, ma_kenh: str, ngay_hien_tai: _dt.date,
-                       *, so_ngay: int = SO_NGAY_QUET_LUOT_CHUA_XONG
+                       *, so_ngay: int = SO_NGAY_QUET_LUOT_CHUA_XONG,
+                       che_do: str = "that"
                        ) -> Optional[Tuple[str, str]]:
     """`(ngày, mã lượt)` CŨ NHẤT trong `so_ngay` ngày gần đây (kể cả hôm nay)
     mà lượt chưa xong hết và chưa bị đánh dấu bỏ (`"bo": true`). `None` nếu
@@ -500,7 +565,8 @@ def _tim_run_chua_xong(goc: str, ma_kenh: str, ngay_hien_tai: _dt.date,
             if luot is None or not _coi_nhu_da_xong(luot):
                 ung_vien.append((ngay_str, ma_luot))
     if not ung_vien:
-        ma_nuoi = _nhan_nuoi_luot_mo_coi(goc, ma_kenh, ngay_hien_tai.isoformat(), da_thay_ma_luot)
+        ma_nuoi = _nhan_nuoi_luot_mo_coi(goc, ma_kenh, ngay_hien_tai.isoformat(), da_thay_ma_luot,
+                                    che_do)
         if ma_nuoi:
             ung_vien.append((ngay_hien_tai.isoformat(), ma_nuoi))
     if not ung_vien:
@@ -2246,7 +2312,7 @@ def _chay_mot_ngay_trong_khoa(
     # Lượt dở luôn đi trước nghiên cứu và cửa nhịp đăng: lần chạy sau tiếp tục
     # đúng nguồn cũ, không chất thêm video và không trả tiền lần hai.
     tim_som = _tim_run_chua_xong(
-        goc, ma_kenh, ngay, so_ngay=SO_NGAY_QUET_LUOT_CHUA_XONG)
+        goc, ma_kenh, ngay, so_ngay=SO_NGAY_QUET_LUOT_CHUA_XONG, che_do=che_do)
     # ═══ VÁ 28/09/2026 — nạp lại `bao_cao`, tránh `finalize()` ghi đè mất
     # dòng "nhận con nuôi" vừa ghi ═══
     #
@@ -2640,6 +2706,8 @@ def _chay_mot_ngay_trong_khoa(
         _ghi_bao_cao_ngay(goc, ma_kenh, ngay_str, bao_cao)
         luot_moi_ = auto.moi_luot(goc, ma_kenh, ma_luot_moi_,
                                   {"link": nguon["link"], "tieu_de": "", "chu_bia": ""})
+        if che_do == "thu":
+            luot_moi_.dau_vao["che_do"] = "thu"  # 04/10/2026: lượt thử, không phải mồ côi
         auto.ghi_luot(luot_moi_)
         log("  chọn “{0}” ({1}, nguồn {2}) — lượt {3}.".format(
             nguon["tieu_de"][:60] or nguon["link"], nguon["kenh"], nguon["nguon"], ma_luot_moi_))
@@ -2657,6 +2725,8 @@ def _chay_mot_ngay_trong_khoa(
         {"link": str(nguon_luot.get("link") or ""), "tieu_de": "", "chu_bia": ""})
     if auto.doc_luot(luot.thu_muc) is None:
         auto.ghi_luot(luot)
+    elif luot.dau_vao.pop("che_do", None) == "thu":
+        auto.ghi_luot(luot)  # lượt thử nay chạy thật: gỡ cờ "thu"
 
     if not luot.xong_het:
         # ── 3a) Kênh đủ điều kiện sản xuất chưa — kiểm TRƯỚC van ngân sách:

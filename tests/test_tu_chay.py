@@ -2400,3 +2400,54 @@ def test_loi2_end_to_end_chay_mot_ngay_loai_ung_vien_trung_de_da_lam_that(tmp_pa
     assert ket["run"]["nguon"]["ma"] == "DEKHAC00004"  # KHÔNG chọn ứng viên trùng đề
     assert any("loại TRUNGDE0003 vì trùng tiêu đề" in dong for dong in log)
 
+
+
+# ── 04/10/2026: chống trùng nguồn khi nhận nuôi (ca TL6-T7 / TL6-T7-K2, cPh2ow-Mi_8) ──
+
+
+def _hai_kenh_anh_em(goc):
+    _ghi_kenh(goc, "A1", nhom="n1")
+    _ghi_kenh(goc, "A2", nhom="n1")
+
+
+def _so_anh_em_da_chon(goc, kenh, ma_nguon, ngay):
+    from core.tu_chay import _ghi_bao_cao_ngay
+    _ghi_bao_cao_ngay(goc, kenh, ngay, {"ngay": ngay, "kenh": kenh, "nhat_ky": [], "runs": [
+        {"ma_luot": "0001", "nguon": {"ma": ma_nguon, "link": "https://youtu.be/" + ma_nguon}}]})
+
+
+def test_nhan_nuoi_tu_choi_khi_trung_nguon_kenh_anh_em(tmp_path):
+    goc = str(tmp_path)
+    _hai_kenh_anh_em(goc)
+    hom_nay = _dt.date.today()
+    _so_anh_em_da_chon(goc, "A2", "cPh2ow-Mi_8", hom_nay.isoformat())
+    _tao_luot_mo_coi(goc, "A1", "0001", link="https://www.youtube.com/watch?v=cPh2ow-Mi_8",
+                     tao_luc=_dt.datetime(2026, 10, 3, 10).timestamp())
+    assert _nhan_nuoi_luot_mo_coi(goc, "A1", hom_nay.isoformat(), set()) == ""
+    bc = _doc_bao_cao_ngay(goc, "A1", hom_nay.isoformat())
+    run = bc["runs"][0]
+    assert run["bo"] is True and "A2/0001" in run["ly_do_bo"]
+    assert any(t.startswith("BO-VI-") for t in os.listdir(os.path.join(goc, "PROJECTS", "AUTO", "A1", "0001")))
+    # lần sau không bị nhận lại
+    assert _nhan_nuoi_luot_mo_coi(goc, "A1", hom_nay.isoformat(), {"0001"}) == ""
+
+
+def test_nhan_nuoi_van_nhan_khi_khong_trung_va_giu_nguon(tmp_path):
+    goc = str(tmp_path)
+    _hai_kenh_anh_em(goc)
+    _tao_luot_mo_coi(goc, "A1", "0001", link="https://youtu.be/ORPHAN00001")
+    hom_nay = _dt.date.today().isoformat()
+    assert _nhan_nuoi_luot_mo_coi(goc, "A1", hom_nay, set()) == "0001"
+    # nguồn đã giữ cho A1: kênh A2 nhận cùng nguồn thì bị chặn (sổ nguồn đã nhận dùng chung nhóm)
+    _tao_luot_mo_coi(goc, "A2", "0001", link="https://youtu.be/ORPHAN00001")
+    assert _nhan_nuoi_luot_mo_coi(goc, "A2", hom_nay, set()) == ""
+
+
+def test_luot_thu_khong_duoc_nhan_nuoi(tmp_path):
+    goc = str(tmp_path)
+    _ghi_kenh(goc, "K1")
+    luot = _tao_luot_mo_coi(goc, "K1", "0001")
+    luot.dau_vao["che_do"] = "thu"
+    auto.ghi_luot(luot)
+    assert _nhan_nuoi_luot_mo_coi(goc, "K1", _dt.date.today().isoformat(), set()) == ""
+    assert _doc_bao_cao_ngay(goc, "K1", _dt.date.today().isoformat())["runs"] == []
