@@ -916,6 +916,8 @@ def xem_mot_video(tab: Tab, v: dict, ghi, kh: dict = None, ngu=time.sleep, dung=
         info = tab.js(_JS_VIDEO)
         if not info:
             break
+        if info.get("t") is None or not info.get("dai"):    # trình phát chưa nạp / đang quảng cáo: chờ nhịp sau
+            continue
         if info.get("het") or info["t"] >= info["dai"] - 3:
             break
         if info.get("nut_qc"):                       # quảng cáo cho bỏ qua
