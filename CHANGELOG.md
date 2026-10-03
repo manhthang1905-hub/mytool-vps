@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.144.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 2: truc kieu_tieu_de + hook (nhan theo nghia do LLM tra kem luc cham, regex chi la duong lui), Thompson he so 0.9-1.1 khi chon tieu de/hook/kieu bia, ghi nhan vao ho so + van
 - **2.143.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 1 (kieu AI co vua): core/tu_hoc ghi van (nuoc di + du doan) luc ban giao, cham ket qua 48h/7 ngay (gio xem), bang diem Beta + tien nghiem nhom, Thompson sampling he so cum 0.8-1.2 trong xep hang nguon
 - **2.142.0** — 2026-10-03 — `vps-jp1` — Giao dien VPS moi (cot icon, danh sach kenh, tab, cot phai Viec cua ban/Canh bao/Sap dang, dai trang thai); san xuat dung han (M1 chon content cho khe M2, san_xuat_truoc_gio); tai bo sung ghi ly do khi het luot; bang dieu hanh: lich tiep t…
 - **2.141.8** — 2026-10-01 — `vps-jp1` — feat: tu chon danh sach phat theo de tai (kenh.yaml danh_sach_phat_kenh -> cot Danh sach phat -> may dang)
