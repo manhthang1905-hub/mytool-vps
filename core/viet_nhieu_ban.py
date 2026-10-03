@@ -456,6 +456,7 @@ def thay_hook(goi_viet: Callable[[str], str],
               ghi: Optional[Callable[[str], None]] = None,
               luu_ban: Optional[Callable[[int, str], None]] = None,
               da_co: Optional[Callable[[int], str]] = None,
+              hoc: Optional[Dict[str, Any]] = None,
               ) -> Tuple[str, bool, str]:
     """Viết `so_ban` đoạn mở, chấm, thay đoạn mở tốt nhất vào `ban`.
 
@@ -464,6 +465,9 @@ def thay_hook(goi_viet: Callable[[str], str],
 
     `luu_ban(i, chu)` / `da_co(i)` để nơi gọi ghi từng bản ra đĩa và nhặt lại
     khi chạy tiếp một lượt đứt giữa chừng.
+
+    `hoc` (tự học đợt 2): `{"goc","kenh","hat"}` — bật nhãn `hook` + hệ số Thompson; kết quả
+    (nhãn hook ĐÃ CHỌN + hệ số) ghi lại vào `hoc["ket"]`. Không truyền thì y như cũ.
     """
     def noi(dong: str) -> None:
         if ghi is not None:
@@ -522,11 +526,27 @@ def thay_hook(goi_viet: Callable[[str], str],
     if len(dung) == 1:
         chon, ly_do, diem, bang = 0, "chỉ còn một hook qua rào chắn", {}, ""
     else:
+        sau, ghi_hoc = None, {}
+        if hoc is not None and goi_cham and khuon_cham.strip():
+            try:
+                from . import tu_hoc  # noqa: PLC0415
+
+                sau, ghi_hoc = tu_hoc.bo_chon(hoc["goc"], hoc["kenh"], "hook", dung, hoc["hat"])
+                khuon_cham = khuon_cham + tu_hoc.yeu_cau_nhan("hook")
+            except Exception:  # noqa: BLE001
+                sau, ghi_hoc = None, {}
         chon, ly_do, diem, bang = cham_va_chon(
             goi_cham if (goi_cham and khuon_cham.strip()) else None,
             dung, hook_goc or "", khuon_cham=khuon_cham, chung=o,
-            muc_tieu=muc_tieu, ghi=ghi)
+            muc_tieu=muc_tieu, ghi=ghi, sau_cham=sau)
     hook_chon = dung[chon]
+    if hoc is not None:
+        try:
+            from . import tu_hoc  # noqa: PLC0415
+
+            hoc["ket"] = tu_hoc.ket_nhan("hook", dung, chon, ghi_hoc if len(dung) > 1 else {})
+        except Exception:  # noqa: BLE001
+            pass
 
     # ═══ VÁ HOOK ĐÃ CHỌN THEO ĐÚNG LỜI CHÊ (thêm 04/09/2026) ═══
     #
@@ -563,6 +583,13 @@ def thay_hook(goi_viet: Callable[[str], str],
                     ten_ban=("hook chưa vá", "hook đã vá"))
                 if i_hon == 1:
                     hook_chon = va
+                    if hoc is not None:
+                        try:
+                            from . import tu_hoc  # noqa: PLC0415
+
+                            hoc["ket"] = tu_hoc.ket_nhan("hook", [va], 0, {})
+                        except Exception:  # noqa: BLE001
+                            pass
                     ghi_va = " · bộ chấm chọn hook ĐÃ VÁ: " + ly_do_so[:160]
                 else:
                     ghi_va = " · bộ chấm vẫn thích hook chưa vá: " + ly_do_so[:160]
@@ -584,6 +611,7 @@ def cham_va_chon(goi: Optional[Callable[[str], str]], ban: Sequence[str],
                  ghi: Optional[Callable[[str], None]] = None,
                  ky_tu_moi_phut: int = 0,
                  ten_ban: Optional[Sequence[str]] = None,
+                 sau_cham: Optional[Callable[[int, Dict[str, Any], Any], int]] = None,
                  ) -> Tuple[int, str, Dict[str, Any], str]:
     """Chấm `ban`, trả về `(chỉ số bản chọn, lý do, điểm, bảng số đo)`.
 
@@ -647,6 +675,15 @@ def cham_va_chon(goi: Optional[Callable[[str], str]], ban: Sequence[str],
                 if gt:
                     ly_do += "\n{0}: {1}".format(nhan, gt)
             diem = ket.get("diem") if isinstance(ket.get("diem"), dict) else {}
+            if sau_cham is not None:
+                # Tự học (`core/tu_hoc.bo_chon`): nhân hệ số Thompson vào điểm LLM; nhãn `kieu` do LLM trả kèm.
+                try:
+                    moi = sau_cham(chon, diem, ket.get("kieu"))
+                    if isinstance(moi, int) and 0 <= moi < len(ban) and moi != chon:
+                        noi("  (tự học: đổi chọn {0} → {1} theo hệ số Thompson)".format(ten(chon), ten(moi)))
+                        chon = moi
+                except Exception as loi:  # noqa: BLE001 — học hỏng không được làm hỏng chấm
+                    noi("  (tự học: bỏ qua hệ số — {0})".format(str(loi)[:80]))
     except Exception as loi:  # noqa: BLE001 — chấm hỏng thì chọn theo số đo
         noi("  (chấm hỏng: {0} — chọn theo số đo)".format(str(loi)[:80]))
     if chon is None:

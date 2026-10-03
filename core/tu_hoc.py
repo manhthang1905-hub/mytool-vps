@@ -20,12 +20,18 @@ import io
 import json
 import os
 import random
+import re
 import statistics
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-#: Trục nhãn của đợt 1. Đợt 2 thêm "kieu_tieu_de", "hook".
-TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai")
+#: Trục nhãn. Đợt 2 (03/10/2026) thêm "kieu_tieu_de", "hook".
+TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook")
+#: Tập nhãn cố định của 2 trục đợt 2 (LLM trả kèm lúc chấm; thiếu thì lùi về regex).
+KIEU_TIEU_DE = ("so_dem", "cau_hoi", "canh_bao", "bi_mat", "doi_lap", "dac_diem_nguoi", "khac")
+KIEU_HOOK = ("cau_hoi", "canh_tinh_huong", "so_lieu_su_that", "canh_bao", "ke_chuyen", "khac")
+_TAP_NHAN = {"kieu_tieu_de": KIEU_TIEU_DE, "hook": KIEU_HOOK}
+HE_SO_CHON_NEN, HE_SO_CHON_BIEN = 0.9, 0.2   # hệ số = 0,9 + 0,2 × điểm rút ∈ [0,9; 1,1]
 TRONG_SO_7D = 1.0
 TRONG_SO_48H = 0.5
 HE_SO_NHOM = 0.3
@@ -127,9 +133,147 @@ def _doc_ho_so(goc: str, ma_kenh: str, ma_goi: str) -> Dict[str, Any]:
 
 def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any) -> Dict[str, Any]:
     th = hs.get("thumbnail") or {}
-    return {"cum": nhan_cum(nguon or {}, cum_cua),
-            "cong_thuc": str((nguon or {}).get("cong_thuc") or hs.get("cong_thuc") or (nguon or {}).get("nguon") or ""),
-            "kieu_bia": str(th.get("kieu") or ""), "do_dai": nhom_do_dai(hs.get("thoi_luong_giay"))}
+    ra = {"cum": nhan_cum(nguon or {}, cum_cua),
+          "cong_thuc": str((nguon or {}).get("cong_thuc") or hs.get("cong_thuc") or (nguon or {}).get("nguon") or ""),
+          "kieu_bia": str(th.get("kieu") or ""), "do_dai": nhom_do_dai(hs.get("thoi_luong_giay"))}
+    ra.update(_nhan_dot2(hs))
+    return ra
+
+
+def _nhan_dot2(hs: Dict[str, Any]) -> Dict[str, Any]:
+    """`kieu_tieu_de`/`hook` của ván: nhãn LLM đã ghi lúc làm video (`tieu_de_cham.tu_hoc`,
+    `kich_ban.hook_nhan`) nếu có; không có thì đoán bằng regex từ tiêu đề thật và đánh dấu `nhan_doan`.
+    Hook không có chữ trong hồ sơ cũ nên không đoán được — để trống, không bịa."""
+    ra: Dict[str, Any] = {}
+    doan: List[str] = []
+    td = ((hs.get("tieu_de_cham") or {}).get("tu_hoc") or {}) if isinstance(hs.get("tieu_de_cham"), dict) else {}
+    hk = ((hs.get("kich_ban") or {}).get("hook_nhan") or {}) if isinstance(hs.get("kich_ban"), dict) else {}
+    for truc, nguon in (("kieu_tieu_de", td), ("hook", hk)):
+        v = chuan_nhan(truc, nguon.get(truc)) if isinstance(nguon, dict) else ""
+        if v:
+            ra[truc] = v
+            if nguon.get("nhan_doan"):
+                doan.append(truc)
+    if "kieu_tieu_de" not in ra and str(hs.get("tieu_de") or "").strip():
+        ra["kieu_tieu_de"] = nhan_tieu_de_regex(str(hs["tieu_de"]))
+        doan.append("kieu_tieu_de")
+    if doan:
+        ra["nhan_doan"] = True
+        ra["nhan_doan_truc"] = doan
+    return ra
+
+
+# ── nhãn kiểu tiêu đề / hook: LLM trả kèm lúc chấm, regex chỉ là đường lùi ──
+
+_RE_HOI = re.compile(r"[?？]|\bbạn có (?:biết|bao giờ)\b|\bwhy\b|\bhow\b|\bwhat\b|(?:ですか|でしょうか|のか)[。！!]?$", re.I)
+_RE_CANH_BAO = re.compile(r"sai lầm|đừng|không bao giờ|cảnh báo|nguy hiểm|tránh|thảm họa|mistake|never|stop |don'?t|warning|"
+                          r"avoid|danger|危険|やめ|注意|失敗|絶対|してはいけ|ダメ", re.I)
+_RE_BI_MAT = re.compile(r"bí mật|sự thật|ít ai|không ai nói|giấu|che giấu|bị che|secret|truth|hidden|nobody tells|"
+                        r"秘密|真実|知らない|誰も|隠", re.I)
+_RE_DOI_LAP = re.compile(r"ngược lại|trái ngược|thực ra|hóa ra|thật ra|không phải|nhưng thực|opposite|actually|"
+                         r"contrary|myth|逆|実は|ではなく|じゃない|真逆", re.I)
+_RE_NGUOI = re.compile(r"kiểu người|người (?:\w+ ){0,3}(?:thường|hay|có)|những người|people who|type of (?:person|people)|"
+                       r"タイプ|人は|人の特徴|な人|する人", re.I)
+_RE_SO = re.compile(r"\d|[０-９]|[一二三四五六七八九十百千]+(?:つ|個|選|大|の|%)|top\s*\d", re.I)
+_RE_TINH_HUONG = re.compile(r"tưởng tượng|giả sử|hãy nghĩ|bạn đang|bạn có từng|imagine|suppose|picture this|"
+                            r"想像|もし|あなたが|ある日|いつも", re.I)
+_RE_KE = re.compile(r"ngày xưa|hồi đó|một hôm|có một|câu chuyện|năm \d{4}|story|once|years ago|back in|"
+                    r"昔|ある男|ある女|物語|あれは", re.I)
+
+
+def nhan_tieu_de_regex(chu: str) -> str:
+    """Đường lùi RẺ khi LLM không trả nhãn. Thứ tự: hỏi > cảnh báo > bí mật > đối lập > kiểu người > số đếm."""
+    c = str(chu or "")
+    for ten, re_ in (("cau_hoi", _RE_HOI), ("canh_bao", _RE_CANH_BAO), ("bi_mat", _RE_BI_MAT),
+                     ("doi_lap", _RE_DOI_LAP), ("dac_diem_nguoi", _RE_NGUOI), ("so_dem", _RE_SO)):
+        if re_.search(c):
+            return ten
+    return "khac"
+
+
+def nhan_hook_regex(chu: str) -> str:
+    """Đường lùi cho hook — chỉ nhìn ~220 ký tự đầu."""
+    c = str(chu or "").strip()[:220]
+    for ten, re_ in (("cau_hoi", _RE_HOI), ("canh_bao", _RE_CANH_BAO), ("so_lieu_su_that", _RE_SO),
+                     ("canh_tinh_huong", _RE_TINH_HUONG), ("ke_chuyen", _RE_KE)):
+        if re_.search(c):
+            return ten
+    return "khac"
+
+
+_REGEX_NHAN = {"kieu_tieu_de": nhan_tieu_de_regex, "hook": nhan_hook_regex}
+
+
+def chuan_nhan(truc: str, gia_tri: Any) -> str:
+    """Nhãn hợp lệ của trục (chữ thường, thuộc tập cố định) hoặc "" nếu lạ."""
+    v = str(gia_tri or "").strip().lower()
+    return v if v in _TAP_NHAN.get(truc, ()) else ""
+
+
+def yeu_cau_nhan(truc: str) -> str:
+    """Đoạn THÊM vào cuối lời nhắc chấm đang có: xin LLM ghi nhãn từng phương án, khỏi tốn thêm lượt gọi."""
+    return ("\n\nNgoài ra, trong JSON trả về, thêm khoá \"kieu\": nhãn của TỪNG ứng viên theo Ý NGHĨA, dạng "
+            "{\"A\": \"<nhãn>\", \"B\": \"<nhãn>\"}. Mỗi nhãn CHỈ là một trong: " + ", ".join(_TAP_NHAN[truc])
+            + " (không chắc thì \"khac\"). Giữ nguyên mọi khoá khác như yêu cầu ở trên.")
+
+
+def gan_nhan(truc: str, ban: Any, kieu_llm: Any = None) -> Tuple[List[str], List[bool]]:
+    """Nhãn mỗi phương án: của LLM nếu hợp lệ, không thì regex (`doan`=True)."""
+    kl = kieu_llm if isinstance(kieu_llm, dict) else {}
+    nhan, doan = [], []
+    for i, b in enumerate(ban):
+        v = chuan_nhan(truc, kl.get(chr(65 + i)) or kl.get(chr(97 + i)))
+        nhan.append(v or _REGEX_NHAN[truc](b))
+        doan.append(not v)
+    return nhan, doan
+
+
+def he_so_chon(goc: str, ma_kenh: str, truc: str, nhan: Any, hat: str) -> Dict[str, float]:
+    """`{nhãn: hệ số}` = 0,9 + 0,2 × điểm rút Thompson. Trục chưa có ván kết luận → {} (không làm gì).
+    Hạt giống tất định theo `hat` (kênh + mã gói)."""
+    if not bang_diem(goc, ma_kenh).get(truc):
+        return {}
+    rd = rut(goc, ma_kenh, truc, sorted({n for n in nhan if n}), random.Random(hat))
+    return {n: round(HE_SO_CHON_NEN + HE_SO_CHON_BIEN * r, 3) for n, r in rd.items()}
+
+
+def bo_chon(goc: str, ma_kenh: str, truc: str, ban: Any, hat: str) -> Tuple[Any, Dict[str, Any]]:
+    """`(sau_cham, ghi)` cho `viet_nhieu_ban.cham_va_chon(sau_cham=…)`: gắn nhãn, nhân hệ số vào điểm LLM,
+    chọn lại phương án điểm cao nhất. Mọi thứ giải thích được nằm trong `ghi` (cập nhật khi callback chạy)."""
+    ghi: Dict[str, Any] = {}
+
+    def sau_cham(chon: int, diem: Dict[str, Any], kieu_llm: Any) -> int:
+        nhan, doan = gan_nhan(truc, ban, kieu_llm)
+        ghi.update(nhan=nhan, doan=doan)
+        he = he_so_chon(goc, ma_kenh, truc, nhan, hat)
+        if not he:
+            return chon
+        d0 = {i: _so(diem.get(chr(65 + i))) for i in range(len(ban)) if isinstance(diem, dict)}
+        d0 = {i: v for i, v in d0.items() if v is not None}
+        if len(d0) < 2:
+            return chon
+        d1 = {i: round(v * he.get(nhan[i], 1.0), 3) for i, v in d0.items()}
+        moi = max(d1, key=lambda i: (d1[i], i == chon))
+        ghi["he_so"] = {"truc": truc, "he_so": he, "diem_goc": {chr(65 + i): v for i, v in d0.items()},
+                        "diem_sau": {chr(65 + i): v for i, v in d1.items()}, "chon_truoc": chon, "chon_sau": moi}
+        return moi
+
+    return sau_cham, ghi
+
+
+def ket_nhan(truc: str, ban: Any, chon: int, ghi: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Nhãn của phương án ĐÃ CHỌN để ghi vào hồ sơ/ván. Callback chưa chạy (chấm hỏng) thì dùng regex."""
+    ghi = ghi or {}
+    if ghi.get("nhan") and 0 <= chon < len(ghi["nhan"]):
+        nhan, doan = ghi["nhan"][chon], bool(ghi["doan"][chon])
+    elif 0 <= chon < len(ban):
+        nhan, doan = _REGEX_NHAN[truc](ban[chon]), True
+    else:
+        return {}
+    ra: Dict[str, Any] = {truc: nhan, "nhan_doan": doan}
+    if ghi.get("he_so"):
+        ra["he_so_tu_hoc"] = ghi["he_so"]
+    return ra
 
 
 def _du_doan_tu(nguon: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,6 +380,15 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
         van[ma] = {"ma_goi": ma, "nuoc": nuoc, "du_doan": _du_doan_tu(ng), "ngay": str(hs.get("ngay_dang") or ""),
                    "tu_cu": True}
         moi += 1
+    bu = 0
+    for ma, v in van.items():  # bù nhãn đợt 2 cho ván cũ (regex, không gọi LLM)
+        hs = ho_so.get(ma) or {}
+        if hs and "kieu_tieu_de" not in (v.get("nuoc") or {}):
+            them = _nhan_dot2(hs)
+            if them:
+                v["nuoc"] = dict(v.get("nuoc") or {}, **them)
+                bu += 1
+    moi += bu
     vm_theo_id: Optional[Dict[str, Any]] = None
     nguong: Optional[float] = None
     tv7: Optional[Tuple[Optional[float], str]] = None

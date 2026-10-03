@@ -569,6 +569,7 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
             raise RuntimeError("giám khảo không trả điểm cho ứng viên nào")
 
         canh_bao = ""
+        he_tu_hoc: Dict[str, Any] = {}
         if all(k.loai for k in ung_cu_vien):
             # Mọi ứng viên đều bị loại (chữ quá dài/sai/vỡ/nhân vật dị dạng) — luật "không
             # chặn sản xuất" vẫn buộc phải ra MỘT tấm. Chọn tấm ÍT CHỮ NHẤT thay vì tấm điểm
@@ -587,6 +588,21 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
         else:
             hop_le = [k for k in ung_cu_vien if not k.loai]
             hop_le.sort(key=lambda k: -k.tong)
+            # Tự học (đợt 2): nhân điểm với 0,9 + 0,2 × Thompson của KIỂU bìa rồi xếp lại. Chỉ nắn thứ tự hạng
+            # (A/B nhóm khuôn ở dưới vẫn chạy y cũ); trục chưa có ván kết luận thì không làm gì.
+            try:
+                from . import tu_hoc  # noqa: PLC0415
+
+                kieu_ds = [ten_kieu_theo_so.get(k_.so, "") for k_ in hop_le]
+                he = tu_hoc.he_so_chon(goc, kenh, "kieu_bia", kieu_ds, "kb|{0}|{1}".format(kenh, ma_goi))
+                if he:
+                    sau = sorted(hop_le, key=lambda k_: -k_.tong * he.get(ten_kieu_theo_so.get(k_.so, ""), 1.0))
+                    he_tu_hoc = {"truc": "kieu_bia", "he_so": he, "doi_hang": sau[0].so != hop_le[0].so,
+                                 "diem_sau": {str(k_.so): round(k_.tong * he.get(ten_kieu_theo_so.get(k_.so, ""), 1.0), 2)
+                                              for k_ in hop_le}}
+                    hop_le = sau
+            except Exception:  # noqa: BLE001 — học hỏng không được làm hỏng chọn bìa
+                he_tu_hoc = {}
             thang = hop_le[0]
             chon_boi = "ai"
             ly_do_chon = thang.ly_do or "điểm tổng cao nhất"
@@ -631,7 +647,8 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
                     "nhom": nhom_theo_so.get(thang.so, ""),
                     "theo_khuon": nhom_theo_so.get(thang.so) == "khuon",
                     "tham_do": nhom_theo_so.get(thang.so, "tham_do" if not nhom_theo_so else "") == "tham_do",
-                    "nhom_uu_tien": nhom_uu_tien or "", "luot_tham_do": bool(luot_tham_do)},
+                    "nhom_uu_tien": nhom_uu_tien or "", "luot_tham_do": bool(luot_tham_do),
+                    "he_so_tu_hoc": he_tu_hoc},
             "ung_vien": [{"so": k.so, "kieu": ten_kieu_theo_so.get(k.so, ""),
                          "nhom": nhom_theo_so.get(k.so, ""),
                          "tong_diem": round(k.tong, 1), "diem": {a: round(b, 1) for a, b in k.diem.items()},

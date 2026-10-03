@@ -3578,6 +3578,7 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
             return _doc_chu(os.path.join(d, TEP_HOOK.format(chr(65 + i))))
 
         bc.ghi("  viết riêng {0} đoạn mở đầu…".format(so_hook))
+        hoc_hook = {"goc": bc.goc, "kenh": k.ma, "hat": "hk|{0}|{1}-{2}".format(k.ma, luot.ma_kenh, luot.ma_luot)}
         try:
             ban_moi, da_thay, ghi_hook = thay_hook(
                 goi_viet_hook, goi_cham_hook, ban_chon,
@@ -3600,7 +3601,12 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
                           if getattr(k, "hoan_thien", False) else ""),
                 goi_va=goi_va_hook,
                 chung=chung, ghi=bc.ghi,
-                luu_ban=luu_hook, da_co=hook_da_co)
+                luu_ban=luu_hook, da_co=hook_da_co, hoc=hoc_hook)
+            if hoc_hook.get("ket"):  # nhãn hook đã chọn → hồ sơ video đọc (`ho_so_video`)
+                try:
+                    ghi_json(os.path.join(d, "1-tu-hoc-hook.json"), hoc_hook["ket"])
+                except Exception:  # noqa: BLE001
+                    pass
             if da_thay:
                 ban_chon = ban_moi
                 _ghi_chu(os.path.join(d, "1-ban-hook-moi.txt"), ban_chon + "\n")
@@ -4332,19 +4338,37 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
             return json.dumps({"chon": "A",
                                "ly_do": "chấm hỏng — giữ đối chứng: {0}".format(str(loi)[:100])})
 
+    # Tự học (đợt 2): xin LLM ghi nhãn `kieu_tieu_de` từng ứng viên NGAY TRONG lượt chấm này (không thêm lượt
+    # gọi) và nhân hệ số 0,9–1,1 theo Thompson vào điểm. Hỏng thì chấm y như cũ.
+    khuon_cham_td, sau_cham_td, ghi_hoc_td = _KHUON_CHAM_TIEU_DE, None, {}
+    try:
+        from . import tu_hoc as _th  # noqa: PLC0415
+
+        sau_cham_td, ghi_hoc_td = _th.bo_chon(bc.goc, k.ma, "kieu_tieu_de", ban,
+                                              "td|{0}|{1}-{2}".format(k.ma, luot.ma_kenh, luot.ma_luot))
+        khuon_cham_td = _KHUON_CHAM_TIEU_DE + _th.yeu_cau_nhan("kieu_tieu_de")
+    except Exception:  # noqa: BLE001
+        sau_cham_td, ghi_hoc_td = None, {}
     try:
         chung_cham = dict(_du_lieu_cham_tieu_de(bc.goc, k.ma),
                           THUMB_HIEN_CO=chu_bia_hien_co or "")
         chon, ly_do, diem, bang = cham_va_chon(
-            goi_cham, ban, sach, khuon_cham=_KHUON_CHAM_TIEU_DE,
+            goi_cham, ban, sach, khuon_cham=khuon_cham_td,
             tieu_chi=_TIEU_CHI_CHAM_TIEU_DE, chung=chung_cham, muc_tieu=0,
-            ghi=bc.ghi, ten_ban=ten_ban)
+            ghi=bc.ghi, ten_ban=ten_ban, sau_cham=sau_cham_td)
     except Exception as loi:  # noqa: BLE001 — chấm hỏng thì giữ đối chứng, không vỡ lượt
         bc.ghi("  (chấm tiêu đề không xong: {0}) — giữ đối chứng.".format(str(loi)[:100]))
         chon, ly_do, diem, bang = 0, "chấm hỏng — giữ đối chứng: {0}".format(str(loi)[:100]), {}, ""
 
     chon = chon if 0 <= chon < len(ban) else 0
+    try:
+        from . import tu_hoc as _th2  # noqa: PLC0415
+
+        nhan_tu_hoc = _th2.ket_nhan("kieu_tieu_de", ban, chon, ghi_hoc_td)
+    except Exception:  # noqa: BLE001
+        nhan_tu_hoc = {}
     ghi_json(os.path.join(d, "1-tieu-de-cham.json"), {
+        "tu_hoc": nhan_tu_hoc,
         "ung_vien": [{"ten": ten_ban[i], "tieu_de": b} for i, b in enumerate(ban)],
         "chon": chon, "ten_chon": ten_ban[chon] if chon < len(ten_ban) else "",
         "tieu_de_chon": ban[chon], "ly_do": ly_do, "diem": diem, "bang_so_do": bang,

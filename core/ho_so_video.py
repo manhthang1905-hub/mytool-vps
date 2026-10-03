@@ -446,6 +446,9 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
     ho_so["chu_bia"] = chu_bia
     ho_so["tieu_de_cham"] = _doc_json(os.path.join(thu_muc_luot, "1-tieu-de-cham.json"))
     ho_so["kich_ban"] = _doc_cham_diem(os.path.join(thu_muc_luot, "1-cham-diem.txt"))
+    hook_nhan = _doc_json(os.path.join(thu_muc_luot, "1-tu-hoc-hook.json"))  # tự học đợt 2
+    if isinstance(hook_nhan, dict):
+        ho_so["kich_ban"]["hook_nhan"] = hook_nhan
     ho_so["phan"] = _doc_phan(thu_muc_luot)
     ho_so["nhac"] = _doc_json(os.path.join(thu_muc_luot, "8-nhac.json"))
 
