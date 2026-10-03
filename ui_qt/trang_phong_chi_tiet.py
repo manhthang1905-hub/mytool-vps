@@ -7,6 +7,9 @@
 
 Chỉ VẼ: mọi dữ liệu từ `core.bang_dieu_khien` (thuần, test không cần Qt). Đọc chậm (sổ bài học vài giây)
 chạy qua `app.run_bg`.
+
+`nhung=True` (03/10/2026): dựng ngay làm một widget con để NHÚNG vào tab của phòng điều hành
+(`ui_qt.trang_bang_dieu_khien`) — bỏ nút "Đóng", không phải cửa sổ riêng.
 """
 
 from __future__ import annotations
@@ -45,10 +48,19 @@ def _o_markdown(chu: str, rong: str) -> QTextEdit:
     return o
 
 
+def _nut_dong(hop: QDialog, v: QVBoxLayout, nhung: bool) -> None:
+    """Hộp riêng: thêm nút "Đóng". Nhúng vào tab: thành widget con, không nút."""
+    if nhung:
+        hop.setWindowFlags(Qt.Widget)
+        v.setContentsMargins(0, 0, 0, 0)
+    else:
+        v.addWidget(nut_phu("Đóng", hop.accept, rong=90))
+
+
 class HopBaoCaoTuan(QDialog):
     """Báo cáo tuần: thẻ "Kênh" (`giam-doc/BAO-CAO-TUAN.md`) + thẻ "Công ty" (`BAO-CAO-CONG-TY.md`)."""
 
-    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None):
+    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None, *, nhung: bool = False):
         super().__init__(cha)
         self.setWindowTitle("Báo cáo tuần — {0}".format(ma or "công ty"))
         self.resize(780, 640)
@@ -61,13 +73,14 @@ class HopBaoCaoTuan(QDialog):
         self.the.addTab(_o_markdown(du.get("cong_ty") or "", "Tổng giám đốc chưa họp tuần nào (họp sáng thứ Hai)."),
                         "Công ty")
         v.addWidget(self.the, 1)
-        v.addWidget(nut_phu("Đóng", self.accept, rong=90))
+        _nut_dong(self, v, nhung)
 
 
 class HopBaiHoc(QDialog):
     """Sổ bài học của kênh, gom theo chuyên gia → phạm vi. Bài bị gạch hiện mờ, gạch ngang."""
 
-    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None, *, tu_nap: bool = True):
+    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None, *, tu_nap: bool = True,
+                 nhung: bool = False):
         super().__init__(cha)
         self._app = app
         self._ma = ma
@@ -83,8 +96,10 @@ class HopBaiHoc(QDialog):
         self._cuon = QScrollArea()
         self._cuon.setWidgetResizable(True)
         self._cuon.setFrameShape(QFrame.NoFrame)
+        if nhung:
+            self._cuon.setMinimumHeight(420)   # nằm trong trang đã cuộn — không để ô cuộn con bẹp lại
         v.addWidget(self._cuon, 1)
-        v.addWidget(nut_phu("Đóng", self.accept, rong=90))
+        _nut_dong(self, v, nhung)
         if tu_nap:
             self.nap_lai()
 
@@ -179,7 +194,8 @@ class HopQuyetDinh(QDialog):
 
     COT = ("Lúc", "Loại", "Quyết gì", "Vì sao", "Kết quả")
 
-    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None, *, tu_nap: bool = True):
+    def __init__(self, app: Any, ma: str, cha: Optional[QWidget] = None, *, tu_nap: bool = True,
+                 nhung: bool = False):
         super().__init__(cha)
         self._app = app
         self._ma = ma
@@ -198,8 +214,14 @@ class HopQuyetDinh(QDialog):
                                  QHeaderView.Stretch, QHeaderView.Interactive)):
             tieu.setSectionResizeMode(i, che)
         tieu.resizeSection(4, 150)
+        if nhung:
+            # Vùng giữa hẹp hơn hộp riêng (~980px): nhường chỗ cho hai cột chữ "Quyết gì" / "Vì sao".
+            tieu.setSectionResizeMode(1, QHeaderView.Interactive)
+            tieu.resizeSection(1, 130)
+            tieu.resizeSection(4, 120)
+            self.bang.setMinimumHeight(360)
         v.addWidget(self.bang, 1)
-        v.addWidget(nut_phu("Đóng", self.accept, rong=90))
+        _nut_dong(self, v, nhung)
         if tu_nap:
             goc = app.base_dir
             app.run_bg(lambda: bdk.so_quyet_dinh(goc, ma), on_ok=self.ve,

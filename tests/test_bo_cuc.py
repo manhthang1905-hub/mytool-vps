@@ -109,6 +109,22 @@ def test_moi_trang_co_duoc_xuong_760px(cua_so):
         .format(TRAN_RONG, "; ".join(tran)))
 
 
+def test_vps_co_cot_icon_va_dai_duoi(cua_so):
+    """03/10/2026: chế độ VPS — cột icon (mỗi trang VPS một nút, không còn nhóm "Nâng cao" gập) + dải dưới."""
+    from PyQt5.QtWidgets import QPushButton
+
+    from ui_qt.app import ThanhIcon
+
+    cs, app = cua_so
+    assert isinstance(cs._ben, ThanhIcon)
+    assert list(cs._ben._nut) == [k for k, _b, _n in cs._nav]
+    assert not [n for n in cs.findChildren(QPushButton) if "Nâng cao" in n.text()]
+    cs.show_page("he-thong")
+    app.processEvents()
+    assert cs._ben._nut["he-thong"].isChecked() and not cs._ben._nut["tong-quan"].isChecked()
+    assert cs._thanh_duoi is not None and cs._thanh_duoi.isVisible()
+
+
 def test_trang_cao_qua_man_hinh_thi_cuon_duoc(cua_so):
     """Màn hình laptop 1366×768 vẫn là loại phổ biến nhất.
 

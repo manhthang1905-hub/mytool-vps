@@ -55,7 +55,7 @@ __all__ = [
     "doi_cong_tac", "doi_ngan_sach", "doi_gio_dang", "doi_nhip_dang",
     "doi_phut_phien", "doi_giu_luot", "tam_dung_tat_ca", "bat_lai_tam_dung",
     # Giám đốc kênh (01/10/2026).
-    "doi_giam_doc", "giam_doc_the", "CHE_DO_GIAM_DOC",
+    "doi_giam_doc", "giam_doc_the", "CHE_DO_GIAM_DOC", "dong_lich",
     # Mức việc — dùng để sắp xếp/tô màu ở cả hai lớp.
     "HONG", "CANH_BAO", "THUONG",
     # Mức thẻ kênh (`muc_the`).
@@ -258,6 +258,8 @@ def cau_tinh_trang(k: Dict[str, Any]) -> str:
             _lam_gi(str(d.get("ma") or ""), goc[len("Dở ở khâu "):].strip()))
     if goc.startswith("Chưa đặt trần tiền"):
         return "Chưa đặt tiền mỗi ngày — chưa sản xuất được"
+    if goc.startswith(("Chờ khe", "Lượt ")):  # do `_chinh_bay_gio` viết sẵn câu người đọc
+        return _cat_chu(goc, 120)
     if goc.startswith(_GOC_RANH_VIEC):
         hen = _da_hen_tuong_lai(k)
         if hen:
@@ -1082,6 +1084,29 @@ def _viec_cho_duyet(goc: str, k: Dict[str, Any], bay_gio: _dt.datetime) -> List[
     return ra
 
 
+#: Mẫu câu CODE tự viết trong `core.giam_doc` cho việc chỉ người làm được (không phải lời LLM tự do):
+#: quyết định lớn chờ duyệt, đổi tiêu đề trên Studio; và câu cố định của cò sức khoẻ (cảnh báo chính sách).
+_VIEC_GD_CAN_NGUOI = ("Quyết định lớn chờ bạn duyệt:", "Đổi tiêu đề video ")
+
+
+def viec_gd_can_nguoi(chu: str) -> bool:
+    """Mục "Việc của bạn" trong báo cáo giám đốc có THẬT SỰ cần người không (còn lại chỉ là gợi ý)."""
+    from .giam_doc.suc_khoe import VIEC_CUA_BAN as _sk  # noqa: PLC0415
+
+    return str(chu).startswith(_VIEC_GD_CAN_NGUOI) or str(chu).strip() == _sk.strip()
+
+
+def goi_y_giam_doc(goc: str, ma: str) -> List[Dict[str, str]]:
+    """Gợi ý của giám đốc kênh KHÔNG cần người (xem `viec_gd_can_nguoi`) — hiện ở "Đội AI nói"."""
+    try:
+        from . import giam_doc as _gd  # noqa: PLC0415
+
+        ds = [c for c in _gd.viec_cua_ban_kenh(goc, ma) if not viec_gd_can_nguoi(c)]
+    except Exception:  # noqa: BLE001
+        return []
+    return [{"ai": "Giám đốc gợi ý", "cau": _mot_cau(c, 220), "luc": ""} for c in ds[:3]]
+
+
 def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetime] = None,
                  so_du_micro: Optional[int] = None,
                  trang_thai_may: Optional[Dict[str, Any]] = None,
@@ -1215,8 +1240,8 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     # tinh-trang.json → `canh_bao_may` bởi gác tổng): ví sắp hết/hết tiền, Windows sắp
     # hết hạn/cần khởi động lại, hạn thuê VPS, giọng đọc trùng. Chỉ ĐỌC, không tính lại.
     for cb in (doc_tinh_trang(goc).get("canh_bao_may") or []):
-        if not isinstance(cb, dict) or not cb.get("chuyen_gi"):
-            continue
+        if not isinstance(cb, dict) or not cb.get("chuyen_gi") or cb.get("loai") == "giong_doc_trung":
+            continue  # giọng chung: chủ đã quyết GIỮ — chỉ hiện ở khối Cảnh báo (`cb_giong_chung`)
         ra.append(_viec(
             "canh-bao-may:" + str(cb.get("loai") or "?"),
             HONG if cb.get("muc") == "khan" else THUONG,
@@ -1233,6 +1258,8 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
         for k in kenh_ds:
             ma = str(k.get("ma") or "")
             for chu_gd in _gd.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio):
+                if not viec_gd_can_nguoi(chu_gd):
+                    continue  # gợi ý của giám đốc → "Đội AI nói" của kênh (`goi_y_giam_doc`)
                 khoa = "giam-doc:{0}:{1}".format(ma, hashlib.sha1(chu_gd.encode("utf-8")).hexdigest()[:12])
                 if khoa in da_xong:
                     continue
@@ -1352,6 +1379,62 @@ def con_thieu_ypp(ypp: Dict[str, Any]) -> str:
     return "Còn thiếu để bật kiếm tiền: " + " · ".join(phan)
 
 
+def _luot_da_bo(goc: str, ma: str, ma_luot: str) -> Optional[Dict[str, Any]]:
+    """Mục lượt `ma_luot` trong sổ `CHANNEL/<ma>/tu-chay/*.json` nếu máy đã TỰ BỎ (`bo: true`)."""
+    if not ma_luot:
+        return None
+    thu = os.path.join(_kenh_mod.duong_kenh(goc, ma), "tu-chay")
+    try:
+        tep = sorted(f for f in os.listdir(thu) if f[:1].isdigit() and f.endswith(".json"))[-7:]
+    except OSError:
+        return None
+    for f in reversed(tep):
+        du = _doc_json(os.path.join(thu, f))
+        for r in ((du.get("runs") or []) if isinstance(du, dict) else []):
+            if isinstance(r, dict) and str(r.get("ma_luot")) == ma_luot and r.get("bo"):
+                return r
+    return None
+
+
+#: Lỗi của lượt chưa bỏ chỉ tô ĐỎ khi kéo dài quá chừng này (máy còn tự chạy lại ở các nhịp sau).
+LOI_DO_SAU_GIO = 6
+
+
+def _chinh_bay_gio(goc: str, k: Dict[str, Any], bay_gio: _dt.datetime) -> Optional[Dict[str, str]]:
+    """Sửa thẻ "Bây giờ" cho ĐÚNG hiện trạng (None = giữ nguyên): lượt máy đã tự bỏ → thông tin, không đỏ;
+    lỗi mới < 6 giờ → vàng; cổng sản xuất đóng theo luật đúng hạn → "Chờ khe — sản xuất lúc …"."""
+    bay = k.get("bay_gio") or {}
+    muc, chu = str(bay.get("muc") or ""), str(bay.get("chu") or "")
+    ma = str(k.get("ma") or "")
+    luot = k.get("luot") or {}
+    if muc == "loi":
+        ma_luot = str(luot.get("ma_luot") or "")
+        run = _luot_da_bo(goc, ma, ma_luot)
+        if run:
+            ly = cau_tinh_trang(k)
+            ly = ly[len("Dừng khi "):] if ly.startswith("Dừng khi ") else ly
+            return {"chu": "Lượt {0} bỏ ({1}) — máy đã chuyển nguồn khác".format(ma_luot, _cat_chu(ly.split(" cho job")[0], 60)),
+                    "muc": "cho", "chi_tiet": str(run.get("ly_do_bo") or "")}
+        try:
+            tuoi = (bay_gio.timestamp() - os.path.getmtime(str(luot.get("thu_muc") or ""))) / 3600.0
+        except OSError:
+            return None
+        return dict(bay, muc="canh_bao") if tuoi < LOI_DO_SAU_GIO else None
+    if k.get("tu_chay") and chu.startswith(_GOC_RANH_VIEC):
+        mo, _ly, ttin = tu_chay._cua_so_san_xuat(  # noqa: SLF001 — hàm thuần đọc, nguồn sự thật của cổng
+            goc, ma, _kenh_mod.doc_kenh(goc, ma), bay_gio=bay_gio)
+        if mo:
+            return None
+        gio = lambda s: _dt.datetime.fromisoformat(s).strftime("%d/%m %H:%M")  # noqa: E731
+        if ttin.get("khe_ke_tiep") and ttin.get("mo_cua_san_xuat"):
+            return {"chu": "Chờ khe — sản xuất lúc " + gio(ttin["mo_cua_san_xuat"]), "muc": "cho",
+                    "chi_tiet": "Khe đăng kế tiếp {0}; máy chọn content và sản xuất đúng hạn.".format(gio(ttin["khe_ke_tiep"]))}
+        if ttin.get("che_do") == "kho_dem" and ttin.get("mo_cua_san_xuat"):
+            return {"chu": "Chờ khe — kho đủ, làm tiếp sau khi video {0} lên sóng".format(gio(ttin["mo_cua_san_xuat"])),
+                    "muc": "cho", "chi_tiet": _ly}
+    return None
+
+
 def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
             anh: Optional[Dict[str, Any]] = None, gio_lich: Optional[str] = None,
             so_du_micro: Optional[int] = None, trang_thai_may: Optional[Dict[str, Any]] = None,
@@ -1372,6 +1455,13 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
     kenh: List[Dict[str, Any]] = []
     for k in (anh.get("kenh") or []):
         k2 = dict(k)
+        try:
+            bay_moi = _chinh_bay_gio(goc, k2, bay_gio)
+        except Exception:  # noqa: BLE001 — dò thêm hỏng thì giữ thẻ gốc
+            bay_moi = None
+        if bay_moi:
+            k2["bay_gio"] = bay_moi
+            k = k2
         k2["muc_the"] = muc_the(k)
         vkt = video_ke_tiep(k)
         k2["video_ke_tiep"] = vkt
@@ -1383,7 +1473,7 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         k2["giam_doc"] = giam_doc_the(goc, str(k.get("ma") or ""))
         kenh.append(k2)
 
-    viec = viec_cua_ban(goc, anh=anh, bay_gio=bay_gio, so_du_micro=so_du_micro,
+    viec = viec_cua_ban(goc, anh=dict(anh, kenh=kenh), bay_gio=bay_gio, so_du_micro=so_du_micro,
                         trang_thai_may=trang_thai_may, co_client=co_client,
                         gio_lich=gio_lich, thu_muc_vm=thu_muc_vm)
     may = dong_may(goc, anh, bay_gio=bay_gio, so_du_micro=so_du_micro,
@@ -1749,6 +1839,11 @@ def _doi_tu_hoi_dong(tm: str) -> List[Dict[str, str]]:
 
 
 def doi_ai_noi(goc: str, ma: str) -> List[Dict[str, str]]:
+    """Đội AI nói + "Giám đốc gợi ý" (việc giám đốc nhắc mà máy/không cần người xử lý)."""
+    return _doi_ai_chinh(goc, ma) + goi_y_giam_doc(goc, ma)
+
+
+def _doi_ai_chinh(goc: str, ma: str) -> List[Dict[str, str]]:
     """"Đội AI nói": một câu mỗi chuyên gia — `giam-doc/doi-ai.json` nếu có, không thì phiên hội đồng cuối
     (`giam_doc.hoi_dong` → `hoi-dong-cuoi.json`); chưa có đội thì lùi về chẩn đoán giám đốc kênh
     (`bao-cao.json`) + khám nghiệm gần nhất (`kham_nghiem.doc_kham`). `[{ai, cau, luc}]`."""
@@ -1813,44 +1908,47 @@ def dang_thu(goc: str, ma: str) -> List[str]:
     return []
 
 
-def _chu_luc(moc: _dt.datetime, bay_gio: _dt.datetime) -> str:
-    ngay = (moc.date() - bay_gio.date()).days
-    duoi = "hôm nay" if ngay == 0 else ("mai" if ngay == 1 else moc.strftime("%d/%m"))
-    return "{0} {1}".format(moc.strftime("%H:%M"), duoi)
-
-
 def lich_dang_tiep(goc: str, k: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None,
-                   n: int = 2) -> List[Dict[str, str]]:
-    """`n` khe đăng sắp tới (`xep_lich.khe_cua_kenh`) kèm video đã xếp vào khe đó (kế hoạch đăng):
-    `[{luc, chu_luc, tieu_de, loai}]` — `tieu_de` rỗng = khe còn trống (máy sẽ làm)."""
+                   n: int = 2) -> List[Dict[str, Any]]:
+    """Mốc đăng sắp tới của kênh: `[{luc, chu_luc, tieu_de, loai, da_hen, chu}]`.
+
+    Có mốc TƯƠNG LAI đã hẹn (`xep_lich.moc_da_co`: kế hoạch + sổ máy đăng) → tối đa `n` mốc sớm nhất.
+    Chưa có → một khe kế tiếp (`khe_trong_som_nhat`, đã theo nhịp N ngày) kèm giờ máy chọn content/sản xuất
+    = khe − `san_xuat_truoc_gio` (luật đúng hạn 03/10/2026)."""
     from . import xep_lich  # noqa: PLC0415
 
     bay_gio = bay_gio or _dt.datetime.now()
     ma = str(k.get("ma") or "")
-    try:
-        khe = xep_lich.khe_cua_kenh(_kenh_mod.doc_kenh(goc, ma))
-    except Exception:  # noqa: BLE001
-        khe = []
-    ke = {}
+    tieu = {}
     for d in (k.get("ke_hoach") or []):
-        g = xep_lich._gio_hop_le(d.get("gio"))  # noqa: SLF001
-        if d.get("ngay") and g and d.get("loai") not in ("bo", "da_bo"):
-            ke[(str(d["ngay"]).strip(), g)] = d
-    ra: List[Dict[str, str]] = []
-    ngay = bay_gio.date()
-    for _i in range(15):
-        chuoi = ngay.strftime("%d/%m/%Y")
-        for gio in khe:
-            moc = xep_lich._moc(chuoi, gio)  # noqa: SLF001
-            if moc is None or moc < bay_gio:
-                continue
-            d = ke.get((chuoi, gio)) or {}
-            ra.append({"luc": moc.isoformat(timespec="minutes"), "chu_luc": _chu_luc(moc, bay_gio),
-                       "tieu_de": str(d.get("tieu_de") or ""), "loai": str(d.get("loai") or "")})
-            if len(ra) >= n:
-                return ra
-        ngay += _dt.timedelta(days=1)
-    return ra
+        m = xep_lich._moc(str(d.get("ngay") or ""), str(d.get("gio") or ""))  # noqa: SLF001
+        if m is not None and d.get("tieu_de") and d.get("loai") not in ("bo", "da_bo"):
+            tieu[m] = str(d["tieu_de"])
+    ra: List[Dict[str, Any]] = []
+    for moc in sorted(m for m in set(xep_lich.moc_da_co(goc, ma)) if m > bay_gio)[:n]:
+        cl = moc.strftime("%H:%M %d/%m")
+        ra.append({"luc": moc.isoformat(timespec="minutes"), "chu_luc": cl, "tieu_de": tieu.get(moc, ""),
+                   "loai": "da_hen", "da_hen": True, "chu": cl + " · đã hẹn"})
+    if ra:
+        return ra
+    kenh = _kenh_mod.doc_kenh(goc, ma)
+    ngay, gio = xep_lich.khe_trong_som_nhat(goc, ma, kenh, bay_gio=bay_gio)
+    moc = xep_lich._moc(ngay, gio) if ngay else None  # noqa: SLF001
+    if moc is None:
+        return []
+    truoc = max(0, int(getattr(kenh, "san_xuat_truoc_gio", 0) or 0))
+    sx = moc - _dt.timedelta(hours=truoc)
+    viec = ("máy chọn content & sản xuất lúc " + sx.strftime("%H:%M %d/%m")) if sx > bay_gio         else "máy đang chọn content & sản xuất"
+    return [{"luc": moc.isoformat(timespec="minutes"), "chu_luc": "khe " + moc.strftime("%H:%M %d/%m"),
+             "tieu_de": "", "loai": "", "da_hen": False,
+             "chu": "khe {0} — {1}".format(moc.strftime("%H:%M %d/%m"), viec)}]
+
+
+def dong_lich(x: Dict[str, Any], gioi_han: int = 24) -> str:
+    """Một dòng người đọc của một mốc `lich_dang_tiep` (kèm tiêu đề nếu đã có)."""
+    td = str(x.get("tieu_de") or "")
+    return str(x.get("chu") or x.get("chu_luc") or "") + (
+        " 「{0}」".format(td if len(td) <= gioi_han else td[:gioi_han - 1] + "…") if td else "")
 
 
 #: Thứ tự thẻ: đỏ lên đầu.

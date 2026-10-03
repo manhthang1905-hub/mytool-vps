@@ -167,9 +167,20 @@ def test_lich_dang_tiep_hai_khe_kem_video_da_xep(tmp_path):
     goc = str(tmp_path)
     _ghi(os.path.join(goc, "CHANNEL", "K1", "kenh.yaml"), 'ma: K1\nnhip_dang: "05:00, 20:00"\n')
     k = {"ma": "K1", "ke_hoach": [{"ngay": "01/10/2026", "gio": "20:00", "tieu_de": "Video tối", "loai": "sap_dang"}]}
+    _ghi(os.path.join(goc, "CHANNEL", "K1", "ke-hoach-dang", "ke-hoach.csv"),
+         "Mã gói,Ngày đăng,Giờ đăng,Sẵn sàng,Trạng thái đăng\nK1-0001,01/10/2026,20:00,x,\n")
     ra = bdk.lich_dang_tiep(goc, k, bay_gio=BAY)
-    assert [x["chu_luc"] for x in ra] == ["20:00 hôm nay", "05:00 mai"]
-    assert ra[0]["tieu_de"] == "Video tối" and ra[1]["tieu_de"] == ""
+    # đã có mốc tương lai thật → chỉ hiện mốc đó (không bịa khe "trống" theo nhịp ngày)
+    assert [x["chu"] for x in ra] == ["20:00 01/10 · đã hẹn"] and ra[0]["tieu_de"] == "Video tối"
+
+
+def test_lich_dang_tiep_chua_co_moc_thi_ghi_khe_va_gio_san_xuat(tmp_path):
+    goc = str(tmp_path)
+    _ghi(os.path.join(goc, "CHANNEL", "K1", "kenh.yaml"),
+         'ma: K1\nnhip_dang: "05:00"\nchu_ky_dang_ngay: 2\nsan_xuat_truoc_gio: 24\ntu_duyet: true\n')
+    ra = bdk.lich_dang_tiep(goc, {"ma": "K1", "ke_hoach": []}, bay_gio=BAY)
+    assert len(ra) == 1 and not ra[0]["da_hen"]
+    assert ra[0]["chu"] == "khe 05:00 02/10 — máy đang chọn content & sản xuất"
 
 
 def test_muc_phong_kenh_tut_la_do():

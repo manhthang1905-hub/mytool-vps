@@ -29,12 +29,11 @@ from typing import Any, Callable, Dict, List, Optional
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QMessageBox, QPushButton, QScrollArea,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QSizePolicy, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from core.api import build_client, fetch_prices, wallet_micro
 from core import cai_dat, che_do_vps, du_an, tien_trinh_con
-from core import trung_tam as tt
 from core.config import (CONFIG_FILENAME, Config, load_config,
                          luu_phien_dang_nhap, sanitize_api_key, save_config)
 from core.errors import describe, la_qua_tai, retry_after_seconds, tu_xu_ly_ngam
@@ -132,24 +131,13 @@ class ThanhBen(QFrame):
     def __init__(self, on_chon: Callable[[str], None], nav=TRANG,
                  ten_hien: str = "My Tool",
                  cau_duoi: str = "Tool của bạn, do bạn tạo",
-                 duoi_ten=None, nhom=None, gap=(), mo_nang_cao: bool = False,
-                 on_doi_nang_cao: Optional[Callable[[bool], None]] = None):
-        """`gap`: khoá các trang gập vào một nhóm "Nâng cao ▸/▾" — dùng cho
-        thanh bên VPS (`core.che_do_vps.TRANG_NANG_CAO`); rỗng thì thanh bên
-        vẽ phẳng y hệt trước (máy nhà). `mo_nang_cao`/`on_doi_nang_cao`: trạng
-        thái mở/gập ban đầu và nơi lưu lại khi người dùng bấm (hay khi trang
-        đang mở thuộc nhóm này tự mở ra) — `ui_qt/app.py::CuaSoChinh` truyền
-        `tt.luu_cai(goc, ben_mo_nang_cao=…)` vào đây.
-        """
+                 duoi_ten=None, nhom=None):
+        """Thanh bên chữ của máy nhà. Chế độ VPS dùng `ThanhIcon` (03/10/2026 —
+        nhóm "Nâng cao" gập của VPS bỏ hẳn, bảy trang thành bảy icon)."""
         super().__init__()
         self.setObjectName("sidebar")
         self.setFixedWidth(240)
         self._nut: Dict[str, QPushButton] = {}
-        self._gap = set(gap or ())
-        self._mo_nang_cao = bool(mo_nang_cao)
-        self._on_doi_nang_cao = on_doi_nang_cao
-        self._nut_nang_cao: Optional[QPushButton] = None
-        self._hop_nang_cao: Optional[QWidget] = None
         doc = QVBoxLayout(self)
         doc.setContentsMargins(14, 22, 14, 18)
         doc.setSpacing(4)
@@ -182,22 +170,7 @@ class ThanhBen(QFrame):
             nut.setCheckable(True)
             nut.setCursor(Qt.PointingHandCursor)
             nut.clicked.connect(lambda _c, k=khoa: on_chon(k))
-            if khoa in self._gap:
-                if self._hop_nang_cao is None:
-                    self._nut_nang_cao = QPushButton("   Nâng cao")
-                    self._nut_nang_cao.setObjectName("nav")
-                    self._nut_nang_cao.setCursor(Qt.PointingHandCursor)
-                    self._nut_nang_cao.clicked.connect(
-                        lambda: self._dat_mo_nang_cao(not self._mo_nang_cao))
-                    doc.addWidget(self._nut_nang_cao)
-                    self._hop_nang_cao = QWidget()
-                    v_con = QVBoxLayout(self._hop_nang_cao)
-                    v_con.setContentsMargins(12, 0, 0, 0)
-                    v_con.setSpacing(4)
-                    doc.addWidget(self._hop_nang_cao)
-                self._hop_nang_cao.layout().addWidget(nut)
-            else:
-                doc.addWidget(nut)
+            doc.addWidget(nut)
             self._nut[khoa] = nut
         doc.addStretch(1)
         # Chỗ cho nút cập nhật. Nó tự ẩn cho tới khi thật sự có bản mới trên
@@ -205,33 +178,123 @@ class ThanhBen(QFrame):
         self.duoi = QVBoxLayout()
         self.duoi.setContentsMargins(0, 0, 0, 0)
         doc.addLayout(self.duoi)
-        # Áp trạng thái mở/gập ban đầu — không báo lại ra ngoài (không phải
-        # người bấm, chỉ là dựng trang theo đúng cái đã lưu từ lần trước).
-        self._dat_mo_nang_cao(self._mo_nang_cao, bao=False)
-
-    def _dat_mo_nang_cao(self, mo: bool, *, bao: bool = True) -> None:
-        self._mo_nang_cao = bool(mo)
-        if self._hop_nang_cao is not None:
-            self._hop_nang_cao.setVisible(self._mo_nang_cao)
-        if self._nut_nang_cao is not None:
-            self._nut_nang_cao.setText(
-                "   Nâng cao " + ("▾" if self._mo_nang_cao else "▸"))
-        if bao and self._on_doi_nang_cao is not None:
-            self._on_doi_nang_cao(self._mo_nang_cao)
 
     def danh_dau(self, khoa: str) -> None:
         for ten, nut in self._nut.items():
             nut.setChecked(ten == khoa)
-        # Mở tới một trang trong nhóm "Nâng cao" thì tự mở nhóm ra — không ai
-        # muốn nhìn vào một nút đã bôi đậm nằm ẩn sau một mũi tên gập lại.
-        if khoa in self._gap and not self._mo_nang_cao:
-            self._dat_mo_nang_cao(True)
 
     def dat_so_du(self, micro: Optional[int]) -> None:
         """Không hiện số dư ở thanh bên nữa — số liệu tiền gom hết về trang Ví.
 
         Giữ phương thức để nơi gọi không phải biết chuyện đó.
         """
+
+
+#: Cột icon của chế độ VPS: `khoá trang -> (glyph "Segoe MDL2 Assets", nhãn ngắn)`.
+#: Tên đầy đủ (tooltip) vẫn lấy từ `core.che_do_vps.TRANG_VPS`.
+RAY_VPS = {
+    "tong-quan": ("", "Điều hành"),
+    "so-lieu-vps": ("", "Số liệu"),
+    "nghien-cuu-vps": ("", "Nghiên cứu"),
+    "chon-content-vps": ("", "Nội dung"),
+    "san-xuat-vps": ("", "Sản xuất"),
+    "dang-cham-soc-vps": ("", "Lịch đăng"),
+    "he-thong": ("", "Cài đặt"),
+}
+#: Trang đứng sát đáy cột icon (như nút cài đặt của mọi ứng dụng).
+_RAY_DAY = "he-thong"
+PHONG_ICON = "Segoe MDL2 Assets"
+
+
+class ThanhIcon(QFrame):
+    """Cột icon hẹp (~64px) thay `ThanhBen` ở chế độ VPS (03/10/2026).
+
+    Mỗi nút: icon đơn sắc (font "Segoe MDL2 Assets") + chữ nhỏ dưới, tooltip là
+    tên đầy đủ. Máy không có font đó thì chỉ hiện chữ. Cùng giao kèo với
+    `ThanhBen` (`danh_dau`, `dat_so_du`, `duoi`) nên `CuaSoChinh` không phải
+    biết đang dùng thanh nào.
+    """
+
+    RONG = 64
+
+    def __init__(self, on_chon: Callable[[str], None], nav, ten_hien: str = "My Tool",
+                 cau_duoi: str = ""):
+        super().__init__()
+        from PyQt5.QtGui import QFontDatabase  # noqa: PLC0415
+
+        self.setObjectName("rail")
+        self.setFixedWidth(self.RONG)
+        self._nut: Dict[str, QPushButton] = {}
+        self._chu: Dict[str, tuple] = {}
+        self._co_font = PHONG_ICON in QFontDatabase().families()
+        doc = QVBoxLayout(self)
+        doc.setContentsMargins(6, 12, 6, 10)
+        doc.setSpacing(4)
+        day = None
+        for khoa, _bt, ten in nav:
+            nut = self._tao_nut(khoa, ten, on_chon)
+            if khoa == _RAY_DAY:
+                day = nut
+            else:
+                doc.addWidget(nut, 0, Qt.AlignHCenter)
+        doc.addStretch(1)
+        if day is not None:
+            doc.addWidget(day, 0, Qt.AlignHCenter)
+        # "Avatar" của máy — chữ tắt tên tool, tooltip nói đây là máy nào.
+        anh = nhan("".join(t[0] for t in ten_hien.split()[:2]).upper() or "MT")
+        anh.setWordWrap(False)
+        anh.setFixedSize(34, 34)
+        anh.setAlignment(Qt.AlignCenter)
+        anh.setToolTip("{0} — {1}".format(ten_hien, cau_duoi) if cau_duoi else ten_hien)
+        anh.setStyleSheet("background:{0};color:white;border-radius:17px;font-size:12px;"
+                          "font-weight:700;".format(theme.NHAN))
+        doc.addSpacing(6)
+        doc.addWidget(anh, 0, Qt.AlignHCenter)
+        self.duoi = QVBoxLayout()
+        self.duoi.setContentsMargins(0, 0, 0, 0)
+        doc.addLayout(self.duoi)
+
+    def _tao_nut(self, khoa: str, ten: str, on_chon: Callable[[str], None]) -> QPushButton:
+        glyph, ngan = RAY_VPS.get(khoa, ("", ten))
+        nut = QPushButton()
+        nut.setObjectName("railNut")
+        nut.setCheckable(True)
+        nut.setCursor(Qt.PointingHandCursor)
+        nut.setFixedSize(54, 50)
+        nut.setToolTip(ten)
+        nut.clicked.connect(lambda _c, k=khoa: on_chon(k))
+        v = QVBoxLayout(nut)
+        v.setContentsMargins(0, 5, 0, 4)
+        v.setSpacing(1)
+        o_icon = nhan(glyph)
+        o_chu = nhan(ngan)
+        for o in (o_icon, o_chu):
+            o.setWordWrap(False)
+            o.setAlignment(Qt.AlignCenter)
+            o.setAttribute(Qt.WA_TransparentForMouseEvents)
+            v.addWidget(o)
+        co_icon = bool(glyph) and self._co_font
+        o_icon.setVisible(co_icon)
+        self._chu[khoa] = (o_icon, o_chu, co_icon)
+        self._nut[khoa] = nut
+        self._to_mau(khoa, False)
+        return nut
+
+    def _to_mau(self, khoa: str, chon: bool) -> None:
+        o_icon, o_chu, co_icon = self._chu[khoa]
+        mau = theme.NHAN if chon else theme.CHU_MO
+        o_icon.setStyleSheet("font-family:'{0}';font-size:18px;color:{1};".format(PHONG_ICON, mau))
+        # Không có icon thì chữ là thứ duy nhất để nhận ra nút — cho to hơn.
+        o_chu.setStyleSheet("font-size:{0}px;color:{1};{2}".format(
+            10 if co_icon else 11, mau, "font-weight:600;" if chon else ""))
+
+    def danh_dau(self, khoa: str) -> None:
+        for ten, nut in self._nut.items():
+            nut.setChecked(ten == khoa)
+            self._to_mau(ten, ten == khoa)
+
+    def dat_so_du(self, micro: Optional[int]) -> None:
+        """Như `ThanhBen.dat_so_du` — số dư nằm ở trang Cài đặt, không ở đây."""
 
 
 class CuaSoChinh(QWidget):
@@ -428,31 +491,35 @@ class CuaSoChinh(QWidget):
                                    # tấm và giữ tấm giống hơn (chủ dự án 25/08/2026).
                                    cham_anh=dung_cham_anh(lambda: self.client))
 
-        ngang = QHBoxLayout(self)
-        ngang.setContentsMargins(0, 0, 0, 0)
-        ngang.setSpacing(0)
         cau_duoi = "Quản lý kênh tự động" if self._la_vps else self.CAU_DUOI_TEN
-        # ═══ NHÓM "NÂNG CAO" GẬP SẴN — CHỈ Ở CHẾ ĐỘ VPS ═══
-        #
-        # Sáu trang theo quy trình (Số liệu kênh…Cài đặt) không mất, chỉ gập
-        # dưới một nút "Nâng cao ▸/▾" để trang "Bảng điều khiển" đứng một mình,
-        # đúng thiết kế 29/09/2026 (mục 3, "Thanh bên"). Máy nhà không có
-        # `TRANG_NANG_CAO` nào nên thanh bên vẽ phẳng y hệt trước.
-        nhom_ben = che_do_vps.NHOM_VPS if self._la_vps else self.NHOM_BEN
-        gap_ben = che_do_vps.TRANG_NANG_CAO if self._la_vps else ()
-        mo_nang_cao = bool(tt.doc_cai(base_dir).get("ben_mo_nang_cao")) \
-            if self._la_vps else False
-
-        def _nho_mo_nang_cao(mo: bool) -> None:
-            try:
-                tt.luu_cai(base_dir, ben_mo_nang_cao=bool(mo))
-            except OSError:
-                pass
-
-        self._ben = ThanhBen(self.show_page, self._nav, self.TEN_HIEN,
-                             cau_duoi, self.widget_duoi_ten(),
-                             nhom=nhom_ben, gap=gap_ben, mo_nang_cao=mo_nang_cao,
-                             on_doi_nang_cao=_nho_mo_nang_cao if self._la_vps else None)
+        #: Dải trạng thái dưới cùng — chỉ chế độ VPS (`dat_thanh_duoi`).
+        self._thanh_duoi = None
+        if self._la_vps:
+            # ═══ CHẾ ĐỘ VPS (03/10/2026): CỘT ICON TRÁI + DẢI TRẠNG THÁI DƯỚI ═══
+            #
+            # Bảy trang VPS thành bảy icon trên `ThanhIcon` (không còn nhóm
+            # "Nâng cao" gập). Dải dưới do trang Điều hành điền mỗi lần nó làm
+            # mới (`dat_thanh_duoi`) — không đọc gì thêm ở đây.
+            doc_goc = QVBoxLayout(self)
+            doc_goc.setContentsMargins(0, 0, 0, 0)
+            doc_goc.setSpacing(0)
+            ngang = QHBoxLayout()
+            ngang.setContentsMargins(0, 0, 0, 0)
+            ngang.setSpacing(0)
+            doc_goc.addLayout(ngang, 1)
+            self._thanh_duoi = nhan("Đang đọc tình hình máy…", "thanhDuoi")
+            self._thanh_duoi.setWordWrap(False)
+            self._thanh_duoi.setTextFormat(Qt.RichText)
+            self._thanh_duoi.setFixedHeight(26)
+            self._thanh_duoi.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            doc_goc.addWidget(self._thanh_duoi)
+            self._ben = ThanhIcon(self.show_page, self._nav, self.TEN_HIEN, cau_duoi)
+        else:
+            ngang = QHBoxLayout(self)
+            ngang.setContentsMargins(0, 0, 0, 0)
+            ngang.setSpacing(0)
+            self._ben = ThanhBen(self.show_page, self._nav, self.TEN_HIEN,
+                                 cau_duoi, self.widget_duoi_ten(), nhom=self.NHOM_BEN)
         ngang.addWidget(self._ben)
         #: khoá -> vùng cuộn bọc ngoài trang. Xem `_boc_cuon`.
         self._vo_cuon: Dict[str, QWidget] = {}
@@ -652,6 +719,12 @@ class CuaSoChinh(QWidget):
         # Thứ nằm trong chồng là VÙNG CUỘN bọc ngoài trang, không phải trang.
         self._chong.setCurrentWidget(self._vo_cuon.get(khoa, trang))
         self._ben.danh_dau(khoa)
+
+    def dat_thanh_duoi(self, chu: str, tip: str = "") -> None:
+        """Dải trạng thái dưới (chỉ chế độ VPS) — trang Điều hành gọi mỗi lần làm mới."""
+        if self._thanh_duoi is not None:
+            self._thanh_duoi.setText(chu)
+            self._thanh_duoi.setToolTip(tip)
 
     # ── Dịch vụ cho các trang (giữ đúng tên của bản tkinter) ─────────────────
 

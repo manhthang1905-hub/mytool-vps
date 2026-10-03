@@ -89,6 +89,18 @@ QPushButton#nav {{
 QPushButton#nav:hover   {{ background: #eef2fb; }}
 QPushButton#nav:checked {{ background: {NHAN_NHAT}; color: {NHAN}; font-weight: 600; }}
 
+/* ── Chế độ VPS: cột icon trái + dải trạng thái dưới + phòng điều hành ──── */
+#rail {{ background: {THE}; border-right: 1px solid {VIEN}; }}
+QPushButton#railNut {{ background: transparent; border: none; border-radius: 10px; }}
+QPushButton#railNut:hover   {{ background: #eef2fb; }}
+QPushButton#railNut:checked {{ background: {NHAN_NHAT}; }}
+QLabel#thanhDuoi {{ background: {THE}; border-top: 1px solid {VIEN}; color: {CHU_MO};
+                    font-size: 11px; padding: 0 12px; }}
+QFrame#bdkBen {{ background: {THE}; border-right: 1px solid {VIEN}; }}
+QFrame#dongBen {{ background: transparent; border-radius: 8px; }}
+QFrame#dongBen:hover {{ background: #eef2fb; }}
+QFrame#dongBen[chon="true"] {{ background: {NHAN_NHAT}; }}
+
 /* ── Thẻ ───────────────────────────────────────────────────────────────── */
 QFrame#card {{ background: {THE}; border: 1px solid {VIEN}; border-radius: 11px; }}
 #h1    {{ font-size: 17px; font-weight: 700; }}

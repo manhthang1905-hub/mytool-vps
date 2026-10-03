@@ -328,6 +328,19 @@ def test_khe_trong_ton_trong_nhip_tinh_ca_so_may_dang(tmp_path):
     assert xep_lich.khe_trong_som_nhat(goc, "K2", k1, bay_gio=bay) == ("02/10/2026", "05:00")
 
 
+def test_san_xuat_dung_han_ngay_truoc_khe(tmp_path):
+    """03/10/2026: khe đăng M2 → M1 (24h trước) mới chọn content + sản xuất, không làm sẵn."""
+    goc = str(tmp_path)
+    k = _kenh_thua(goc, san_xuat_truoc_gio=24)
+    _ghi_ke_hoach(goc, "K2", {"Mã gói": "K2-0001", "Ngày đăng": "05/10/2026", "Giờ đăng": "05:00",
+                              "Sẵn sàng": "x", "Trạng thái đăng": "ĐÃ ĐĂNG", "Video ID": "v1"})
+    mo, ly_do, tt = _cua_so_san_xuat(goc, "K2", k, bay_gio=_dt.datetime(2026, 10, 5, 6, 0))
+    assert not mo and "đúng hạn" in ly_do and tt["khe_ke_tiep"] == "2026-10-07T05:00"
+    assert tt["mo_cua_san_xuat"] == "2026-10-06T05:00"
+    mo, _ly, _tt = _cua_so_san_xuat(goc, "K2", k, bay_gio=_dt.datetime(2026, 10, 6, 5, 0))
+    assert mo
+
+
 def test_kho_dem_theo_nhip_ngay(tmp_path):
     goc = str(tmp_path)
     k = _kenh_thua(goc)

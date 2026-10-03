@@ -345,7 +345,7 @@ def test_bang_dieu_khien_dong_giam_doc_cong_tac_va_viec(tmp_path, monkeypatch):
     _kenh_bat(goc, "goi_y")
     tm = du_lieu.thu_muc_giam_doc(goc, "GDK")
     _ghi(os.path.join(tm, bao_cao.TEP_BAO_CAO_JSON), {"luc": BAY_GIO.isoformat(), "che_do": "goi_y",
-         "chan_doan": "CTR trang chủ 8,9% tốt, hiển thị yếu.", "viec_cua_ban": ["Xem Studio"],
+         "chan_doan": "CTR trang chủ 8,9% tốt, hiển thị yếu.", "viec_cua_ban": ["Quyết định lớn chờ bạn duyệt: x", "Xem Studio"],
          "tu_cham": {"tong": 2, "dung": 1}})
     _ghi(os.path.join(tm, bao_cao.TEP_BAO_CAO_MD), "# Báo cáo\n")
     the = bdk.giam_doc_the(goc, "GDK")
@@ -355,7 +355,9 @@ def test_bang_dieu_khien_dong_giam_doc_cong_tac_va_viec(tmp_path, monkeypatch):
                                                            "o_dia": {"muc": bdk.TOT, "con_gb": None}})
     viec = bdk.viec_cua_ban(goc, anh={"kenh": [{"ma": "GDK"}]}, bay_gio=BAY_GIO, gio_lich="02:00")
     gd = [v for v in viec if v["khoa"].startswith("giam-doc:GDK:")]
-    assert len(gd) == 1 and gd[0]["chu"] == "Giám đốc kênh: Xem Studio"
+    assert len(gd) == 1 and gd[0]["chu"] == "Giám đốc kênh: Quyết định lớn chờ bạn duyệt: x"
+    # "Xem Studio" chỉ là gợi ý → sang Đội AI nói, không nằm ở Việc của bạn
+    assert [x["cau"] for x in bdk.goi_y_giam_doc(goc, "GDK")] == ["Xem Studio"]
     bdk.danh_dau_xong(goc, gd[0]["khoa"])
     viec = bdk.viec_cua_ban(goc, anh={"kenh": [{"ma": "GDK"}]}, bay_gio=BAY_GIO, gio_lich="02:00")
     assert not [v for v in viec if v["khoa"].startswith("giam-doc:")]

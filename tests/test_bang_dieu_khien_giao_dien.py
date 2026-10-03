@@ -467,7 +467,9 @@ _PHONG_MAU = {
     "doi_ai": [{"ai": "Giám đốc kênh", "cau": "Cổng hiển thị hỏng nặng."},
                {"ai": "Khám nghiệm", "cau": "video v3 (7d): hook lệch tiêu đề."}],
     "dang_thu": ["Cứu tỉ lệ bấm: đổi tiêu đề"],
-    "lich_tiep": [{"chu_luc": "20:00 hôm nay", "tieu_de": "Video tối"}, {"chu_luc": "05:00 mai", "tieu_de": ""}],
+    "lich_tiep": [{"chu_luc": "20:00 01/10", "chu": "20:00 01/10 · đã hẹn", "da_hen": True, "tieu_de": "Video tối"},
+                  {"chu_luc": "khe 05:00 03/10", "chu": "khe 05:00 03/10 — máy chọn content & sản xuất lúc 05:00 02/10",
+                   "da_hen": False, "tieu_de": ""}],
 }
 
 
@@ -480,7 +482,7 @@ def test_the_phong_dieu_hanh_hien_du_cac_dong(qapp):
     assert the._nhan_giam_doc.text() == "Giám đốc kênh: Cổng hiển thị hỏng nặng."
     assert the._nhan_ai[0].text().startswith("Khám nghiệm:") and the._nhan_ai[1].isHidden()
     assert the._nhan_dang_thu.text() == "Đang thử: Cứu tỉ lệ bấm: đổi tiêu đề"
-    assert the._nhan_ke_tiep.text() == "Lịch đăng tiếp: 20:00 hôm nay 「Video tối」 · 05:00 mai — trống, máy sẽ làm"
+    assert the._nhan_ke_tiep.text() == "Lịch đăng tiếp: 20:00 01/10 · đã hẹn 「Video tối」 · khe 05:00 03/10 — máy chọn content & sản xuất lúc 05:00 02/10"
     assert the._nhan_ypp_sub.text() == "Sub 30/1.000" and the._thanh_sub.value() == 30
     assert the._muc == "hong"
     the.deleteLater()
@@ -516,12 +518,54 @@ def test_trang_xep_kenh_do_len_dau_va_sinh_tinh_so(tmp_path, monkeypatch, qapp):
     monkeypatch.setattr(bdk, "phong_dieu_hanh", phong)
     t, _app = _mo(goc)
     try:
-        dau = t._phong["thu_tu"][0]
-        assert t._luoi._grid.itemAtPosition(0, 0).widget() is t._the_kenh[dau]
+        # 03/10/2026: thứ tự nay ở CỘT TRÁI (mỗi kênh một dòng) — kênh tự chạy theo `thu_tu`, kênh không tự
+        # chạy (sản xuất ở máy khác) xuống cuối.
+        dau = next(m for m in t._phong["thu_tu"] if (t._kenh(m) or {}).get("tu_chay"))
+        assert t._thu_tu_ben[0] == dau
+        assert t._v_dong.itemAt(0).widget() is t._dong_ben[dau]
+        cuoi = [m for m in t._thu_tu_ben if not (t._kenh(m) or {}).get("tu_chay")]
+        assert t._thu_tu_ben[len(t._thu_tu_ben) - len(cuoi):] == cuoi
         assert sinh and set(sinh[0]) >= {"K1", "K2"}, "chưa có bộ đệm số → phải sinh tiến trình tính"
         t.lam_moi()
         assert len(sinh) == 1, "không sinh lại trong vòng GIAY_TINH_LAI"
         assert t._khoi_cong_ty._o_video.text().startswith("Video hôm nay")
+    finally:
+        t.close()
+        t.deleteLater()
+
+
+def test_chon_kenh_doi_vung_chinh_va_ba_tab(trang, qapp):
+    """03/10/2026: bấm một dòng cột trái → vùng giữa là kênh đó (thẻ đầy đủ + tab Video/Bài học);
+    bấm "Toàn công ty" → lại ba tab công ty."""
+    t, _app, _goc = trang
+    assert [t._tab.tabText(i) for i in range(3)] == list(t.TAB_CONG_TY)
+    ma = t._thu_tu_ben[0]
+    t.chon(ma)
+    assert [t._tab.tabText(i) for i in range(3)] == list(t.TAB_KENH)
+    assert t._the_kenh[ma].isVisibleTo(t)
+    assert not [m for m, c in t._the_kenh.items() if m != ma and c.isVisibleTo(t)]
+    t._tab.setCurrentIndex(1)
+    assert "Kế hoạch đăng" in " ".join(w.text() for w in t._trang_k[1].findChildren(QLabel))
+    t._tab.setCurrentIndex(2)
+    from ui_qt.trang_phong_chi_tiet import HopBaiHoc, HopQuyetDinh
+
+    assert t._trang_k[2].findChildren(HopBaiHoc) and t._trang_k[2].findChildren(HopQuyetDinh)
+    t.chon("")
+    assert t._tab.tabText(1) == "Báo cáo tuần" and t._tieu.text() == "Toàn công ty"
+
+
+def test_dai_duoi_nhan_tinh_hinh_may(tmp_path, monkeypatch, qapp):
+    goc = _dung_goc(tmp_path, monkeypatch)
+    from ui_qt.trang_bang_dieu_khien import TrangBangDieuKhien
+
+    app = _AppGia(goc)
+    app.giam_sat_vm = _GiamSatGia()
+    nhan_duoc = []
+    app.dat_thanh_duoi = lambda chu, tip="": nhan_duoc.append(chu)
+    t = TrangBangDieuKhien(app)
+    t._dong_ho.stop()
+    try:
+        assert nhan_duoc and "Agent đăng: chạy" in nhan_duoc[-1] and "Ổ trống 500 GB" in nhan_duoc[-1]
     finally:
         t.close()
         t.deleteLater()

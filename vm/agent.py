@@ -2863,8 +2863,6 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
             continue
         khoa_dem = "tai_bo_sung@{0}@{1}".format(kenh, hom_nay)
         da_chay = int(tt.get(khoa_dem) or 0)
-        if da_chay >= TAI_BO_SUNG_TOI_DA_LUOT_NGAY:
-            continue
         try:
             can = ma_can_tai_bo_sung(tai_ke_hoach(ch, kenh), kenh, so, luc)
         except Exception as loi:  # noqa: BLE001 — đọc kế hoạch hỏng thì chờ lượt sau
@@ -2872,7 +2870,19 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
             continue
         khoa_goi = "tai_bo_sung_goi@{0}@{1}".format(kenh, hom_nay)
         dem_goi = tt.get(khoa_goi) if isinstance(tt.get(khoa_goi), dict) else {}
-        can = [m for m in can if int(dem_goi.get(m) or 0) < TAI_BO_SUNG_TOI_DA_LUOT_GOI_NGAY]
+        het_luot = [m for m in can if int(dem_goi.get(m) or 0) >= TAI_BO_SUNG_TOI_DA_LUOT_GOI_NGAY]
+        if da_chay >= TAI_BO_SUNG_TOI_DA_LUOT_NGAY:
+            het_luot, can = can, []
+        else:
+            can = [m for m in can if m not in het_luot]
+        # 03/10/2026: chạm trần thì GHI LÝ DO (1 lần/kênh/ngày) — trước đây im lặng.
+        bao = _TAI_BO_SUNG.setdefault("da_bao", set())
+        if het_luot and (kenh, hom_nay) not in bao:
+            bao.add((kenh, hom_nay))
+            ghi("tải bổ sung kênh {0}: bỏ qua {1} — hết lượt hôm nay (kênh {2}/{3}, gói ≤{4}); "
+                "thử lại sau 00:00".format(kenh, ", ".join(het_luot), da_chay,
+                                           TAI_BO_SUNG_TOI_DA_LUOT_NGAY,
+                                           TAI_BO_SUNG_TOI_DA_LUOT_GOI_NGAY))
         if not can:
             continue
         ung_vien.append((da_chay, float(cuoi.get(kenh) or 0.0), thu_tu, kenh, ch, can,

@@ -1763,6 +1763,22 @@ def _cua_so_san_xuat(goc: str, ma_kenh: str, kenh: Any,
                           "so_khe_ngay": kho["so_khe_ngay"],
                           "khe_tuong_lai": kho["khe_tuong_lai"], "goi_cho_lich": kho["goi_cho"]})
         if kho["kho"] < kho["can"]:
+            # ═══ SẢN XUẤT ĐÚNG HẠN (chủ dự án 03/10/2026) ═══
+            # "M2 đăng thì M1 mới nghiên cứu + chọn content + sản xuất rồi hẹn lịch M2"
+            # — chọn bằng số liệu MỚI NHẤT, không làm sẵn trước. `san_xuat_truoc_gio`
+            # (vd 24) > 0: chỉ mở cửa khi khe trống kế tiếp còn ≤ chừng đó giờ.
+            truoc = max(0, int(getattr(kenh, "san_xuat_truoc_gio", 0) or 0))
+            if truoc > 0:
+                ngay_k, gio_k = xep_lich.khe_trong_som_nhat(goc, ma_kenh, kenh, bay_gio=luc)
+                moc_k = _ghep_ngay_gio(_dt.datetime.strptime(ngay_k, "%d/%m/%Y").date(),
+                                       gio_k) if ngay_k else None
+                if moc_k is not None and moc_k - luc > _dt.timedelta(hours=truoc):
+                    mo = moc_k - _dt.timedelta(hours=truoc)
+                    thong_tin.update({"mo_cua_san_xuat": mo.isoformat(timespec="minutes"),
+                                      "khe_ke_tiep": moc_k.isoformat(timespec="minutes")})
+                    return False, ("sản xuất đúng hạn: khe đăng kế tiếp {0} — {1} mới chọn content "
+                                   "(số liệu mới nhất) và sản xuất.").format(
+                                       moc_k.strftime("%d/%m %H:%M"), mo.strftime("%d/%m %H:%M")), thong_tin
             return True, "", thong_tin
         if kho["moc_tuong_lai_som_nhat"]:
             thong_tin["mo_cua_san_xuat"] = kho["moc_tuong_lai_som_nhat"]
