@@ -67,9 +67,12 @@ don_sau_gio: 24
 giu_toi_da_luot: 3
 gio_dang: "20:00"
 chu_ky_dang_ngay: 1
-san_xuat_truoc_gio: 72
+# 03/10: san xuat dung han - ngay M1 chon content (so lieu moi nhat) + san xuat cho khe dang M2
+san_xuat_truoc_gio: 24
 dung_mot_lan: true
 tu_chay: false
 tu_duyet: false
 ngan_sach_ngay: 0
 ngay_bat_dau: ""
+# Nuoi trang chu (vm/nuoi_trang_chu.py): cho Chrome da dang nhap xem video doi thu cung ngach de trang chu dung chu de; dat (% chu de > 90) thi tu ghi false; muon nuoi lai thi tu bat true.
+nuoi_trang_chu: true

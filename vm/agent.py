@@ -140,6 +140,8 @@ def giu_khoa_may_chung(viec: str = "phien", kenh: str = "", uu_tien: int = 1) ->
         return True
     if _KHOA_MAY_DANG_GIU:
         return True
+    if kenh and not _nhuong_kenh_nuoi(kenh):    # kênh đang được nuôi trang chủ: báo dừng, đợi đóng Chrome
+        return False
     k = _nap_khe()
     if k is not None:
         try:
@@ -2929,6 +2931,65 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
     return False
 
 
+# ── NUÔI TRANG CHỦ (03/10/2026): mỗi ~10 phút mở tiến trình con vm/nuoi_trang_chu.py cho từng kênh đủ điều kiện ──
+CHU_KY_NUOI_TRANG_CHU_GIAY = 10 * 60
+_NUOI_TRANG_CHU = {"luc": 0.0, "con": {}, "ly": {}}
+
+
+def _nhuong_kenh_nuoi(kenh: str, cho_giay: float = 120.0) -> bool:
+    """Kênh đang được NUÔI trang chủ thì ghi cờ `.dung`, đợi phiên nuôi đóng Chrome (<= 2 phút).
+    False = chưa nhường được (việc đăng hoãn, nhịp sau thử lại). Mọi việc đăng đều đi qua
+    `giu_khoa_may_chung(kenh=...)` nên móc ở đó là đủ."""
+    thu_muc = os.path.join(GOC, "logs", "nuoi-trang-chu")
+    khoa = os.path.join(thu_muc, kenh + ".khoa")
+    try:
+        with open(khoa, "r", encoding="utf-8") as tep:
+            pid = int(json.load(tep).get("pid") or 0)
+        if not _pid_con_song(pid):
+            return True
+        with open(os.path.join(thu_muc, kenh + ".dung"), "w", encoding="utf-8") as tep:
+            tep.write(str(time.time()))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return True
+    ghi("kênh {0} đang được nuôi trang chủ — báo dừng sớm, đợi đóng Chrome".format(kenh))
+    han = time.monotonic() + cho_giay
+    while os.path.exists(khoa) and _pid_con_song(pid) and time.monotonic() < han:
+        time.sleep(2)
+    if os.path.exists(khoa) and _pid_con_song(pid):
+        ghi("kênh {0}: phiên nuôi chưa đóng Chrome sau {1:.0f}s — hoãn việc, thử lại nhịp sau".format(kenh, cho_giay))
+        return False
+    return True
+
+
+def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
+    """MỘT bước nuôi trang chủ (gọi mỗi nhịp tim, tự giãn 10 phút). Mỗi kênh đủ điều kiện một tiến trình
+    con (tối đa 4 Chrome + RAM >= 4 GB do `kenh_den_luot` canh). Trả số con đang chạy."""
+    luc = time.time() if bay_gio is None else bay_gio
+    con = _NUOI_TRANG_CHU["con"]
+    for k in [k for k, c in con.items() if c.poll() is not None]:
+        ghi("nuôi trang chủ kênh {0}: tiến trình con xong (mã {1})".format(k, con.pop(k).returncode))
+    if luc - _NUOI_TRANG_CHU["luc"] < CHU_KY_NUOI_TRANG_CHU_GIAY:
+        return len(con)
+    _NUOI_TRANG_CHU["luc"] = luc
+    sys.path.insert(0, GOC) if GOC not in sys.path else None
+    import nuoi_trang_chu  # noqa: PLC0415 — chỉ thư viện chuẩn khi nạp
+    ra, ly = nuoi_trang_chu.kenh_den_luot(luc, set(con))
+    if ra and van_ipv4_mo():
+        ly, ra = dict(ly, **{k: "van IPv4 đang mở" for k in ra}), []
+    for k, r in ly.items():     # mỗi lần bỏ qua ghi lý do, chỉ khi lý do đổi (bỏ số đếm lùi)
+        if _NUOI_TRANG_CHU["ly"].get(k) != re.sub(r"\d+", "#", r):
+            _NUOI_TRANG_CHU["ly"][k] = re.sub(r"\d+", "#", r)
+            ghi("nuôi trang chủ kênh {0}: bỏ qua — {1}".format(k, r[:150]))
+    for k in ra:
+        _NUOI_TRANG_CHU["ly"].pop(k, None)
+        ghi("── NUÔI TRANG CHỦ kênh {0}: mở tiến trình con ──".format(k))
+        con[k] = (mo_con or subprocess.Popen)(
+            [sys.executable, os.path.join(GOC, "nuoi_trang_chu.py"), "--kenh", k], cwd=GOC,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return len(con)
+
+
 # ── GHIM SỚM bình luận mồi (29/09/2026) ─────────────────────────────────────
 #
 # Video đăng qua máy DOM được YouTube tự công khai đúng giờ hẹn (vd 20:00), còn
@@ -3657,6 +3718,10 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                         chay_ghim_som(cau_hinh, hieu_luc, cac_kenh)
                     except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                         ghi("ghim sớm hỏng: {0}".format(loi))
+                try:
+                    chay_nuoi_trang_chu()
+                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
+                    ghi("nuôi trang chủ hỏng: {0}".format(loi))
         else:
             # Lịch cố định + giữ Chrome chạy cả khi trạm tắt: quét Studio
             # không cần trạm sống (extension tự ghi vào Tải xuống khi không
