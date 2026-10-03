@@ -78,7 +78,8 @@ __all__ = ["TEN_VIEC", "TEN_VIEC_CANH", "TEN_VIEC_TRAM_DANG_NHAP",
            "TEN_VIEC_DIEU_PHOI", "dang_ky_dieu_phoi", "huy_dieu_phoi",
            "TEN_VIEC_GAC_TONG", "dang_ky_gac_tong", "huy_gac_tong",
            "trang_thai_gac_tong",
-           "TEN_VIEC_DONG_BO_GIT", "dang_ky_dong_bo_git", "huy_dong_bo_git"]
+           "TEN_VIEC_DONG_BO_GIT", "dang_ky_dong_bo_git", "huy_dong_bo_git",
+           "TEN_VIEC_NAO", "dang_ky_nao", "huy_nao"]
 
 #: Tên việc trong Task Scheduler — một tool chỉ một việc, tìm/xoá/đọc lại bằng
 #: đúng tên này. Đổi tên là bỏ rơi việc cũ đã đăng ký trên máy khách.
@@ -604,3 +605,41 @@ def huy_dong_bo_git(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> T
     if not ok:
         return False, "Không gỡ được lịch đồng bộ kho — thử mở Task Scheduler xoá tay."
     return True, ("Đã gỡ lịch đồng bộ kho." if that_su else "Chưa từng đặt lịch đồng bộ kho.")
+
+
+# ── Bộ não (03/10/2026, `core/nao.py`) ───────────────────────────────────────
+#
+# Việc thứ bảy: mỗi sáng một phiên Claude Code "bộ não" (`python -m core.nao phien`) — đọc số, tự chấm các
+# hành động cũ, rồi chỉnh hướng qua CLI an toàn. 04:10 = SAU lượt quét Studio 02:10–03:55, TRƯỚC sản xuất 05:00.
+# Cùng nguyên tắc "đã đăng nhập, không /RU SYSTEM" với các việc khác (cần phiên người dùng để tìm claude).
+
+TEN_VIEC_NAO = "ShopAPI-Nao"
+
+
+def _lenh_nao(goc: str) -> str:
+    return '"{0}" -m core.nao phien'.format(_pythonw_cho(goc))
+
+
+def dang_ky_nao(goc: str, gio: str = "04:10", *,
+                chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
+    """Đặt lịch `ShopAPI-Nao` (`/SC DAILY /ST <gio>`, `/F` ghi đè). Mỗi ngày chỉ một phiên (khoá + log ngày)."""
+    gio = (gio or "").strip()
+    if not _MAU_GIO.match(gio):
+        return False, "Giờ phải theo dạng HH:MM (ví dụ 04:10) — nhận “{0}”.".format(gio)
+    if not os.path.isfile(os.path.join(os.path.abspath(goc), "core", "nao.py")):
+        return False, "Không thấy core/nao.py — không đặt lịch bộ não được."
+    tr = 'cmd /c cd /d "{0}" && {1}'.format(os.path.abspath(goc), _lenh_nao(goc))
+    ma, ra = chay_lenh(["schtasks", "/Create", "/TN", TEN_VIEC_NAO, "/SC", "DAILY",
+                        "/ST", gio, "/TR", tr, "/F"])
+    if ma != 0:
+        return False, ("Không đặt được lịch bộ não — Windows báo: {0}"
+                       .format(ra.strip()[:300] or "(mã thoát {0})".format(ma)))
+    return True, "Đã đặt lịch: mỗi ngày {0} một phiên bộ não (Claude Code đọc số, tự chấm, chỉnh hướng).".format(gio)
+
+
+def huy_nao(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
+    """Gỡ lịch `ShopAPI-Nao` (chưa có thì coi như xong)."""
+    ok, that_su = _xoa_viec(TEN_VIEC_NAO, chay_lenh)
+    if not ok:
+        return False, "Không gỡ được lịch bộ não — thử mở Task Scheduler xoá tay."
+    return True, ("Đã gỡ lịch bộ não." if that_su else "Chưa từng đặt lịch bộ não.")

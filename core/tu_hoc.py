@@ -88,6 +88,13 @@ def ghi_van(goc: str, ma_kenh: str, ma_goi: str, nuoc: Dict[str, Any], du_doan: 
                        du_doan=dict(du_doan or {}))
     van[ma_goi].setdefault("ngay", time.strftime("%Y-%m-%d"))
     _luu_van(goc, ma_kenh, van)
+    if not cu:  # ván MỚI: bộ não (`core/nao`) trừ 1 lượt mỗi lần `thu` khớp. Lỗi = như không có bộ não.
+        try:
+            from . import nao  # noqa: PLC0415
+
+            nao.tru_luot(goc, ma_kenh, van[ma_goi].get("nuoc") or {})
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ── nhãn chuẩn ──────────────────────────────────────────────────────────────
@@ -231,7 +238,7 @@ def gan_nhan(truc: str, ban: Any, kieu_llm: Any = None) -> Tuple[List[str], List
 def he_so_chon(goc: str, ma_kenh: str, truc: str, nhan: Any, hat: str) -> Dict[str, float]:
     """`{nhãn: hệ số}` = 0,9 + 0,2 × điểm rút Thompson. Trục chưa có ván kết luận → {} (không làm gì).
     Hạt giống tất định theo `hat` (kênh + mã gói)."""
-    if not bang_diem(goc, ma_kenh).get(truc):
+    if not bang_diem(goc, ma_kenh).get(truc) and not _nao_hieu_luc(goc, ma_kenh, truc):
         return {}
     rd = rut(goc, ma_kenh, truc, sorted({n for n in nhan if n}), random.Random(hat))
     return {n: round(HE_SO_CHON_NEN + HE_SO_CHON_BIEN * r, 3) for n, r in rd.items()}
@@ -475,8 +482,24 @@ def rut(goc: str, ma_kenh: str, truc: str, cac_gia_tri: Any, rng: Optional[rando
     """Thompson sampling: `{giá trị: điểm rút 0..1}`. Giá trị chưa từng có dùng Beta(1,1)."""
     rng = rng or random.Random()
     bd = bang_diem(goc, ma_kenh).get(truc, {})
-    return {str(g): rng.betavariate((bd.get(str(g)) or {}).get("a", 1.0), (bd.get(str(g)) or {}).get("b", 1.0))
-            for g in cac_gia_tri}
+    ra = {str(g): rng.betavariate((bd.get(str(g)) or {}).get("a", 1.0), (bd.get(str(g)) or {}).get("b", 1.0))
+          for g in cac_gia_tri}
+    try:  # bộ não (`core/nao`): `thu` còn lượt → 1,0 (trần); `tranh` còn hạn → 0,0 (sàn). Lỗi = như không có não.
+        from . import nao  # noqa: PLC0415
+
+        nao.ap_hieu_luc_rut(goc, ma_kenh, truc, ra)
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
+
+
+def _nao_hieu_luc(goc: str, ma_kenh: str, truc: str) -> Dict[str, float]:
+    try:
+        from . import nao  # noqa: PLC0415
+
+        return nao.hieu_luc(goc, ma_kenh, truc)
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 # ── hiệu chỉnh dự đoán (đợt 3, 03/10/2026) ───────────────────────────────────

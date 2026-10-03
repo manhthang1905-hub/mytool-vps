@@ -478,7 +478,8 @@ def _ghi_bai_hoc(goc: str, ma: str, dong_moi: Optional[Dict[str, Any]], vid: str
     os.replace(duong + ".tam", duong)
 
 
-def ap_delta(goc: str, ma: str, delta: Any, vid: str, moc: str, luc: str, bong: bool = False) -> Dict[str, int]:
+def ap_delta(goc: str, ma: str, delta: Any, vid: str, moc: str, luc: str, bong: bool = False,
+             nguon: str = "") -> Dict[str, int]:
     """Áp tối đa 3 thao tác delta của LLM vào `bai-hoc.jsonl` (cùng sổ, thêm dòng `loai: "delta"`; KHÔNG viết lại sổ).
     Chống lặp: MỘT video chỉ cộng hoặc trừ mỗi bài MỘT lần (kể cả với dòng `bai_hoc` cũ của chính video đó);
     id lạ / bài đã "bo" / bài chủ đã gạch -> bỏ qua. `them` trùng bài đã có (cùng chữ) tính như `cong`.
@@ -492,7 +493,8 @@ def ap_delta(goc: str, ma: str, delta: Any, vid: str, moc: str, luc: str, bong: 
     def dong_phieu(b: Dict[str, Any], huong: str) -> Dict[str, Any]:
         return {"truc": b["truc"], "gia_tri": b["gia_tri"], "huong": huong, "cum": b["cum"], "cau": b["cau"],
                 "khoa": "{0}|{1}|{2}|{3}".format(b["truc"], b["gia_tri"], huong, b["cum"]), "video_id": vid,
-                "moc": moc, "so_dan": [], "bong": bong, "luc": luc, "loai": "delta"}
+                "moc": moc, "so_dan": [], "bong": bong, "luc": luc, "loai": "delta",
+                **({"nguon": nguon} if nguon else {})}   # nguon="nao": phiếu do bộ não (core/nao) ghi
 
     for d in (delta if isinstance(delta, list) else [])[:TOI_DA_DELTA]:
         op = str(d.get("op") or "") if isinstance(d, dict) else ""

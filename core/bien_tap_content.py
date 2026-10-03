@@ -999,6 +999,12 @@ def _khoi_chi_dao(goc: str, ma_kenh: str, bay_gio: _dt.datetime) -> str:
         tuan = [x.strip() for x in tuan.split("|") if x.strip()]
     for x in [str(x).strip() for x in (tuan or []) if str(x).strip()][:3]:
         dong.append("- Luật chọn tuần này: " + _gon(x, 200))
+    try:  # bộ não (`core/nao uu-tien-nguon`): "Bộ não đề cử: … vì …" — nguồn không có trong bảng thì chỉ là lời nhắc
+        from . import nao  # noqa: PLC0415
+
+        dong += nao.dong_de_cu(goc, ma_kenh)
+    except Exception:  # noqa: BLE001
+        pass
     if not dong:
         return ""
     return ("Tiêu chí MỀM của tuần (giám đốc kênh đọc số của kênh rồi đặt, có hạn) — cân nhắc khi chấm, "

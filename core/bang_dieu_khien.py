@@ -1345,6 +1345,18 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             "lich", CANH_BAO, chu="Lịch tự chạy đang tắt — kênh sẽ không tự làm video",
             goi_y="→ bật lịch chạy hằng ngày", nut=[("Bật lịch", "bat_lich", {})]))
 
+    # 13) bộ não (`core/nao de-xuat`): việc lớn chờ chủ duyệt. Lỗi = như không có não.
+    try:
+        from . import nao as _nao  # noqa: PLC0415
+
+        for dx in _nao.viec_de_xuat(goc):
+            if dx["khoa"] in da_xong:
+                continue
+            ra.append(_viec(dx["khoa"], CANH_BAO, kenh=dx["kenh"], chu=dx["chu"], goi_y=dx["goi_y"],
+                            nut=[("Đã xử lý", "danh_dau_xong", {"khoa": dx["khoa"]})], xong_tay=True))
+    except Exception:  # noqa: BLE001
+        pass
+
     ra.sort(key=lambda v: _THU_TU_MUC.get(v["muc"], 9))
     return ra
 

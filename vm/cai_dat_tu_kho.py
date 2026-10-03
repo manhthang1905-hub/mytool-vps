@@ -390,6 +390,12 @@ def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
     bao("  ShopAPI-DieuPhoi: {0}".format(msg3))
     ok4, msg4 = lich_tu_chay.dang_ky_gac_tong(goc)
     bao("  ShopAPI-GacTong: {0}".format(msg4))
+    # 03/10/2026: bộ não (core/nao.py) — phiên Claude Code 04:10 mỗi sáng. Lỗi không chặn cài.
+    try:
+        _ok5, msg5 = lich_tu_chay.dang_ky_nao(goc)
+        bao("  ShopAPI-Nao: {0}".format(msg5))
+    except Exception as loi:  # noqa: BLE001
+        bao("  ShopAPI-Nao: không đăng ký được ({0})".format(str(loi)[:120]))
     return ok1 and ok2 and ok3 and ok4
 
 

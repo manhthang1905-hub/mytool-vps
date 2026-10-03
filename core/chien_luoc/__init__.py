@@ -314,7 +314,7 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
 
         from .. import tu_hoc  # noqa: PLC0415
 
-        if not tu_hoc.bang_diem(nc.goc, nc.ma_kenh).get("cum"):
+        if not tu_hoc.bang_diem(nc.goc, nc.ma_kenh).get("cum") and not tu_hoc._nao_hieu_luc(nc.goc, nc.ma_kenh, "cum"):
             return
         nhan = {id(d): tu_hoc.nhan_cum(d, nc.cum_cua) for ds in bang.values() for d in ds}
         hat = hashlib.sha1("hs|{0}|{1}|{2}".format(nc.ma_kenh, nc.bay_gio.date().isoformat(),
@@ -324,6 +324,13 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
             for d in ds:
                 cum = nhan[id(d)]
                 he = 0.8 + 0.4 * rut[cum] if cum else 1.0
+                if cum:  # bộ não: `thu` cụm → hệ số 1,5 (mạnh hơn trần Thompson 1,2); lỗi = giữ `he`
+                    try:
+                        from .. import nao  # noqa: PLC0415
+
+                        he = nao.he_so_cum(nc.goc, nc.ma_kenh, cum, he)
+                    except Exception:  # noqa: BLE001
+                        pass
                 d["he_so_cum"] = round(he, 3)
                 try:
                     d["diem_goc"] = d.get("diem", 0)

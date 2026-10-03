@@ -1335,7 +1335,22 @@ def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
     return moi + con + list(ds[SO_UNG_VIEN_BIEN_TAP:])
 
 
-def _chon_nguon(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
+def _chon_nguon(goc: str, ma_kenh: str, *a: Any, **kw: Any) -> Optional[Dict[str, Any]]:
+    """Vỏ của `_chon_nguon_goc` (03/10/2026): sau MỘT lần chọn thật (`goi_chat` có), mọi đề cử còn mở của bộ
+    não (`core/nao`, lệnh `uu-tien-nguon`) coi như đã dùng. Lỗi ở phía não không ảnh hưởng việc chọn."""
+    try:
+        return _chon_nguon_goc(goc, ma_kenh, *a, **kw)
+    finally:
+        if kw.get("goi_chat") is not None:
+            try:
+                from . import nao  # noqa: PLC0415
+
+                nao.dung_xong_de_cu(goc, ma_kenh)
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _chon_nguon_goc(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
                 cham_v7: Callable[..., Any], doc_danh_sach: Callable[..., Any],
                 log: Callable[[str], None],
                 # ═══ VÁ 28/09/2026 (LỖI 2) ═══ — mặc định rỗng, mọi nơi gọi cũ
@@ -1457,6 +1472,12 @@ def _chon_nguon(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
                                        nguong_giong_tieu_de=nguong_giong_tieu_de) or ds
         except Exception as loi:  # noqa: BLE001 — phân cụm AI hỏng thì giữ nhãn từ khoá
             log("  (AI phân cụm theo nghĩa hỏng: {0}) — dùng từ khoá.".format(str(loi)[:120]))
+    try:  # bộ não đề cử một nguồn có trong bảng → cộng điểm mạnh, đưa lên đầu (lỗi = như không có não)
+        from . import nao  # noqa: PLC0415
+
+        ds = nao.ap_uu_tien(goc, ma_kenh, ds, log)
+    except Exception:  # noqa: BLE001
+        pass
     la_tham_do = any(d.get("tham_do") for d in ds)
     ds = _bien_tap_ai(goc, ma_kenh, ds, goi_chat, co_v7_truoc, log)
     if goi_chat is not None:

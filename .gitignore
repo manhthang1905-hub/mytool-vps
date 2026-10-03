@@ -57,6 +57,16 @@
 !/CHANNEL/_NHOM/*/ngach.yaml
 !/CHANNEL/_NHOM/*/INSIGHT-CHON-CONTENT.md
 
+# nao/ (bộ não, 03/10/2026): CHỈ lời nhắc hệ thống CLAUDE.md lên kho. Trí nhớ, nhật ký, kỹ năng và
+# sổ hành động chứa dữ liệu kênh thật — kho công khai không được có.
+!/nao/
+/nao/*
+!/nao/CLAUDE.md
+nao/tri-nho/
+nao/nhat-ky/
+nao/ky-nang/
+nao/hanh-dong.json
+
 # vm/: mã + khuôn; trạng thái/nhật ký/cấu hình máy thật thì không.
 /vm/*
 !/vm/*.py
