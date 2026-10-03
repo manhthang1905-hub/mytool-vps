@@ -208,6 +208,21 @@ def ghi_tu_choi(so: dict, muc: str, gia_tri: Any, ly_do: str, luc: float) -> Non
     so["tu_choi"][muc] = {"gia_tri": gia_tri, "ly_do": str(ly_do)[:200], "luc": time.strftime("%Y-%m-%d %H:%M", time.localtime(luc))}
 
 
+def handle_cong_khai(uc: Any) -> str:
+    """Handle THẬT đang hiện trên trang công khai của kênh (HTTP thường, không mở Chrome); '' nếu không đọc được."""
+    if not uc:
+        return ""
+    try:
+        import urllib.request
+        rq = urllib.request.Request("https://www.youtube.com/channel/{0}".format(uc),
+                                    headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+        with urllib.request.urlopen(rq, timeout=20) as r:
+            m = re.search(r'canonicalBaseUrl":"/(@[^"]+)', r.read().decode("utf-8", "replace"))
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
 def bien_the_handle(handle: str, ma_ngon_ngu: str = "jp") -> List[str]:
     """Handle gốc rồi tối đa 3 biến thể nhẹ (thêm -<ngôn ngữ>, số). Mỗi cái ≤ 30 ký tự, không trùng nhau."""
     h = str(handle or "").lstrip("@")
@@ -573,7 +588,7 @@ _JS_MAC_DINH_NANG_CAO = "(() => {" + _JS_CHUNG + r"""
 
 _JS_DS_PHAT = "(() => {" + _JS_CHUNG + r"""
   const s = q('ytcp-playlist-section-content') || q('ytcp-playlist-section'); if (!s) return null;
-  const ten = qa('ytcp-playlist-row a.playlist-title-link, ytcp-playlist-row #video-title', s).map(a => (a.innerText || '').trim()).filter(x => x);
+  const ten = qa('ytcp-playlist-row h3.playlist-title a, ytcp-playlist-row a.playlist-title-link, ytcp-playlist-row #video-title', s).map(a => (a.innerText || '').trim()).filter(x => x);
   const dem = (((s.innerText || '').match(/\d+\s*[–-]\s*\d+\s*\/\s*\d+/) || [''])[0]) || '';
   return {ten: [...new Set(ten)], chu: (s.innerText || '').slice(0, 3000), phan_trang: dem};
 })()"""
@@ -692,6 +707,12 @@ class Studio:
         self.doi_hien("#description-textbox [role=textbox]", 15)
         self.ngu(1.5)
         du = self.js(_JS_HO_SO)
+        # ô ảnh (nhất là hình mờ) dựng chậm sau tải lại: chưa thấy ảnh thì đọc lại vài lần trước khi kết luận «chưa có»
+        for _ in range(4):
+            if not du or all((du.get(m) or {}).get("co") for m in ("logo", "banner", "hinh_mo")):
+                break
+            self.ngu(2.5)
+            du = self.js(_JS_HO_SO) or du
         if not du:
             raise LoiMuc("không đọc được trang Hồ sơ")
         return du
@@ -1490,6 +1511,12 @@ def _doc_lai_va_ghi(S: Studio, ten_nhom: str, muc_nhom, hs, kh, kq, so, luc0, gh
             S.doc_ds_phat(ht2, loi)
     except LoiMuc as e:
         loi["doc_lai"] = str(e)
+    # Studio hay còn hiện handle cũ một lúc sau Xuất bản; trang công khai mới là nguồn thật → đối chiếu ở đó
+    mong_h = str(so.get("handle_that") or hs.get("handle") or "").lstrip("@").lower()
+    if "handle" in muc_nhom and mong_h and str(ht2.get("handle") or "").lstrip("@").lower() != mong_h:
+        cong_khai = handle_cong_khai(so.get("uc"))
+        if cong_khai and cong_khai.lstrip("@").lower() == mong_h:
+            ht2["handle"] = mong_h
     so2 = json.loads(json.dumps(so))
     hh = _hash_anh(hs, _tl().thu_muc_thiet_lap(so["kenh"]))
     for m in ("logo", "banner", "hinh_mo"):
