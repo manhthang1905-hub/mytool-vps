@@ -139,4 +139,13 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
     except Exception as loi:  # noqa: BLE001
         log("  0) [vòng học] thống kê theo công thức hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
 
+    # 6) Tự học (`core/tu_hoc`): chấm ván + bảng điểm cho người đọc — try riêng, không chặn gì.
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+
+        ket["tu_hoc"] = tu_hoc.cham_van(goc, ma_kenh)
+        tu_hoc.ghi_bang_diem_md(goc, ma_kenh)
+    except Exception as loi:  # noqa: BLE001
+        log("  0) [vòng học] tự học (chấm ván) hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
+
     return ket

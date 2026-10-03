@@ -36,7 +36,7 @@ def test_truoc_luot_kenh_trong_khong_nem_loi_va_tra_du_khoa(tmp_path):
     goc = str(tmp_path)
     nhat_ky = []
     ket = vong_hoc.truoc_luot(goc, "KENH-TRONG", None, _log_thu(nhat_ky), bay_gio=BAY_GIO)
-    assert set(ket.keys()) == {"kho_nhac", "bu_ho_so", "chi_so", "bai_hoc", "khuon_bia", "chien_luoc"}
+    assert set(ket.keys()) == {"kho_nhac", "bu_ho_so", "chi_so", "bai_hoc", "khuon_bia", "chien_luoc", "tu_hoc"}
     # Kênh trống: kho nhạc không có gì để làm, hồ sơ trống, nhưng KHÔNG được ném lỗi.
     assert ket["bu_ho_so"] == []
 

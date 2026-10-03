@@ -282,6 +282,8 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
             if khac:
                 d["tin_hieu"]["cong_thuc_khac"] = khac
 
+    _ap_he_so_cum(nc, bang)
+
     if kh.tham_do and nc.giai_doan == "moi":
         bang[kh.tham_do] = _uu_tien_cum_chua_thu(nc, bang[kh.tham_do])
 
@@ -300,6 +302,40 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
     nc.ghi("  chiến lược: {0} ứng viên sau trộn ({1}).".format(
         len(ra), ", ".join("{0} {1}".format(t, len(bang[t])) for t in ts)))
     return ra
+
+
+def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Tự học (`core/tu_hoc`): nhân điểm mỗi nguồn với hệ số 0,8 + 0,4 × điểm Thompson của CỤM nó, rồi xếp
+    lại từng bảng theo điểm đã nhân. Chưa có ván nào có kết luận (bảng điểm trục cụm rỗng) thì không làm gì.
+    Hạt giống tất định theo kênh|ngày|số lượt (cùng khoá thăm dò) nên trạm và vòng chọn thấy MỘT bảng.
+    Hỏng thì bỏ qua — học không được làm hỏng chọn nguồn."""
+    try:
+        import random  # noqa: PLC0415
+
+        from .. import tu_hoc  # noqa: PLC0415
+
+        if not tu_hoc.bang_diem(nc.goc, nc.ma_kenh).get("cum"):
+            return
+        nhan = {id(d): tu_hoc.nhan_cum(d, nc.cum_cua) for ds in bang.values() for d in ds}
+        hat = hashlib.sha1("hs|{0}|{1}|{2}".format(nc.ma_kenh, nc.bay_gio.date().isoformat(),
+                                                   nc.so_luot_hom_nay).encode("utf-8")).hexdigest()
+        rut = tu_hoc.rut(nc.goc, nc.ma_kenh, "cum", sorted({c for c in nhan.values() if c}), random.Random(hat))
+        for ten, ds in bang.items():
+            for d in ds:
+                cum = nhan[id(d)]
+                he = 0.8 + 0.4 * rut[cum] if cum else 1.0
+                d["he_so_cum"] = round(he, 3)
+                try:
+                    d["diem_goc"] = d.get("diem", 0)
+                    d["diem"] = round(float(d.get("diem") or 0) * he, 2)
+                except (TypeError, ValueError):
+                    pass
+                if cum:
+                    d["ly_do"] = list(d.get("ly_do") or []) + [
+                        "tự học: cụm “{0}” hệ số ×{1:.2f} (Thompson {2:.2f})".format(cum, he, rut[cum])]
+            ds.sort(key=lambda d: -float(d.get("diem") or 0) if isinstance(d.get("diem"), (int, float)) else 0)
+    except Exception as loi:  # noqa: BLE001
+        nc.ghi("  (tự học: bỏ qua hệ số cụm — {0})".format(str(loi)[:100]))
 
 
 def _uu_tien_cum_chua_thu(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

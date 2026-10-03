@@ -2812,6 +2812,12 @@ def _chay_mot_ngay_trong_khoa(
                                               ngay=ngay_dang, gio=gio_dang)
                 run["ban_giao"].update(da_ban_giao=True, ma_goi=ma_goi, ngay_dang=ngay_dang,
                                        gio_dang=gio_dang, ly_do_trong=ly_do_trong)
+                try:  # tự học: ghi NƯỚC ĐI + dự đoán của ván này (hỏng thì bỏ qua)
+                    from . import tu_hoc  # noqa: PLC0415
+
+                    tu_hoc.ghi_van_tu_luot(goc, ma_kenh, ma_goi, run.get("nguon") or {})
+                except Exception as loi_hoc:  # noqa: BLE001
+                    log("  (tự học: chưa ghi được ván {0}: {1})".format(ma_goi, str(loi_hoc)[:100]))
                 # Một content chỉ là quyết định cho video này. Khi đã bàn giao
                 # sang khâu đăng, bỏ đúng lựa chọn vừa dùng để lần kế tiếp được
                 # chấm lại trên dữ liệu mới thay vì tích một kho content cũ.
