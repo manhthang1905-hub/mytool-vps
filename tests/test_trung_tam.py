@@ -531,6 +531,21 @@ def test_them_kenh_vao_vm_giu_kenh_cu(tmp_path):
     assert tt.doc_cau_hinh_vm(vm)["cac_kenh"] == ["K1", "K2"], "không thêm trùng"
 
 
+def test_them_kenh_vao_vm_bat_tu_dang_cho_kenh_moi(tmp_path):
+    """04/10: ghép kênh vào máy đăng → kênh chưa có may-ao.json được bật tu_dang + DOM; kênh đã có thì giữ nguyên."""
+    from core import vm_cai_dat
+    goc = os.path.join(str(tmp_path), "TL")
+    vm = os.path.join(goc, "vm")
+    _ghi_json(os.path.join(vm, "config.json"), {"cac_kenh": []})
+    os.makedirs(os.path.join(goc, "CHANNEL", "K9"))
+    tt.them_kenh_vao_vm(vm, "K9")
+    cai = vm_cai_dat.doc(goc, "K9")
+    assert cai["tu_dang"] is True and cai["cach_dang"] == "tu_dong"
+    vm_cai_dat.luu(goc, "K9", tu_dang=False)
+    tt.them_kenh_vao_vm(vm, "K9")
+    assert vm_cai_dat.doc(goc, "K9")["tu_dang"] is False, "kênh đã có may-ao.json: không đè lựa chọn của chủ"
+
+
 def test_tim_trinh_duyet_va_chrome_rieng(tmp_path):
     cha = os.path.join(str(tmp_path), "TL")
     vm = os.path.join(cha, "vm")

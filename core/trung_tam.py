@@ -367,6 +367,17 @@ def them_kenh_vao_vm(thu_muc_vm_: str, ma: str, chrome: str = "") -> Dict[str, A
         rieng[ma] = chrome
         cau_hinh["chrome_theo_kenh"] = rieng
     ghi_json(duong, cau_hinh, indent=4)
+    # 04/10/2026: "cho máy đăng lo kênh này" = máy TỰ ĐĂNG. Kênh chưa có `may-ao.json` thì ghi
+    # tu_dang + đường DOM (mặc định chung vẫn là tắt cho máy nhà). Trước đây 4 kênh mới làm xong
+    # video mà máy đăng bỏ qua vì `tu_dang: false, cach_dang: anh` từ mặc định.
+    try:
+        from . import vm_cai_dat  # noqa: PLC0415
+        goc_tool = os.path.dirname(os.path.abspath(thu_muc_vm_))
+        if not os.path.isfile(os.path.join(goc_tool, "CHANNEL", ma, vm_cai_dat.TEP)) and \
+                os.path.isdir(os.path.join(goc_tool, "CHANNEL", ma)):
+            vm_cai_dat.luu(goc_tool, ma, tu_dang=True, cach_dang="tu_dong")
+    except Exception:  # noqa: BLE001 — phụ, không chặn việc ghép kênh
+        pass
     return cau_hinh
 
 
