@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.148.4** — 2026-10-04 — `vps-jp1` — Bo nao: de cu uu-tien-nguon chi tinh da dung khi link that su co trong danh sach ung vien; vang 3 luot thi dong khong tinh diem
 - **2.148.3** — 2026-10-04 — `vps-jp1` — xep_lich: goi 'Bo' khong giu khe va khong tinh vao kho dem (TL6-T7-K2 bo vi trung nguon van chan san xuat)
 - **2.148.2** — 2026-10-04 — `vps-jp1` — fix: chong trung nguon khi nhan nuoi luot mo coi + luot thu khong thanh mo coi
 - **2.148.1** — 2026-10-04 — `vps-jp1` — thiet_lap_kenh: doc lai handle theo trang cong khai, doi o anh dung cham, sua bo chon danh sach phat
