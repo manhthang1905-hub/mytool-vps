@@ -47,6 +47,7 @@ TI_LE_DUNG_TOI_THIEU = 0.5
 TOI_DA_SO_VIDEO_THU = 2
 TOI_DA_NGAY_TRANH = 14
 TOI_DA_NGAY_KIEM = 30
+NGAY_DE_XUAT_HET_HAN = 7         # đề xuất mở quá ngần này ngày mà chủ không xử lý → tự đóng `het_han`
 DIEM_CONG_UU_TIEN = 1000.0
 HE_SO_CUM_THU = 1.5
 #: Trục mà dây chuyền THẬT SỰ đọc hiệu lực của bộ não (cum: xếp hạng nguồn; kieu_tieu_de/hook: chấm phương án;
@@ -336,14 +337,26 @@ def _tao_hanh_dong_g(goc: str, lenh: str, tham_so: Dict[str, Any], *, ly_do: str
     return hd
 
 
+def _qua_han_de_xuat(d: Dict[str, Any], hom_nay: str) -> bool:
+    """Đề xuất còn mở mà đã quá `NGAY_DE_XUAT_HET_HAN` ngày kể từ lúc đề xuất."""
+    ngay_de, hom = _ngay(str(d.get("luc") or "")[:10]), _ngay(hom_nay)
+    return bool(d.get("lenh") == "de-xuat" and d.get("trang_thai") == "mo" and ngay_de and hom
+                and (hom - ngay_de).days > NGAY_DE_XUAT_HET_HAN)
+
+
 def don_het_han(goc: str, ds: Optional[List[Dict[str, Any]]] = None, bay_gio: Optional[_dt.datetime] = None) -> bool:
-    """`tranh` quá hạn / `thu` hết lượt → `xong` (chờ chấm). Ghi lại nếu có đổi."""
+    """`tranh` quá hạn / `thu` hết lượt → `xong` (chờ chấm); `de-xuat` mở quá 7 ngày chủ không xử lý → `het_han`
+    (không hiện cho chủ nữa; bộ não thấy trong `xem` để tự quyết lại). Ghi lại nếu có đổi."""
     ds = doc_hanh_dong(goc) if ds is None else ds
     hom_nay = _hom_nay(bay_gio)
     doi = False
     for d in ds:
         if d.get("trang_thai") == "mo" and d.get("lenh") == "tranh" and str((d.get("tham_so") or {}).get("het_han") or "9") < hom_nay:
             d["trang_thai"] = "xong"
+            doi = True
+        elif _qua_han_de_xuat(d, hom_nay):
+            d["trang_thai"] = "het_han"
+            d["het_han_luc"] = hom_nay
             doi = True
     if doi:
         ghi_hanh_dong(goc, ds)
@@ -468,8 +481,14 @@ def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -
                 u["diem"] = DIEM_CONG_UU_TIEN
             u["bo_nao"] = d.get("ly_do") or ""
             dau.append(u)
+            _DE_CU_THAY.setdefault(kenh, set()).add(d["id"])
             if log:
                 log("  [bộ não] đề cử {0}: {1}".format(d["id"], (d.get("ly_do") or "")[:100]))
+        if log:
+            for d in cu.values():
+                if d["id"] not in _DE_CU_THAY.get(kenh, ()):
+                    log("  [bộ não] đề cử {0} KHÔNG có trong danh sách ứng viên (bị lọc: đã làm / quá cũ / lạc ngách / "
+                        "thiếu lời thoại) — giữ lại cho lượt sau".format(d["id"]))
         return dau + con if dau else ds
     except Exception:  # noqa: BLE001
         return ds
@@ -489,15 +508,37 @@ def dung_xong_de_cu(goc: str, *a: Any, **kw: Any) -> Any:
         return _dung_xong_de_cu_g(goc, *a, **kw)
 
 
+#: id đề cử đã THẬT SỰ có mặt trong danh sách ứng viên ở lượt chọn này (cùng tiến trình với `_chon_nguon`).
+_DE_CU_THAY: Dict[str, set] = {}
+#: Đề cử vắng mặt khỏi danh sách ứng viên ngần này lượt thì đóng, không tính điểm (04/10/2026).
+DE_CU_VANG_TOI_DA = 3
+
+
 def _dung_xong_de_cu_g(goc: str, kenh: str) -> int:
-    """Lần chọn content thật đã chạy → mọi đề cử mở của kênh `xong` (dùng MỘT lần)."""
+    """Lần chọn content thật đã chạy → đề cử nào ĐÃ có mặt trong danh sách ứng viên thì `xong` (dùng MỘT lần).
+    04/10/2026: trước đây mọi đề cử mở đều `xong` dù link không có trong bảng (TL3 n001: nguồn đề cử bị lọc,
+    lượt chọn nguồn khác, hành động "xong" mà không có hiệu lực). Vắng mặt → giữ lại, quá
+    `DE_CU_VANG_TOI_DA` lượt thì đóng `khong_tinh` kèm lý do để não tự quyết lại."""
     try:
         ds = doc_hanh_dong(goc)
+        thay = _DE_CU_THAY.pop(kenh, set())
         n = 0
+        luc = _dt.datetime.now().replace(microsecond=0).isoformat()
         for d in ds:
             if d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo" and (d.get("tham_so") or {}).get("kenh") == kenh:
-                d["trang_thai"] = "xong"
-                d.setdefault("tham_so", {})["da_dung_luc"] = _dt.datetime.now().replace(microsecond=0).isoformat()
+                ts = d.setdefault("tham_so", {})
+                if d.get("id") in thay:
+                    d["trang_thai"] = "xong"
+                    ts["da_dung_luc"] = luc
+                else:
+                    ts["lan_vang"] = int(ts.get("lan_vang") or 0) + 1
+                    if ts["lan_vang"] < DE_CU_VANG_TOI_DA:
+                        n += 1
+                        continue
+                    d["trang_thai"] = "xong"
+                    d["khong_tinh"] = True
+                    d["ghi_chu_cham"] = ("nguồn đề cử không vào danh sách ứng viên {0} lượt (bị lọc: đã làm / quá cũ / "
+                                         "lạc ngách / thiếu lời thoại) — không có hiệu lực, không tính điểm").format(ts["lan_vang"])
                 n += 1
         if n:
             ghi_hanh_dong(goc, ds)
@@ -508,14 +549,15 @@ def _dung_xong_de_cu_g(goc: str, kenh: str) -> int:
 
 # ── đề xuất cho chủ ──────────────────────────────────────────────────────────
 
-def viec_de_xuat(goc: str) -> List[Dict[str, str]]:
-    """Đề xuất còn mở cho "Việc của bạn": `[{khoa, kenh, chu, goi_y}]`. Hỏng → []."""
+def viec_de_xuat(goc: str, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[str, str]]:
+    """Đề xuất còn mở (≤ 7 ngày) cho "Việc của bạn": `[{khoa, kenh, chu, goi_y}]`. Hỏng → []."""
     try:
         return [{"khoa": "nao:" + d["id"], "kenh": str((d.get("tham_so") or {}).get("kenh") or ""),
                  "chu": "Bộ não đề xuất: " + str((d.get("tham_so") or {}).get("noi_dung") or "")[:300],
                  "goi_y": "→ duyệt hoặc bỏ qua; não đoán: {0} (kiểm {1})".format(
                      (d.get("du_doan") or "")[:120], d.get("kiem_ngay") or "?")}
-                for d in doc_hanh_dong(goc) if d.get("lenh") == "de-xuat" and d.get("trang_thai") == "mo"]
+                for d in doc_hanh_dong(goc) if d.get("lenh") == "de-xuat" and d.get("trang_thai") == "mo"
+                and not _qua_han_de_xuat(d, _hom_nay(bay_gio))]
     except Exception:  # noqa: BLE001
         return []
 
@@ -767,6 +809,24 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
         return ["  - {0}".format(_cat(v.get("chu"), 150)) for v in (anh.get("viec") or []) if v.get("khoa") != "lich"][:6] or ["  (không có)"]
 
     phan("VIỆC ĐANG CHỜ CHỦ (cảnh báo)", viec)
+
+    def de_xuat_het_han() -> List[str]:
+        ds = [d for d in doc_hanh_dong(goc) if d.get("lenh") == "de-xuat"
+              and (d.get("trang_thai") == "het_han" or _qua_han_de_xuat(d, _hom_nay(bay_gio)))
+              and (_ngay(str(d.get("het_han_luc") or d.get("luc") or "")[:10]) or _dt.date.min) >= bay_gio.date() - _dt.timedelta(days=14)]
+        return ["  - {0} [đề xuất {1}, chủ không xử lý {2} ngày → ĐÃ ĐÓNG] tự quyết lại: làm / bỏ / đề xuất lại"
+                .format(_cat((d.get("tham_so") or {}).get("noi_dung"), 110), str(d.get("luc") or "")[:10],
+                        NGAY_DE_XUAT_HET_HAN) for d in ds[-6:]] or ["  (không có)"]
+
+    phan("ĐỀ XUẤT CỦA NÃO HẾT HẠN (chủ không xử lý — tự quyết lại)", de_xuat_het_han)
+
+    def giam_doc_nho() -> List[str]:
+        from .giam_doc import doc_viec_cho_nao  # noqa: PLC0415
+
+        return ["  - [{0}] {1}".format(m.get("kenh") or "?", _cat(m.get("viec"), 200))
+                for m in doc_viec_cho_nao(goc, bay_gio)[:8]] or ["  (không có)"]
+
+    phan("GIÁM ĐỐC KÊNH NHỜ XEM (tự xem số bằng `xem`/chi-so rồi quyết; KHÔNG báo chủ)", giam_doc_nho)
     d.append("")
     d.append("== ĐỌC SÂU (chỉ đọc) ==")
     d.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")

@@ -157,6 +157,44 @@ def test_de_xuat_hien_trong_viec_cua_ban(tmp_path):
     assert not [v for v in bdk.viec_cua_ban(goc, anh={"kenh": []}, bay_gio=HOM_NAY) if v["khoa"].startswith("nao:")]
 
 
+def test_de_xuat_mo_qua_7_ngay_tu_dong_het_han_va_nao_thay_trong_xem(tmp_path):
+    from core import bang_dieu_khien as bdk
+
+    goc = _goc(tmp_path)
+    assert _chay(goc, "de-xuat", "Mở kênh TL5 cho cụm tiền bạc", "--du-doan", "chủ duyệt thì kênh mới có 100 sub sau 30 ngày",
+                 "--kiem-ngay", NGAY_KIEM) == 0
+    # đúng 7 ngày: còn mở; thuần đọc không ghi
+    bay7 = HOM_NAY + dt.timedelta(days=7)
+    assert nao.don_het_han(goc, bay_gio=bay7) is False
+    assert nao.doc_hanh_dong(goc)[0]["trang_thai"] == "mo"
+    # sang ngày thứ 8: hiện cho chủ biến mất ngay (kể cả trước khi dọn ghi đĩa)
+    bay8 = HOM_NAY + dt.timedelta(days=8)
+    assert not [v for v in bdk.viec_cua_ban(goc, anh={"kenh": []}, bay_gio=bay8) if v["khoa"].startswith("nao:")]
+    assert nao.doc_hanh_dong(goc)[0]["trang_thai"] == "mo", "viec_cua_ban chỉ đọc"
+    # dọn ghi đĩa: trạng thái het_han, và `xem` báo để bộ não tự quyết lại
+    assert nao.don_het_han(goc, bay_gio=bay8) is True
+    hd = nao.doc_hanh_dong(goc)[0]
+    assert hd["trang_thai"] == "het_han" and hd["het_han_luc"] == "2026-10-11"
+    assert nao.viec_de_xuat(goc, bay8) == []
+    bc = nao.bao_cao(goc, bay8)
+    assert "ĐỀ XUẤT CỦA NÃO HẾT HẠN" in bc and "Mở kênh TL5" in bc and "ĐÃ ĐÓNG" in bc
+    assert nao.don_het_han(goc, bay_gio=bay8) is False, "chạy lại không đổi gì"
+    # đề xuất mới (hôm nay) vẫn hiện bình thường
+    assert _chay(goc, "de-xuat", "Đổi giờ đăng TL2", "--du-doan", "giờ mới tăng hiển thị 48h của kênh TL2", "--kiem-ngay",
+                 "2026-10-18", bay_gio=bay8) == 0
+    assert [d["khoa"] for d in nao.viec_de_xuat(goc, bay8)] == ["nao:n002"]
+
+
+def test_xem_in_muc_giam_doc_kenh_nho_xem(tmp_path):
+    from core.giam_doc import ghi_viec_may
+
+    goc = _goc(tmp_path)
+    assert "(không có)" in nao.bao_cao(goc, HOM_NAY).split("GIÁM ĐỐC KÊNH NHỜ XEM")[1]
+    assert ghi_viec_may(goc, "KA", "Mở YouTube Studio xem video X có hiển thị 48h thấp không", "may", bay_gio=HOM_NAY)
+    bc = nao.bao_cao(goc, HOM_NAY)
+    assert "GIÁM ĐỐC KÊNH NHỜ XEM" in bc and "[KA] Mở YouTube Studio xem video X" in bc
+
+
 def test_uu_tien_nguon(tmp_path):
     goc = _goc(tmp_path)
     assert "link" in _chay(goc, "uu-tien-nguon", "--kenh", "KA", "--link", "abc", "--ly-do", "view 120k trong 5 ngày, đúng cụm tiền bạc",
@@ -172,6 +210,23 @@ def test_uu_tien_nguon(tmp_path):
     assert "Bộ não đề cử" in nao.dong_de_cu(goc, "KA")[0] and "view 120k" in nao.dong_de_cu(goc, "KA")[0]
     assert nao.dung_xong_de_cu(goc, "KA") == 1                         # dùng một lần rồi xong
     assert nao.ap_uu_tien(goc, "KA", ds) == ds and nao.dong_de_cu(goc, "KA") == []
+
+
+def test_de_cu_vang_mat_khoi_bang_khong_bi_tinh_la_da_dung(tmp_path):
+    """04/10: đề cử mà link KHÔNG có trong danh sách ứng viên thì không `xong` ngay; vắng 3 lượt → đóng, không tính."""
+    goc = _goc(tmp_path)
+    assert _chay(goc, "uu-tien-nguon", "--kenh", "KA", "--link", "https://youtu.be/CCCCCCCCCCC", "--ly-do",
+                 "view 120k trong 5 ngày, đúng cụm tiền bạc", "--du-doan", "video này vào top 3 hiển thị 48h của kênh",
+                 "--kiem-ngay", NGAY_KIEM) == 0
+    ds = [{"ma": "m1", "link": "https://www.youtube.com/watch?v=BBBBBBBBBBB", "diem": 50}]
+    for _ in range(nao.DE_CU_VANG_TOI_DA - 1):
+        assert nao.ap_uu_tien(goc, "KA", ds) == ds
+        nao.dung_xong_de_cu(goc, "KA")
+        assert nao.dong_de_cu(goc, "KA")                                  # vẫn mở
+    nao.ap_uu_tien(goc, "KA", ds)
+    nao.dung_xong_de_cu(goc, "KA")
+    d = [x for x in nao.doc_hanh_dong(goc) if x.get("lenh") == "uu-tien-nguon"][0]
+    assert d["trang_thai"] == "xong" and d.get("khong_tinh") and "không vào danh sách" in d["ghi_chu_cham"]
 
 
 def test_bai_hoc_cong_tru_nguon_nao(tmp_path):
