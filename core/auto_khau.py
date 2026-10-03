@@ -3187,7 +3187,7 @@ def _khoi_khan_gia(bc: "BoiCanh", k: Kenh, d: str) -> Dict[str, str]:
         bh = (khoi_kham_nghiem(goc_bh, ma, "kich_ban") or khoi_kham_nghiem(
             goc_bh, re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), "kich_ban")) if ma and goc_bh else ""
         if bh:
-            st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật, n ≥ 3 video):\n" + bh
+            st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật; bài ghi \"đang kiểm, chưa chắc\" mới có ít video — chỉ là giả thuyết):\n" + bh
     except Exception:  # noqa: BLE001
         pass
     return {"BINH_LUAN_GOC": bl or "(không có)", "SU_THAT_KENH": st,

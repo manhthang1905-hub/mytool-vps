@@ -908,8 +908,15 @@ def doc_bai_hoc_bien_tap(goc: str, ma_kenh: str, so_dong: int = 10) -> str:
     """Những lần biên tập viên đã dự đoán, kèm số thật — để lần chọn sau tự sửa mình."""
     du = _doc_json(os.path.join(_nghien_cuu(goc, ma_kenh), THU_MUC, TEP_DANH_GIA))
     ban = (du or {}).get("ban_ghi") if isinstance(du, dict) else None
+    hc = ""
+    try:  # đợt 3 tự học: số hiệu chỉnh (đoán lệch bao nhiêu) — chỉ khi n ≥ 2
+        from . import tu_hoc  # noqa: PLC0415
+
+        hc = tu_hoc.cau_hieu_chinh(goc, ma_kenh)
+    except Exception:  # noqa: BLE001
+        hc = ""
     if not ban:
-        return "(chưa có lần dự đoán nào đủ 48h để chấm)"
+        return "(chưa có lần dự đoán nào đủ 48h để chấm)" + ("\n" + hc if hc else "")
     dong = []
     for b in ban[-so_dong:]:
         dong.append("- {0}: dự đoán CTR {1} · {2} → thật: CTR {3}%{4} · {5} hiển thị @{6} · giờ xem {9} · "
@@ -925,6 +932,8 @@ def doc_bai_hoc_bien_tap(goc: str, ma_kenh: str, so_dong: int = 10) -> str:
     bai = (du or {}).get("bai_hoc") or []
     if bai:
         dong.append("Bài học rút ra từ các lần sai: " + " | ".join(_gon(x, 200) for x in bai[-5:]))
+    if hc:
+        dong.append(hc)
     return "\n".join(dong)
 
 

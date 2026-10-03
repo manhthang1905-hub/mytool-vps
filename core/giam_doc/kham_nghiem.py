@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import glob
+import hashlib
 import io
 import json
 import os
@@ -46,7 +47,12 @@ TRUC = ("tieu_de", "hook", "bia", "do_dai", "cum", "loi_moi_dk", "nguon", "giu_c
 #: trục → khâu dùng bài (`dung_cho` của `chien_luoc.bai_hoc`): chọn content · tiêu đề/bìa · kịch bản.
 DUNG_CHO = {"tieu_de": ["chon", "tieu_de"], "hook": ["kich_ban"], "bia": ["bia"], "do_dai": ["kich_ban", "chon"],
             "cum": ["chon", "bien_tap"], "loi_moi_dk": ["kich_ban"], "nguon": ["chon", "bien_tap"],
-            "giu_chan": ["kich_ban"]}
+            "giu_chan": ["kich_ban"], "tu_do": ["chon", "bien_tap"]}
+#: Sổ bài học có bộ đếm (đợt 3 tự học, 03/10/2026): `tu_do` = bài LLM thêm bằng chữ tự do (op "them").
+TRUC_DOC = TRUC + ("tu_do",)
+TOI_DA_DELTA = 3
+TOI_DA_BAI_TRONG_LOI_NHAC = 25
+N_THAT = 3   # cong >= 3 và cong >= 2 x tru -> "that"; tru >= cong + 2 -> "bo"; còn lại "gia_thuyet"
 
 
 def _doc_json(duong: str) -> Any:
@@ -79,6 +85,33 @@ def _mmss(g: Optional[float]) -> str:
         return "?"
     g = int(round(g))
     return "{0}:{1:02d}".format(g // 60, g % 60)
+
+
+def trang_thai(cong: int, tru: int, gach: bool = False) -> str:
+    """Trạng thái bài học tính bằng MÃ: chủ gạch -> "bo"; tru >= cong + 2 -> "bo"; cong >= 3 và cong >= 2×tru ->
+    "that"; còn lại "gia_thuyet"."""
+    if gach or tru >= cong + 2:
+        return "bo"
+    return "that" if cong >= N_THAT and cong >= 2 * tru else "gia_thuyet"
+
+
+def ma_bai_kn(truc: str, gia_tri: str, cum: str) -> str:
+    """Mã bền của bài (cùng dạng `bang_dieu_khien.ma_bai` của bài khám nghiệm) — khoá chống lặp + nút "Sai"."""
+    return "kn:{0}|{1}|{2}".format(truc, gia_tri, cum)
+
+
+def id_bai(truc: str, gia_tri: str, cum: str) -> str:
+    """Id ngắn cho LLM trỏ tới (băm của mã bền)."""
+    return "b" + hashlib.sha1(ma_bai_kn(truc, gia_tri, cum).encode("utf-8")).hexdigest()[:6]
+
+
+def _gach_cua(goc: str, ma: str) -> set:
+    try:
+        from ..bang_dieu_khien import khoa_bai_hoc_gach  # noqa: PLC0415
+
+        return set(khoa_bai_hoc_gach(goc, ma))
+    except Exception:  # noqa: BLE001
+        return set()
 
 
 def thu_muc(goc: str, ma: str) -> str:
@@ -306,7 +339,23 @@ Chỉ trả MỘT khối JSON:
  "so_dan": [{"so": 7.37, "nguon": "<khoá trong SỐ LIỆU>"}]}"""
 
 
-def loi_nhac(hs: Dict[str, Any], muc_tieu: str = "", ma: str = "") -> str:
+DANG_DELTA = """\
+THÊM (không bắt buộc; giữ nguyên JSON trên, chỉ thêm khoá "delta" — tối đa 3 thao tác, KHÔNG viết lại sổ bài học):
+ "delta": [{"op": "cong", "id": "<id bài cũ>"},   // video này XÁC NHẬN bài cũ
+           {"op": "tru", "id": "<id bài cũ>"},    // video này BÁC BỎ bài cũ
+           {"op": "them", "noi_dung": "<1 câu có số>"}]   // bài mới, CHỈ khi không trùng nghĩa bài nào trong sổ
+Chỉ cong/tru khi số liệu của video này thật sự ủng hộ/phản bác bài đó; không chắc thì bỏ qua."""
+
+
+def khoi_so_bai(so_bai: Optional[List[Dict[str, Any]]]) -> str:
+    """Khối "SỔ BÀI HỌC HIỆN CÓ" cho lời nhắc khám nghiệm: id · nội dung · cong/tru ("" nếu sổ trống)."""
+    dong = ["- {0} · {1} · cong {2}/tru {3} ({4})".format(b["id"], _gon(b["cau"], 160), b["cong"], b["tru"],
+                                                          b["trang_thai"]) for b in so_bai or []]
+    return "SỔ BÀI HỌC HIỆN CÓ (id · nội dung · cong/tru)\n" + "\n".join(dong) if dong else ""
+
+
+def loi_nhac(hs: Dict[str, Any], muc_tieu: str = "", ma: str = "",
+             so_bai: Optional[List[Dict[str, Any]]] = None) -> str:
     """Lời nhắc ngắn (~2–3k token): mục tiêu + số + chữ + dạng trả lời."""
     c = hs["chu"]
     dong = [
@@ -331,9 +380,16 @@ def loi_nhac(hs: Dict[str, Any], muc_tieu: str = "", ma: str = "") -> str:
     ]
     if c["binh_luan"]:
         dong.append("BÌNH LUẬN (like):\n" + "\n".join(c["binh_luan"]))
+    try:
+        khoi = khoi_so_bai(so_bai)
+    except Exception:  # noqa: BLE001 — sổ hỏng thì khám nghiệm chạy như cũ
+        khoi = ""
+    if khoi:
+        dong.append(khoi)
     dong.append("LUẬT: chỉ dùng số trong SỐ LIỆU; mẫu là MỘT video nên câu bài học nói rõ đó là quan sát một video; "
                 "nhãn theo NGHĨA của tiêu đề / 30 giây đầu, không theo từ khoá.")
     dong.append(DANG_TRA_LOI)
+    dong.append(DANG_DELTA)
     return "\n\n".join(dong)
 
 
@@ -373,11 +429,23 @@ def doc_ket_qua(tho: str, so_lieu: Optional[Dict[str, Any]] = None) -> Optional[
         bai = {"truc": str(bh["truc"]), "gia_tri": _gon(bh["gia_tri"], 40).lower(), "huong": huong,
                "cum": _gon(bh.get("cum"), 40), "cau": _gon(bh["cau"], 260)}
     cong = str(du.get("cong_hong") or "").strip().lower()
-    return {"chan_doan": _gon(du.get("chan_doan"), 600), "cong_hong": cong if cong in CONG else "khong",
+    delta = []
+    for x in (du.get("delta") if isinstance(du.get("delta"), list) else [])[:3 * TOI_DA_DELTA]:
+        if len(delta) >= TOI_DA_DELTA:
+            break
+        op = str(x.get("op") or "").strip().lower() if isinstance(x, dict) else ""
+        if op in ("cong", "tru") and re.fullmatch(r"b[0-9a-f]{6}", str(x.get("id") or "").strip()):
+            delta.append({"op": op, "id": str(x["id"]).strip()})
+        elif op == "them" and _co_so(x.get("noi_dung")):
+            delta.append({"op": "them", "noi_dung": _gon(x["noi_dung"], 260)})
+    ra = {"chan_doan": _gon(du.get("chan_doan"), 600), "cong_hong": cong if cong in CONG else "khong",
             "vi_sao": _gon(du.get("vi_sao"), 400), "du_doan_lech": _gon(du.get("du_doan_lech"), 300),
             "nhan": {"kieu_tieu_de": _chon(nh.get("kieu_tieu_de"), KIEU_TIEU_DE),
                      "kieu_hook": _chon(nh.get("kieu_hook"), KIEU_HOOK)},
             "bai_hoc": bai, "so_dan": dan[:16]}
+    if delta:  # khoá mới — thiếu thì bỏ qua, định dạng cũ giữ nguyên
+        ra["delta"] = delta
+    return ra
 
 
 # ── chạy + ghi ─────────────────────────────────────────────────────────────
@@ -401,13 +469,64 @@ def _doc_dong(duong: str) -> List[Dict[str, Any]]:
 def _ghi_bai_hoc(goc: str, ma: str, dong_moi: Optional[Dict[str, Any]], vid: str, moc: str) -> None:
     """Viết lại sổ: bỏ dòng cũ cùng (video, mốc), thêm dòng mới — khám lại không nhân đôi phiếu."""
     duong = os.path.join(thu_muc_giam_doc(goc, ma), TEP_BAI_HOC)
-    ds = [d for d in _doc_dong(duong) if not (d.get("video_id") == vid and d.get("moc") == moc)]
+    ds = [d for d in _doc_dong(duong) if not (d.get("video_id") == vid and d.get("moc") == moc and d.get("loai") != "delta")]
     if dong_moi:
         ds.append(dong_moi)
     os.makedirs(os.path.dirname(duong), exist_ok=True)
     with io.open(duong + ".tam", "w", encoding="utf-8", newline="\n") as tep:
         tep.write("".join(json.dumps(d, ensure_ascii=False) + "\n" for d in ds))
     os.replace(duong + ".tam", duong)
+
+
+def ap_delta(goc: str, ma: str, delta: Any, vid: str, moc: str, luc: str, bong: bool = False) -> Dict[str, int]:
+    """Áp tối đa 3 thao tác delta của LLM vào `bai-hoc.jsonl` (cùng sổ, thêm dòng `loai: "delta"`; KHÔNG viết lại sổ).
+    Chống lặp: MỘT video chỉ cộng hoặc trừ mỗi bài MỘT lần (kể cả với dòng `bai_hoc` cũ của chính video đó);
+    id lạ / bài đã "bo" / bài chủ đã gạch -> bỏ qua. `them` trùng bài đã có (cùng chữ) tính như `cong`.
+    Trả `{"cong", "tru", "them", "bo_qua"}`."""
+    kq = {"cong": 0, "tru": 0, "them": 0, "bo_qua": 0}
+    so = {b["id"]: b for b in doc_bai_hoc(goc, ma) if b["trang_thai"] != "bo"}
+    gach = _gach_cua(goc, ma)
+    da: set = set()
+    moi: List[Dict[str, Any]] = []
+
+    def dong_phieu(b: Dict[str, Any], huong: str) -> Dict[str, Any]:
+        return {"truc": b["truc"], "gia_tri": b["gia_tri"], "huong": huong, "cum": b["cum"], "cau": b["cau"],
+                "khoa": "{0}|{1}|{2}|{3}".format(b["truc"], b["gia_tri"], huong, b["cum"]), "video_id": vid,
+                "moc": moc, "so_dan": [], "bong": bong, "luc": luc, "loai": "delta"}
+
+    for d in (delta if isinstance(delta, list) else [])[:TOI_DA_DELTA]:
+        op = str(d.get("op") or "") if isinstance(d, dict) else ""
+        b = None
+        if op in ("cong", "tru"):
+            b = so.get(str(d.get("id") or ""))
+        elif op == "them" and _co_so(d.get("noi_dung")):
+            nd = _gon(d["noi_dung"], 260)
+            gt = "tu_do:" + hashlib.sha1(" ".join(nd.lower().split()).encode("utf-8")).hexdigest()[:8]
+            if ma_bai_kn("tu_do", gt, "") in gach:
+                kq["bo_qua"] += 1
+                continue
+            b = so.get(id_bai("tu_do", gt, ""))
+            if b is None:
+                b = {"truc": "tu_do", "gia_tri": gt, "cum": "", "cau": nd, "huong": "+", "id": id_bai("tu_do", gt, ""),
+                     "bang_chung": []}
+                so[b["id"]] = b
+                moi.append(dong_phieu(b, "+"))
+                da.add(b["id"])
+                kq["them"] += 1
+                continue
+            op = "cong"
+        if b is None or b["id"] in da or any(x["video_id"] == vid for x in b["bang_chung"]):
+            kq["bo_qua"] += 1
+            continue
+        da.add(b["id"])
+        moi.append(dong_phieu(b, b["huong"] if op == "cong" else ("-" if b["huong"] == "+" else "+")))
+        kq[op] += 1
+    if moi:
+        duong = os.path.join(thu_muc_giam_doc(goc, ma), TEP_BAI_HOC)
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        with io.open(duong, "a", encoding="utf-8", newline="\n") as tep:
+            tep.write("".join(json.dumps(d, ensure_ascii=False) + "\n" for d in moi))
+    return kq
 
 
 def kham_mot(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str, goi_chat: Optional[Callable[..., str]], *,
@@ -417,7 +536,11 @@ def kham_mot(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str, goi_cha
     from . import gioi_han, quan_ly  # noqa: PLC0415
 
     hs = ho_so_kham(goc, ma, bs, v, moc, ban_chup=ban_chup)
-    ln = loi_nhac(hs, bs.muc_tieu, ma)
+    try:  # sổ bài học hiện có đưa kèm để LLM trả delta (hỏng thì khám như cũ)
+        so_bai = [b for b in doc_bai_hoc(goc, ma) if b["trang_thai"] != "bo"][:TOI_DA_BAI_TRONG_LOI_NHAC]
+    except Exception:  # noqa: BLE001
+        so_bai = []
+    ln = loi_nhac(hs, bs.muc_tieu, ma, so_bai)
     luc = bs.bay_gio.replace(microsecond=0).isoformat()
     n = hs["so_lieu"].get("kenh/tv@{0}/n".format(moc))
     q = quan_ly.goi_quyet("kham_nghiem", ln, hs["so_lieu"], goi_chat, doc=lambda t: doc_ket_qua(t, hs["so_lieu"]),
@@ -439,6 +562,11 @@ def kham_mot(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str, goi_cha
         _ghi_bai_hoc(goc, ma, dict(bh, khoa="{0}|{1}|{2}|{3}".format(bh["truc"], bh["gia_tri"], bh["huong"], bh["cum"]),
                                    video_id=v["id"], moc=moc, so_dan=ket.get("so_dan") or [], bong=ban["bong"], luc=luc)
                      if bh else None, v["id"], moc)
+        if ket.get("delta"):
+            try:
+                ban["delta_ap"] = ap_delta(goc, ma, ket["delta"], v["id"], moc, luc, ban["bong"])
+            except Exception:  # noqa: BLE001 — học hỏng không làm hỏng lượt khám
+                pass
     return ban
 
 
@@ -473,20 +601,28 @@ def doc_bai_hoc(goc: str, ma: str, *, ngay: int = NGAY_BAI_HOC, bay_gio: Optiona
     tu = ((bay_gio or _dt.datetime.now()) - _dt.timedelta(days=ngay)).isoformat()
     nhom: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
     for d in _doc_dong(os.path.join(thu_muc_giam_doc(goc, ma), TEP_BAI_HOC)):
-        if str(d.get("luc") or "") >= tu and d.get("truc") in TRUC and d.get("video_id") and _co_so(d.get("cau")):
+        if str(d.get("luc") or "") >= tu and d.get("truc") in TRUC_DOC and d.get("video_id") and _co_so(d.get("cau")):
             nhom.setdefault((d["truc"], str(d.get("gia_tri") or ""), str(d.get("cum") or "")), []).append(d)
+    gach = _gach_cua(goc, ma)
     ra = []
     for (truc, gt, cum), ds in nhom.items():
-        theo = {h: {x["video_id"] for x in ds if x.get("huong") == h} for h in ("+", "-")}
-        huong = "+" if len(theo["+"]) >= len(theo["-"]) else "-"
-        ung, phan = theo[huong], theo["-" if huong == "+" else "+"]
-        cung = sorted((x for x in ds if x.get("huong") == huong), key=lambda x: str(x.get("luc")))
+        ds = sorted(ds, key=lambda x: str(x.get("luc")))
+        huong = ds[0].get("huong") if ds[0].get("huong") in ("+", "-") else "+"  # hướng của bài gốc (phiếu đầu tiên)
+        lap: Dict[str, str] = {}   # video -> hướng; một video chỉ một phiếu cho mỗi bài (phiếu đầu thắng)
+        for x in ds:
+            lap.setdefault(str(x["video_id"]), x.get("huong"))
+        ung = {v for v, h in lap.items() if h == huong}
+        phan = {v for v, h in lap.items() if h != huong}
+        cung = [x for x in ds if x.get("huong") == huong]
         bong = all(x.get("bong") for x in cung) and not bo_bong
         n = len(ung) - len(phan)
+        tt = trang_thai(len(ung), len(phan), ma_bai_kn(truc, gt, cum) in gach)
         ra.append({"truc": truc, "gia_tri": gt, "cum": cum, "huong": huong, "n": n, "ung": len(ung), "phan": len(phan),
+                   "cong": len(ung), "tru": len(phan), "trang_thai": tt, "id": id_bai(truc, gt, cum),
+                   "bang_chung": [{"video_id": v, "so": 1 if h == huong else -1} for v, h in sorted(lap.items())],
                    "mau_thuan": bool(phan), "bong": bong, "video": sorted(ung), "cau": cung[-1]["cau"],
                    "khoa": "{0}|{1}|{2}|{3}".format(truc, gt, huong, cum), "dung_cho": DUNG_CHO.get(truc, ["bien_tap"]),
-                   "bom": n >= N_BOM and not phan and not bong})
+                   "bom": tt == "that", "gia_thuyet": tt == "gia_thuyet"})
     ra.sort(key=lambda b: (-b["n"], b["truc"]))
     return ra
 

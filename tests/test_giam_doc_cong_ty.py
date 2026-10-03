@@ -102,10 +102,10 @@ def test_chay_kenh_kham_ghi_ban_kham_va_bai_hoc_bong(tmp_path, monkeypatch):
     # lượt sau: không khám lại video cùng mốc
     kq2 = giam_doc.chay_kenh(goc, "GD1", goi_chat=llm, tuan=True)
     assert {(x["video_id"], x["moc"]) for x in kq2.kham}.isdisjoint({(x["video_id"], x["moc"]) for x in kq.kham})
-    # bài bóng: không bơm vào bộ chấm, kể cả n ≥ 3
+    # đợt 3: luật bơm theo bộ đếm (that = cong ≥ 3 và cong ≥ 2×tru), không còn chặn theo cờ bóng
     gop = kn.doc_bai_hoc(goc, "GD1")
-    assert gop[0]["n"] >= 3 and gop[0]["bong"] and not gop[0]["bom"]
-    assert bai_hoc.khoi_kham_nghiem(goc, "GD1", "kich_ban") == ""
+    assert gop[0]["n"] >= 3 and gop[0]["bong"] and gop[0]["trang_thai"] == "that" and gop[0]["bom"]
+    assert bai_hoc.khoi_kham_nghiem(goc, "GD1", "kich_ban") != ""
     # khối KHÁM NGHIỆM GẦN ĐÂY vào lời nhắc giám đốc kênh
     assert "KHÁM NGHIỆM GẦN ĐÂY" in kn.khoi_gan_day(goc, "GD1") and "kieu_tieu_de: so_dem" in kn.khoi_gan_day(goc, "GD1")
 
@@ -135,9 +135,12 @@ def test_doc_bai_hoc_gop_theo_khoa_n_mau_thuan_bong(tmp_path):
     assert (b["n"], b["bom"], b["mau_thuan"]) == (3, True, False) and b["video"] == ["A", "B", "C"]
     _so_bai(goc, "X", [("A", "+", False), ("B", "+", False), ("C", "+", False), ("D", "-", False)])
     b = kn.doc_bai_hoc(goc, "X")[0]
-    assert (b["n"], b["bom"], b["mau_thuan"]) == (2, False, True)
+    assert (b["n"], b["bom"], b["mau_thuan"]) == (2, True, True)   # cong 3, tru 1: 3 ≥ 2×1 → vẫn "that"
+    _so_bai(goc, "X", [("A", "+", False), ("B", "+", False), ("C", "+", False), ("D", "-", False), ("E", "-", False)])
+    b = kn.doc_bai_hoc(goc, "X")[0]
+    assert (b["cong"], b["tru"], b["trang_thai"], b["bom"]) == (3, 2, "gia_thuyet", False)
     _so_bai(goc, "X", [("A", "+", True), ("B", "+", True), ("C", "+", True)])
-    assert not kn.doc_bai_hoc(goc, "X")[0]["bom"] and kn.doc_bai_hoc(goc, "X", bo_bong=True)[0]["bom"]
+    assert kn.doc_bai_hoc(goc, "X")[0]["bong"] and kn.doc_bai_hoc(goc, "X", bo_bong=True)[0]["bom"]
 
 
 # ── sổ bài học chung + MỘT móc ở bộ chấm kịch bản ─────────────────────────
@@ -157,10 +160,8 @@ def test_khoi_khan_gia_y_het_tung_byte_khi_chua_co_bai_hoc_bom_duoc(tmp_path):
     d = os.path.join(goc, "luot")
     goc_ra = _khoi_khan_gia(goc, "X", d)
     assert goc_ra["SU_THAT_KENH"] == "(chưa có)"
-    _so_bai(goc, "X", [("A", "+", False), ("B", "+", False)])                    # n = 2
-    assert _khoi_khan_gia(goc, "X", d) == goc_ra
-    _so_bai(goc, "X", [("A", "+", True), ("B", "+", True), ("C", "+", True)])    # bóng
-    assert _khoi_khan_gia(goc, "X", d) == goc_ra
+    _so_bai(goc, "X", [("A", "+", False), ("B", "+", False)])                    # cong = 2 → chỉ giả thuyết (đợt 3)
+    assert "- (đang kiểm, chưa chắc) Hook nghịch lý" in _khoi_khan_gia(goc, "X", d)["SU_THAT_KENH"]
     _so_bai(goc, "X", [("A", "+", False), ("B", "+", False), ("C", "+", False)])
     st = _khoi_khan_gia(goc, "X", d)["SU_THAT_KENH"]
     assert st.startswith("(chưa có)\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH")

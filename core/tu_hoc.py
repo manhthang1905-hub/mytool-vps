@@ -479,6 +479,53 @@ def rut(goc: str, ma_kenh: str, truc: str, cac_gia_tri: Any, rng: Optional[rando
             for g in cac_gia_tri}
 
 
+# ── hiệu chỉnh dự đoán (đợt 3, 03/10/2026) ───────────────────────────────────
+
+def hieu_chinh(goc: str, ma_kenh: str) -> Dict[str, Any]:
+    """Biên tập đoán lệch bao nhiêu — từ các ván có CẢ dự đoán lẫn số thật (`lech`/`dung` do `cham_van` ghi).
+    `{n, lech_ctr_pct (tương đối %, + = đoán cao hơn thật), n_ctr, lech_avd_giay, n_avd, dung, tong_dung,
+    ti_le_dung}`; n < 2 thì `{}`. Chỉ tính bằng mã, không LLM."""
+    ctr, avd, dung, n = [], [], [], 0
+    for v in doc_van(goc, ma_kenh).values():
+        lech = v.get("lech") if isinstance(v.get("lech"), dict) else {}
+        co = False
+        dd = _so((v.get("du_doan") or {}).get("ctr_so"))
+        if _so(lech.get("ctr")) is not None and dd is not None:
+            that = dd - _so(lech["ctr"])
+            if that > 0:
+                ctr.append(_so(lech["ctr"]) / that * 100.0)
+                co = True
+        if _so(lech.get("avd")) is not None:
+            avd.append(_so(lech["avd"]))
+            co = True
+        if "dung" in v:
+            dung.append(bool(v["dung"]))
+            co = True
+        n += 1 if co else 0
+    if n < 2:
+        return {}
+    return {"n": n, "lech_ctr_pct": round(sum(ctr) / len(ctr), 1) if ctr else None, "n_ctr": len(ctr),
+            "lech_avd_giay": round(sum(avd) / len(avd), 1) if avd else None, "n_avd": len(avd),
+            "dung": sum(dung), "tong_dung": len(dung), "ti_le_dung": round(sum(dung) / len(dung), 2) if dung else None}
+
+
+def cau_hieu_chinh(goc: str, ma_kenh: str) -> str:
+    """1–2 câu cho lời nhắc biên tập ("" khi n < 2). Chỉ nói phần có số."""
+    h = hieu_chinh(goc, ma_kenh)
+    if not h:
+        return ""
+    mau = []
+    if h["lech_ctr_pct"] is not None:
+        mau.append("bạn đoán CTR {0} thật trung bình {1:g}%".format(
+            "cao hơn" if h["lech_ctr_pct"] > 0 else "thấp hơn", abs(h["lech_ctr_pct"])))
+    if h["lech_avd_giay"] is not None:
+        mau.append("đoán AVD {0} thật trung bình {1:g} giây".format(
+            "cao hơn" if h["lech_avd_giay"] > 0 else "thấp hơn", abs(h["lech_avd_giay"])))
+    if h["tong_dung"]:
+        mau.append("đoán thắng/trượt đúng {0}/{1}".format(h["dung"], h["tong_dung"]))
+    return "Hiệu chỉnh từ {0} video: {1}.".format(h["n"], "; ".join(mau)) if mau else ""
+
+
 # ── bảng điểm cho người đọc ─────────────────────────────────────────────────
 
 def ghi_bang_diem_md(goc: str, ma_kenh: str) -> str:
@@ -509,6 +556,16 @@ def ghi_bang_diem_md(goc: str, ma_kenh: str) -> str:
         d.append("- Đoán đúng thắng/trượt: {0}/{1}.".format(sum(dung), len(dung)))
     if not lech and not dung:
         d.append("- Chưa có ván nào vừa có dự đoán vừa có số thật.")
+    try:  # đợt 3: trình độ dự đoán — theo dõi theo thời gian
+        h = hieu_chinh(goc, ma_kenh)
+        if h:
+            d.append("- Trình độ dự đoán: {0}; lệch CTR {1}.".format(
+                "đúng {0}/{1} ({2:.0f}%)".format(h["dung"], h["tong_dung"], 100 * h["ti_le_dung"])
+                if h["tong_dung"] else "chưa có ván chấm thắng/trượt",
+                "{0:+g}% (tương đối, n={1})".format(h["lech_ctr_pct"], h["n_ctr"]) if h["lech_ctr_pct"] is not None
+                else "chưa có"))
+    except Exception:  # noqa: BLE001
+        pass
     duong = os.path.join(_thu_muc(goc, ma_kenh), "bang-diem.md")
     _ghi_nguyen_tu(duong, "\n".join(d) + "\n")
     return duong

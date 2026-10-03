@@ -62,7 +62,8 @@ TEP_NHAT_KY = "hoi-dong.jsonl"
 TEP_DO_CHINH_XAC = "do-chinh-xac.json"
 TEP_TRI_THUC = ("con-duong-kenh-thang.md", "nghien-cuu-bia.md")
 LOAI_DO = {"chan_doan_cong": "chẩn đoán cổng", "du_doan": "dự đoán thắng/trượt", "bai_hoc": "bài học",
-           "doi_chuan": "đổi chuẩn", "chia_khe": "chia khe"}
+           "doi_chuan": "đổi chuẩn", "chia_khe": "chia khe",
+           "du_doan_bien_tap": "dự đoán của biên tập (tự học)"}
 #: Khoá thực đơn = quyết định LỚN (đổi chiến lược) — không bao giờ tự áp, vào "Việc của bạn".
 KHOA_LON = ("chien_luoc", "chien_luoc_tu_hoc", "cong_thuc_chon")
 
@@ -786,6 +787,14 @@ def do_chinh_xac(goc: str, ma: str, *, ghi: bool = True) -> Dict[str, Any]:
     for t in (_doc_json(os.path.join(goc, "workspace", "tong-giam-doc", "so.json"), {}) or {}).get("thay_doi") or []:
         if isinstance(t, dict) and t.get("ma") in (ma, goc_ma) and t.get("trang_thai") in ("giu", "quay_lui"):
             mau["chia_khe"].append((t["trang_thai"] == "giu", str(t.get("id"))))
+    try:  # đợt 3 tự học: biên tập đoán thắng/trượt đúng không (ván `tu-hoc/van.json`) — để đo "trình độ" theo thời gian
+        from .. import tu_hoc  # noqa: PLC0415
+
+        for mg, v in tu_hoc.doc_van(goc, ma).items():
+            if isinstance(v, dict) and "dung" in v:
+                mau["du_doan_bien_tap"].append((bool(v["dung"]), str(mg)))
+    except Exception:  # noqa: BLE001
+        pass
     cu = (_doc_json(os.path.join(tm, TEP_DO_CHINH_XAC), {}) or {}).get("loai") or {}
     loai = {}
     for k, xs in mau.items():

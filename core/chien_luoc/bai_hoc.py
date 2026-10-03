@@ -357,8 +357,29 @@ def _tu_kham_nghiem(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
         o = _bh("kenh", b["truc"], cau, b["n"], b["dung_cho"], cum=b["cum"], khoa=b["khoa"], bong=b["bong"],
                 video=b["video"], nguon="kham_nghiem")
         o["bom"] = bool(b["bom"])
+        o.update(cong=b["cong"], tru=b["tru"], trang_thai=b["trang_thai"], gia_thuyet=bool(b["gia_thuyet"]),
+                 id_bai=b["id"])
         ra.append(o)
     return ra
+
+
+NHAN_GIA_THUYET = "(đang kiểm, chưa chắc) "
+TOI_DA_THAT = 5
+TOI_DA_GIA_THUYET = 2
+
+
+def _diem_bai(b: Dict[str, Any]) -> Tuple[int, int]:
+    return (-(int(b.get("cong") or 0) - int(b.get("tru") or 0)), -int(b.get("cong") or 0))
+
+
+def chon_bai_kham_nghiem(ds: Iterable[Dict[str, Any]], toi_da_that: int = TOI_DA_THAT,
+                         toi_da_gia_thuyet: int = TOI_DA_GIA_THUYET) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Luật bơm sổ bài học có bộ đếm (đợt 3 tự học): `(that, gia_thuyet)` — CHỈ bài khám nghiệm trạng thái
+    "that" (≤ 5, xếp cong − tru) và ≤ 2 "gia_thuyet" điểm cao nhất (ghi rõ "đang kiểm, chưa chắc"). "bo" không bơm."""
+    kn = [b for b in ds if b.get("nguon") == "kham_nghiem"]
+    that = sorted((b for b in kn if b.get("trang_thai") == "that"), key=_diem_bai)[:max(0, toi_da_that)]
+    gt = sorted((b for b in kn if b.get("trang_thai") == "gia_thuyet"), key=_diem_bai)[:max(0, toi_da_gia_thuyet)]
+    return that, gt
 
 
 def khoi_kham_nghiem(goc: str, ma_kenh: str, dung_cho: Any = "", toi_da: int = 5) -> str:
@@ -368,7 +389,8 @@ def khoi_kham_nghiem(goc: str, ma_kenh: str, dung_cho: Any = "", toi_da: int = 5
         ds = _loc_dung_cho(_tu_kham_nghiem(goc, ma_kenh), dung_cho)
     except Exception:  # noqa: BLE001
         return ""
-    return "\n".join(["- " + b["cau"] for b in sorted(ds, key=lambda b: -b["n"]) if b["bom"]][:toi_da])
+    that, gt = chon_bai_kham_nghiem(ds, toi_da)
+    return "\n".join(["- " + b["cau"] for b in that] + ["- " + NHAN_GIA_THUYET + b["cau"] for b in gt])
 
 
 def _tu_ket_qua(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
@@ -576,13 +598,21 @@ def khoi_chu(goc: str, ma_kenh: str, dung_cho: Any = "", toi_da: int = 8, *,
     `pham_vi` / `bo_truc` (B5): nơi gọi đã có khối riêng cho một nguồn (biên tập viên đã có INSIGHT
     nhóm và TỰ SỬA) thì lọc ra ở đây để lời nhắc không nhắc một bài hai lần."""
     dong = []
-    for b in doc(goc, ma_kenh, dung_cho, tat_ca=True, bay_gio=bay_gio):
+    ds = doc(goc, ma_kenh, dung_cho, tat_ca=True, bay_gio=bay_gio)
+    # Bài khám nghiệm theo luật mới (that ≤ 5 + gia_thuyet ≤ 2); nguồn khác giữ luật cũ n ≥ 3.
+    that, gia_thuyet = chon_bai_kham_nghiem(ds)
+    cho_phep = {id(b) for b in that}
+    for b in ds:
         if not b["bom"] or b["pham_vi"] not in pham_vi or b["truc"] in bo_truc:
+            continue
+        if b.get("nguon") == "kham_nghiem" and id(b) not in cho_phep:
             continue
         nhan = NHAN_NHOM if b["pham_vi"] == "nhom" else NHAN_NGOAI if b["pham_vi"] == "ngoai" else ""
         dong.append("- " + b["cau"] + nhan)
         if len(dong) >= toi_da:
             break
+    if "kenh" in pham_vi:
+        dong += ["- " + NHAN_GIA_THUYET + b["cau"] for b in gia_thuyet if b["truc"] not in bo_truc]
     return "\n".join(dong)
 
 
