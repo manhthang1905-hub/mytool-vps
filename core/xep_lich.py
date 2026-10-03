@@ -284,6 +284,12 @@ def _dong(cot: List[str], hang: List[List[str]]) -> List[Dict[str, str]]:
     return ra
 
 
+def _la_goi_bo(d: Dict[str, str]) -> bool:
+    """Dòng kế hoạch đã bị bỏ (Trạng thái đăng "Bỏ…" / "KHÔNG ĐĂNG") — cùng luật với `moc_da_co`."""
+    tt = d.get("Trạng thái đăng", "")
+    return tt.lower().startswith("bỏ") or "KHÔNG ĐĂNG" in tt.upper()
+
+
 def khe_da_dung(goc: str, ma_kenh: str) -> Set[Tuple[str, str]]:
     """Mọi cặp (Ngày đăng, Giờ đăng) đã có trong kế hoạch của kênh — BẤT KỂ
     trạng thái (đã đăng, đang chờ, đăng tay…): một khe đã có video thì không
@@ -291,6 +297,8 @@ def khe_da_dung(goc: str, ma_kenh: str) -> Set[Tuple[str, str]]:
     cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
     ra: Set[Tuple[str, str]] = set()
     for d in _dong(cot, hang):
+        if _la_goi_bo(d):
+            continue      # 04/10: gói "Bỏ" (vd trùng nguồn) không giữ khe — khe đó làm video khác
         ngay, gio = d.get("Ngày đăng", ""), _gio_hop_le(d.get("Giờ đăng", ""))
         if ngay and gio:
             ra.add((ngay, gio))
@@ -370,7 +378,7 @@ def dem_kho_dem(goc: str, ma_kenh: str, kenh: Any, *,
     moc_tuong_lai: List[_dt.datetime] = []
     for d in _dong(cot, hang):
         ma = d.get("Mã gói", "")
-        if not ma or ma in bo:
+        if not ma or ma in bo or _la_goi_bo(d):
             continue
         moc = _moc(d.get("Ngày đăng", ""), d.get("Giờ đăng", ""))
         if moc is not None and moc > bay_gio:
