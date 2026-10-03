@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.148.3** — 2026-10-04 — `vps-jp1` — xep_lich: goi 'Bo' khong giu khe va khong tinh vao kho dem (TL6-T7-K2 bo vi trung nguon van chan san xuat)
 - **2.148.2** — 2026-10-04 — `vps-jp1` — fix: chong trung nguon khi nhan nuoi luot mo coi + luot thu khong thanh mo coi
 - **2.148.1** — 2026-10-04 — `vps-jp1` — thiet_lap_kenh: doc lai handle theo trang cong khai, doi o anh dung cham, sua bo chon danh sach phat
 - **2.148.0** — 2026-10-04 — `vps-jp1` — Thiet lap kenh tu dong (core/thiet_lap_kenh ho so: ten/handle/mo ta SEO/tu khoa/danh sach phat/mac dinh tai len + logo/banner/hinh mo; vm/thiet_lap_kenh_dom dien Studio, doc lai xac nhan, chi doi muc khac, luat doi ten/handle; agent tu cha…
