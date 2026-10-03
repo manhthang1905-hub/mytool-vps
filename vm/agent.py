@@ -2990,6 +2990,41 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
     return len(con)
 
 
+# ── THIẾT LẬP KÊNH (03/10/2026): kênh `thiet_lap_kenh: true` chưa `xong` → mở tiến trình con vm/thiet_lap_kenh_dom.py ──
+#   Điền hồ sơ kênh (tên, handle, mô tả, logo, banner, từ khoá, mặc định tải lên, danh sách phát) vào Studio MỘT LẦN.
+#   Cùng khoá `<kênh>.khoa` với nuôi trang chủ nên `_nhuong_kenh_nuoi` ở trên nhường được cho việc đăng; tuần tự từng kênh.
+CHU_KY_THIET_LAP_KENH_GIAY = 10 * 60
+_THIET_LAP_KENH = {"luc": 0.0, "con": {}, "ly": {}}
+
+
+def chay_thiet_lap_kenh(bay_gio: float = None, mo_con=None) -> int:
+    """MỘT bước thiết lập kênh (gọi mỗi nhịp tim, tự giãn 10 phút). Trả số tiến trình con đang chạy."""
+    luc = time.time() if bay_gio is None else bay_gio
+    con = _THIET_LAP_KENH["con"]
+    for k in [k for k, c in con.items() if c.poll() is not None]:
+        ghi("thiết lập kênh {0}: tiến trình con xong (mã {1})".format(k, con.pop(k).returncode))
+    if luc - _THIET_LAP_KENH["luc"] < CHU_KY_THIET_LAP_KENH_GIAY:
+        return len(con)
+    _THIET_LAP_KENH["luc"] = luc
+    sys.path.insert(0, GOC) if GOC not in sys.path else None
+    import thiet_lap_kenh_dom  # noqa: PLC0415 — chỉ thư viện chuẩn khi nạp
+    ra, ly = thiet_lap_kenh_dom.kenh_den_luot(luc, set(con))
+    if ra and van_ipv4_mo():
+        ly, ra = dict(ly, **{k: "van IPv4 đang mở" for k in ra}), []
+    for k, r in ly.items():     # chỉ ghi khi lý do đổi (bỏ số đếm lùi)
+        if _THIET_LAP_KENH["ly"].get(k) != re.sub(r"\d+", "#", r):
+            _THIET_LAP_KENH["ly"][k] = re.sub(r"\d+", "#", r)
+            ghi("thiết lập kênh {0}: bỏ qua — {1}".format(k, r[:150]))
+    for k in ra:
+        _THIET_LAP_KENH["ly"].pop(k, None)
+        ghi("── THIẾT LẬP KÊNH {0}: mở tiến trình con ──".format(k))
+        con[k] = (mo_con or subprocess.Popen)(
+            [sys.executable, os.path.join(GOC, "thiet_lap_kenh_dom.py"), "--kenh", k], cwd=GOC,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return len(con)
+
+
 # ── GHIM SỚM bình luận mồi (29/09/2026) ─────────────────────────────────────
 #
 # Video đăng qua máy DOM được YouTube tự công khai đúng giờ hẹn (vd 20:00), còn
@@ -3722,6 +3757,10 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                     chay_nuoi_trang_chu()
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("nuôi trang chủ hỏng: {0}".format(loi))
+                try:
+                    chay_thiet_lap_kenh()
+                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
+                    ghi("thiết lập kênh hỏng: {0}".format(loi))
         else:
             # Lịch cố định + giữ Chrome chạy cả khi trạm tắt: quét Studio
             # không cần trạm sống (extension tự ghi vào Tải xuống khi không

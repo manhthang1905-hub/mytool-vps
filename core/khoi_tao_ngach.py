@@ -816,6 +816,9 @@ def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,
     }
     if gio:
         khoa_kenh["gio_dang"] = gio
+    if not co_san:
+        # Kênh mới: tự thiết lập trên Studio (tên, handle, mô tả, logo, banner, SEO…) — máy mới chỉ cần Chrome đã đăng nhập.
+        khoa_kenh["thiet_lap_kenh"] = True
     if yc.thu:
         log("b) [THỬ] Sẽ {0} kênh {1} ({2}) ở {3}: nhóm {4}, tệp {5}, giờ đăng {6} (giờ VPS).".format(
             "đổi chủ đề" if co_san else "tạo", ma, khoa_kenh["ten"], dich, yc.nhom, khoa_kenh["tep"],
@@ -958,6 +961,9 @@ def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,
                 "“Cho máy đăng lo kênh này”.".format(os.path.dirname(os.path.abspath(goc)), ma))
     except Exception as loi:  # noqa: BLE001
         log("  (không kiểm được máy đăng: {0})".format(str(loi)[:100]))
+    if not co_san:
+        log("  thiết lập kênh: kenh.yaml `thiet_lap_kenh: true` — agent dựng hồ sơ (LLM + cổng ảnh ShopAPI) rồi tự điền "
+            "tên/handle/mô tả/logo/banner/từ khoá/danh sách phát vào Studio khi Chrome kênh đã đăng nhập.")
     log("b) Kênh {0}: {1} ({2} lời nhắc viết lại, {3} giữ nguyên).".format(
         ma, dich, len(kq.loi_nhac_viet_lai), len(kq.loi_nhac_giu_nguyen)))
     return dich

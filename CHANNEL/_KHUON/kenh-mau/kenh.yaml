@@ -76,3 +76,5 @@ ngan_sach_ngay: 0
 ngay_bat_dau: ""
 # Nuoi trang chu (vm/nuoi_trang_chu.py): cho Chrome da dang nhap xem video doi thu cung ngach de trang chu dung chu de; dat (% chu de > 90) thi tu ghi false; muon nuoi lai thi tu bat true.
 nuoi_trang_chu: true
+# Thiet lap kenh (vm/thiet_lap_kenh_dom.py): Chrome da dang nhap la du - agent tu doi ten, handle, mo ta, logo, banner, hinh mo, tu khoa, mac dinh tai len, danh sach phat theo CHANNEL/<K>/thiet-lap/ho-so.json (chua co thi dung bang LLM + cong anh ShopAPI); xong thi tu ghi false; muon thiet lap lai thi tu bat true.
+thiet_lap_kenh: true
