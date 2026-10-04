@@ -2138,7 +2138,11 @@ def dong_chrome_kenh(cau_hinh_kenh: dict) -> None:
                 break
             time.sleep(0.5)
     if da_dong == "xong":
-        return   # Browser.close đã tự đóng cổng sạch — không cần taskkill
+        # Browser.close đã tự đóng cổng sạch. 04/10/2026: launcher Portable `<K>.exe` của kênh mới hay KẸT lại
+        # sau khi cây Chromium đã thoát → lần mở kế `_chrome_dang_chay` tưởng còn chạy, không mở lại → "Chrome
+        # đang chạy nhưng KHÔNG có cổng DevTools" (mã 3). Đợi nó tự thoát ~6", còn thì tắt ĐÚNG launcher đó.
+        _don_launcher_sot(os.path.basename(chrome))
+        return
     # LƯỚI CUỐI: Browser.close không gửi được, hoặc cổng vẫn còn sau 10 giây
     # chờ (Chrome kẹt/không tự thoát) — chỉ lúc này mới taskkill.
     ten = os.path.basename(chrome)
@@ -2147,6 +2151,34 @@ def dong_chrome_kenh(cau_hinh_kenh: dict) -> None:
                        capture_output=True, timeout=15)
     except Exception:  # noqa: BLE001 — không đóng được thì thôi, phiên sau vẫn thử
         pass
+
+
+def _don_launcher_sot(ten_exe: str, cho_giay: float = 6.0) -> bool:
+    """Launcher còn sót sau khi Chrome đã thoát sạch → tắt theo TÊN (không /T: cây Chromium đã đóng cổng).
+    Không áp cho tên chung `chrome.exe`. Trả True nếu đã phải tắt."""
+    if not ten_exe or ten_exe.lower() == "chrome.exe":
+        return False
+
+    def con_song() -> bool:
+        try:
+            ra = subprocess.run(["tasklist", "/FI", "IMAGENAME eq {0}".format(ten_exe), "/NH"],
+                                capture_output=True, text=True, timeout=10,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return ten_exe.lower() in (ra.stdout or "").lower()
+        except Exception:  # noqa: BLE001
+            return False
+    het = time.monotonic() + cho_giay
+    while con_song():
+        if time.monotonic() >= het:
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", ten_exe], capture_output=True, timeout=15,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                ghi("đã tắt launcher {0} kẹt sau khi Chrome đóng".format(ten_exe))
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+        time.sleep(1)
+    return False
 
 
 #: Mã thoát GIẢ của :func:`_chay_mot_lan` khi tiến trình không hề chạy được

@@ -580,7 +580,8 @@ class TestDongChromeKenh:
 
         assert da_goi["url"][0][0].endswith(":9307/json/version")
         assert da_goi["ws"] == [{"id": 1, "method": "Browser.close"}]
-        assert da_goi["taskkill"] == [], \
+        # 04/10: được phép hỏi `tasklist` xem launcher còn sót không (launcher không còn → không tắt gì)
+        assert [c for c in da_goi["taskkill"] if c and c[0] == "taskkill"] == [], \
             "cổng đã tự đóng sạch — taskkill là LƯỚI CUỐI, không phải bước mặc định"
 
     def test_cong_khong_dong_sau_10s_thi_taskkill_la_luoi_cuoi(self, monkeypatch):
