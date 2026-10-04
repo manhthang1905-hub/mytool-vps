@@ -417,7 +417,6 @@ def loi_nhac_ho_so(kenh: str, kh: Dict[str, Any], mau: List[Dict[str, Any]]) -> 
         "no claims of medical/financial advice, line breaks allowed,\n"
         '"tu_khoa": 8-15 keywords/phrases as a JSON array (total <= 450 chars), the search terms the audience uses,\n'
         '"danh_sach_phat": array of {{"ten": <=60 chars, "mo_ta": <=160 chars}} (3-6 items),\n'
-        '"danh_muc": "education" or "people",\n'
         '"banner_chu": array of 2-3 short lines for the banner (name, a one-line promise, upload rhythm), each <= 18 chars for CJK or <= 32 chars otherwise.\n'
     ).format(ma=kenh, ten=kh.get("ten") or "", lg=ngon_ngu, tep=kh.get("tep") or "", nhom=kh.get("nhom") or "",
              giong=str(kh.get("giong_van") or "")[:300], luat=str(kh.get("luat_chon") or "")[:900],
@@ -446,7 +445,9 @@ def chuan_hoa_tu_llm(du: Dict[str, Any], kh: Dict[str, Any]) -> Dict[str, Any]:
             tk.append(t)
             tong += len(t) + 2
     handle = re.sub(r"[^a-z0-9\-]", "", str(du.get("handle") or "").lower().lstrip("@"))[:24]
-    dm = str(du.get("danh_muc") or "education").lower()
+    # 04/10/2026 (chủ dự án): danh mục MỌI kênh = Giáo dục (mặc định tải lên → video sau cũng Giáo dục). Không để LLM
+    # chọn; kênh nào cần khác thì khai `danh_muc` trong kenh.yaml.
+    dm = str(kh.get("danh_muc") or "education").lower()
     return {"ten": chuan_chu(du.get("ten"))[:GIOI_HAN_TEN], "handle": ("@" + handle) if handle else "",
             "mo_ta": str(du.get("mo_ta") or "").replace("\r\n", "\n").strip()[:GIOI_HAN_MO_TA],
             "tu_khoa": tk, "tu_khoa_chinh": chuan_chu(du.get("tu_khoa_chinh")), "danh_sach_phat": ds_phat,

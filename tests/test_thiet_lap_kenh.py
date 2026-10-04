@@ -165,7 +165,7 @@ def test_ho_so_nhap_llm_va_anh_gia_cho_kenh_chua_co_bo_san(goc_tam):
     assert tl.kiem_ho_so(hs, thu_muc) == []
     assert hs["nguon"] == "llm" and hs["handle"] == "@yoake-shinri"                  # handle làm sạch
     assert len(tl.tu_khoa_chuoi(hs["tu_khoa"])) <= tl.GIOI_HAN_TU_KHOA
-    assert hs["mac_dinh_tai_len"]["danh_muc"] == "people"
+    assert hs["mac_dinh_tai_len"]["danh_muc"] == "education"   # 04/10: luôn Giáo dục, LLM không chọn
     assert len(goi_goi) == 1 and "ja" in goi_goi[0] and len(ve) == 2                  # 1 lượt LLM, 2 ảnh (logo, banner)
     assert tl.kich_thuoc_anh(tl.duong_anh(hs, "banner", thu_muc)) == (2560, 1440)
 
