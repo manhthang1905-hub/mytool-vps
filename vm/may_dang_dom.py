@@ -2944,6 +2944,17 @@ class MayDangDom:
 
 # ═══ --kiem-dom ══════════════════════════════════════════════════════════
 
+def _kenh_co_video_trong_so(kenh: str, duong: str = None) -> bool:
+    """Sổ videoId có ít nhất một video ĐÃ TẢI của kênh. Đọc hỏng → coi như CÓ (giữ kiểm chặt như cũ)."""
+    try:
+        with open(duong or DUONG_SO, "r", encoding="utf-8") as tep:
+            so = json.load(tep)
+    except (OSError, ValueError):
+        return True
+    return any(str(k).startswith(kenh + "/") and isinstance(v, dict) and v.get("video_id")
+               for k, v in (so or {}).items())
+
+
 def kiem_dom(cdp, kenh: str, bo: dict, sau: bool = False, nhat_ky=None,
              ghi_dom_day_du: bool = False, tao_trang=None, duong_uc: str = DUONG_UC,
              ngu=None) -> dict:
@@ -3019,8 +3030,15 @@ def kiem_dom(cdp, kenh: str, bo: dict, sau: bool = False, nhat_ky=None,
         # 3. Danh sách
         tr.mo(may._url("danh_sach"), han=60)
         rows = may._doc_danh_sach(tr, han=40)
-        ghi("hang_video", tr.tim("hang_video", han=0), "danh_sach")
-        ghi("hang_tieu_de", tr.tim("hang_tieu_de", han=0), "danh_sach")
+        if not rows and not _kenh_co_video_trong_so(kenh):
+            # 04/10/2026: kênh MỚI chưa có video nào → danh sách trống là ĐÚNG, không phải selector hỏng
+            # (trước đây mã 3 → máy lùi về đường ảnh và báo "khan" oan cho 3 kênh mới).
+            for khoa in ("hang_video", "hang_tieu_de"):
+                kq["chi_tiet"][khoa] = {"khop": None, "buoc": "danh_sach", "bo_qua": "kênh chưa có video nào"}
+            kq["ghi_chu"].append("danh sách trống — kênh chưa có video nào, bỏ qua kiểm hàng video")
+        else:
+            ghi("hang_video", tr.tim("hang_video", han=0), "danh_sach")
+            ghi("hang_tieu_de", tr.tim("hang_tieu_de", han=0), "danh_sach")
         hang = [may._hang_kenh(h) for h in rows or []]
         kq["hang"] = [{"video_id": x["video_id"], "tieu_de": x["tieu_de"][:60], "loai": x["loai"],
                        "luc": x["luc"].strftime("%d/%m/%Y %H:%M") if x["luc"] else "",
