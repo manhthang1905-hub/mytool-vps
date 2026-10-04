@@ -124,6 +124,17 @@ class TestChayTaiBoSung:
               "TL4-T7": _csv(_d("TL4-T7-0009", "30/09/2026", "20:00"))}
         return ag, goi, hieu_luc, ke, chay_con
 
+    def test_xong_ma_con_kenh_cho_thi_lam_ngay_kenh_ke(self, tmp_path, monkeypatch):
+        """04/10: tải xong (mã 0) mà còn kênh khác chờ → nhịp kế chạy luôn, không đợi 25 phút."""
+        ag, goi, hl, ke, cc = self._chuan_bi(tmp_path, monkeypatch)
+        hl["TL3-T7"] = {"kenh": "TL3-T7", "tu_dang": True, "cach_dang": "tu_dong"}
+        ke["TL3-T7"] = _csv(_d("TL3-T7-0001", "30/09/2026", "20:00"))
+        assert ag.chay_tai_bo_sung({}, hl, ["TL2-T7", "TL3-T7"], bay_gio=BAY_GIO,
+                                   tai_ke_hoach=lambda ch, k: ke[k], chay_con=cc) is True
+        assert ag.chay_tai_bo_sung({}, hl, ["TL2-T7", "TL3-T7"], bay_gio=BAY_GIO + 60,
+                                   tai_ke_hoach=lambda ch, k: ke[k], chay_con=cc) is True
+        assert [c[1] for c in goi["con"]] == ["TL2-T7", "TL3-T7"]
+
     def test_chay_dung_kenh_dung_co(self, tmp_path, monkeypatch):
         ag, goi, hl, ke, cc = self._chuan_bi(tmp_path, monkeypatch)
         assert ag.chay_tai_bo_sung({}, hl, ["TL4-T7", "TL2-T7"], bay_gio=BAY_GIO,

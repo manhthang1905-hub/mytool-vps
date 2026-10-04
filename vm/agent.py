@@ -2972,6 +2972,10 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
                             "--bien-gio", str(BIEN_TAI_BO_SUNG_GIO),
                             "--toi-da-ngay", str(TAI_LEN_TOI_DA_KENH_NGAY)))
             ghi("tải bổ sung kênh {0}: {1}".format(kenh, msg))
+            # 04/10/2026 (7 kênh): tải xong (mã 0) mà còn kênh khác chờ → nhịp sau làm luôn, không đợi đủ
+            # CHU_KY_TAI_BO_SUNG_GIAY (25') — mỗi lượt chỉ ~4', 7 kênh đợi lần lượt mất ~3 giờ vô ích.
+            if _ma == 0 and len(ung_vien) > 1:
+                _TAI_BO_SUNG["luc"] = 0.0
         finally:
             try:
                 dong_chrome_kenh(ch)
