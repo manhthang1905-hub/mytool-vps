@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.20** — 2026-10-04 — `vps-jp1` — Nhip tim: ghi trong luc cho extension cao Studio (~25 phut) de bo canh khong khoi dong lai nham agent luc quet dem
 - **2.149.19** — 2026-10-04 — `vps-jp1` — fix(agent): nhip tim + gac tong dung agent treo; luong canh tien trinh con nuoi/thiet lap; tran 120 phut
 - **2.149.18** — 2026-10-04 — `vps-jp1` — Thiet lap kenh: danh muc mac dinh tai len luon la Giao duc (khong de LLM chon), kenh.yaml danh_muc de doi neu can
 - **2.149.17** — 2026-10-04 — `vps-jp1` — Nuoi trang chu: noi dung khac quoc gia/ngon ngu = lac de (chan bang ma: kenh Nhat tieu de khong kana); bam Khong quan tam dau phien va moi lan ve trang chu (toi da 30/phien)
