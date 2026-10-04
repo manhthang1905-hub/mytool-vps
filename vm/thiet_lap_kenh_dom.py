@@ -298,6 +298,84 @@ def ghi_tu_choi(so: dict, muc: str, gia_tri: Any, ly_do: str, luc: float) -> Non
     so["tu_choi"][muc] = {"gia_tri": gia_tri, "ly_do": str(ly_do)[:200], "luc": time.strftime("%Y-%m-%d %H:%M", time.localtime(luc))}
 
 
+def ten_handle_bi_chan(so: dict, muc: str, luc: float) -> str:
+    """"" nếu được phép gõ `ten`/`handle`; ngược lại lý do bị CHẶN (05/10/2026). Mục đang `cho` mà Studio từng từ chối (hoặc đã đủ 2 lượt)
+    trong 14 ngày → KHÔNG điền tên/handle (lượt Xuất bản không được dính tên làm cả lượt hỏng). Chặn theo CỬA SỔ, không theo giá trị."""
+    if ((so.get("muc") or {}).get(muc) or {}).get("tt") != "cho":
+        return ""
+    tc = (so.get("tu_choi") or {}).get(muc) or {}
+    if tc and _luc_tu_choi(tc) + CUA_SO_DOI_TEN_NGAY * 86400 > luc:
+        return "Studio từ chối {0} lúc {1}, chưa qua {2} ngày".format(muc, tc.get("luc"), CUA_SO_DOI_TEN_NGAY)
+    gan = doi_gan_day(so, muc, luc)
+    if len(gan) >= TOI_DA_DOI_TRONG_CUA_SO:
+        return "đã đổi {0} lần trong {1} ngày".format(len(gan), CUA_SO_DOI_TEN_NGAY)
+    return ""
+
+
+RE_LOI_XUAT_BAN = re.compile(r"(lỗi|không thể|không thành công|thất bại|hết lượt|vượt quá|giới hạn|error|couldn.?t|can.?t|cannot|unable|failed|"
+                             r"try again|too many|limit|エラー|失敗|できません|できませんでした|問題が発生|上限)", re.I)
+
+
+def thong_bao_loi_xuat_ban(chu: Any) -> str:
+    """Chữ thông báo (toast/hộp/ô) của Studio sau Xuất bản có phải LỖI không? Trả chữ lỗi gọn, '' nếu không."""
+    t = " ".join(str(chu or "").split())
+    return t[:200] if t and RE_LOI_XUAT_BAN.search(t) else ""
+
+
+def goc_url_anh(url: Any) -> str:
+    """URL ảnh yt3 bỏ phần co giãn sau «=» (đổi ảnh thật thì phần gốc ĐỔI)."""
+    return str(url or "").split("=")[0].strip()
+
+
+def doc_anh_cong_khai(uc: Any, mo_url=None) -> Dict[str, str]:
+    """Ảnh đại diện (og:image) + banner trên trang CÔNG KHAI (HTTP thường). {logo, banner} = URL gốc; {} nếu không đọc được."""
+    if not uc:
+        return {}
+    try:
+        if mo_url is None:
+            import urllib.request
+
+            def mo_url(u):
+                rq = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+                with urllib.request.urlopen(rq, timeout=25) as r:
+                    return r.read().decode("utf-8", "replace")
+        h = mo_url("https://www.youtube.com/channel/{0}".format(uc))
+    except Exception:  # noqa: BLE001
+        return {}
+    ra: Dict[str, str] = {}
+    m = re.search(r'<meta property="og:image" content="([^"]*)"', h)
+    if m:
+        ra["logo"] = goc_url_anh(m.group(1))
+    m = (re.search(r'"banner":\{"imageBannerViewModel":\{"image":\{"sources":\[\{"url":"([^"]+)"', h)
+         or re.search(r'"tvBanner":\{"thumbnails":\[\{"url":"([^"]+)"', h))
+    ra["banner"] = goc_url_anh(m.group(1)) if m else ""
+    return ra
+
+
+def bang_chung_anh_luu(truoc: Dict[str, str], muc: List[str], doc=None, cho_giay: float = 90.0, ngu=time.sleep) -> Dict[str, Tuple[bool, str]]:
+    """Ảnh logo/banner đã LƯU thật chưa? = URL ảnh trên trang CÔNG KHAI KHÁC lần đọc TRƯỚC khi Xuất bản (không tin khung soạn thảo).
+    Chờ tối đa `cho_giay` (CDN chậm). Trả {mục: (đạt, lý do)}."""
+    doc = doc or (lambda: {})
+    ra: Dict[str, Tuple[bool, str]] = {}
+    het = time.monotonic() + cho_giay
+    while True:
+        sau = doc() or {}
+        for m in muc:
+            if m in ra:
+                continue
+            if not truoc or m not in truoc:
+                ra[m] = (False, "không có bản đọc trang công khai TRƯỚC khi Xuất bản để so")
+            elif sau.get(m) and sau[m] != truoc[m]:
+                ra[m] = (True, "trang công khai đã đổi ảnh")
+        if len(ra) == len(muc) or time.monotonic() >= het:
+            break
+        ngu(10.0)
+    for m in muc:
+        if m not in ra:
+            ra[m] = (False, "trang công khai vẫn ảnh CŨ sau {0:.0f}s (Xuất bản chưa lưu ảnh)".format(cho_giay))
+    return ra
+
+
 def handle_cong_khai(uc: Any) -> str:
     """Handle THẬT đang hiện trên trang công khai của kênh (HTTP thường, không mở Chrome); '' nếu không đọc được."""
     if not uc:
@@ -349,7 +427,7 @@ def lan_hom_nay(so: dict, ngay: str) -> int:
     return sum(1 for p in so.get("phien", []) if p.get("ngay") == ngay and not str(p.get("ket_qua", "")).startswith("hoãn"))
 
 
-def quyet_dinh(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung: bool = False) -> Tuple[bool, str]:
+def quyet_dinh(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung: bool = False, bo_qua_lan: bool = False) -> Tuple[bool, str]:
     """(được chạy phiên mới không, lý do). Thuần: nhận sổ + giờ."""
     tt = so.get("trang_thai")
     if tt == "xong":
@@ -360,7 +438,7 @@ def quyet_dinh(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung: bo
         k = khung_cam(luc, du_kien_phut)
         if k:
             return False, k
-    if lan_hom_nay(so, time.strftime("%Y-%m-%d", time.localtime(luc))) >= TOI_DA_LAN_NGAY:
+    if not bo_qua_lan and lan_hom_nay(so, time.strftime("%Y-%m-%d", time.localtime(luc))) >= TOI_DA_LAN_NGAY:
         return False, "đã chạy {0} phiên hôm nay".format(TOI_DA_LAN_NGAY)
     if float(so.get("nghi_den_luc") or 0) > luc:
         return False, "nghỉ tới {0}".format(time.strftime("%H:%M", time.localtime(so["nghi_den_luc"])))
@@ -673,7 +751,16 @@ _JS_LOI_O = "((host) => {" + _JS_CHUNG + r"""
           loi: [...new Set(loi)].join(' | '), thong_bao: dong.length ? dong[dong.length - 1] : '', chu: (h.innerText || '').trim().slice(0, 400)};
 })"""
 
-_JS_HOP_THOAI = "(() => {" + _JS_CHUNG + r"""
+#: Chữ thông báo (toast/snackbar) + ô đang báo lỗi trên trang (sau Xuất bản).
+_JS_LOI_XUAT_BAN = "(() => {" + _JS_CHUNG + r"""
+  const ra = [];
+  qa('ytcp-toast, tp-yt-paper-toast, ytcp-snackbar, yt-notification-action-renderer, #toast, [role=alert], #error-message, ytcp-form-error').forEach(e => {
+    const t = (e.innerText || '').trim(); if (t && hien(e)) ra.push(t); });
+  qa('[invalid] #error-message, ytcp-form-input-container[invalid] [id*=error]').forEach(e => { const t = (e.innerText || '').trim(); if (t && hien(e)) ra.push(t); });
+  return [...new Set(ra)].join(' | ').slice(0, 400);
+})()"""
+
+_JS_HOP_THOAI ="(() => {" + _JS_CHUNG + r"""
   const ds = qa('tp-yt-paper-dialog, ytcp-dialog, ytcp-confirmation-dialog, [role=dialog], [role=alertdialog]').filter(hien);
   return ds.map(d => (d.innerText || '').trim().slice(0, 600)).join('\n----\n');
 })()"""
@@ -899,7 +986,7 @@ class Studio:
         sua = self._bam_nhan(r"수정|edit|chỉnh sửa|sửa|編集|変更|변경", "삭제|delete|xóa|xoá|저장|save|削除|保存", "nút sửa ngôn ngữ ưu tiên")
         ghi("   bấm «{0}»".format(sua))
         self.ngu(2.5)
-        self._bam_nhan(r"기본 언어|default language|preferred language|ngôn ngữ|優先言語|デフォルトの言語|言語", "nhãn ô tìm", sel="input")
+        self._bam_nhan(r"기본 언어|default language|preferred language|primary language|ngôn ngữ|優先言語|デフォルトの言語|主要言語|言語", "nhãn ô tìm", sel="input")
         self.ngu(0.6)
         muc, loi = "", None
         for go in b["go"]:                                          # gõ lần lượt: tên bản địa → tên Anh → tên Việt
@@ -920,7 +1007,11 @@ class Studio:
         try:                                                        # nút của HỘP («Lưu ngôn ngữ đã chọn») trước, nút «Lưu» của ngôn ngữ khác sau
             luu = self._bam_nhan(r"선택한 언어|selected language|ngôn ngữ đã chọn|選択した言語", "nút lưu ngôn ngữ đã chọn", han=3.0, sel="button, [role=button]")
         except LoiMuc:
-            luu = self._bam_nhan(r"저장|save|lưu|保存", "nút lưu ngôn ngữ", loai=r"English|영어|英語", sel="button, [role=button]")
+            try:                                                    # 05/10: nút «Lưu ngôn ngữ: <ĐÍCH>» — tránh bấm nhầm nút Lưu của ngôn ngữ gợi ý khác (Esperanto...)
+                tho = re.escape(re.split(r"\s*[(（]", muc)[0].strip())
+                luu = self._bam_nhan(r"(저장|save|lưu|保存).*" + tho + r"|" + tho + r".*(저장|save|lưu|保存)", "nút lưu ngôn ngữ đích", han=3.0, sel="button, [role=button]")
+            except LoiMuc:
+                luu = self._bam_nhan(r"저장|save|lưu|保存", "nút lưu ngôn ngữ", loai=r"English|영어|英語", sel="button, [role=button]")
         ghi("   bấm «{0}»".format(luu))
         self.ngu(5.0)
         ghi("   trang tài khoản sau khi lưu: {0}".format(" ".join(str(self.js(_JS_NGON_NGU).get("chu"))[:120].split())))
@@ -1125,7 +1216,13 @@ class Studio:
         kq: dict = {}
         thu_muc = _tl().thu_muc_thiet_lap(so["kenh"], GOC_TOOL)
         can = [m for m in ("ten", "handle", "mo_ta", "logo", "banner", "hinh_mo") if kh[m]["khac"] in (True, None)]
-        if not can:
+        for m in ("ten", "handle"):                                 # đang bị chặn đổi → KHÔNG điền, Xuất bản chỉ mang mô tả/ảnh
+            ly_chan = ten_handle_bi_chan(so, m, luc) if m in can else ""
+            if ly_chan:
+                can.remove(m)
+                kq[m] = ("cho", ly_chan)
+                ghi("   {0}: đang bị chặn đổi ({1}) → KHÔNG điền, Xuất bản không dính {0}".format(TEN_MUC[m], ly_chan))
+        if not [m for m in can if m not in kq]:
             return kq
         self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
         self.doi_hien("#description-textbox [role=textbox]", 15)
@@ -1214,11 +1311,22 @@ class Studio:
                 for m in can:
                     kq.setdefault(m, ("khong_luu", ""))
                 return kq
-            # Xuất bản
+            # Xuất bản. Mốc ảnh công khai LẤY TRƯỚC (bằng chứng đã lưu = URL ảnh công khai đổi sau đó)
+            so["truoc"]["cong_khai"] = doc_anh_cong_khai(so.get("uc"))
             self.chup("truoc-xuat-ban")
             self.bam(["ytcp-button#publish-button button", "ytcp-button#publish-button"], ("Xuất bản", "Publish", "公開"), han=6)
             da_xuat_ban = True
-            self.xu_ly_sau_xuat_ban(ghi)
+            loi_xb = self.xu_ly_sau_xuat_ban(ghi)
+            if loi_xb:
+                # Studio BÁO LỖI khi Xuất bản → cả lượt coi như CHƯA lưu: ghi chữ thông báo vào sổ, KHÔNG báo đạt, KHÔNG ghi lượt đổi
+                ghi("   *** Xuất bản BÁO LỖI: «{0}» — không báo đạt ***".format(loi_xb))
+                self.chup("xuat-ban-loi")
+                for m in can:
+                    if m not in ("ten", "handle") and m not in kq:
+                        kq[m] = ("hong", "Xuất bản báo lỗi: " + loi_xb)
+                so["truoc"]["loi_xuat_ban"] = loi_xb
+                luu_so(so)
+                return kq
             # ghi lượt đổi tên/handle NGAY sau Xuất bản (đã tốn lượt dù đọc lại có lệch)
             if "ten" in can and "ten" not in kq:
                 ghi_doi(so, "ten", luc)
@@ -1243,26 +1351,43 @@ class Studio:
         except LoiMuc:
             pass
 
-    def xu_ly_sau_xuat_ban(self, ghi, han: float = 40.0) -> None:
-        """Chờ Xuất bản xong: gặp hộp xác nhận thì bấm Xác nhận (nếu hộp ĐÒI xác minh thì dừng người); xong khi nút Xuất bản mờ lại."""
+    def xu_ly_sau_xuat_ban(self, ghi, han: float = 40.0) -> str:
+        """Chờ Xuất bản xong: gặp hộp xác nhận thì bấm Xác nhận (nếu hộp ĐÒI xác minh thì dừng người); xong khi nút Xuất bản mờ lại.
+        Trả '' nếu ổn, hoặc CHỮ LỖI của Studio (toast/hộp/ô báo lỗi) — khi đó Xuất bản coi như THẤT BẠI."""
         het = time.monotonic() + han
+        thay: List[str] = []
         while time.monotonic() < het:
             self.ngu(1.5)
             self.kiem_chan()
+            try:
+                tb = str(self.js(_JS_LOI_XUAT_BAN) or "")
+            except Exception:  # noqa: BLE001
+                tb = ""
+            if tb.strip():
+                thay.append(" ".join(tb.split())[:200])
+                loi = thong_bao_loi_xuat_ban(tb)
+                if loi:
+                    return loi
             ht = self.hop_thoai()
             if ht.strip():
                 ghi("   hộp sau Xuất bản: {0}".format(re.sub(r"\s+", " ", ht)[:140]))
+                loi = thong_bao_loi_xuat_ban(ht)
                 try:
                     self.bam(["tp-yt-paper-dialog ytcp-button.action-button", "tp-yt-paper-dialog ytcp-button#confirm-button",
                               "ytcp-confirmation-dialog ytcp-button#confirm-button"], CHU_NUT_XAC_NHAN, han=3)
+                    if loi:
+                        return loi
                     continue
                 except LoiMuc:
                     self.chup("hop-sau-xuat-ban")
+                    if loi:
+                        return loi
                     raise LoiMuc("hộp lạ sau Xuất bản, không có nút xác nhận: " + re.sub(r"\s+", " ", ht)[:120])
             du = self.js(_JS_HO_SO)
             if du is not None and du.get("xuat_ban_tat"):
-                return
-        raise LoiMuc("Xuất bản xong nhưng nút vẫn sáng sau {0:.0f}s (Studio chưa xác nhận lưu)".format(han))
+                return ""
+        raise LoiMuc("Xuất bản xong nhưng nút vẫn sáng sau {0:.0f}s (Studio chưa xác nhận lưu){1}".format(
+            han, (" — thông báo: " + " | ".join(thay[-3:])) if thay else ""))
 
     # ── sửa: Cài đặt kênh / mặc định tải lên ──
     def chon_dropdown(self, css_trigger: str, aliases) -> None:
@@ -1549,11 +1674,14 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
     luc0 = time.time()
     so = doc_so(kenh)
     if mo_lai:
-        so["muc"] = {m: ({"tt": "chua"} if (v or {}).get("tt") in ("can_nguoi", "hong", "cho") else v) for m, v in so["muc"].items()}
-        so["tu_choi"], so["trang_thai"], so["nghi_den_luc"] = {}, "dang_lam", 0.0
-        ghi("--mo-lai: xoá trạng thái can_nguoi/hong/từ chối cũ")
+        # GIỮ thông tin từ chối tên/handle còn trong cửa sổ 14 ngày (không thử lại tên trước hạn)
+        giu = {m for m in ("ten", "handle") if ten_handle_bi_chan(so, m, luc0)}
+        so["muc"] = {m: ({"tt": "chua"} if (v or {}).get("tt") in ("can_nguoi", "hong", "cho") and m not in giu else v) for m, v in so["muc"].items()}
+        so["tu_choi"] = {m: v for m, v in so["tu_choi"].items() if m in giu}
+        so["trang_thai"], so["nghi_den_luc"] = "dang_lam", 0.0
+        ghi("--mo-lai: xoá trạng thái can_nguoi/hong/từ chối cũ (giữ từ chối còn hạn: {0})".format(", ".join(sorted(giu)) or "không"))
     if not thu and not khong_luu and not chi_ngon_ngu:
-        ok, ly = quyet_dinh(so, luc0, NGAN_SACH_PHIEN_PHUT, bo_qua_khung)
+        ok, ly = quyet_dinh(so, luc0, NGAN_SACH_PHIEN_PHUT, bo_qua_khung, bo_qua_lan=mo_lai)      # --mo-lai = lệnh chủ động: không tính trần phiên/ngày
         if not ok:
             ghi("bỏ qua: " + ly)
             return MA_KHONG_CAN if so.get("trang_thai") in ("can_nguoi", "xong") else MA_HOAN
@@ -1812,8 +1940,14 @@ def _doc_lai_va_ghi(S: Studio, ten_nhom: str, muc_nhom, hs, kh, kq, so, luc0, gh
             ht2["handle"] = mong_h
     so2 = json.loads(json.dumps(so))
     hh = _hash_anh(hs, _tl().thu_muc_thiet_lap(so["kenh"]))
+    # logo/banner: Studio không cho so điểm ảnh → BẰNG CHỨNG ĐÃ LƯU = ảnh trên trang CÔNG KHAI đổi so với trước Xuất bản
+    # (khung soạn thảo chưa lưu cũng hiện «có ảnh» nên KHÔNG đủ). Hình mờ: trang Hồ sơ đã TẢI LẠI (doc_ho_so mở lại URL) vẫn có ảnh.
+    can_cong_khai = [m for m in ("logo", "banner") if m in muc_nhom and kq.get(m) is None and kh[m]["khac"]]
+    bc = bang_chung_anh_luu((so.get("truoc") or {}).get("cong_khai") or {}, can_cong_khai, doc=lambda: doc_anh_cong_khai(so.get("uc")),
+                            ngu=S.ngu) if can_cong_khai else {}
+    chua_luu = {m: v[1] for m, v in bc.items() if not v[0]}
     for m in ("logo", "banner", "hinh_mo"):
-        if m in muc_nhom and kq.get(m) is None and kh[m]["khac"]:
+        if m in muc_nhom and kq.get(m) is None and kh[m]["khac"] and m not in chua_luu:
             so2["muc"][m] = {"tt": "dat"}
             so2["hash_anh"][m] = hh[m]
     kh2 = khac_biet(hs, ht2, so2, hh)
@@ -1834,12 +1968,16 @@ def _doc_lai_va_ghi(S: Studio, ten_nhom: str, muc_nhom, hs, kh, kq, so, luc0, gh
             continue
         if kh[m]["khac"] is False:
             continue
+        if m in chua_luu:
+            hong_muc(so, m, "Xuất bản KHÔNG lưu được ảnh: " + chua_luu[m])
+            ghi("   {0}: HỎNG — {1}".format(TEN_MUC[m], chua_luu[m][:140]))
+            continue
         x = kh2.get(m, {})
         if x.get("khac") is False:
             dat_muc(so, m, kh[m]["mong"], luc0, "đọc lại khớp")
             if m in ("logo", "banner", "hinh_mo"):
                 so["hash_anh"][m] = hh[m]
-            ghi("   {0}: ĐẠT (đọc lại khớp hồ sơ)".format(TEN_MUC[m]))
+            ghi("   {0}: ĐẠT (đọc lại khớp hồ sơ{1})".format(TEN_MUC[m], (" + " + bc[m][1]) if m in bc else ""))
         else:
             ly = "đọc lại KHÔNG khớp hồ sơ ({0})".format(x.get("ghi") or loi or "?")
             if m in ("ten", "handle"):

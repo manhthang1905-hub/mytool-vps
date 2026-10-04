@@ -7,6 +7,7 @@ import importlib.util
 import json
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -623,3 +624,124 @@ def test_kenh_moi_dung_tu_khuon_co_thiet_lap_kenh_true():
     nd = (GOC / "CHANNEL" / "_KHUON" / "kenh-mau" / kt.TEP_KENH).read_text(encoding="utf-8")
     nd2 = kt._dat_khoa(nd, "ma", "TLQ")
     assert "thiet_lap_kenh: true" in nd2
+
+
+# ═══════════════════ 05/10: XUẤT BẢN THẤT BẠI KHÔNG ĐƯỢC BÁO ĐẠT ═══════════════════
+def _so_cho_ten():
+    so = t.so_moi("K")
+    so["uc"] = "UCxxx"
+    t.ghi_tu_choi(so, "ten", "凪の心理学", "Studio từ chối", NOW)
+    t.ghi_tu_choi(so, "handle", "@nagi", "Studio từ chối", NOW)
+    so["muc"]["ten"] = {"tt": "cho"}
+    so["muc"]["handle"] = {"tt": "cho"}
+    return so
+
+
+def test_ten_handle_bi_chan_theo_cua_so_khong_theo_gia_tri():
+    so = _so_cho_ten()
+    assert "chưa qua" in t.ten_handle_bi_chan(so, "ten", NOW + 3600)
+    assert t.ten_handle_bi_chan(so, "handle", NOW + 13 * 86400)
+    assert t.ten_handle_bi_chan(so, "ten", NOW + 15 * 86400) == ""        # qua 14 ngày: được thử lại
+    so["muc"]["ten"] = {"tt": "dat"}
+    assert t.ten_handle_bi_chan(so, "ten", NOW + 3600) == ""              # không ở trạng thái chờ thì không chặn
+
+
+def test_mo_lai_giu_tu_choi_ten_handle_con_han(monkeypatch):
+    """--mo-lai xoá hong/can_nguoi nhưng GIỮ `cho` + từ chối tên/handle còn hạn."""
+    so = _so_cho_ten()
+    so["muc"]["mo_ta"] = {"tt": "hong"}
+    giu = {m for m in ("ten", "handle") if t.ten_handle_bi_chan(so, m, NOW + 60)}
+    assert giu == {"ten", "handle"}
+
+
+@pytest.mark.parametrize("chu,loi", [
+    ("Đã lưu thay đổi", False), ("Changes saved", False), ("", False), ("変更を保存しました", False),
+    ("Không thể xuất bản thay đổi. Hãy thử lại sau", True), ("Couldn't update channel name", True),
+    ("You've reached the limit of name changes", True), ("エラーが発生しました", True)])
+def test_thong_bao_loi_xuat_ban(chu, loi):
+    assert bool(t.thong_bao_loi_xuat_ban(chu)) is loi
+
+
+def test_anh_cong_khai_doc_va_bang_chung_chi_tin_trang_cong_khai():
+    html = ('<meta property="og:image" content="https://yt3.googleusercontent.com/AAA=s900-c-k">'
+            '"banner":{"imageBannerViewModel":{"image":{"sources":[{"url":"https://yt3.googleusercontent.com/BBB=w1060"')
+    cu = t.doc_anh_cong_khai("UCx", mo_url=lambda u: html)
+    assert cu == {"logo": "https://yt3.googleusercontent.com/AAA", "banner": "https://yt3.googleusercontent.com/BBB"}
+    assert t.doc_anh_cong_khai("UCx", mo_url=lambda u: 1 / 0) == {}
+    # ảnh công khai CHƯA đổi → HỎNG (dù khung soạn thảo hiện «có ảnh»)
+    r = t.bang_chung_anh_luu(cu, ["logo", "banner"], doc=lambda: dict(cu), cho_giay=0.0, ngu=lambda s: None)
+    assert r["logo"][0] is False and r["banner"][0] is False and "CŨ" in r["logo"][1]
+    moi = dict(cu, logo="https://yt3.googleusercontent.com/CCC")
+    r = t.bang_chung_anh_luu(cu, ["logo", "banner"], doc=lambda: moi, cho_giay=0.0, ngu=lambda s: None)
+    assert r["logo"][0] is True and r["banner"][0] is False                  # banner vẫn cũ
+    assert t.bang_chung_anh_luu({}, ["logo"], doc=lambda: moi, cho_giay=0.0)["logo"][0] is False   # không có mốc trước → không đạt
+
+
+class _GiaStudio(t.Studio):
+    """Studio giả: ghi lại những gì được gõ, không Chrome."""
+    def __init__(self, loi_xb=""):
+        super().__init__(types.SimpleNamespace(), lambda *_: None, "x", ngu=lambda s: None)
+        self.uc, self.go, self.loi_xb, self.da_bam_xb = "UCxxx", [], loi_xb, False
+
+    def mo(self, *a, **k): pass
+    def doi_hien(self, *a, **k): return True
+    def chup(self, *a, **k): pass
+    def js(self, bt): return {}
+    def huy_thay_doi(self, ghi=None): self.da_huy = True
+    def nhap(self, css, chu, nhieu_dong=False, han=8.0): self.go.append(css)
+    def dat_tep(self, *a, **k): self.go.append("tep")
+    def xong_hop_cat(self, *a, **k): pass
+    def doi_o_hop_le(self, host, han=4.5): return {"invalid": False}
+    def bam(self, css, chu=(), *a, **k): self.da_bam_xb = True
+    def xu_ly_sau_xuat_ban(self, ghi, han=40.0): return self.loi_xb
+
+
+def _khac(**mac):
+    kh = {m: {"khac": False, "hien": "", "mong": ""} for m in t.MUC}
+    for m in ("ten", "handle", "mo_ta", "logo"):
+        kh[m]["khac"] = True
+    kh.update(mac)
+    return kh
+
+
+def _hs_gia(monkeypatch):
+    class TL:
+        @staticmethod
+        def thu_muc_thiet_lap(*a, **k): return "x"
+        @staticmethod
+        def duong_anh(hs, muc, tm): return __file__
+    monkeypatch.setattr(t, "_tl", lambda: TL)
+    monkeypatch.setattr(t, "luu_so", lambda so: None)
+    monkeypatch.setattr(t, "doc_anh_cong_khai", lambda uc, mo_url=None: {"logo": "a", "banner": "b"})
+    return {"ten": "凪の心理学", "handle": "@nagi", "mo_ta": "x", "logo": "logo.png"}
+
+
+def test_ho_so_khong_dien_ten_handle_khi_dang_bi_chan(monkeypatch):
+    hs = _hs_gia(monkeypatch)
+    so = _so_cho_ten()
+    S = _GiaStudio()
+    kq = S.sua_ho_so(hs, _khac(), so, {"ten": "cũ", "handle": "cũ"}, NOW + 3600, lambda *_: None)
+    assert not any("channel-name" in c or "channel-handle" in c for c in S.go)    # KHÔNG gõ tên/handle
+    assert "#description-textbox [role=textbox]" in S.go and "tep" in S.go        # mô tả + logo vẫn điền
+    assert S.da_bam_xb and kq["ten"][0] == "cho" and kq["handle"][0] == "cho"
+
+
+def test_ho_so_go_ten_khi_khong_bi_chan(monkeypatch):
+    hs = _hs_gia(monkeypatch)
+    so = t.so_moi("K")
+    so["uc"] = "UCxxx"
+    S = _GiaStudio()
+    S.sua_ho_so(hs, _khac(), so, {"ten": "cũ", "handle": "cũ"}, NOW, lambda *_: None)
+    assert any("channel-name" in c for c in S.go)
+
+
+def test_xuat_ban_bao_loi_thi_khong_bao_dat_va_khong_ghi_luot(monkeypatch):
+    hs = _hs_gia(monkeypatch)
+    so = t.so_moi("K")
+    so["uc"] = "UCxxx"
+    S = _GiaStudio(loi_xb="Không thể xuất bản thay đổi")
+    kq = S.sua_ho_so(hs, _khac(), so, {"ten": "cũ", "handle": "cũ"}, NOW, lambda *_: None)
+    assert kq["mo_ta"][0] == "hong" and "Không thể xuất bản" in kq["mo_ta"][1]
+    assert kq["logo"][0] == "hong"
+    assert so["ngay_doi"]["ten"] == [] and so["ngay_doi"]["handle"] == []        # lượt chưa tốn
+    assert so["truoc"]["loi_xuat_ban"] == "Không thể xuất bản thay đổi"
