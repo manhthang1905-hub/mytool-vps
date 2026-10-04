@@ -816,6 +816,26 @@ _JS_MUC_MENU = """((reSrc) => { const Y = window.__yd, re = new RegExp(reSrc, 'i
 
 
 # ═══════════════════════════ ĐIỀU KHIỂN STUDIO ══════════════════════════════
+def pref_dat_hl(pref: str, hl: str) -> str:
+    """Giá trị cookie PREF của YouTube (`k=v&k=v`) với `hl=<hl>`: giữ MỌI cặp khoá khác, đổi/thêm `hl`. Hàm thuần."""
+    cap = [c for c in str(pref or "").split("&") if c.strip()]
+    ra, thay = [], False
+    for c in cap:
+        if c.split("=", 1)[0] == "hl":
+            if not thay:
+                ra.append("hl=" + hl)
+            thay = True
+        else:
+            ra.append(c)
+    if not thay:
+        ra.append("hl=" + hl)
+    return "&".join(ra)
+
+
+#: đường dự phòng khi tài khoản Google đã đổi mà Studio chưa đổi (đo 04/10: 4 kênh TL1/2/3/5-T7 kẹt vi-VN)
+CACH_NGON_NGU_MAC_DINH = ("tai_khoan", "hl", "cookie", "trinh_duyet")
+
+
 class Studio:
     """Bọc `TrangStudio` (vm/cdp_studio.py) cho việc thiết lập kênh: tìm theo CSS (cấu trúc phần tử ổn định của
     Studio) rồi dự phòng theo CHỮ đa ngôn ngữ; bấm/gõ có xác minh như máy đăng."""
@@ -976,6 +996,40 @@ class Studio:
                 raise LoiMuc("không thấy «{0}»".format(nhan))
             self.ngu(0.8)
 
+    def _ngon_ngu_trinh_duyet(self, ghi, dich: str = "vi") -> None:
+        """Đường dự phòng 1: menu ngôn ngữ của youtube.com (avatar → Ngôn ngữ → ngôn ngữ đích) = ghi cookie PREF của trình duyệt."""
+        b = NGON_NGU_DICH.get(dich) or NGON_NGU_DICH[MA_NGON_NGU_MAC_DINH]
+        self.st.mo("https://www.youtube.com/", han=60)
+        self.ngu(4.0)
+        self.kiem_chan()
+        self._bam_nhan(r"^(trình đơn avatar|avatar|アカウント|account menu|menu tài khoản|ảnh hồ sơ|프로필)", "avatar youtube", sel="button#avatar-btn, #avatar-btn, button[aria-label]")
+        self.ngu(1.5)
+        ghi("   youtube.com menu avatar: {0}".format(" || ".join(self.js(_JS_MENU_MO) or [])[:300]))
+        self._bam_muc_menu(r"ngôn ngữ|language|言語|언어", "Ngôn ngữ")
+        self.ngu(1.5)
+        muc = self._bam_muc_menu(b["re_chon"], b["ten"])
+        ghi("   youtube.com chọn «{0}»".format(muc))
+        self.ngu(5.0)
+
+    def _ngon_ngu_cookie(self, ghi, dich: str = "vi") -> None:
+        """Đường dự phòng 2: đặt cookie PREF `hl=<đích>` (giữ cặp khác) trên .youtube.com bằng CDP. Chỉ đụng PREF."""
+        b = NGON_NGU_DICH.get(dich) or NGON_NGU_DICH[MA_NGON_NGU_MAC_DINH]
+        cdp, sid = self.st.cdp, self.st.sid
+        ck = cdp.goi("Network.getCookies", {"urls": ["https://www.youtube.com/", "https://studio.youtube.com/"]}, sid=sid, han=15).get("cookies") or []
+        pref = [c for c in ck if c.get("name") == "PREF"]
+        ghi("   cookie PREF trước: {0}".format(" | ".join("{0}{1}={2}".format(c.get("domain"), c.get("path"), c.get("value")) for c in pref) or "(không có)"))
+        goc = pref[0] if pref else {}
+        moi = pref_dat_hl(goc.get("value", ""), b["html"])
+        c = {"name": "PREF", "value": moi, "domain": ".youtube.com", "path": "/", "secure": True, "sameSite": "None"}
+        if goc.get("expires", -1) and goc.get("expires", -1) > 0:
+            c["expires"] = goc["expires"]
+        else:
+            c["expires"] = time.time() + 400 * 86400
+        r = cdp.goi("Network.setCookie", c, sid=sid, han=15)
+        ghi("   đặt PREF={0} → {1}".format(moi, r.get("success")))
+        if not r.get("success"):
+            raise LoiMuc("Network.setCookie không thành công")
+
     def _ngon_ngu_tai_khoan(self, ghi, dich: str = "vi") -> None:
         """Đường CHÍNH: Studio theo ngôn ngữ của TÀI KHOẢN Google (menu youtube.com chỉ đổi riêng trình duyệt).
         myaccount.google.com/language → bút chì sửa ngôn ngữ → ô tìm → ngôn ngữ ĐÍCH → xác nhận."""
@@ -1028,10 +1082,14 @@ class Studio:
         if dung or chi_doc:
             return kq
         loi_cuoi = ""
-        for cach in ("tai_khoan", "hl"):
+        for cach in (tuple(x for x in os.environ.get("TL_NGON_NGU_CACH", "").split(",") if x) or CACH_NGON_NGU_MAC_DINH):
             try:
                 if cach == "tai_khoan":
                     self._ngon_ngu_tai_khoan(ghi, dich)
+                elif cach == "trinh_duyet":
+                    self._ngon_ngu_trinh_duyet(ghi, dich)
+                elif cach == "cookie":
+                    self._ngon_ngu_cookie(ghi, dich)
                 else:
                     self.st.mo("https://studio.youtube.com/?hl=" + b["html"], han=60)
                     self.ngu(4.0)
