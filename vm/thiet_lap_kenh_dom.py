@@ -262,8 +262,12 @@ def quyet_doi(so: dict, muc: str, hien: Any, mong: Any, luc: float) -> Tuple[str
         return "giong", ""
     tc = (so.get("tu_choi") or {}).get(muc) or {}
     if tc and chuan(tc.get("gia_tri")).lstrip("@") == chuan(mong).lstrip("@"):
-        return "tu_choi", "Studio đã từ chối («{0}», {1}) — không thử lại; người xử lý rồi chạy với --mo-lai".format(
-            str(tc.get("ly_do"))[:100], tc.get("luc"))
+        # 04/10/2026: Studio từ chối đổi tên/handle gần như luôn là giới hạn 2 lần/14 ngày của YouTube (kênh vừa
+        # được đặt tên trước đó) → CHỜ hết cửa sổ rồi TỰ thử lại, không bắt người xử lý.
+        mo = _luc_tu_choi(tc) + CUA_SO_DOI_TEN_NGAY * 86400
+        if luc < mo:
+            return "cho", "Studio từ chối lúc {0} (giới hạn đổi tên/handle của YouTube) — tự thử lại sau {1}".format(
+                tc.get("luc"), time.strftime("%Y-%m-%d %H:%M", time.localtime(mo)))
     gan = doi_gan_day(so, muc, luc)
     if len(gan) >= TOI_DA_DOI_TRONG_CUA_SO:
         mo = min(gan) + CUA_SO_DOI_TEN_NGAY * 86400
@@ -275,6 +279,19 @@ def quyet_doi(so: dict, muc: str, hien: Any, mong: Any, luc: float) -> Tuple[str
 def ghi_doi(so: dict, muc: str, luc: float) -> None:
     so["ngay_doi"].setdefault(muc, []).append(luc)
     so["ngay_doi"][muc] = doi_gan_day(so, muc, luc + 1)[-6:]
+
+
+def _luc_tu_choi(tc: dict) -> float:
+    try:
+        return time.mktime(time.strptime(str(tc.get("luc") or ""), "%Y-%m-%d %H:%M"))
+    except (ValueError, OverflowError):
+        return 0.0
+
+
+def mo_lai_doi_ten_luc(so: dict) -> float:
+    """Mốc sớm nhất YouTube cho đổi lại tên/handle bị từ chối (0 nếu không có từ chối nào)."""
+    ds = [_luc_tu_choi(v) + CUA_SO_DOI_TEN_NGAY * 86400 for v in (so.get("tu_choi") or {}).values() if isinstance(v, dict)]
+    return min(ds) if ds else 0.0
 
 
 def ghi_tu_choi(so: dict, muc: str, gia_tri: Any, ly_do: str, luc: float) -> None:
@@ -347,6 +364,13 @@ def quyet_dinh(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung: bo
         return False, "đã chạy {0} phiên hôm nay".format(TOI_DA_LAN_NGAY)
     if float(so.get("nghi_den_luc") or 0) > luc:
         return False, "nghỉ tới {0}".format(time.strftime("%H:%M", time.localtime(so["nghi_den_luc"])))
+    # 04/10/2026: chỉ còn tên/handle đang CHỜ YouTube mở lại cửa sổ đổi → không mở Chrome mỗi ngày vô ích.
+    muc = so.get("muc") or {}
+    con = [m for m in MUC if (muc.get(m) or {}).get("tt") != "dat"]
+    mo = mo_lai_doi_ten_luc(so)
+    if con and all(m in ("ten", "handle") and (muc.get(m) or {}).get("tt") == "cho" for m in con) and mo > luc:
+        return False, "chỉ còn tên/handle chờ YouTube cho đổi lại — thử lại {0}".format(
+            time.strftime("%Y-%m-%d %H:%M", time.localtime(mo)))
     return True, ""
 
 
@@ -1815,9 +1839,10 @@ def _doc_lai_va_ghi(S: Studio, ten_nhom: str, muc_nhom, hs, kh, kq, so, luc0, gh
         else:
             ly = "đọc lại KHÔNG khớp hồ sơ ({0})".format(x.get("ghi") or loi or "?")
             if m in ("ten", "handle"):
-                ly = "Studio không nhận giá trị mới (đọc lại: «{0}») — có thể đã hết lượt đổi".format(str(x.get("hien"))[:60])
+                ly = ("Studio không nhận giá trị mới (đọc lại: «{0}») — giới hạn đổi của YouTube, tự thử lại sau {1} "
+                      "ngày").format(str(x.get("hien"))[:60], CUA_SO_DOI_TEN_NGAY)
                 ghi_tu_choi(so, m, hs.get(m) if m == "ten" else (so.get("handle_that") or hs.get(m)), ly, luc0)
-                hong_muc(so, m, ly, tt="can_nguoi")
+                hong_muc(so, m, ly, tt="cho")
             else:
                 hong_muc(so, m, ly)
             ghi("   {0}: HỎNG — {1}".format(TEN_MUC[m], ly[:140]))

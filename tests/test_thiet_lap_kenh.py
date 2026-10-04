@@ -1,4 +1,4 @@
-"""Tự thiết lập kênh YouTube (03/10/2026): HÀM THUẦN của `core/thiet_lap_kenh.py` (hồ sơ) và
+﻿"""Tự thiết lập kênh YouTube (03/10/2026): HÀM THUẦN của `core/thiet_lap_kenh.py` (hồ sơ) và
 `vm/thiet_lap_kenh_dom.py` (so khác biệt, luật đổi tên/handle, sổ, chỗ nối agent). Không Chrome, không mạng."""
 
 from __future__ import annotations
@@ -246,7 +246,7 @@ def test_hom_nay_4_kenh_moi_that_su_doc_duoc_tu_bo_san():
 
 
 # ═══════════════════ PHẦN 2: SO KHÁC BIỆT ════════════════════════════════════
-HS = {"ten": "年輪の心理学", "handle": "@nenrin-shinri", "mo_ta": "一行目。\n\n二行目。", "tu_khoa": ["心理学", "老後"],
+HS = {"ten": "テスト心理学", "handle": "@nenrin-shinri", "mo_ta": "一行目。\n\n二行目。", "tu_khoa": ["心理学", "老後"],
       "quoc_gia": "JP", "logo": "logo.png", "banner": "banner.png", "hinh_mo": "hinh-mo.png",
       "mac_dinh_tai_len": {"ngon_ngu": "ja", "danh_muc": "education", "the": ["心理学", "老後"]},
       "danh_sach_phat": [{"ten": "A", "mo_ta": ""}, {"ten": "B", "mo_ta": ""}]}
@@ -254,7 +254,7 @@ HASH = {"logo": "h1", "banner": "h2", "hinh_mo": "h3"}
 
 
 def ht_dung():
-    return {"ngon_ngu_vi": True, "ten": "年輪の心理学", "handle": "nenrin-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
+    return {"ngon_ngu_vi": True, "ten": "テスト心理学", "handle": "nenrin-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
             "quoc_gia": "Nhật Bản", "anh": {"logo": True, "banner": True, "hinh_mo": True},
             "mac_dinh": {"ngon_ngu_video": "Tiếng Nhật", "ngon_ngu_mo_ta": "Tiếng Nhật", "danh_muc": "Giáo dục", "the": ["老後", "心理学"]},
             "danh_sach_phat": ["A", "B", "C"]}
@@ -331,7 +331,7 @@ NOW = time.mktime((2026, 10, 3, 12, 0, 0, 0, 0, -1))
 
 def test_khong_doi_khi_giong_va_khong_ton_luot():
     so = t.so_moi("K")
-    assert t.quyet_doi(so, "ten", "年輪の心理学", " 年輪の心理学 ", NOW)[0] == "giong"
+    assert t.quyet_doi(so, "ten", "テスト心理学", " テスト心理学 ", NOW)[0] == "giong"
     assert t.quyet_doi(so, "handle", "@Nenrin-Shinri", "nenrin-shinri", NOW)[0] == "giong"
     assert so["ngay_doi"]["ten"] == []
 
@@ -348,12 +348,21 @@ def test_doi_khi_khac_ghi_ngay_va_het_luot_sau_2_lan_trong_14_ngay():
     assert t.quyet_doi(so, "handle", "a", "b", NOW + 7200)[0] == "doi"             # handle tính RIÊNG
 
 
-def test_studio_tu_choi_thi_khong_thu_lai_cung_gia_tri():
+def test_studio_tu_choi_thi_cho_14_ngay_roi_tu_thu_lai():
+    """04/10: Studio từ chối (giới hạn đổi của YouTube) → CHỜ 14 ngày rồi tự thử lại, không bắt người xử lý."""
     so = t.so_moi("K")
+    luc_tc = time.mktime(time.strptime(time.strftime("%Y-%m-%d %H:%M", time.localtime(NOW)), "%Y-%m-%d %H:%M"))
     t.ghi_tu_choi(so, "ten", "mới", "Studio từ chối", NOW)
     v, ly = t.quyet_doi(so, "ten", "cũ", "mới", NOW + 60)
-    assert v == "tu_choi" and "không thử lại" in ly
+    assert v == "cho" and "tự thử lại" in ly
+    assert t.quyet_doi(so, "ten", "cũ", "mới", luc_tc + 15 * 86400)[0] == "doi"      # qua 14 ngày: thử lại
     assert t.quyet_doi(so, "ten", "cũ", "giá trị khác", NOW + 60)[0] == "doi"      # giá trị khác thì được
+    # chỉ còn tên/handle đang chờ → không mở phiên mỗi ngày
+    so["muc"] = {m: {"tt": "dat"} for m in t.MUC}
+    so["muc"]["ten"] = {"tt": "cho"}
+    ok, ly2 = t.quyet_dinh(so, luc_tc + 3600, bo_qua_khung=True)
+    assert not ok and "chờ YouTube" in ly2
+    assert t.quyet_dinh(so, luc_tc + 15 * 86400, bo_qua_khung=True)[0] is True
 
 
 def test_bien_the_handle_toi_da_3_va_hop_le():
@@ -470,10 +479,10 @@ def test_ghi_ten_yaml_chi_thay_ten_tam():
         d = Path(td) / "CHANNEL" / "A"
         d.mkdir(parents=True)
         (d / "kenh.yaml").write_text('ten: "(tên tạm) — tâm lý, người 65+"\nx: 1\n', encoding="utf-8")
-        assert t.ghi_ten_yaml("A", "年輪の心理学", td)
+        assert t.ghi_ten_yaml("A", "テスト心理学", td)
         nd = (d / "kenh.yaml").read_text(encoding="utf-8")
-        assert 'ten: "年輪の心理学 — tâm lý, người 65+"' in nd and "x: 1" in nd
-        assert n.ten_kenh_cua_minh(td) == {"年輪の心理学"}                          # nuôi trang chủ cắt phần trước " — "
+        assert 'ten: "テスト心理学 — tâm lý, người 65+"' in nd and "x: 1" in nd
+        assert n.ten_kenh_cua_minh(td) == {"テスト心理学"}                          # nuôi trang chủ cắt phần trước " — "
         assert not t.ghi_ten_yaml("A", "Tên khác", td)                              # đã là tên thật: không đè
 
 
