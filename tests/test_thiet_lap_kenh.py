@@ -254,7 +254,7 @@ HASH = {"logo": "h1", "banner": "h2", "hinh_mo": "h3"}
 
 
 def ht_dung():
-    return {"ten": "年輪の心理学", "handle": "nenrin-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
+    return {"ngon_ngu_vi": True, "ten": "年輪の心理学", "handle": "nenrin-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
             "quoc_gia": "Nhật Bản", "anh": {"logo": True, "banner": True, "hinh_mo": True},
             "mac_dinh": {"ngon_ngu_video": "Tiếng Nhật", "ngon_ngu_mo_ta": "Tiếng Nhật", "danh_muc": "Giáo dục", "the": ["老後", "心理学"]},
             "danh_sach_phat": ["A", "B", "C"]}
@@ -266,6 +266,17 @@ def so_da_dat_anh():
     for m in ("logo", "banner", "hinh_mo"):
         so["muc"][m] = {"tt": "dat"}
     return so
+
+
+def test_ngon_ngu_studio():
+    assert t.la_tieng_viet("vi-VN", "")
+    assert not t.la_tieng_viet("ko-KR", "채널 대시보드 콘텐츠 분석")
+    assert t.la_tieng_viet("", "Bảng điều khiển của kênh Nội dung Số liệu phân tích")
+    assert not t.la_tieng_viet("ko-KR", "Nội dung")           # 1 chữ không đủ
+    kh = t.khac_biet(HS, dict(ht_dung(), ngon_ngu_vi=False), so_da_dat_anh(), HASH)
+    assert kh["ngon_ngu"]["khac"] is True
+    assert t.khac_biet(HS, {k: v for k, v in ht_dung().items() if k != "ngon_ngu_vi"}, so_da_dat_anh(), HASH)["ngon_ngu"]["khac"] is None
+    assert t.MUC[0] == "ngon_ngu" and "ngon_ngu" in t.TEN_MUC
 
 
 def test_khac_biet_tat_ca_dung_thi_khong_sua_gi():

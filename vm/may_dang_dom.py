@@ -186,6 +186,7 @@ def phan_tich_ngay(chu):
         (r"(\d{1,2})\s*(?:thg|tháng|Thg|Tháng)\s*(\d{1,2})\s*,?\s*(?:năm\s*)?(\d{4})", "dmy"),
         (r"(\d{1,2})/(\d{1,2})/(\d{4})", "dmy"),
         (r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", "ymd"),
+        (r"(?<![\d.])(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?(?![\d:])", "ymd"),   # Studio tiếng Hàn: '2026. 10. 5.'
         (r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", "ymd"),
         (r"\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})", "mdy_en"),
     ]
@@ -255,6 +256,16 @@ def phan_tich_trang_thai(chu, bo_chu: dict = None):
             loai = k
             break
     return loai, phan_tich_ngay_gio(s)
+
+
+MAU_NGAY_MAC_DINH = ["{d} thg {m}, {Y}", "{dd}/{mm}/{Y}"]
+MAU_NGAY_DU_PHONG = ["{Y}. {m}. {d}."]      # Studio tiếng Hàn (không số 0 đứng đầu, dấu chấm cuối)
+
+
+def mau_ngay_thu(bo) -> list:
+    """Các mẫu gõ ô ngày: theo bộ chọn, LUÔN thêm mẫu dự phòng còn thiếu (không trùng)."""
+    ds = list((bo or {}).get("dinh_dang_ngay") or MAU_NGAY_MAC_DINH)
+    return ds + [m for m in MAU_NGAY_DU_PHONG if m not in ds]
 
 
 def dinh_dang_ngay(d, mau: str) -> str:
@@ -2037,7 +2048,7 @@ class MayDangDom:
         """Gõ NGÀY (thử các mẫu định dạng, đọc lại) rồi GIỜ (đọc lại) vào ô Lên lịch đang mở — cùng cách
         `_hien_thi` của luồng đăng. Ném lỗi nếu đọc lại lệch."""
         da_ngay = False
-        for mau in self.bo.get("dinh_dang_ngay") or ["{d} thg {m}, {Y}", "{dd}/{mm}/{Y}"]:
+        for mau in mau_ngay_thu(self.bo):
             try:
                 if not tb.co("o_ngay"):
                     tb.bam("o_ngay_mo", hau_dieu_kien=lambda: tb.co("o_ngay"), han_hau=8)
@@ -2537,7 +2548,7 @@ class MayDangDom:
         if not (ta.co("o_ngay_mo") or ta.co("o_gio")):   # đang mở sẵn thì đừng bấm (bấm = gập lại)
             ta.bam("len_lich_mo", hau_dieu_kien=lambda: ta.co("o_ngay_mo") or ta.co("o_gio"), han_hau=10)
         da_ngay = False
-        for mau in self.bo.get("dinh_dang_ngay") or ["{d} thg {m}, {Y}", "{dd}/{mm}/{Y}"]:
+        for mau in mau_ngay_thu(self.bo):
             try:
                 if not ta.co("o_ngay"):
                     ta.bam("o_ngay_mo", hau_dieu_kien=lambda: ta.co("o_ngay"), han_hau=8)

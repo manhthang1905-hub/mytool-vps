@@ -54,8 +54,8 @@ THU_MUC_KHOA_RIENG = THU_MUC_SO                                  # khoá "một 
 MA_HOAN, MA_CAN_NGUOI, MA_KHONG_CAN = nuoi.MA_HOAN, nuoi.MA_CAN_NGUOI, nuoi.MA_KHONG_CAN
 
 # ── Hằng số luật (đổi ở đây, test canh) ─────────────────────────────────────
-MUC = ("ten", "handle", "mo_ta", "logo", "banner", "hinh_mo", "quoc_gia", "tu_khoa", "mac_dinh", "danh_sach_phat")
-TEN_MUC = {"ten": "tên kênh", "handle": "handle", "mo_ta": "mô tả", "logo": "logo", "banner": "banner",
+MUC = ("ngon_ngu", "ten", "handle", "mo_ta", "logo", "banner", "hinh_mo", "quoc_gia", "tu_khoa", "mac_dinh", "danh_sach_phat")
+TEN_MUC = {"ngon_ngu": "ngôn ngữ Studio", "ten": "tên kênh", "handle": "handle", "mo_ta": "mô tả", "logo": "logo", "banner": "banner",
            "hinh_mo": "hình mờ", "quoc_gia": "quốc gia", "tu_khoa": "từ khoá kênh",
            "mac_dinh": "mặc định tải lên", "danh_sach_phat": "danh sách phát"}
 TOI_DA_LAN_NGAY = 2                       # mỗi kênh tối đa 2 phiên thiết lập / ngày
@@ -128,6 +128,21 @@ def sha_tep(duong: str) -> str:
             return hashlib.sha1(tep.read()).hexdigest()
     except OSError:
         return ""
+
+
+#: Chữ CHỈ có ở Studio tiếng Việt (thanh bên / tiêu đề) — dùng đọc xác nhận ngôn ngữ giao diện.
+CHU_STUDIO_VI = ("Nội dung", "Bảng điều khiển của kênh", "Tuỳ chỉnh", "Tùy chỉnh", "Số liệu phân tích", "Danh sách phát")
+RE_MUC_NGON_NGU = r"언어|language|言語|ngôn ngữ"
+RE_TIENG_VIET = r"^(tiếng việt|vietnamese|베트남어|ベトナム語)"
+URL_NGON_NGU_VI = "https://studio.youtube.com/?hl=vi"
+
+
+def la_tieng_viet(lang: Any, chu: Any) -> bool:
+    """Studio đang hiện tiếng Việt? `<html lang>` bắt đầu `vi` HOẶC thấy >= 2 chữ giao diện tiếng Việt đặc trưng."""
+    if str(lang or "").strip().lower().startswith("vi"):
+        return True
+    t = unicodedata.normalize("NFC", str(chu or ""))
+    return sum(1 for w in CHU_STUDIO_VI if w in t) >= 2
 
 
 def so_moi(kenh: str) -> dict:
@@ -288,6 +303,10 @@ def khac_biet(hs: dict, ht: dict, so: dict, hash_anh: Optional[Dict[str, str]] =
     def mot(m, khac, hien, mong, ghi=""):
         ra[m] = {"khac": khac, "hien": hien, "mong": mong, "ghi": ghi}
 
+    if "ngon_ngu_vi" in ht:
+        mot("ngon_ngu", not ht["ngon_ngu_vi"], "tiếng Việt" if ht["ngon_ngu_vi"] else "KHÔNG phải tiếng Việt", "tiếng Việt")
+    else:
+        mot("ngon_ngu", None, None, "tiếng Việt")
     if "ten" in ht:
         mot("ten", chuan(ht["ten"]) != chuan(hs.get("ten")), ht["ten"], hs.get("ten"))
     else:
@@ -517,6 +536,14 @@ def kenh_den_luot(luc: float, dang_chay=(), goc: str = GOC_TOOL, ram=None, nang_
     r = nuoi.duoc_mo_them(len(nuoi.cac_kenh_dang_nuoi()), ram_gb(ram))
     if r:
         return [], dict(ly, **{k: r for k in ung})
+    # 04/10/2026: XOAY VÒNG — kênh lâu chưa thử nhất đi trước (giờ sửa nhật ký kênh). Trước đây luôn lấy kênh
+    # đầu danh sách: TL4-T7-K2 bị hoãn mãi (gói chờ tải kẹt) chặn TL6-T7/TL6-T7-K2 đã sẵn sàng phía sau.
+    def _lan_thu_cuoi(k: str) -> float:
+        try:
+            return os.path.getmtime(os.path.join(THU_MUC_SO, k + ".log"))
+        except OSError:
+            return 0.0
+    ung.sort(key=_lan_thu_cuoi)
     return ung[:1], dict(ly, **{k: "xếp hàng sau {0}".format(ung[0]) for k in ung[1:]})
 
 
@@ -592,6 +619,29 @@ _JS_DS_PHAT = "(() => {" + _JS_CHUNG + r"""
   const dem = (((s.innerText || '').match(/\d+\s*[–-]\s*\d+\s*\/\s*\d+/) || [''])[0]) || '';
   return {ten: [...new Set(ten)], chu: (s.innerText || '').slice(0, 3000), phan_trang: dem};
 })()"""
+
+
+_JS_NGON_NGU = """(() => ({lang: document.documentElement.lang || '', chu: (document.body ? document.body.innerText : '').slice(0, 5000)}))()"""
+
+#: Phần tử bấm được có NHÃN (aria-label) hoặc chữ khớp regex (tuỳ chọn: chỉ trong hộp thoại); trả tâm điểm.
+_JS_THEO_NHAN = """((reSrc, loaiSrc, sel) => { const Y = window.__yd, re = new RegExp(reSrc, 'i'), loai = loaiSrc ? new RegExp(loaiSrc, 'i') : null; const ra = [];
+  for (const e of Y.qsa(Y.goc(), sel || 'button, [role=button], a, li, [role=option], [role=radio], [role=menuitem], [role=listitem], [role=combobox], label')) {
+    if (!Y.hien(e)) continue; const nh = (e.getAttribute('aria-label') || '') + ' ' + Y.chuan(e.innerText || ''); if (!re.test(nh) || (loai && loai.test(nh)) || nh.length > 160) continue;
+    const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue;
+    ra.push({chu: nh.trim().slice(0, 80), x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height}); }
+  ra.sort((a, b) => (a.w * a.h - b.w * b.h)); return ra.slice(0, 5); })"""
+
+#: Hộp menu đang mở (avatar → menu → danh sách ngôn ngữ): chữ từng hộp, để GHI NHẬT KÝ khi dò.
+_JS_MENU_MO = """(() => { const Y = window.__yd; return Y.qsa(Y.goc(), 'tp-yt-iron-dropdown, ytcp-multi-page-menu, ytd-multi-page-menu-renderer, ytcp-popup-container, [role=menu], [role=listbox]')
+  .filter(e => Y.hien(e)).map(e => Y.chuan(e.innerText).slice(0, 700)).filter(x => x); })()"""
+
+#: Mục (trong menu đang mở) có chữ khớp regex: trả tâm điểm bấm + chữ. Chọn mục NGẮN nhất (sát lá nhất).
+_JS_MUC_MENU = """((reSrc) => { const Y = window.__yd, re = new RegExp(reSrc, 'i'); const ra = [];
+  for (const e of Y.qsa(Y.goc(), 'tp-yt-paper-item, tp-yt-paper-icon-item, ytd-compact-link-renderer, [role=menuitem], [role=option], [role=radio], a, ytcp-ve, yt-formatted-string, li')) {
+    if (!Y.hien(e)) continue; const t = Y.chuan(e.innerText || e.textContent); if (!t || t.length > 80 || !re.test(t)) continue;
+    const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue;
+    ra.push({chu: t, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height}); }
+  ra.sort((a, b) => (a.chu.length - b.chu.length) || (a.w * a.h - b.w * b.h)); return ra.slice(0, 5); })"""
 
 
 # ═══════════════════════════ ĐIỀU KHIỂN STUDIO ══════════════════════════════
@@ -700,6 +750,124 @@ class Studio:
             self.kiem_chan()
             self.ngu(1.5)
         raise CanNguoi("không vào được Studio của kênh (URL {0}) — chưa đăng nhập hoặc tài khoản có nhiều kênh".format(self.url()[:80]))
+
+    # ── ngôn ngữ giao diện Studio ──
+    def doc_ngon_ngu(self, han: float = 25.0) -> Tuple[bool, str, str]:
+        """Đọc ngôn ngữ giao diện Studio hiện tại ở trang đang mở. Trả (là_tiếng_Việt, html_lang, trích_chữ)."""
+        het = time.monotonic() + han
+        du: dict = {}
+        while True:
+            try:
+                du = self.js(_JS_NGON_NGU) or {}
+            except Exception:  # noqa: BLE001
+                du = {}
+            # trang dựng xong khi thanh bên có chữ (>= 8 dòng) — chưa xong thì đợi
+            if len((du.get("chu") or "").split("\n")) >= 8 or time.monotonic() >= het:
+                break
+            self.ngu(1.5)
+        lang, chu = str(du.get("lang") or ""), str(du.get("chu") or "")
+        return la_tieng_viet(lang, chu), lang, " ".join(chu.split())[:160]
+
+    def _bam_muc_menu(self, re_src: str, nhan: str, han: float = 8.0) -> str:
+        """Bấm mục menu theo regex chữ (tâm điểm bằng chuột thật). Trả chữ mục đã bấm; không thấy → LoiMuc."""
+        het = time.monotonic() + han
+        while True:
+            try:
+                ds = self.js("({0})({1})".format(_JS_MUC_MENU, json.dumps(re_src, ensure_ascii=False))) or []
+            except Exception:  # noqa: BLE001
+                ds = []
+            if ds:
+                x = ds[0]
+                self.st._bam_diem(round(x["x"], 1), round(x["y"], 1))      # noqa: SLF001
+                return x["chu"]
+            if time.monotonic() >= het:
+                self.ghi("   menu hiện: {0}".format(" || ".join(self.js(_JS_MENU_MO) or [])[:500]))
+                self.chup("ngon-ngu-khong-thay-" + nhan)
+                raise LoiMuc("không thấy mục «{0}» trong menu".format(nhan))
+            self.ngu(0.8)
+
+    def _bam_nhan(self, re_src: str, nhan: str, loai: str = "", han: float = 8.0, sel: str = "") -> str:
+        """Bấm phần tử theo NHÃN/chữ khớp regex (chuột thật vào tâm điểm). Không thấy → LoiMuc."""
+        het = time.monotonic() + han
+        while True:
+            try:
+                ds = self.js("({0})({1},{2},{3})".format(_JS_THEO_NHAN, json.dumps(re_src, ensure_ascii=False),
+                                                       json.dumps(loai, ensure_ascii=False), json.dumps(sel))) or []
+            except Exception:  # noqa: BLE001
+                ds = []
+            if ds:
+                self.st._bam_diem(round(ds[0]["x"], 1), round(ds[0]["y"], 1))      # noqa: SLF001
+                return ds[0]["chu"]
+            if time.monotonic() >= het:
+                self.chup("khong-thay-" + nhan.replace(" ", "-")[:30])
+                raise LoiMuc("không thấy «{0}»".format(nhan))
+            self.ngu(0.8)
+
+    def _ngon_ngu_tai_khoan(self, ghi) -> None:
+        """Đường CHÍNH: Studio theo ngôn ngữ của TÀI KHOẢN Google (menu youtube.com chỉ đổi riêng trình duyệt).
+        myaccount.google.com/language → bút chì sửa ngôn ngữ → ô tìm → «Tiếng Việt» → xác nhận."""
+        self.st.mo("https://myaccount.google.com/language", han=60)
+        self.ngu(4.0)
+        self.kiem_chan()
+        sua = self._bam_nhan(r"수정|edit|chỉnh sửa|sửa|編集|변경", "삭제|delete|xóa|xoá|저장|save", "nút sửa ngôn ngữ ưu tiên")
+        ghi("   bấm «{0}»".format(sua))
+        self.ngu(2.5)
+        self._bam_nhan(r"기본 언어|default language|preferred language|ngôn ngữ", "nhãn ô tìm", sel="input")
+        self.ngu(0.6)
+        self.st._chen("Tiếng Việt")                                 # noqa: SLF001
+        self.ngu(2.0)
+        muc = self._bam_nhan(r"tiếng việt|vietnamese|베트남어", "Tiếng Việt trong danh sách", loai=r"취소|cancel|hủy",
+                             sel="li, [role=option], [role=radio], [role=listitem], label")
+        ghi("   chọn «{0}»".format(muc))
+        self.ngu(1.0)
+        try:                                                        # nút của HỘP («Lưu ngôn ngữ đã chọn») trước, nút «Lưu» của ngôn ngữ khác sau
+            luu = self._bam_nhan(r"선택한 언어|selected language|ngôn ngữ đã chọn", "nút lưu ngôn ngữ đã chọn", han=3.0, sel="button, [role=button]")
+        except LoiMuc:
+            luu = self._bam_nhan(r"저장|save|lưu", "nút lưu ngôn ngữ", loai=r"English|영어", sel="button, [role=button]")
+        ghi("   bấm «{0}»".format(luu))
+        self.ngu(5.0)
+        ghi("   trang tài khoản sau khi lưu: {0}".format(" ".join(str(self.js(_JS_NGON_NGU).get("chu"))[:120].split())))
+
+    def dat_ngon_ngu(self, ghi, chi_doc: bool = False) -> dict:
+        """ĐẶT ngôn ngữ giao diện Studio = Tiếng Việt (chạy ĐẦU TIÊN: Studio tiếng Hàn làm hỏng mọi bước tìm theo chữ).
+        Đọc trước → đã Việt thì thôi. Đường 1: ngôn ngữ ƯU TIÊN của tài khoản Google (Studio theo cái này; menu avatar
+        Studio không có mục ngôn ngữ, menu youtube.com chỉ đổi riêng trình duyệt — đo 04/10). Đường 2: `?hl=vi`. Xong ĐỌC LẠI.
+        Trả {ket: giong|doi|hong|khac (chi_doc), lang_truoc, lang_sau, chu}."""
+        da_vi, lang, chu = self.doc_ngon_ngu()
+        ghi("ngôn ngữ Studio: html lang={0!r} → {1} (chữ: {2})".format(lang, "TIẾNG VIỆT" if da_vi else "KHÔNG phải tiếng Việt", chu[:90]))
+        kq = {"ket": "giong" if da_vi else "khac", "lang_truoc": lang, "lang_sau": lang, "chu": chu}
+        if da_vi or chi_doc:
+            return kq
+        loi_cuoi = ""
+        for cach in ("tai_khoan", "hl"):
+            try:
+                if cach == "tai_khoan":
+                    self._ngon_ngu_tai_khoan(ghi)
+                else:
+                    self.st.mo(URL_NGON_NGU_VI, han=60)
+                    self.ngu(4.0)
+                self.kiem_chan()
+                self.st.mo("https://studio.youtube.com/", han=60)
+                self.ngu(3.0)
+                da_vi, lang2, chu2 = self.doc_ngon_ngu()
+                kq.update(lang_sau=lang2, chu=chu2)
+                ghi("   đọc lại sau đường {0}: html lang={1!r} → {2}".format(cach, lang2, "TIẾNG VIỆT" if da_vi else "vẫn không phải"))
+                if da_vi:
+                    kq["ket"] = "doi"
+                    return kq
+                loi_cuoi = "đường {0}: đọc lại vẫn không phải tiếng Việt".format(cach)
+            except CanNguoi:
+                raise
+            except Exception as e:  # noqa: BLE001
+                loi_cuoi = "đường {0}: {1}".format(cach, str(e)[:120])
+                ghi("   {0}".format(loi_cuoi))
+                try:
+                    self.st.phim("Escape")
+                except Exception:  # noqa: BLE001
+                    pass
+        self.chup("ngon-ngu-hong")
+        kq["ket"], kq["ly_do"] = "hong", loi_cuoi
+        return kq
 
     # ── đọc ──
     def doc_ho_so(self) -> dict:
@@ -1273,9 +1441,11 @@ def ly_do_dung(agent, kenh: str, luc: float) -> str:
 
 
 def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_luu: bool = False,
-               bo_qua_khung: bool = False, rng=None) -> int:
+               bo_qua_khung: bool = False, rng=None, chi_ngon_ngu: bool = False) -> int:
+    """`chi_ngon_ngu`: CHỈ kiểm/đặt ngôn ngữ Studio = Tiếng Việt (không đụng hồ sơ, không ghi sổ thiết lập; kết quả
+    ghi `logs/thiet-lap-kenh/<K>.ngon-ngu.json`); kết hợp `thu` = chỉ ĐỌC."""
     global _KHONG_GHI_SO, _BO_QUA_KHE
-    _KHONG_GHI_SO = bool(thu or khong_luu)
+    _KHONG_GHI_SO = bool(thu or khong_luu or chi_ngon_ngu)
     _BO_QUA_KHE = bool(bo_qua_khung)
     rng = rng or random.Random()
     luc0 = time.time()
@@ -1284,7 +1454,7 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         so["muc"] = {m: ({"tt": "chua"} if (v or {}).get("tt") in ("can_nguoi", "hong", "cho") else v) for m, v in so["muc"].items()}
         so["tu_choi"], so["trang_thai"], so["nghi_den_luc"] = {}, "dang_lam", 0.0
         ghi("--mo-lai: xoá trạng thái can_nguoi/hong/từ chối cũ")
-    if not thu and not khong_luu:
+    if not thu and not khong_luu and not chi_ngon_ngu:
         ok, ly = quyet_dinh(so, luc0, NGAN_SACH_PHIEN_PHUT, bo_qua_khung)
         if not ok:
             ghi("bỏ qua: " + ly)
@@ -1293,7 +1463,7 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         ghi("hoãn: " + khung_cam(luc0, 0))
         return MA_HOAN
     try:
-        hs = chuan_bi_ho_so(kenh, ghi)
+        hs = {} if chi_ngon_ngu else chuan_bi_ho_so(kenh, ghi)
     except Exception as e:  # noqa: BLE001
         ghi("hồ sơ lỗi: {0}".format(str(e)[:200]))
         return 1
@@ -1301,7 +1471,8 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
     try:
         kiem_truoc_khi_chay(agent, kenh)
         for r in (nuoi.viec_dang_cho(agent, luc0, kenh), "khe nang của máy đang bận" if (CHO_KHE_NANG and nuoi.khe_nang_ban() and not bo_qua_khung) else ""):
-            if r:
+            # chi_ngon_ngu: gói chờ tải lên KHÔNG chặn — chính việc sửa ngôn ngữ mở đường cho gói đó (khoá Chrome kênh vẫn canh)
+            if r and not (chi_ngon_ngu and "có gói chờ tải lên" in r):
                 raise Hoan("nhường: " + r)
     except Hoan as h:
         ghi("hoãn: {0}".format(h))
@@ -1347,7 +1518,7 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
             ghi("hoãn: {0}".format(r))
             phien["ket_qua"] = "hoãn: " + r
             return MA_HOAN
-        if not (thu or khong_luu):
+        if not (thu or khong_luu or chi_ngon_ngu):
             so["phien"].append(phien)
             luu_so(so)
         ghi("── THIẾT LẬP KÊNH {0}{1} ──".format(kenh, " [CHỈ ĐỌC]" if thu else (" [không lưu]" if khong_luu else "")))
@@ -1374,7 +1545,25 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         uc = S.vao_studio()
         so["uc"] = uc
         ghi("kênh Studio {0}".format(uc))
+        # BƯỚC 0 — NGÔN NGỮ STUDIO (trước mọi mục: Studio tiếng Hàn làm hỏng mọi bước tìm theo chữ vi/ja/en)
+        nn = S.dat_ngon_ngu(ghi, chi_doc=thu)
+        if chi_ngon_ngu:
+            nn["kenh"], nn["luc"] = kenh, time.strftime("%Y-%m-%d %H:%M:%S")
+            if not thu:
+                try:
+                    with open(os.path.join(THU_MUC_SO, kenh + ".ngon-ngu.json"), "w", encoding="utf-8") as tep:
+                        json.dump(nn, tep, ensure_ascii=False, indent=1)
+                except OSError:
+                    pass
+            phien["ket_qua"] = "ngôn ngữ: " + nn["ket"]
+            ghi("*** NGÔN NGỮ STUDIO {0}: {1} (trước {2!r} → sau {3!r}) ***".format(kenh, nn["ket"].upper(), nn["lang_truoc"], nn["lang_sau"]))
+            return 0 if nn["ket"] in ("giong", "doi", "khac") else 1
+        if nn["ket"] == "hong":
+            hong_muc(so, "ngon_ngu", nn.get("ly_do") or "không đổi được sang tiếng Việt")
+            luu_so(so)
+            raise RuntimeError("ngôn ngữ Studio không phải tiếng Việt và không đổi được: {0}".format(nn.get("ly_do")))
         ht, loi_doc = S.doc_hien_trang()
+        ht["ngon_ngu_vi"] = nn["ket"] in ("giong", "doi")
         for k, v in loi_doc.items():
             ghi("   không đọc được nhóm {0}: {1}".format(k, v))
         thu_muc_hs = _tl().thu_muc_thiet_lap(kenh)
@@ -1583,6 +1772,7 @@ def main(argv=None) -> int:
     ap.add_argument("--mo-lai", action="store_true", help="xoá can_nguoi/hong/từ chối cũ rồi chạy")
     ap.add_argument("--khong-luu", action="store_true", help="(dev) điền nhưng KHÔNG Xuất bản/Lưu")
     ap.add_argument("--bo-qua-khung", action="store_true", help="(dev) bỏ khung cấm 02–07h")
+    ap.add_argument("--ngon-ngu", action="store_true", help="CHỈ kiểm/đặt ngôn ngữ Studio = Tiếng Việt (kèm --thu = chỉ đọc)")
     ap.add_argument("--nhom", default="", help="(dev) chỉ chạy nhóm: ho_so,cai_dat_kenh,mac_dinh,ds_phat")
     a = ap.parse_args(argv)
     ghi = _nhat_ky(a.kenh)
@@ -1590,13 +1780,13 @@ def main(argv=None) -> int:
     if not d:
         ghi("không thấy kenh.yaml của {0}".format(a.kenh))
         return 1
-    if not a.thu and not a.khong_luu and not thiet_lap_bat(a.kenh) and not a.mo_lai:
+    if not a.thu and not a.khong_luu and not a.ngon_ngu and not thiet_lap_bat(a.kenh) and not a.mo_lai:
         so = doc_so(a.kenh)
         ghi("kênh {0} không bật thiet_lap_kenh: true — không chạy{1}".format(a.kenh, " (đã xong)" if so.get("trang_thai") == "xong" else ""))
         return MA_KHONG_CAN
     global _NHOM_CHON
     _NHOM_CHON = {x.strip() for x in a.nhom.split(",") if x.strip()} or None
-    return chay_phien(a.kenh, ghi, thu=a.thu, mo_lai=a.mo_lai, khong_luu=a.khong_luu, bo_qua_khung=a.bo_qua_khung)
+    return chay_phien(a.kenh, ghi, thu=a.thu, mo_lai=a.mo_lai, khong_luu=a.khong_luu, bo_qua_khung=a.bo_qua_khung, chi_ngon_ngu=a.ngon_ngu)
 
 
 if __name__ == "__main__":
