@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.23** — 2026-10-04 — `vps-jp1` — dat_ngon_ngu: duong du phong cookie PREF hl=<dich> (giu cap khac) khi tai khoan Google da doi ma Studio van chua doi
 - **2.149.22** — 2026-10-04 — `vps-jp1` — fix(thiet lap kenh): Xuat ban that bai khong bao DAT sai (bang chung anh cong khai + doc loi Studio), bo ten/handle khi bi chan, --mo-lai giu tu choi, nut Luu ngon ngu dung dich
 - **2.149.21** — 2026-10-04 — `vps-jp1` — Nuoi trang chu: chi bam Khong quan tam khi chac chan lac de (khac ngon ngu, hoac LLM noi khong phai tam ly) - tranh bam nham video tam ly lech ngach
 - **2.149.20** — 2026-10-04 — `vps-jp1` — Nhip tim: ghi trong luc cho extension cao Studio (~25 phut) de bo canh khong khoi dong lai nham agent luc quet dem
