@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.12** — 2026-10-04 — `vps-jp1` — Mo kenh tu dong (core/mo_kenh: de-xuat/chuan-bi/kich-hoat) + ngon ngu tai khoan theo quoc gia (ngon_ngu_tai_khoan_dich) + mau ngay/nut Studio tieng Nhat
 - **2.149.11** — 2026-10-04 — `vps-jp1` — Studio tiếng Việt: bước ngôn ngữ tài khoản (thiet_lap_kenh_dom) + đọc ngày kiểu Hàn '2026. 10. 5.' (may_dang_dom) + test
 - **2.149.10** — 2026-10-04 — `vps-jp1` — May dang DOM: nhan chu trang thai Studio tieng Han (TL6-T7-K2 Studio tieng Han, ket o 'tien do ?')
 - **2.149.9** — 2026-10-04 — `vps-jp1` — Tai bo sung: hut khoa thi thu lai moi phut (co uu tien tai len song 5 phut, truoc day doi 25 phut nen co het han)
