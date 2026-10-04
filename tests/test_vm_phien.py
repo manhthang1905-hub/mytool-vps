@@ -280,7 +280,11 @@ def test_phien_chi_thanh_cong_khi_hai_bang_du_lieu_da_ve_hom_nay(tmp_path, monke
     cs.mkdir(parents=True)
     (tmp_path / "vps.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(agent, "GOC", str(vm))
+    monkeypatch.setattr(agent, "_kenh_da_co_video", lambda k: True)   # kênh đã có video: luật đủ số liệu như cũ
     assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is False
+    monkeypatch.setattr(agent, "_kenh_da_co_video", lambda k: False)  # 04/10: kênh mới chưa có video → không đòi
+    assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is None
+    monkeypatch.setattr(agent, "_kenh_da_co_video", lambda k: True)
     (cs / "bang-tom-tat.csv").write_text("Video\n", encoding="utf-8")
     (cs / "kenh-theo-ngay.csv").write_text("Ngày\n", encoding="utf-8")
     assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is True
@@ -293,6 +297,7 @@ def test_thieu_bang_du_lieu_thi_tu_xep_mot_lan_sua(tmp_path, monkeypatch):
     vm.mkdir()
     (tmp_path / "vps.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(agent, "GOC", str(vm))
+    monkeypatch.setattr(agent, "_kenh_da_co_video", lambda k: True)   # kênh đã có video: luật đủ số liệu như cũ
     monkeypatch.setattr(agent, "tim_chrome", lambda _ch: "C:/A/A.exe")
     hom_nay = time.strftime("%Y-%m-%d")
     cau_hinh = {}

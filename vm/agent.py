@@ -3774,8 +3774,17 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                 vua_chay_phien = chay_hang_doi_phien(cau_hinh, hieu_luc, cac_kenh)
             except Exception as loi:  # noqa: BLE001 — một phiên hỏng, agent sống, mai lại tới lượt
                 ghi("hàng đợi phiên hỏng: {0}".format(loi))
+            # Tải lên BỔ SUNG — 04/10/2026: đứng TRƯỚC quét ngày (luật ưu tiên "đăng đúng giờ > quét Studio");
+            # trước đây một lượt quét ~25' mở ra ngay sau khởi động, video chờ tải phải đợi.
+            vua_tai = False
+            if not vua_chay_phien and not mot_vong:
+                try:
+                    vua_tai = chay_tai_bo_sung(cau_hinh, hieu_luc, cac_kenh)
+                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
+                    ghi("tải bổ sung hỏng: {0}".format(loi))
+                vua_chay_phien = vua_tai
             # QUÉT NGÀY (30/09/2026) — việc quét độc lập, khung đêm, sau phiên
-            # (phiên có hạn giờ thật), trước tải bổ sung.
+            # (phiên có hạn giờ thật) và sau tải bổ sung.
             if not vua_chay_phien and not mot_vong:
                 try:
                     vua_chay_phien = chay_quet_ngay(cau_hinh, hieu_luc, cac_kenh)
@@ -3793,14 +3802,8 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                     vua_chay_phien = chay_sua_video(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("sửa video hỏng: {0}".format(loi))
-            # Tải lên BỔ SUNG (gói xong sau phiên sáng) — chỉ khi nhịp này không
-            # vừa chạy phiên; tự giãn 25 phút/lần, tự nhường khoá/van/khe :00.
+            # (Tải lên bổ sung đã chạy ở đầu nhịp — xem trên.)
             if not vua_chay_phien and not mot_vong:
-                vua_tai = False
-                try:
-                    vua_tai = chay_tai_bo_sung(cau_hinh, hieu_luc, cac_kenh)
-                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
-                    ghi("tải bổ sung hỏng: {0}".format(loi))
                 # Ghim sớm bình luận mồi cho video vừa công khai (máy bình luận DOM).
                 if not vua_tai:
                     try:
