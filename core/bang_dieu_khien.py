@@ -723,6 +723,16 @@ def doc_kiem_dom(thu_muc_vm: str, ma: str) -> Optional[Dict[str, Any]]:
         return None
     du = dict(du)
     du["hong_ten"] = [_TEN_BUOC_KIEM.get(b, b) for b in (du.get("hong") or [])]
+    # 04/10/2026: kết quả kiểm HỎNG cũ hơn một lượt ĐĂNG THÀNH CÔNG của chính kênh → hết hiệu lực (máy đăng
+    # đã chứng minh chạy được). Trước đây kiểm lúc kênh mới chưa có video (danh sách trống) bị báo "khẩn" mỗi giờ.
+    if not du.get("ok", True):
+        so = _doc_json(os.path.join(thu_muc_vm, "logs", "so-video-id.json"))
+        ngay_kiem = str(du.get("ngay") or "")
+        sau = [str(v.get("cap_nhat") or "") for k, v in (so or {}).items()
+               if str(k).startswith(ma + "/") and isinstance(v, dict) and v.get("trang_thai") == "xac-nhan"]
+        if ngay_kiem and any(c > ngay_kiem for c in sau):
+            du["ok"] = True
+            du["het_hieu_luc"] = "đã đăng thành công sau lần kiểm {0}".format(ngay_kiem)
     return du
 
 
