@@ -2406,6 +2406,33 @@ def _du_lieu_kenh_da_ve_hom_nay(cau_hinh: dict, kenh: str, ngay: str = None):
     return True
 
 
+#: Trang chủ của kênh chỉ là nguồn đối thủ đáng tin khi lần đo nuôi trang chủ gần nhất > ngưỡng này (%).
+TRANG_CHU_TIN_CAY_PCT = 90.0
+
+
+def trang_chu_tin_cay(kenh: str) -> Tuple[bool, str]:
+    """04/10/2026 (chủ dự án): trang chủ kênh mới / chưa nuôi xong toàn chủ đề linh tinh → cào về là rác.
+    Chỉ cào khi `kenh.yaml` khai `trang_chu_tin_cay: true` (TL4-T7 — chủ xác nhận) HOẶC lần đo gần nhất
+    của `vm/logs/nuoi-trang-chu/<kênh>.json` có % chủ đề > TRANG_CHU_TIN_CAY_PCT. Đọc hỏng → không cào."""
+    try:
+        with open(os.path.join(os.path.dirname(GOC), "CHANNEL", kenh, "kenh.yaml"), "r", encoding="utf-8") as tep:
+            if re.search(r"(?m)^trang_chu_tin_cay:\s*true\s*$", tep.read()):
+                return True, "chủ xác nhận trang chủ tin cậy"
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(GOC, "logs", "nuoi-trang-chu", kenh + ".json"), "r", encoding="utf-8") as tep:
+            lan = (json.load(tep) or {}).get("lan_do") or []
+    except (OSError, ValueError):
+        lan = []
+    if not lan:
+        return False, "trang chủ chưa đo độ đúng chủ đề (nuôi trang chủ chưa đo)"
+    pct = float(lan[-1].get("pct_chu_de") or 0)
+    if pct > TRANG_CHU_TIN_CAY_PCT:
+        return True, "trang chủ {0:.0f}% đúng chủ đề".format(pct)
+    return False, "trang chủ mới {0:.0f}% đúng chủ đề (cần > {1:.0f}%) — đang nuôi".format(pct, TRANG_CHU_TIN_CAY_PCT)
+
+
 def _kenh_da_co_video(kenh: str) -> bool:
     """Sổ videoId có ít nhất một video của kênh đã tải lên (có video_id)."""
     so = _doc_so_video_id()
@@ -2636,7 +2663,11 @@ def chay_quet_ngay_mot_kenh(cau_hinh: dict, ch: dict, kenh: str) -> dict:
         except Exception as loi:  # noqa: BLE001 — bước hỏng, lượt vẫn đi tiếp
             ket["quet_studio"] = "lỗi: {0}".format(loi)
             ghi("QUÉT NGÀY kênh {0}: Studio lỗi: {1}".format(kenh, loi))
-        if bool(ch.get("quet_trang_chu_hang_ngay", True)):
+        tin_tc, ly_tc = trang_chu_tin_cay(kenh)
+        if bool(ch.get("quet_trang_chu_hang_ngay", True)) and not tin_tc:
+            ket["quet_trang_chu"] = "bỏ: " + ly_tc
+            ghi("QUÉT NGÀY kênh {0}: KHÔNG cào trang chủ — {1}".format(kenh, ly_tc))
+        elif bool(ch.get("quet_trang_chu_hang_ngay", True)):
             try:
                 ket["quet_trang_chu"] = quet_trang_chu(ch_phien)
             except Exception as loi:  # noqa: BLE001
