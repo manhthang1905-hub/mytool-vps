@@ -767,8 +767,10 @@ def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
             "Phật pháp/tâm linh, truyện đọc, học ngoại ngữ, video không phải tiếng Nhật, ...).\n"
             "QUAN TRỌNG: video của QUỐC GIA/NGÔN NGỮ KHÁC (tiếng Việt, Anh, Hàn, Trung…) luôn là lac_de, kể cả khi "
             "cũng nói về tâm lý.\n"
+            "Thêm trường \"tam_ly\": true nếu video NÓI VỀ tâm lý học / hiểu người / não bộ (bất kể ngách hay ngôn ngữ), "
+            "false nếu hoàn toàn không phải (nấu ăn, game, tin tức, nhạc…).\n"
             "Danh sách (số|tiêu đề|kênh):\n{1}\n"
-            "Chỉ trả JSON thuần: [{{\"i\":1,\"nhan\":\"dung_ngach\"}}, ...] đủ {2} phần tử.").format(mo_ta, ds, len(lo))
+            "Chỉ trả JSON thuần: [{{\"i\":1,\"nhan\":\"dung_ngach\",\"tam_ly\":true}}, ...] đủ {2} phần tử.").format(mo_ta, ds, len(lo))
         try:
             if GOC_TOOL not in sys.path:
                 sys.path.insert(0, GOC_TOOL)
@@ -784,7 +786,21 @@ def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
                 continue
             if x.get("nhan") in NHAN_HOP_LE:
                 ra[o["id"]] = cache[o["id"]] = x["nhan"]
+                if isinstance(x.get("tam_ly"), bool):
+                    cache["tl:" + o["id"]] = x["tam_ly"]
     return ra
+
+
+def chac_lac_de(o: dict, cache: dict) -> bool:
+    """Được bấm "Không quan tâm" KHÔNG — chặt hơn nhãn `lac_de` (04/10/2026: máy từng bấm cả video tâm lý tiếng
+    Nhật bị LLM xếp lệch ngách). CHỈ khi: khác ngôn ngữ/quốc gia (mã), HOẶC LLM khẳng định KHÔNG phải tâm lý
+    (`tam_ly` False). Chưa biết `tam_ly` → không bấm (an toàn: bỏ sót hơn bấm nhầm)."""
+    vid = o.get("id")
+    if not vid:
+        return False
+    if sai_ngon_ngu(o.get("tieu_de")):
+        return True
+    return cache.get(vid) == "lac_de" and cache.get("tl:" + vid) is False
 
 
 # ═══════════════════════════ TRÌNH DUYỆT (CDP) ══════════════════════════════
@@ -1242,7 +1258,7 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
             for x in o:
                 if n >= toi_da or phien["khong_quan_tam"] >= TOI_DA_KHONG_QUAN_TAM:
                     break
-                if nl.get(x["id"]) == "lac_de" and khong_quan_tam(tab, x["id"], ghi):
+                if nl.get(x["id"]) == "lac_de" and chac_lac_de(x, so["cache"]) and khong_quan_tam(tab, x["id"], ghi):
                     n += 1
                     phien["khong_quan_tam"] += 1
                     ghi("   Không quan tâm: {0} — {1}".format(x["kenh"][:20], x["tieu_de"][:40]))

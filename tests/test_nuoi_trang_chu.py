@@ -416,3 +416,12 @@ def test_noi_dung_khac_quoc_gia_la_lac_de_bang_ma():
     goi_bi_goi = []
     ra = n.phan_loai(lambda p: goi_bi_goi.append(p) or "[]", "ngách", [{"id": "aaaaaaaaaaa", "tieu_de": "Tâm lý học", "kenh": "X"}], {})
     assert ra == {"aaaaaaaaaaa": "lac_de"} and goi_bi_goi == []
+
+
+def test_chi_bam_khong_quan_tam_khi_chac_chan_lac_de():
+    """04/10: video tâm lý tiếng Nhật lệch ngách KHÔNG bị bấm; chỉ bấm khi khác ngôn ngữ hoặc LLM nói không phải tâm lý."""
+    c = {"a1": "lac_de", "tl:a1": True, "a2": "lac_de", "tl:a2": False, "a3": "lac_de"}
+    assert not n.chac_lac_de({"id": "a1", "tieu_de": "恋愛心理学のすごい話"}, c)      # tâm lý, lệch ngách
+    assert n.chac_lac_de({"id": "a2", "tieu_de": "簡単レシピで晩ごはん"}, c)          # LLM: không phải tâm lý
+    assert not n.chac_lac_de({"id": "a3", "tieu_de": "ゲーム実況です"}, c)             # chưa biết tam_ly → không bấm
+    assert n.chac_lac_de({"id": "a4", "tieu_de": "那些成年後依舊能輕鬆交到真心朋友的人"}, c)   # khác ngôn ngữ (không kana)
