@@ -66,7 +66,8 @@ CHU_KY_LICH_AGENT_GIAY = 10 * 60
 NGAN_SACH_PHIEN_PHUT = 90                # quá ngần này thì thôi không mở video mới
 NHIN_TRUOC_PHIEN_PHUT = 25               # phiên kênh đăng sắp tới trong ngần này => nhường
 CHO_NHUONG_GIAY = 120
-TOI_DA_KHONG_QUAN_TAM = 5
+TOI_DA_KHONG_QUAN_TAM = 30          # 04/10: dọn mạnh — tối đa mỗi phiên (trước 5)
+KHONG_QUAN_TAM_MOI_LAN = 4          # tối đa mỗi lần về trang chủ (đầu phiên gấp đôi)
 TUOI_VIDEO_TOI_DA_NGAY = 60
 #: CHỈ xem video THẮNG (03/10): view tối thiểu + phải ≥ HE_SO_NO × trung vị view của chính kênh đó.
 VIEW_THANG_TOI_THIEU = 30000
@@ -725,10 +726,27 @@ def tao_llm():
                                       mo_hinh="claude-sonnet-5", toi_da_token=4096)
 
 
+#: Ngôn ngữ của kênh đang nuôi (đặt ở đầu `chay_phien` từ kenh.yaml `ngon_ngu`).
+NGON_NGU_KENH = "ja"
+_RE_KANA = re.compile(r"[぀-ヿ]")
+
+
+def sai_ngon_ngu(tieu_de: str, ngon_ngu: str = None) -> bool:
+    """04/10/2026 (chủ dự án): nội dung KHÁC QUỐC GIA/ngôn ngữ (vd tâm lý tiếng Việt trên trang chủ kênh Nhật) là
+    LẠC ĐỀ dù cùng chủ đề — chặn bằng MÃ, không trông LLM. Hiện chỉ chắc cho tiếng Nhật: không có kana = không phải
+    tiếng Nhật (chữ Hán trơn có thể là tiếng Trung). Ngôn ngữ khác: không chặn (để LLM)."""
+    ng = str(ngon_ngu or NGON_NGU_KENH or "").lower()
+    if ng == "ja":
+        return not _RE_KANA.search(str(tieu_de or ""))
+    return False
+
+
 def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
     """{video_id: nhan}. Phân loại theo NGHĨA bằng LLM, cache theo video_id (trong `cache`).
-    Mỗi ô: {id, tieu_de, kenh}. LLM lỗi/thiếu thì ô đó KHÔNG có trong kết quả."""
-    ra = {o["id"]: cache[o["id"]] for o in cac_o if cache.get(o["id"]) in NHAN_HOP_LE}
+    Mỗi ô: {id, tieu_de, kenh}. LLM lỗi/thiếu thì ô đó KHÔNG có trong kết quả.
+    Ô sai ngôn ngữ của kênh → `lac_de` ngay bằng mã (không gọi LLM)."""
+    ra = {o["id"]: "lac_de" for o in cac_o if o.get("id") and sai_ngon_ngu(o.get("tieu_de"))}
+    ra.update({o["id"]: cache[o["id"]] for o in cac_o if o["id"] not in ra and cache.get(o["id"]) in NHAN_HOP_LE})
     chua = [o for o in cac_o if o["id"] not in ra]
     for i in range(0, len(chua), 30):
         lo = chua[i:i + 30]
@@ -742,6 +760,8 @@ def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
             "- dung_chu_de: là tâm lý học/não khoa học tiếng Nhật nhưng KHÔNG đúng ngách cụ thể.\n"
             "- lac_de: mọi thứ khác (nấu ăn, game, tin tức, nhạc, giải trí, y tế/sức khoẻ thuần, tiền hưu/tài chính, "
             "Phật pháp/tâm linh, truyện đọc, học ngoại ngữ, video không phải tiếng Nhật, ...).\n"
+            "QUAN TRỌNG: video của QUỐC GIA/NGÔN NGỮ KHÁC (tiếng Việt, Anh, Hàn, Trung…) luôn là lac_de, kể cả khi "
+            "cũng nói về tâm lý.\n"
             "Danh sách (số|tiêu đề|kênh):\n{1}\n"
             "Chỉ trả JSON thuần: [{{\"i\":1,\"nhan\":\"dung_ngach\"}}, ...] đủ {2} phần tử.").format(mo_ta, ds, len(lo))
         try:
@@ -1206,14 +1226,31 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
                 ghi("ĐO KHÔNG TÍNH ({0}): chỉ phân loại được {1} ô (cần >= {2}) — {3} ô đọc được".format(
                     nhan, ket["n"], TOI_THIEU_O_DO, len(o)))
 
+        def day_lac_de(o: list, nl: dict, toi_da: int) -> None:
+            """04/10/2026 (chủ dự án): VỪA bấm "Không quan tâm" mọi ô lạc đề (kể cả khác quốc gia) VỪA xem tích cực
+            đúng chủ đề → trang chủ sạch nhanh. Mỗi lần về trang chủ đều dọn, không đợi 3–5 video."""
+            n = 0
+            for x in o:
+                if n >= toi_da or phien["khong_quan_tam"] >= TOI_DA_KHONG_QUAN_TAM:
+                    break
+                if nl.get(x["id"]) == "lac_de" and khong_quan_tam(tab, x["id"], ghi):
+                    n += 1
+                    phien["khong_quan_tam"] += 1
+                    ghi("   Không quan tâm: {0} — {1}".format(x["kenh"][:20], x["tieu_de"][:40]))
+
+        global NGON_NGU_KENH
+        NGON_NGU_KENH = str(doc_kenh_yaml(kenh).get("ngon_ngu") or "ja").strip().lower()
         # Kiểm trang chủ trước: chưa đăng nhập / CAPTCHA thì dừng ngay. Đọc đủ ô để ĐO luôn đầu phiên.
         o0 = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=30)
         ghi("trang chủ đã đăng nhập, thấy {0} ô video".format(len(o0)))
-        do_va_ghi(o0, phan_loai(goi, mo_ta, o0[:SO_O_DO], so["cache"]), "đầu phiên")
+        nl0 = phan_loai(goi, mo_ta, o0[:SO_O_DO], so["cache"])
+        do_va_ghi(o0, nl0, "đầu phiên")
         if so.get("trang_thai") == "dat":
             chon_truoc = True
         else:
             chon_truoc = False
+            day_lac_de(o0, nl0, KHONG_QUAN_TAM_MOI_LAN * 2)
+            luu_so(so)
         hom = datetime.fromtimestamp(luc0).date()
         ung = doc_ung_vien(kenh, hom)
         cam_id, cam_ten = id_video_cua_minh(), ten_kenh_cua_minh()
@@ -1246,20 +1283,16 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
             if tab.kiem_trang() in ("captcha", "dang_xuat", "dong_y"):
                 raise CanNguoi(tab.kiem_trang())
             tab.cuon_trang_chu(rng.uniform(5, 20))
-            if so_gan >= moc_day and phien["khong_quan_tam"] < TOI_DA_KHONG_QUAN_TAM:
+            # Mỗi lần về trang chủ: đọc + dọn ô lạc đề; ĐO (ghi sổ) mỗi 3–5 video.
+            o = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=25)
+            nl = phan_loai(goi, mo_ta, o, so["cache"])
+            if so_gan >= moc_day:
                 so_gan, moc_day = 0, rng.randint(3, 5)
-                o = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=25)
-                nl = phan_loai(goi, mo_ta, o, so["cache"])
                 do_va_ghi(o, nl, "giữa phiên")
                 if so.get("trang_thai") == "dat":
                     break
-                for x in o:
-                    if phien["khong_quan_tam"] >= TOI_DA_KHONG_QUAN_TAM:
-                        break
-                    if nl.get(x["id"]) == "lac_de" and khong_quan_tam(tab, x["id"], ghi):
-                        phien["khong_quan_tam"] += 1
-                        ghi("   Không quan tâm: {0} — {1}".format(x["kenh"][:20], x["tieu_de"][:40]))
-                luu_so(so)
+            day_lac_de(o, nl, KHONG_QUAN_TAM_MOI_LAN)
+            luu_so(so)
             tab.ngu(rng.uniform(10, 60))
         if not bi_ngat and so.get("trang_thai") != "dat":
             # Đo cuối phiên: nạp lại trang chủ, ~30 ô đầu, LLM phân loại.

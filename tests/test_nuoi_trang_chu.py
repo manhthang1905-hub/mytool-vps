@@ -404,3 +404,15 @@ def test_tran_chrome_khi_may_dang_dung_va_cpu(monkeypatch):
     monkeypatch.setattr(n, "cpu_tong_pct", lambda giay=3.0: 10.0)
     monkeypatch.setattr(n, "khe_nang_viec", lambda goc_tool=None: "tai_len")
     assert n.khe_nang_ban() is True                     # việc đăng giữ khe → nhường tuyệt đối
+
+
+def test_noi_dung_khac_quoc_gia_la_lac_de_bang_ma():
+    """04/10: kênh tiếng Nhật — tiêu đề không có kana (tiếng Việt/Anh/Hàn/Trung) là lạc đề, không cần LLM."""
+    assert n.sai_ngon_ngu("Tâm lý học: 5 dấu hiệu người thao túng", "ja")
+    assert n.sai_ngon_ngu("5 signs of a narcissist", "ja")
+    assert n.sai_ngon_ngu("나르시시스트의 특징", "ja")
+    assert not n.sai_ngon_ngu("【心理学】本当に賢い人の特徴", "ja")
+    assert not n.sai_ngon_ngu("Tâm lý học tiếng Việt", "vi")        # ngôn ngữ khác: để LLM quyết
+    goi_bi_goi = []
+    ra = n.phan_loai(lambda p: goi_bi_goi.append(p) or "[]", "ngách", [{"id": "aaaaaaaaaaa", "tieu_de": "Tâm lý học", "kenh": "X"}], {})
+    assert ra == {"aaaaaaaaaaa": "lac_de"} and goi_bi_goi == []
