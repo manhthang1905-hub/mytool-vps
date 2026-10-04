@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.26** — 2026-10-05 — `vps-jp1` — Quet ngay: kenh chi bi doi du so lieu khi da co video CONG KHAI (lich da qua), khong phai chi moi tai len
 - **2.149.25** — 2026-10-05 — `vps-jp1` — Bo nao: luat ghi ngay bai hoc bi bac bo/xac nhan (khong tinh quota), nhan ban video thang lon khi con nong
 - **2.149.24** — 2026-10-04 — `vps-jp1` — dat_ngon_ngu: them duong cookie PREF hl (code)
 - **2.149.23** — 2026-10-04 — `vps-jp1` — dat_ngon_ngu: duong du phong cookie PREF hl=<dich> (giu cap khac) khi tai khoan Google da doi ma Studio van chua doi
