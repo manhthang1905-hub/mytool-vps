@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.4** — 2026-10-04 — `vps-jp1` — Quet ngay: chi cao trang chu kenh tin cay (kenh.yaml trang_chu_tin_cay: true, hoac lan do nuoi trang chu gan nhat > 90% chu de) - trang chu kenh moi linh tinh la du lieu rac
 - **2.149.3** — 2026-10-04 — `vps-jp1` — Kiem DOM: kenh moi chua co video thi danh sach trong khong bi bao HONG hang_video/hang_tieu_de
 - **2.149.2** — 2026-10-04 — `vps-jp1` — Quet ngay: kenh moi chua co video nao thi khong coi la CHUA DU (tranh quet lai 3 lan/ngay giu Chrome + khe nang vo ich)
 - **2.149.1** — 2026-10-04 — `vps-jp1` — Ghep kenh vao may dang: kenh chua co may-ao.json tu bat tu_dang + cach_dang tu_dong (4 kenh moi lam xong video ma may dang bo qua)
