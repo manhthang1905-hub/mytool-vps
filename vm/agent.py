@@ -1487,6 +1487,7 @@ def _cho_extension_bao_xong(cau_hinh: dict, gioi_han_giay: float, ma: str = "") 
         buoc = min(float(NHIP_GIAY), con_lai)
         time.sleep(buoc)
         con_lai -= buoc
+        nhip_tim("chờ extension cào (còn {0:.0f}s)".format(con_lai))   # chờ dài hợp lệ — không bị coi là treo
         if ma:
             if _mat_cao_bao_xong(cau_hinh, ma):
                 return True
