@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.13** — 2026-10-04 — `vps-jp1` — Dong Chrome kenh: tat launcher Portable con sot sau khi Chrome dong sach (loi 'Chrome dang chay nhung khong co cong DevTools' ma 3 o kenh moi)
 - **2.149.12** — 2026-10-04 — `vps-jp1` — Mo kenh tu dong (core/mo_kenh: de-xuat/chuan-bi/kich-hoat) + ngon ngu tai khoan theo quoc gia (ngon_ngu_tai_khoan_dich) + mau ngay/nut Studio tieng Nhat
 - **2.149.11** — 2026-10-04 — `vps-jp1` — Studio tiếng Việt: bước ngôn ngữ tài khoản (thiet_lap_kenh_dom) + đọc ngày kiểu Hàn '2026. 10. 5.' (may_dang_dom) + test
 - **2.149.10** — 2026-10-04 — `vps-jp1` — May dang DOM: nhan chu trang thai Studio tieng Han (TL6-T7-K2 Studio tieng Han, ket o 'tien do ?')
