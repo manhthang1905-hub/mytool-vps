@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.17** — 2026-10-04 — `vps-jp1` — Nuoi trang chu: noi dung khac quoc gia/ngon ngu = lac de (chan bang ma: kenh Nhat tieu de khong kana); bam Khong quan tam dau phien va moi lan ve trang chu (toi da 30/phien)
 - **2.149.16** — 2026-10-04 — `vps-jp1` — Canh bao kiem DOM: ket qua HONG cu hon mot luot dang thanh cong cua kenh thi het hieu luc (kenh moi bi bao khan moi gio)
 - **2.149.15** — 2026-10-04 — `vps-jp1` — Nuoi trang chu: do % chu de ngay dau phien va giua phien (truoc day chi do cuoi phien, phien hay bi ngat nen khong co lan do nao); dat ngay dau phien thi dung
 - **2.149.14** — 2026-10-04 — `vps-jp1` — Thiet lap kenh: Studio tu choi doi ten/handle (gioi han 2 lan/14 ngay cua YouTube) -> cho 14 ngay roi tu thu lai, khong bat nguoi; khong mo Chrome moi ngay khi chi con ten/handle cho
