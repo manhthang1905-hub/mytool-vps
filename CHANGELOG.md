@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.3** — 2026-10-04 — `vps-jp1` — Kiem DOM: kenh moi chua co video thi danh sach trong khong bi bao HONG hang_video/hang_tieu_de
 - **2.149.2** — 2026-10-04 — `vps-jp1` — Quet ngay: kenh moi chua co video nao thi khong coi la CHUA DU (tranh quet lai 3 lan/ngay giu Chrome + khe nang vo ich)
 - **2.149.1** — 2026-10-04 — `vps-jp1` — Ghep kenh vao may dang: kenh chua co may-ao.json tu bat tu_dang + cach_dang tu_dong (4 kenh moi lam xong video ma may dang bo qua)
 - **2.149.0** — 2026-10-04 — `vps-jp1` — Tu dong hoa dot 1: loc Viec cua ban (cho so -> nhat ky, xem Studio -> bo nao), giam doc tu nang/ha quyen theo thanh tich, cuu_ctr tu ap kenh <1000 sub, de-xuat nao het han 7 ngay, lich tat tu dang ky lai
