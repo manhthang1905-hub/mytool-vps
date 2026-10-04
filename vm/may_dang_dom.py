@@ -107,25 +107,25 @@ log = logging.getLogger("may_dang_dom")
 #: Studio TL4 hiển thị TIẾNG NHẬT (đo 29/09/2026: "公開", "2026/09/28 公開日") —
 #: giữ đủ ba thứ tiếng.
 CHU_TRANG_THAI = {
-    "da_len_lich": ["Đã lên lịch", "Scheduled", "予約済み", "予約", "公開予約"],
-    "cong_khai": ["Công khai", "Public", "公開"],
-    "khong_cong_khai": ["Không công khai", "Unlisted", "限定公開"],
-    "rieng_tu": ["Riêng tư", "Private", "非公開"],
-    "nhap": ["Nháp", "Draft", "下書き"],
-    "loi_tai": ["Tải lên không thành công", "Đã xảy ra lỗi", "đã bị hủy", "アップロードに失敗", "エラーが発生"],
+    "da_len_lich": ["Đã lên lịch", "Scheduled", "予約済み", "予約", "公開予約", "예약됨", "예약"],
+    "cong_khai": ["Công khai", "Public", "公開", "공개"],
+    "khong_cong_khai": ["Không công khai", "Unlisted", "限定公開", "일부 공개"],
+    "rieng_tu": ["Riêng tư", "Private", "非公開", "비공개"],
+    "nhap": ["Nháp", "Draft", "下書き", "임시보관함", "초안"],
+    "loi_tai": ["Tải lên không thành công", "Đã xảy ra lỗi", "đã bị hủy", "アップロードに失敗", "エラーが発生", "업로드 실패", "오류가 발생"],
     # 30/09/2026 — tiến độ tải lên (đo thật ở `ytcp-video-upload-progress`: "Đã tải được
     # 83% … Còn 24 giây" → "Đã hoàn tất quá trình tải lên … Quá trình xử lý sẽ sớm bắt
     # đầu" → "Đang xử lý đến độ phân giải tối đa là HD …" → "Đang kiểm tra 14% …" →
     # "Đã kiểm tra xong. Không phát hiện vấn đề nào."). Xử lý/kiểm tra chỉ chạy SAU khi
     # tải xong, nên cũng là bằng chứng tải xong.
     "da_tai_xong": ["Đã hoàn tất quá trình tải lên", "Đã tải lên", "Tải lên hoàn tất", "Upload complete",
-                    "アップロード完了", "アップロードが完了"],
-    "dang_xu_ly": ["Đang xử lý", "Processing", "処理中"],
-    "dang_kiem_tra": ["Đang kiểm tra", "Checking", "チェック中"],
-    "xu_ly_xong": ["Đã kiểm tra xong", "Checks complete", "Đã xử lý", "チェック完了", "処理が完了"],
-    "dang_tai": ["Đã tải được", "Đang tải lên", "Uploading", "アップロード中"],
+                    "アップロード完了", "アップロードが完了", "업로드 완료", "업로드가 완료"],
+    "dang_xu_ly": ["Đang xử lý", "Processing", "処理中", "처리 중"],
+    "dang_kiem_tra": ["Đang kiểm tra", "Checking", "チェック中", "확인 중", "검사 중"],
+    "xu_ly_xong": ["Đã kiểm tra xong", "Checks complete", "Đã xử lý", "チェック完了", "処理が完了", "검사가 완료", "확인 완료", "처리 완료"],
+    "dang_tai": ["Đã tải được", "Đang tải lên", "Uploading", "アップロード中", "업로드 중"],
     "tai_do": ["bị gián đoạn", "chưa hoàn tất", "Tải lên không thành công", "đã bị hủy",
-               "interrupted", "Upload failed", "Processing abandoned", "アップロードが中断", "処理が中止"],
+               "interrupted", "Upload failed", "Processing abandoned", "アップロードが中断", "処理が中止", "업로드가 중단", "처리가 중단"],
     "mhkt_khong_nguon": ["không có màn hình kết thúc để nhập", "no end screen to import",
                          "doesn't have an end screen", "終了画面がありません"],
 }
