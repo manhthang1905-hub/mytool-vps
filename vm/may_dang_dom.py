@@ -1207,6 +1207,11 @@ class MayDangDom:
         except Exception as loi:  # noqa: BLE001
             raise loi_cls("không mở được danh sách lọc tiêu đề: {0}".format(loi))
         rows = self._doc_danh_sach(tb)
+        if rows is None and not vid and not _kenh_co_video_trong_so(self.kenh):
+            # 04/10/2026: kênh MỚI chưa có video nào — trang trống của Studio kênh mới không khớp mẫu "trang
+            # trống" cũ, nhưng sổ videoId xác nhận kênh chưa từng tải gì → không thể trùng, đi tiếp.
+            log.info("kênh %s chưa có video nào trong sổ — danh sách trống là đúng, tải mới", self.kenh)
+            rows = []
         if rows is None:
             raise loi_cls("không đọc được danh sách video (không thấy hàng lẫn trang trống)")
         ra = [self._hang_kenh(h) for h in rows]
