@@ -82,7 +82,7 @@ class TestHamThuan:
         assert mdd.phan_tich_ngay("v1.2.3.4")[0] is None
         assert "{Y}. {m}. {d}." in mdd.mau_ngay_thu({"dinh_dang_ngay": ["{dd}/{mm}/{Y}"]})
         assert mdd.mau_ngay_thu({}).count("{Y}. {m}. {d}.") == 1
-        assert mdd.mau_ngay_thu({"dinh_dang_ngay": ["{Y}. {m}. {d}."]}) == ["{Y}. {m}. {d}."]
+        assert mdd.mau_ngay_thu({"dinh_dang_ngay": ["{Y}. {m}. {d}."]}) == ["{Y}. {m}. {d}.", "{Y}/{m}/{d}", "{Y}年{m}月{d}日"]
 
     def test_chuan_hoa_tieu_de(self):
         assert mdd.chuan_hoa_tieu_de("【雑学】　猫  が\n好き ") == mdd.chuan_hoa_tieu_de("【雑学】 猫 が 好き")

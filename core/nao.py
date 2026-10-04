@@ -827,6 +827,13 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
                 for m in doc_viec_cho_nao(goc, bay_gio)[:8]] or ["  (không có)"]
 
     phan("GIÁM ĐỐC KÊNH NHỜ XEM (tự xem số bằng `xem`/chi-so rồi quyết; KHÔNG báo chủ)", giam_doc_nho)
+    def mo_kenh_moi() -> List[str]:
+        from . import mo_kenh as _mk  # noqa: PLC0415
+
+        return _mk.tom_tat_nao(goc)
+
+    phan("MỞ KÊNH MỚI (số do mã tính — luật số kênh; chỉ ĐỀ XUẤT, mở bằng `python -m core.mo_kenh`)", mo_kenh_moi)
+
     d.append("")
     d.append("== ĐỌC SÂU (chỉ đọc) ==")
     d.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")

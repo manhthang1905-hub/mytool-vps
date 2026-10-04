@@ -1783,6 +1783,16 @@ def _main(argv: Optional[List[str]] = None) -> int:
             "giam_doc_hong", bao_dong.MUC_NHAC,
             "Giám đốc kênh không chạy được: {0}".format(str(loi_gd)[:150]),
             can_lam_gi="Báo người quản trị tool xem nhật ký.", dedupe_khoa="giam_doc:hong"))
+    # Mở kênh mới (04/10/2026, `core/mo_kenh`): chỉ QUYẾT có bước đến hạn không (kích hoạt kênh đã đăng nhập, chuẩn bị
+    # kênh đã đăng ký, đề xuất định kỳ 7 ngày/lần); có thì sinh `python -m core.mo_kenh tiep-tuc` tách rời. try riêng.
+    tom_tat_mk = ""
+    try:
+        from core import mo_kenh  # noqa: PLC0415
+
+        kq_mk = mo_kenh.nhip(goc, thu=thu)
+        tom_tat_mk = ("đã sinh tiến trình — " if kq_mk.get("sinh") else "") + str(kq_mk.get("ly_do") or "")
+    except Exception as loi_mk:  # noqa: BLE001 — mở kênh hỏng không được làm sập gác tổng
+        tom_tat_mk = "không chạy được ({0})".format(str(loi_mk)[:200])
     ket_qua = bao_cao_su_co(goc, anh, ds_su_co, ghi_dia=not thu)
     hanh_dong_tu_sua = tu_sua(goc, anh, ghi_dia=not thu)
     try:
@@ -1806,6 +1816,9 @@ def _main(argv: Optional[List[str]] = None) -> int:
     if tom_tat_gd:
         print("")
         print("Giám đốc kênh: {0}".format(tom_tat_gd))
+    if tom_tat_mk and "không có việc" not in tom_tat_mk:
+        print("")
+        print("Mở kênh: {0}".format(tom_tat_mk))
     # Kiểm cập nhật (30/09/2026, `core/cap_nhat_git.py`): tự hãm nhịp ~30 phút,
     # `git fetch` + đọc origin/main:VERSION; có bản mới + tự động bật + máy rảnh
     # thì SINH tiến trình `dong_bo_git keo` tách rời (gác tổng không chờ nó).

@@ -989,13 +989,15 @@
  "dinh_dang_ngay": [
   "{d} thg {m}, {Y}",
   "{dd}/{mm}/{Y}",
-  "{Y}/{mm}/{dd}"
+  "{Y}/{mm}/{dd}",
+  "{Y}/{m}/{d}",
+  "{Y}年{m}月{d}日"
  ],
  "dinh_dang_gio": "{HH}:{MM}",
  "ngon_ngu_video": {
-  "ja": "Tiếng Nhật",
-  "vi": "Tiếng Việt",
-  "en": "Tiếng Anh"
+  "ja": ["Tiếng Nhật", "日本語", "Japanese", "일본어"],
+  "vi": ["Tiếng Việt", "ベトナム語", "Vietnamese", "베트남어"],
+  "en": ["Tiếng Anh", "英語", "English", "영어"]
  },
  "hop_la": [
   {
@@ -1010,6 +1012,7 @@
    "dong": [
     "#close-button",
     "[aria-label='Đóng']",
+    "[aria-label='閉じる']",
     "[aria-label='Close']"
    ]
   }

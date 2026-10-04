@@ -259,7 +259,7 @@ def phan_tich_trang_thai(chu, bo_chu: dict = None):
 
 
 MAU_NGAY_MAC_DINH = ["{d} thg {m}, {Y}", "{dd}/{mm}/{Y}"]
-MAU_NGAY_DU_PHONG = ["{Y}. {m}. {d}."]      # Studio tiếng Hàn (không số 0 đứng đầu, dấu chấm cuối)
+MAU_NGAY_DU_PHONG = ["{Y}. {m}. {d}.", "{Y}/{m}/{d}", "{Y}年{m}月{d}日"]      # Studio tiếng Hàn (không số 0 đứng đầu, dấu chấm cuối)
 
 
 def mau_ngay_thu(bo) -> list:
@@ -272,6 +272,14 @@ def dinh_dang_ngay(d, mau: str) -> str:
     """`{d} thg {m}, {Y}` → '30 thg 9, 2026'; `{dd}/{mm}/{Y}` → '30/09/2026'."""
     return (str(mau).replace("{dd}", "%02d" % d.day).replace("{mm}", "%02d" % d.month)
             .replace("{d}", str(d.day)).replace("{m}", str(d.month)).replace("{Y}", str(d.year)))
+
+
+CHU_NUT_CHINH_SUA = ("chỉnh sửa", "編集", "edit", "수정")     # nút «Chỉnh sửa» (đã có phụ đề / MHKT) ở Studio Việt/Nhật/Anh/Hàn
+
+
+def nut_la_chinh_sua(chu) -> bool:
+    t = chuan_hoa_tieu_de(chu or "").lower()
+    return any(w in t for w in CHU_NUT_CHINH_SUA)
 
 
 def han_cho_tai(duong_mp4: str) -> float:
@@ -1397,7 +1405,7 @@ class MayDangDom:
         if not srt:
             self._canh_bao("{0}: gói không có .srt — KHÔNG có phụ đề".format(d["ma"]))
             return "bo"
-        if "chỉnh sửa" in chuan_hoa_tieu_de(ta.doc_chu("phu_de_them") or "").lower():
+        if nut_la_chinh_sua(ta.doc_chu("phu_de_them")):
             self.nk("{0}: phụ đề đã có (nút là «Chỉnh sửa») — bỏ qua".format(d["ma"]))
             return "ok"
         try:
@@ -1406,12 +1414,13 @@ class MayDangDom:
             if ta.co("phu_de_ngon_ngu") and not ta.co("phu_de_tai_tep"):
                 ngon = str(self.cai.get("ngon_ngu") or "")
                 ten = (self.bo.get("ngon_ngu_video") or {}).get(ngon)
+                ten = [ten] if isinstance(ten, str) else list(ten or [])      # nhiều tên: Việt/Nhật/Anh/Hàn
                 if not ten:
                     raise Exception("Studio hỏi ngôn ngữ video mà kênh chưa khai ngon_ngu")
                 ta.bam("phu_de_ngon_ngu")
-                muc = ta.tim_chu([ten], han=5)
+                muc = ta.tim_chu(ten, han=5)
                 if not muc:
-                    raise Exception("không thấy mục ngôn ngữ «{0}»".format(ten))
+                    raise Exception("không thấy mục ngôn ngữ «{0}»".format(ten[0]))
                 ta.bam(muc)
             pt_tai = ta.tim("phu_de_tai_tep", han=10)
             if pt_tai and pt_tai.get("cach") != "chon#1":
@@ -1469,7 +1478,7 @@ class MayDangDom:
            Video + nút Đăng ký, mẫu của Studio đặt ở 20 giây cuối)."""
         if not self.lam_mhkt:
             return "bo"
-        if "chỉnh sửa" in chuan_hoa_tieu_de(ta.doc_chu("mhkt_them") or "").lower():
+        if nut_la_chinh_sua(ta.doc_chu("mhkt_them")):
             self.nk("{0}: màn hình kết thúc đã có — bỏ qua".format(d["ma"]))
             return "ok"
         het = time.monotonic() + self.han_mhkt
@@ -3277,19 +3286,31 @@ def _kiem_lich_trang_sua(tr, may, kq, ghi, bang_chung, vid, ngu) -> None:
         return
     ngu(1)
     ghi("sua_hop_hien_thi", tr.tim("sua_hop_hien_thi", han=5), "lich_trang_sua")
-    pt = ghi("len_lich_mo", tr.tim("len_lich_mo", han=8), "lich_trang_sua")
+    pt = tr.tim("len_lich_mo", han=8)
+    # Video ĐÃ HẸN GIỜ: phần Lên lịch ĐÃ MỞ SẴN (ô ngày + ô giờ hiện ngay, nút mở rộng không còn) — không phải hỏng
+    # (đo 04/10 trên Studio tiếng Nhật, TL6-T7-K2: ô ngày '2026/10/05', ô giờ '5:00').
+    da_mo_san = (not pt) and bool(tr.co("o_ngay_mo")) and bool(tr.co("o_gio"))
+    if da_mo_san:
+        kq["chi_tiet"]["len_lich_mo"] = {"khop": True, "cach": "da_mo_san", "buoc": "lich_trang_sua"}
+        kq["ghi_chu"].append("len_lich_mo: phần Lên lịch đã mở sẵn (video đã hẹn giờ) — không cần bấm mở")
+    else:
+        ghi("len_lich_mo", pt, "lich_trang_sua")
     bang_chung("sua-hien-thi")
-    if pt:
-        try:
-            tr.bam(pt, hau_dieu_kien=lambda: tr.co("o_ngay_mo") or tr.co("o_gio"), han_hau=10)
-        except Exception as loi:  # noqa: BLE001
-            kq["ghi_chu"].append("mở Lên lịch (trang sửa): {0}".format(loi))
+    if pt or da_mo_san:
+        if pt:
+            try:
+                tr.bam(pt, hau_dieu_kien=lambda: tr.co("o_ngay_mo") or tr.co("o_gio"), han_hau=10)
+            except Exception as loi:  # noqa: BLE001
+                kq["ghi_chu"].append("mở Lên lịch (trang sửa): {0}".format(loi))
         ngu(1)
         ptn = ghi("o_ngay_mo", tr.tim("o_ngay_mo", han=8), "lich_trang_sua")
         ghi("o_gio", tr.tim("o_gio", han=5), "lich_trang_sua")
         try:
             kq["o_ngay_mo_chu"] = chuan_hoa_tieu_de(tr.doc_chu("o_ngay_mo") or "")
             kq["o_gio_gia_tri"] = str(tr.doc_thuoc_tinh("o_gio", "value") or "")
+            kq["ngay_doc_duoc"] = str(phan_tich_ngay(kq["o_ngay_mo_chu"])[0] or "")          # '' = KHÔNG đọc được ngày
+            g = phan_tich_gio(kq["o_gio_gia_tri"])
+            kq["gio_doc_duoc"] = "{0:02d}:{1:02d}".format(*g) if g else ""
         except Exception:  # noqa: BLE001
             pass
         bang_chung("sua-lich")

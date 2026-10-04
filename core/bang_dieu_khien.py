@@ -1393,6 +1393,18 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001
         pass
 
+    # 17) Mở kênh mới (`core/mo_kenh`): ĐÚNG MỘT việc — người tạo kênh YouTube + đăng nhập Chrome Portable; máy lo phần còn lại.
+    try:
+        from . import mo_kenh as _mk  # noqa: PLC0415
+
+        for v in _mk.viec_cua_ban(goc):
+            if v["khoa"] in da_xong:
+                continue
+            ra.append(_viec(v["khoa"], THUONG, kenh=v.get("kenh", ""), chu=v["chu"], goi_y=v.get("goi_y", ""),
+                            nut=[("Đã xử lý", "danh_dau_xong", {"khoa": v["khoa"]})], xong_tay=True))
+    except Exception:  # noqa: BLE001 — mở kênh hỏng không làm hỏng khối việc
+        pass
+
     ra.sort(key=lambda v: _THU_TU_MUC.get(v["muc"], 9))
     return ra
 

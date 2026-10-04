@@ -145,6 +145,64 @@ def la_tieng_viet(lang: Any, chu: Any) -> bool:
     return sum(1 for w in CHU_STUDIO_VI if w in t) >= 2
 
 
+#: BẢNG NGÔN NGỮ GIAO DIỆN ĐÍCH (04/10/2026): Studio theo ngôn ngữ của TÀI KHOẢN Google = ngôn ngữ/quốc gia của NGÁCH
+#: (không cố định tiếng Việt). `go` = chữ gõ vào ô tìm (thử lần lượt), `re_chon` = nhãn mục trong danh sách,
+#: `chu` = chữ ĐẶC TRƯNG của thanh bên Studio ở ngôn ngữ đó (>= 2 chữ → xác nhận), `quoc_gia` = quốc gia khớp.
+NGON_NGU_DICH = {
+    "vi": {"ten": "Tiếng Việt", "html": "vi", "go": ("Tiếng Việt", "Vietnamese"), "quoc_gia": ("VN",),
+           "re_chon": r"(?:^|\s)(tiếng việt|vietnamese|베트남어|ベトナム語)", "chu": CHU_STUDIO_VI},
+    "ja": {"ten": "日本語", "html": "ja", "go": ("日本語", "Japanese", "Tiếng Nhật"), "quoc_gia": ("JP",),
+           "re_chon": r"(?:^|\s)(日本語|japanese|일본어|tiếng nhật)",
+           "chu": ("コンテンツ", "チャンネル ダッシュボード", "アナリティクス", "カスタマイズ", "再生リスト", "収益化", "字幕")},
+    "en": {"ten": "English", "html": "en", "go": ("English (United States)", "English"), "quoc_gia": ("US", "GB", "CA", "AU", "IN"),
+           "re_chon": r"(?:^|\s)(english|tiếng anh|영어|英語)", "chu": ("Content", "Analytics", "Customization", "Playlists", "Subtitles", "Channel dashboard")},
+    "ko": {"ten": "한국어", "html": "ko", "go": ("한국어", "Korean", "Tiếng Hàn"), "quoc_gia": ("KR",),
+           "re_chon": r"(?:^|\s)(한국어|korean|tiếng hàn|韓国語)", "chu": ("콘텐츠", "채널 대시보드", "분석", "맞춤설정", "재생목록", "수익 창출")},
+}
+MA_NGON_NGU_MAC_DINH = "vi"          # kênh KHÔNG khai `ngon_ngu_tai_khoan_dich` → giữ hành vi cũ (tiếng Việt)
+
+
+def ma_ngon_ngu(x: Any) -> str:
+    return str(x or "").strip().lower().split("-")[0].split("_")[0]
+
+
+def chon_ngon_ngu_dich(khai: Any, quoc_gia: Any = "") -> Tuple[str, str]:
+    """Đích ngôn ngữ tài khoản của kênh. `khai` = khoá `ngon_ngu_tai_khoan_dich` trong kenh.yaml (RỖNG → `vi` như cũ:
+    triển khai DẦN, kênh nào chưa khai thì KHÔNG đổi). Khai nhưng không có trong bảng, hoặc LỆCH quốc gia hồ sơ
+    (vd khai `ja` mà quốc gia VN) → rơi về `vi` kèm lý do. Trả (mã, ghi_chú)."""
+    ma = ma_ngon_ngu(khai)
+    if not ma:
+        return MA_NGON_NGU_MAC_DINH, ""
+    if ma not in NGON_NGU_DICH:
+        return MA_NGON_NGU_MAC_DINH, "ngon_ngu_tai_khoan_dich={0!r} chưa có trong bảng → giữ tiếng Việt".format(ma)
+    qg = str(quoc_gia or "").strip().upper()
+    if qg and qg not in NGON_NGU_DICH[ma]["quoc_gia"]:
+        return MA_NGON_NGU_MAC_DINH, "ngon_ngu_tai_khoan_dich={0} LỆCH quốc gia hồ sơ {1} → giữ tiếng Việt".format(ma, qg)
+    return ma, ""
+
+
+def la_ngon_ngu_dich(ma: str, lang: Any, chu: Any) -> bool:
+    """Studio đang ở ngôn ngữ `ma`? `<html lang>` bắt đầu bằng mã HOẶC >= 2 chữ giao diện đặc trưng."""
+    b = NGON_NGU_DICH.get(ma) or NGON_NGU_DICH[MA_NGON_NGU_MAC_DINH]
+    if str(lang or "").strip().lower().startswith(b["html"]):
+        return True
+    t = unicodedata.normalize("NFC", str(chu or ""))
+    return sum(1 for w in b["chu"] if w in t) >= 2
+
+
+def ngon_ngu_dich_kenh(kenh: str, goc: str = GOC_TOOL) -> Tuple[str, str]:
+    """Đọc `ngon_ngu_tai_khoan_dich` của kenh.yaml + quốc gia trong hồ sơ thiết lập (nếu đã dựng)."""
+    d = nuoi.duong_kenh_yaml(kenh, goc)
+    khai = _yaml_gia_tri(d, "ngon_ngu_tai_khoan_dich") if d else ""
+    qg = ""
+    try:
+        with open(os.path.join(goc, "CHANNEL", kenh, "thiet-lap", "ho-so.json"), "r", encoding="utf-8") as tep:
+            qg = str((json.load(tep) or {}).get("quoc_gia") or "")
+    except (OSError, ValueError):
+        pass
+    return chon_ngon_ngu_dich(khai, qg)
+
+
 def so_moi(kenh: str) -> dict:
     return {"kenh": kenh, "trang_thai": "chua_chay", "ly_do": "", "uc": "", "handle_that": "",
             "muc": {m: {"tt": "chua"} for m in MUC}, "ngay_doi": {"ten": [], "handle": []},
@@ -304,9 +362,10 @@ def khac_biet(hs: dict, ht: dict, so: dict, hash_anh: Optional[Dict[str, str]] =
         ra[m] = {"khac": khac, "hien": hien, "mong": mong, "ghi": ghi}
 
     if "ngon_ngu_vi" in ht:
-        mot("ngon_ngu", not ht["ngon_ngu_vi"], "tiếng Việt" if ht["ngon_ngu_vi"] else "KHÔNG phải tiếng Việt", "tiếng Việt")
+        ten_d = ht.get("ngon_ngu_dich_ten") or "tiếng Việt"
+        mot("ngon_ngu", not ht["ngon_ngu_vi"], ten_d if ht["ngon_ngu_vi"] else "KHÔNG phải " + ten_d, ten_d)
     else:
-        mot("ngon_ngu", None, None, "tiếng Việt")
+        mot("ngon_ngu", None, None, ht.get("ngon_ngu_dich_ten") or "tiếng Việt")
     if "ten" in ht:
         mot("ten", chuan(ht["ten"]) != chuan(hs.get("ten")), ht["ten"], hs.get("ten"))
     else:
@@ -752,8 +811,8 @@ class Studio:
         raise CanNguoi("không vào được Studio của kênh (URL {0}) — chưa đăng nhập hoặc tài khoản có nhiều kênh".format(self.url()[:80]))
 
     # ── ngôn ngữ giao diện Studio ──
-    def doc_ngon_ngu(self, han: float = 25.0) -> Tuple[bool, str, str]:
-        """Đọc ngôn ngữ giao diện Studio hiện tại ở trang đang mở. Trả (là_tiếng_Việt, html_lang, trích_chữ)."""
+    def doc_ngon_ngu(self, han: float = 25.0, dich: str = "vi") -> Tuple[bool, str, str]:
+        """Đọc ngôn ngữ giao diện Studio hiện tại ở trang đang mở. Trả (đúng_ngôn_ngữ_đích, html_lang, trích_chữ)."""
         het = time.monotonic() + han
         du: dict = {}
         while True:
@@ -766,7 +825,7 @@ class Studio:
                 break
             self.ngu(1.5)
         lang, chu = str(du.get("lang") or ""), str(du.get("chu") or "")
-        return la_tieng_viet(lang, chu), lang, " ".join(chu.split())[:160]
+        return la_ngon_ngu_dich(dich, lang, chu), lang, " ".join(chu.split())[:160]
 
     def _bam_muc_menu(self, re_src: str, nhan: str, han: float = 8.0) -> str:
         """Bấm mục menu theo regex chữ (tâm điểm bằng chuột thật). Trả chữ mục đã bấm; không thấy → LoiMuc."""
@@ -803,59 +862,71 @@ class Studio:
                 raise LoiMuc("không thấy «{0}»".format(nhan))
             self.ngu(0.8)
 
-    def _ngon_ngu_tai_khoan(self, ghi) -> None:
+    def _ngon_ngu_tai_khoan(self, ghi, dich: str = "vi") -> None:
         """Đường CHÍNH: Studio theo ngôn ngữ của TÀI KHOẢN Google (menu youtube.com chỉ đổi riêng trình duyệt).
-        myaccount.google.com/language → bút chì sửa ngôn ngữ → ô tìm → «Tiếng Việt» → xác nhận."""
+        myaccount.google.com/language → bút chì sửa ngôn ngữ → ô tìm → ngôn ngữ ĐÍCH → xác nhận."""
+        b = NGON_NGU_DICH.get(dich) or NGON_NGU_DICH[MA_NGON_NGU_MAC_DINH]
         self.st.mo("https://myaccount.google.com/language", han=60)
         self.ngu(4.0)
         self.kiem_chan()
-        sua = self._bam_nhan(r"수정|edit|chỉnh sửa|sửa|編集|변경", "삭제|delete|xóa|xoá|저장|save", "nút sửa ngôn ngữ ưu tiên")
+        sua = self._bam_nhan(r"수정|edit|chỉnh sửa|sửa|編集|変更|변경", "삭제|delete|xóa|xoá|저장|save|削除|保存", "nút sửa ngôn ngữ ưu tiên")
         ghi("   bấm «{0}»".format(sua))
         self.ngu(2.5)
-        self._bam_nhan(r"기본 언어|default language|preferred language|ngôn ngữ", "nhãn ô tìm", sel="input")
+        self._bam_nhan(r"기본 언어|default language|preferred language|ngôn ngữ|優先言語|デフォルトの言語|言語", "nhãn ô tìm", sel="input")
         self.ngu(0.6)
-        self.st._chen("Tiếng Việt")                                 # noqa: SLF001
-        self.ngu(2.0)
-        muc = self._bam_nhan(r"tiếng việt|vietnamese|베트남어", "Tiếng Việt trong danh sách", loai=r"취소|cancel|hủy",
-                             sel="li, [role=option], [role=radio], [role=listitem], label")
+        muc, loi = "", None
+        for go in b["go"]:                                          # gõ lần lượt: tên bản địa → tên Anh → tên Việt
+            self.st._chen(go)                                       # noqa: SLF001
+            self.ngu(2.0)
+            try:
+                muc = self._bam_nhan(b["re_chon"], "{0} trong danh sách".format(b["ten"]), loai=r"취소|cancel|hủy|キャンセル", han=4.0,
+                                     sel="li, [role=option], [role=radio], [role=listitem], label")
+                break
+            except LoiMuc as e:
+                loi = e
+                self.st._ctrl_a()                                   # noqa: SLF001
+                self.ngu(0.4)
+        if not muc:
+            raise loi or LoiMuc("không thấy {0} trong danh sách".format(b["ten"]))
         ghi("   chọn «{0}»".format(muc))
         self.ngu(1.0)
         try:                                                        # nút của HỘP («Lưu ngôn ngữ đã chọn») trước, nút «Lưu» của ngôn ngữ khác sau
-            luu = self._bam_nhan(r"선택한 언어|selected language|ngôn ngữ đã chọn", "nút lưu ngôn ngữ đã chọn", han=3.0, sel="button, [role=button]")
+            luu = self._bam_nhan(r"선택한 언어|selected language|ngôn ngữ đã chọn|選択した言語", "nút lưu ngôn ngữ đã chọn", han=3.0, sel="button, [role=button]")
         except LoiMuc:
-            luu = self._bam_nhan(r"저장|save|lưu", "nút lưu ngôn ngữ", loai=r"English|영어", sel="button, [role=button]")
+            luu = self._bam_nhan(r"저장|save|lưu|保存", "nút lưu ngôn ngữ", loai=r"English|영어|英語", sel="button, [role=button]")
         ghi("   bấm «{0}»".format(luu))
         self.ngu(5.0)
         ghi("   trang tài khoản sau khi lưu: {0}".format(" ".join(str(self.js(_JS_NGON_NGU).get("chu"))[:120].split())))
 
-    def dat_ngon_ngu(self, ghi, chi_doc: bool = False) -> dict:
-        """ĐẶT ngôn ngữ giao diện Studio = Tiếng Việt (chạy ĐẦU TIÊN: Studio tiếng Hàn làm hỏng mọi bước tìm theo chữ).
-        Đọc trước → đã Việt thì thôi. Đường 1: ngôn ngữ ƯU TIÊN của tài khoản Google (Studio theo cái này; menu avatar
-        Studio không có mục ngôn ngữ, menu youtube.com chỉ đổi riêng trình duyệt — đo 04/10). Đường 2: `?hl=vi`. Xong ĐỌC LẠI.
-        Trả {ket: giong|doi|hong|khac (chi_doc), lang_truoc, lang_sau, chu}."""
-        da_vi, lang, chu = self.doc_ngon_ngu()
-        ghi("ngôn ngữ Studio: html lang={0!r} → {1} (chữ: {2})".format(lang, "TIẾNG VIỆT" if da_vi else "KHÔNG phải tiếng Việt", chu[:90]))
-        kq = {"ket": "giong" if da_vi else "khac", "lang_truoc": lang, "lang_sau": lang, "chu": chu}
-        if da_vi or chi_doc:
+    def dat_ngon_ngu(self, ghi, chi_doc: bool = False, dich: str = "vi") -> dict:
+        """ĐẶT ngôn ngữ giao diện Studio = ngôn ngữ ĐÍCH `dich` (chạy ĐẦU TIÊN: Studio tiếng Hàn làm hỏng mọi bước tìm theo chữ).
+        Đọc trước → đã đúng thì thôi. Đường 1: ngôn ngữ ƯU TIÊN của tài khoản Google (Studio theo cái này; menu avatar
+        Studio không có mục ngôn ngữ, menu youtube.com chỉ đổi riêng trình duyệt — đo 04/10). Đường 2: `?hl=`. Xong ĐỌC LẠI.
+        Trả {ket: giong|doi|hong|khac (chi_doc), lang_truoc, lang_sau, chu, dich}."""
+        b = NGON_NGU_DICH.get(dich) or NGON_NGU_DICH[MA_NGON_NGU_MAC_DINH]
+        dung, lang, chu = self.doc_ngon_ngu(dich=dich)
+        ghi("ngôn ngữ Studio: html lang={0!r} → {1} (chữ: {2})".format(lang, ("ĐÚNG đích " if dung else "KHÔNG phải ") + b["ten"], chu[:90]))
+        kq = {"ket": "giong" if dung else "khac", "lang_truoc": lang, "lang_sau": lang, "chu": chu, "dich": dich}
+        if dung or chi_doc:
             return kq
         loi_cuoi = ""
         for cach in ("tai_khoan", "hl"):
             try:
                 if cach == "tai_khoan":
-                    self._ngon_ngu_tai_khoan(ghi)
+                    self._ngon_ngu_tai_khoan(ghi, dich)
                 else:
-                    self.st.mo(URL_NGON_NGU_VI, han=60)
+                    self.st.mo("https://studio.youtube.com/?hl=" + b["html"], han=60)
                     self.ngu(4.0)
                 self.kiem_chan()
                 self.st.mo("https://studio.youtube.com/", han=60)
                 self.ngu(3.0)
-                da_vi, lang2, chu2 = self.doc_ngon_ngu()
+                dung, lang2, chu2 = self.doc_ngon_ngu(dich=dich)
                 kq.update(lang_sau=lang2, chu=chu2)
-                ghi("   đọc lại sau đường {0}: html lang={1!r} → {2}".format(cach, lang2, "TIẾNG VIỆT" if da_vi else "vẫn không phải"))
-                if da_vi:
+                ghi("   đọc lại sau đường {0}: html lang={1!r} → {2}".format(cach, lang2, "ĐÚNG đích" if dung else "vẫn không phải"))
+                if dung:
                     kq["ket"] = "doi"
                     return kq
-                loi_cuoi = "đường {0}: đọc lại vẫn không phải tiếng Việt".format(cach)
+                loi_cuoi = "đường {0}: đọc lại vẫn không phải {1}".format(cach, b["ten"])
             except CanNguoi:
                 raise
             except Exception as e:  # noqa: BLE001
@@ -1442,7 +1513,7 @@ def ly_do_dung(agent, kenh: str, luc: float) -> str:
 
 def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_luu: bool = False,
                bo_qua_khung: bool = False, rng=None, chi_ngon_ngu: bool = False) -> int:
-    """`chi_ngon_ngu`: CHỈ kiểm/đặt ngôn ngữ Studio = Tiếng Việt (không đụng hồ sơ, không ghi sổ thiết lập; kết quả
+    """`chi_ngon_ngu`: CHỈ kiểm/đặt ngôn ngữ Studio = ngôn ngữ ĐÍCH của kênh (`ngon_ngu_tai_khoan_dich`, mặc định Tiếng Việt) (không đụng hồ sơ, không ghi sổ thiết lập; kết quả
     ghi `logs/thiet-lap-kenh/<K>.ngon-ngu.json`); kết hợp `thu` = chỉ ĐỌC."""
     global _KHONG_GHI_SO, _BO_QUA_KHE
     _KHONG_GHI_SO = bool(thu or khong_luu or chi_ngon_ngu)
@@ -1546,7 +1617,11 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         so["uc"] = uc
         ghi("kênh Studio {0}".format(uc))
         # BƯỚC 0 — NGÔN NGỮ STUDIO (trước mọi mục: Studio tiếng Hàn làm hỏng mọi bước tìm theo chữ vi/ja/en)
-        nn = S.dat_ngon_ngu(ghi, chi_doc=thu)
+        dich, ghi_chu_dich = ngon_ngu_dich_kenh(kenh)
+        if ghi_chu_dich:
+            ghi("   ⚠ " + ghi_chu_dich)
+        ghi("   ngôn ngữ tài khoản ĐÍCH: {0} ({1})".format(dich, NGON_NGU_DICH[dich]["ten"]))
+        nn = S.dat_ngon_ngu(ghi, chi_doc=thu, dich=dich)
         if chi_ngon_ngu:
             nn["kenh"], nn["luc"] = kenh, time.strftime("%Y-%m-%d %H:%M:%S")
             if not thu:
@@ -1559,11 +1634,12 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
             ghi("*** NGÔN NGỮ STUDIO {0}: {1} (trước {2!r} → sau {3!r}) ***".format(kenh, nn["ket"].upper(), nn["lang_truoc"], nn["lang_sau"]))
             return 0 if nn["ket"] in ("giong", "doi", "khac") else 1
         if nn["ket"] == "hong":
-            hong_muc(so, "ngon_ngu", nn.get("ly_do") or "không đổi được sang tiếng Việt")
+            hong_muc(so, "ngon_ngu", nn.get("ly_do") or "không đổi được sang {0}".format(NGON_NGU_DICH[dich]["ten"]))
             luu_so(so)
-            raise RuntimeError("ngôn ngữ Studio không phải tiếng Việt và không đổi được: {0}".format(nn.get("ly_do")))
+            raise RuntimeError("ngôn ngữ Studio không phải {0} và không đổi được: {1}".format(NGON_NGU_DICH[dich]["ten"], nn.get("ly_do")))
         ht, loi_doc = S.doc_hien_trang()
-        ht["ngon_ngu_vi"] = nn["ket"] in ("giong", "doi")
+        ht["ngon_ngu_vi"] = nn["ket"] in ("giong", "doi")          # tên khoá cũ giữ cho tương thích: = ĐÚNG ngôn ngữ đích
+        ht["ngon_ngu_dich_ten"] = NGON_NGU_DICH[dich]["ten"]
         for k, v in loi_doc.items():
             ghi("   không đọc được nhóm {0}: {1}".format(k, v))
         thu_muc_hs = _tl().thu_muc_thiet_lap(kenh)
@@ -1772,7 +1848,7 @@ def main(argv=None) -> int:
     ap.add_argument("--mo-lai", action="store_true", help="xoá can_nguoi/hong/từ chối cũ rồi chạy")
     ap.add_argument("--khong-luu", action="store_true", help="(dev) điền nhưng KHÔNG Xuất bản/Lưu")
     ap.add_argument("--bo-qua-khung", action="store_true", help="(dev) bỏ khung cấm 02–07h")
-    ap.add_argument("--ngon-ngu", action="store_true", help="CHỈ kiểm/đặt ngôn ngữ Studio = Tiếng Việt (kèm --thu = chỉ đọc)")
+    ap.add_argument("--ngon-ngu", action="store_true", help="CHỈ kiểm/đặt ngôn ngữ Studio = đích của kênh (ngon_ngu_tai_khoan_dich, mặc định vi) (kèm --thu = chỉ đọc)")
     ap.add_argument("--nhom", default="", help="(dev) chỉ chạy nhóm: ho_so,cai_dat_kenh,mac_dinh,ds_phat")
     a = ap.parse_args(argv)
     ghi = _nhat_ky(a.kenh)
