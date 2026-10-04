@@ -32,6 +32,11 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
      tới" của kênh trong `xem`: ngày kiểm = ngày đăng của video cuối chịu ảnh hưởng + 2 (mốc 48h).
      CLI tự từ chối ngày quá sớm.
    - Chỉ dùng trục mà CLI nhận (`cum`, `kieu_tieu_de`, `kieu_bia`, `hook`). `uu-tien-nguon` dùng MỘT lần (1 video).
+   - **Bài học bị số mới bác bỏ / xác nhận → GHI NGAY** bằng `bai-hoc --kenh K tru <id>` / `cong <id>` (bằng chứng
+     = video_id). Lệnh này KHÔNG tính vào 3 hành động/ngày — đừng để sổ bài học sai nằm đó (vd 05/10: video 【雑学】
+     10.202 hiển thị bác bỏ bài "tránh 雑学" mà não chỉ ghi nhật ký).
+   - Thấy video THẮNG LỚN (hiển thị ≫ ngưỡng kênh) → cân nhắc `uu-tien-nguon` cho nguồn cùng chủ đề/góc ở đối thủ
+     (nhân bản cái thắng khi còn nóng) — "giữ nguyên" chỉ đúng khi thật sự chưa có tín hiệu.
 6. **Ghi nhớ** — cập nhật `tri-nho/` (sự thật bền: tệp khán giả, cái đã chứng minh, cái đã thất bại) và
    `ky-nang/` (cách làm một việc mà bạn đã làm đúng — vd "chẩn đoán video CTR thấp"); kỹ năng sai thì sửa ngay.
    Nhật ký phiên: `nhat-ky/<YYYY-MM-DD>.md` (quan sát → suy nghĩ → quyết định → dự đoán).
