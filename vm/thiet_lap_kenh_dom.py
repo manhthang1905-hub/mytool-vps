@@ -507,6 +507,7 @@ def _nhat_ky(kenh: str):
     duong = os.path.join(THU_MUC_SO, kenh + ".log")
 
     def ghi(dong):
+        nuoi.canh_tien_trien.danh_dau()
         chu = "{0} {1}".format(time.strftime("%Y-%m-%d %H:%M:%S"), dong)
         try:
             print(chu, flush=True)
@@ -754,7 +755,9 @@ class Studio:
         return self.tim(css, chu, han, cho_tat) is not None
 
     def js(self, bt: str):
-        return self.st.js_tho(bt)
+        r = self.st.js_tho(bt)
+        nuoi.canh_tien_trien.danh_dau()
+        return r
 
     def url(self) -> str:
         return self.st.url()
@@ -1621,6 +1624,7 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         agent.ghi_che_do_mat_cao(ch, False)
         cong = agent._cong_devtools(ch)                             # noqa: SLF001
         tu_mo = True
+        nuoi.canh_tien_trien.bat_canh(lambda: (agent.dong_chrome_kenh(ch), nuoi.nha_khoa(kenh)), ghi=ghi)
         agent.mo_chrome_kenh(ch, "https://studio.youtube.com/", chrome, da_chay=False, quet=False)
         ws = agent._cho_devtools(cong, agent.CHO_DEVTOOLS_GIAY)     # noqa: SLF001
         nuoi.nha_khoa("_mo")

@@ -280,9 +280,35 @@ def _xoay_nhat_ky_neu_can() -> None:
         pass  # tiến trình khác vừa xoay xong -> bỏ qua, lần ghi kế mở file mới
 
 
+#: NHỊP TIM (04/10/2026): sự cố agent đứng im 2 giờ mà tiến trình vẫn sống. Mỗi dòng log và mỗi bước của vòng chính
+#: ghi `logs/nhip-tim.json` {pid, luc, buoc}; `core/gac_tong.py` thấy cũ >20' (và không đang tải lên) thì dừng agent.
+NHIP_TIM_TOI_THIEU_GIAY = 5.0
+_NHIP_TIM = {"luc": 0.0}
+
+
+def nhip_tim(buoc: str = "", ep: bool = False) -> None:
+    now = time.time()
+    if not ep and now - _NHIP_TIM["luc"] < NHIP_TIM_TOI_THIEU_GIAY and not buoc.startswith("bước:"):
+        return
+    _NHIP_TIM["luc"] = now
+    try:
+        duong = os.path.join(GOC, "logs", "nhip-tim.json")
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        tam = duong + ".tmp"
+        with open(tam, "w", encoding="utf-8") as tep:
+            json.dump({"pid": os.getpid(), "luc": now, "buoc": str(buoc)[:160]}, tep, ensure_ascii=False)
+        os.replace(tam, duong)
+    except OSError:
+        pass
+
+
 def ghi(dong: str) -> None:
     chu = "{0} {1}".format(time.strftime("%H:%M:%S"), dong)
-    print(chu, flush=True)
+    try:
+        print(chu, flush=True)
+    except (OSError, ValueError, UnicodeEncodeError):
+        pass
+    nhip_tim("log: " + dong)
     try:
         _xoay_nhat_ky_neu_can()
         with open(_duong_nhat_ky(), "a", encoding="utf-8") as tep:
@@ -2215,7 +2241,15 @@ def _chay_mot_lan(duong_py: str, kenh: str, nhan: str, han_giay: float,
     except OSError as loi:
         return "{0}: không mở được ({1})".format(nhan, loi), MA_KHONG_CHAY
     try:
-        ma = con.wait(timeout=han_giay)
+        han_den = time.monotonic() + han_giay
+        while True:      # chờ từng lát 60s để vẫn ghi nhịp tim (tải lên có thể kéo dài hàng giờ)
+            nhip_tim("bước: chờ {0} kênh {1}".format(nhan, kenh))
+            try:
+                ma = con.wait(timeout=max(0.1, min(60.0, han_den - time.monotonic())))
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= han_den:
+                    raise
     except subprocess.TimeoutExpired:
         try:
             con.kill()
@@ -3025,7 +3059,31 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
 
 # ── NUÔI TRANG CHỦ (03/10/2026): mỗi ~10 phút mở tiến trình con vm/nuoi_trang_chu.py cho từng kênh đủ điều kiện ──
 CHU_KY_NUOI_TRANG_CHU_GIAY = 10 * 60
-_NUOI_TRANG_CHU = {"luc": 0.0, "con": {}, "ly": {}}
+_NUOI_TRANG_CHU = {"luc": 0.0, "con": {}, "ly": {}, "bd": {}}
+#: Trần thời gian MỘT tiến trình con nuôi trang chủ / thiết lập kênh (04/10/2026): quá thì dừng + đóng Chrome kênh đó.
+TRAN_TIEN_TRINH_CON_GIAY = 120 * 60
+
+
+def dung_con_qua_tran(con: dict, bd: dict, luc: float, tran_giay: float = None, ten: str = "") -> list:
+    """Con nào chạy quá trần → kill, đóng Chrome kênh, bỏ khỏi sổ. Trả danh sách kênh đã dừng."""
+    tran = TRAN_TIEN_TRINH_CON_GIAY if tran_giay is None else tran_giay
+    ra = []
+    for k in [k for k, c in con.items() if c.poll() is None and luc - bd.get(k, luc) > tran]:
+        ghi("{0} kênh {1}: tiến trình con chạy quá {2:.0f} phút — dừng và đóng Chrome kênh".format(ten, k, tran / 60.0))
+        c = con.pop(k)
+        bd.pop(k, None)
+        try:
+            c.kill()
+        except OSError:
+            pass
+        try:
+            sys.path.insert(0, GOC) if GOC not in sys.path else None
+            import nuoi_trang_chu  # noqa: PLC0415
+            dong_chrome_kenh(nuoi_trang_chu.cau_hinh_kenh_moi(sys.modules[__name__], k))
+        except Exception as loi:  # noqa: BLE001 — đóng không được thì phiên sau tự dọn
+            ghi("{0} kênh {1}: không đóng được Chrome ({2})".format(ten, k, str(loi)[:100]))
+        ra.append(k)
+    return ra
 
 
 def _nhuong_kenh_nuoi(kenh: str, cho_giay: float = 120.0) -> bool:
@@ -3060,6 +3118,8 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
     con = _NUOI_TRANG_CHU["con"]
     for k in [k for k, c in con.items() if c.poll() is not None]:
         ghi("nuôi trang chủ kênh {0}: tiến trình con xong (mã {1})".format(k, con.pop(k).returncode))
+        _NUOI_TRANG_CHU["bd"].pop(k, None)
+    dung_con_qua_tran(con, _NUOI_TRANG_CHU["bd"], luc, ten="nuôi trang chủ")
     if luc - _NUOI_TRANG_CHU["luc"] < CHU_KY_NUOI_TRANG_CHU_GIAY:
         return len(con)
     _NUOI_TRANG_CHU["luc"] = luc
@@ -3079,6 +3139,7 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
             [sys.executable, os.path.join(GOC, "nuoi_trang_chu.py"), "--kenh", k], cwd=GOC,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        _NUOI_TRANG_CHU["bd"][k] = luc
     return len(con)
 
 
@@ -3086,7 +3147,7 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
 #   Điền hồ sơ kênh (tên, handle, mô tả, logo, banner, từ khoá, mặc định tải lên, danh sách phát) vào Studio MỘT LẦN.
 #   Cùng khoá `<kênh>.khoa` với nuôi trang chủ nên `_nhuong_kenh_nuoi` ở trên nhường được cho việc đăng; tuần tự từng kênh.
 CHU_KY_THIET_LAP_KENH_GIAY = 10 * 60
-_THIET_LAP_KENH = {"luc": 0.0, "con": {}, "ly": {}}
+_THIET_LAP_KENH = {"luc": 0.0, "con": {}, "ly": {}, "bd": {}}
 
 
 def chay_thiet_lap_kenh(bay_gio: float = None, mo_con=None) -> int:
@@ -3095,6 +3156,8 @@ def chay_thiet_lap_kenh(bay_gio: float = None, mo_con=None) -> int:
     con = _THIET_LAP_KENH["con"]
     for k in [k for k, c in con.items() if c.poll() is not None]:
         ghi("thiết lập kênh {0}: tiến trình con xong (mã {1})".format(k, con.pop(k).returncode))
+        _THIET_LAP_KENH["bd"].pop(k, None)
+    dung_con_qua_tran(con, _THIET_LAP_KENH["bd"], luc, ten="thiết lập kênh")
     if luc - _THIET_LAP_KENH["luc"] < CHU_KY_THIET_LAP_KENH_GIAY:
         return len(con)
     _THIET_LAP_KENH["luc"] = luc
@@ -3114,6 +3177,7 @@ def chay_thiet_lap_kenh(bay_gio: float = None, mo_con=None) -> int:
             [sys.executable, os.path.join(GOC, "thiet_lap_kenh_dom.py"), "--kenh", k], cwd=GOC,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        _THIET_LAP_KENH["bd"][k] = luc
     return len(con)
 
 
@@ -3752,6 +3816,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
     hong_lien_tiep = 0
     while True:
         co_loi = False
+        nhip_tim("bước: hỏi việc từ trạm", ep=True)
         for kenh in cac_kenh:
             try:
                 tra = hoi_viec(cau_hinh, kenh=kenh)
@@ -3775,6 +3840,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                             if not da_bao_cho:
                                 ghi("việc #{0}: đang xếp hàng sau việc nặng hiện tại".format(viec["id"]))
                                 da_bao_cho = True
+                            nhip_tim("bước: xếp hàng khoá máy cho việc #{0}".format(viec["id"]), ep=True)
                             time.sleep(NHIP_GIAY)
                         try:
                             ket_qua = lam_viec(hieu_luc[kenh], viec)
@@ -3809,6 +3875,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
         if che_do_phien_bat(cau_hinh, hieu_luc.get(kenh_chinh)):
             vua_chay_phien = False
             try:
+                nhip_tim("bước: hàng đợi phiên", ep=True)
                 vua_chay_phien = chay_hang_doi_phien(cau_hinh, hieu_luc, cac_kenh)
             except Exception as loi:  # noqa: BLE001 — một phiên hỏng, agent sống, mai lại tới lượt
                 ghi("hàng đợi phiên hỏng: {0}".format(loi))
@@ -3817,6 +3884,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             vua_tai = False
             if not vua_chay_phien and not mot_vong:
                 try:
+                    nhip_tim("bước: tải bổ sung", ep=True)
                     vua_tai = chay_tai_bo_sung(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("tải bổ sung hỏng: {0}".format(loi))
@@ -3825,18 +3893,21 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             # (phiên có hạn giờ thật) và sau tải bổ sung.
             if not vua_chay_phien and not mot_vong:
                 try:
+                    nhip_tim("bước: quét ngày", ep=True)
                     vua_chay_phien = chay_quet_ngay(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước hỏng, agent sống, lịch tự thử lại
                     ghi("QUÉT NGÀY hỏng: {0}".format(loi))
             # BÙ MHKT video cũ (01/10/2026) — giờ vắng, sau QUÉT NGÀY của kênh.
             if not vua_chay_phien and not mot_vong:
                 try:
+                    nhip_tim("bước: bù MHKT", ep=True)
                     vua_chay_phien = chay_bu_mhkt(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("bù MHKT hỏng: {0}".format(loi))
             # SỬA VIDEO CŨ (01/10/2026, cứu CTR thấp) — cùng khe giờ vắng của bù MHKT.
             if not vua_chay_phien and not mot_vong:
                 try:
+                    nhip_tim("bước: sửa video", ep=True)
                     vua_chay_phien = chay_sua_video(cau_hinh, hieu_luc, cac_kenh)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("sửa video hỏng: {0}".format(loi))
@@ -3845,14 +3916,17 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                 # Ghim sớm bình luận mồi cho video vừa công khai (máy bình luận DOM).
                 if not vua_tai:
                     try:
+                        nhip_tim("bước: ghim sớm", ep=True)
                         chay_ghim_som(cau_hinh, hieu_luc, cac_kenh)
                     except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                         ghi("ghim sớm hỏng: {0}".format(loi))
                 try:
+                    nhip_tim("bước: nuôi trang chủ", ep=True)
                     chay_nuoi_trang_chu()
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("nuôi trang chủ hỏng: {0}".format(loi))
                 try:
+                    nhip_tim("bước: thiết lập kênh", ep=True)
                     chay_thiet_lap_kenh()
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("thiết lập kênh hỏng: {0}".format(loi))
@@ -3883,6 +3957,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             return
         # Chờ giãn dần khi trạm im ắng lâu (tối đa 5 phút) — máy nhà tắt tool
         # qua đêm thì agent không việc gì phải hỏi đều 30 giây suốt đêm.
+        nhip_tim("bước: ngủ giữa nhịp", ep=True)
         time.sleep(min(NHIP_GIAY * max(1, hong_lien_tiep // 10 + 1), 300))
 
 

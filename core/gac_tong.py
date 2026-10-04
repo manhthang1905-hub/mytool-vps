@@ -1547,6 +1547,79 @@ def tu_sua(
     return hanh_dong
 
 
+#: NHỊP TIM AGENT (04/10/2026): sự cố agent `vm/agent.py` đứng im 2 giờ dù tiến trình còn sống. Agent ghi
+#: `vm/logs/nhip-tim.json` {pid, luc, buoc}; cũ hơn ngưỡng → dừng PID (giao diện tự bật lại agent trong ~10 giây).
+NGUONG_NHIP_TIM_CU_PHUT = 20.0
+#: Đang tải lên thì chờ lâu hơn hẳn — tải lên hợp lệ có thể kéo dài; quá mức này mới coi là treo.
+NGUONG_NHIP_TIM_CU_KHI_TAI_PHUT = 60.0
+
+
+def _dang_tai_len(goc: str) -> bool:
+    """Có lượt tải lên đang chạy: tệp `dang-dodang.json` (vm/logs hoặc logs) hoặc tiến trình `may_dang_dom`."""
+    for ten in (os.path.join(goc, "vm", "logs", "dang-dodang.json"), os.path.join(goc, "logs", "dang-dodang.json")):
+        if os.path.exists(ten):
+            return True
+    try:
+        import subprocess  # noqa: PLC0415
+        ra = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*may_dang_dom.p[y]*' }).ProcessId"],
+            capture_output=True, text=True, timeout=30)
+        return any(d.strip().isdigit() for d in (ra.stdout or "").splitlines())
+    except Exception:  # noqa: BLE001 — không dò được thì coi như ĐANG tải (an toàn: không giết)
+        return True
+
+
+def _pid_la_agent(pid: int) -> bool:
+    try:
+        import subprocess  # noqa: PLC0415
+        ra = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "(Get-CimInstance Win32_Process -Filter 'ProcessId={0}').CommandLine".format(int(pid))],
+            capture_output=True, text=True, timeout=30)
+        return "agent.py" in (ra.stdout or "")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def tu_sua_agent_treo(
+    goc: str,
+    *,
+    bay_gio: Optional[_dt.datetime] = None,
+    ghi_dia: bool = True,
+    giet: Optional[GietPid] = None,
+    dang_tai: Optional[Callable[[str], bool]] = None,
+    la_agent: Optional[Callable[[int], bool]] = None,
+) -> List[Dict[str, Any]]:
+    """Nhịp tim agent cũ quá ngưỡng → dừng PID agent + ghi sự cố. Không đọc được/chưa có nhịp tim → bỏ qua.
+    Có lượt tải lên đang chạy → chỉ dừng khi cũ hơn `NGUONG_NHIP_TIM_CU_KHI_TAI_PHUT`."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    nhip = _doc_json_an_toan(os.path.join(goc, "vm", "logs", "nhip-tim.json"))
+    if not isinstance(nhip, dict):
+        return []
+    try:
+        pid, luc = int(nhip["pid"]), float(nhip["luc"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    tuoi = (bay_gio.timestamp() - luc) / 60.0
+    if tuoi <= NGUONG_NHIP_TIM_CU_PHUT or not _pid_con_song(pid):
+        return []
+    if (dang_tai or _dang_tai_len)(goc) and tuoi <= NGUONG_NHIP_TIM_CU_KHI_TAI_PHUT:
+        return []
+    if not (la_agent or _pid_la_agent)(pid):
+        return []
+    if ghi_dia:
+        (giet or tien_trinh_con.giet_pid)(pid)
+    h = {"loai": "agent_treo", "kenh": "", "pid": pid, "thuc_hien": ghi_dia,
+         "chuyen_gi": "agent treo — đã tự khởi động lại (dừng PID {0}; nhịp tim cũ {1:.0f} phút, bước cuối: {2})".format(
+             pid, tuoi, str(nhip.get("buoc") or "?")[:120])}
+    if ghi_dia:
+        su_co = [_su_co("tu_sua:agent_treo", bao_dong.MUC_THUONG, chuyen_gi=h["chuyen_gi"])]
+        _ghi_nhat_ky_jsonl(goc, bay_gio, su_co)
+        _ghi_loi_chay_max_md(goc, bay_gio, su_co)
+    return [h]
+
+
 def tu_xu_ly_viec_may(
     goc: str,
     anh: Dict[str, Any],
@@ -1795,6 +1868,10 @@ def _main(argv: Optional[List[str]] = None) -> int:
         tom_tat_mk = "không chạy được ({0})".format(str(loi_mk)[:200])
     ket_qua = bao_cao_su_co(goc, anh, ds_su_co, ghi_dia=not thu)
     hanh_dong_tu_sua = tu_sua(goc, anh, ghi_dia=not thu)
+    try:
+        hanh_dong_tu_sua += tu_sua_agent_treo(goc, ghi_dia=not thu)
+    except Exception:  # noqa: BLE001 — canh nhịp tim hỏng không được làm sập gác tổng
+        pass
     try:
         hanh_dong_tu_sua += tu_xu_ly_viec_may(goc, anh, ghi_dia=not thu)
     except Exception:  # noqa: BLE001 — tự xử hỏng không được làm sập gác tổng

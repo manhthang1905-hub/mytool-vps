@@ -47,6 +47,11 @@ import time
 import unicodedata
 from datetime import date, datetime, timedelta
 
+try:
+    from vm import canh_tien_trien
+except ImportError:  # chạy trực tiếp `python vm/nuoi_trang_chu.py` (vm/ nằm trong sys.path)
+    import canh_tien_trien
+
 GOC = os.path.dirname(os.path.abspath(__file__))            # vm/
 GOC_TOOL = os.path.dirname(GOC)                             # MyTool/
 THU_MUC_SO = os.path.join(GOC, "logs", "nuoi-trang-chu")
@@ -860,6 +865,7 @@ class Tab:
                                                       "awaitPromise": False}, sid=self.sid, han=han)
                 if r.get("exceptionDetails"):
                     raise RuntimeError("JS lỗi: " + str((r["exceptionDetails"].get("exception") or {}).get("description") or "")[:150])
+                canh_tien_trien.danh_dau()
                 return (r.get("result") or {}).get("value")
             except RuntimeError:
                 raise
@@ -910,6 +916,7 @@ class Tab:
         x, y = self.chuot
         self.cdp.goi("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": dy},
                      sid=self.sid, han=10)
+        canh_tien_trien.danh_dau()
 
     def cuon_trang_chu(self, giay: float):
         """Cuộn như người thật `giay` giây: cuộn xuống từng đoạn, thỉnh thoảng lên một chút."""
@@ -1037,6 +1044,7 @@ def _nhat_ky(kenh: str):
     duong = os.path.join(THU_MUC_SO, kenh + ".log")
 
     def ghi(dong):
+        canh_tien_trien.danh_dau()
         chu = "{0} {1}".format(time.strftime("%Y-%m-%d %H:%M:%S"), dong)
         try:
             print(chu, flush=True)
@@ -1195,6 +1203,7 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         agent.ghi_che_do_mat_cao(ch, False)
         cong = agent._cong_devtools(ch)                     # noqa: SLF001
         tu_mo = True
+        canh_tien_trien.bat_canh(lambda: (agent.dong_chrome_kenh(ch), nha_khoa(kenh)), ghi=ghi)
         agent.mo_chrome_kenh(ch, "https://www.youtube.com/", chrome, da_chay=False, quet=False)
         ws = agent._cho_devtools(cong, agent.CHO_DEVTOOLS_GIAY)  # noqa: SLF001
         nha_khoa("_mo")
