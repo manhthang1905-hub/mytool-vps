@@ -166,7 +166,7 @@ def test_hop_cai_dat_co_du_bay_muc(bon_cot, qapp):
     for ten in BAY_MUC:
         assert getattr(hop, ten, None) is not None, "thiếu " + ten
     assert sorted(hop.o_cong_tac) == sorted(
-        ["tu_chay", "tu_dang", "tu_don", "tu_tra_loi_cmt"])
+        ["nuoi_trang_chu", "tu_chay", "tu_dang", "tu_don", "tu_tra_loi_cmt"])
 
     chu = " ".join(nh.text() for nh in hop.findChildren(type(hop.nhan_canh_ns)))
     assert "Giờ đăng" in chu

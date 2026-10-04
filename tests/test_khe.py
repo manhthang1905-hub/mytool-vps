@@ -459,3 +459,36 @@ class TestGiuJobToanMay:
             with pytest.raises(_Dung):
                 with khe.giu_job(goc, "image", tran_may_chu=1, kiem_dung=kiem):
                     pass
+
+
+# ── Cờ "đang chờ tải lên" (04/10/2026) ──────────────────────────────────────
+
+
+def test_co_cho_tai_len_chan_san_xuat_nhung_khong_chan_viec_dang(tmp_path):
+    goc = str(tmp_path)
+    assert khe.co_cho_tai_len(goc) is False
+    khe.dat_co_cho_tai_len(goc, True)
+    assert khe.co_cho_tai_len(goc) is True
+    assert khe.thu_giu(goc, "nang", "dung") is None            # sản xuất nhường dù khe trống
+    assert khe.thu_giu(goc, "nang", "quet", uu_tien=1) is None  # quét cũng nhường
+    p = khe.thu_giu(goc, "nang", "tai_len", uu_tien=1)          # việc đăng vào ngay
+    assert p is not None
+    p.nha()
+    khe.dat_co_cho_tai_len(goc, False)                          # tải xong gỡ cờ
+    assert khe.co_cho_tai_len(goc) is False
+    q = khe.thu_giu(goc, "nang", "dung")
+    assert q is not None
+    q.nha()
+
+
+def test_co_cho_tai_len_het_han_thi_san_xuat_chay_tiep(tmp_path):
+    goc = str(tmp_path)
+    khe.dat_co_cho_tai_len(goc, True)
+    duong = khe._duong_co_cho_tai_len(goc)
+    du = json.load(open(duong, encoding="utf-8"))
+    du["luc"] = time.time() - khe.TUOI_CO_CHO_TAI_LEN_GIAY - 5
+    json.dump(du, open(duong, "w", encoding="utf-8"))
+    assert khe.co_cho_tai_len(goc) is False
+    q = khe.thu_giu(goc, "nang", "dung")
+    assert q is not None
+    q.nha()

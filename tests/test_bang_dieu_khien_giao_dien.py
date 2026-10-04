@@ -622,3 +622,30 @@ def test_hop_quyet_dinh_va_bao_cao_tuan(tmp_path, qapp):
     bc = HopBaoCaoTuan(app, "K1")
     assert [bc.the.tabText(i) for i in range(bc.the.count())] == ["Kênh K1", "Công ty"]
     bc.deleteLater()
+
+
+def test_cong_tac_nuoi_trang_chu_trong_cai_dat_kenh(tmp_path, qapp):
+    """Hộp ⚙ Cài kênh có công tắc "Nuôi trang chủ" + số đo gần nhất từ sổ nuôi."""
+    import json
+
+    from core import bang_dieu_khien as bdk
+    from ui_qt.trang_dieu_khien import HopCaiDatKenh
+
+    goc = str(tmp_path)
+    assert bdk.nuoi_trang_chu_so(goc, "K1") == "chưa đo"
+    thu_muc = tmp_path / "vm" / "logs" / "nuoi-trang-chu"
+    thu_muc.mkdir(parents=True)
+    so = {"trang_thai": "dang_nuoi", "lan_do": [{"pct_chu_de": 77.2, "pct_ngach": 43.0}]}
+    (thu_muc / "K1.json").write_text(json.dumps(so), encoding="utf-8")
+    assert bdk.nuoi_trang_chu_so(goc, "K1") == "Trang chủ 77% đúng chủ đề · 43% đúng ngách · đang nuôi"
+    so.update(trang_thai="dat", lan_do=[{"pct_chu_de": 94.0, "pct_ngach": 60.0}])
+    (thu_muc / "K1.json").write_text(json.dumps(so), encoding="utf-8")
+    assert bdk.nuoi_trang_chu_so(goc, "K1") == "đã đạt 94% — tắt"
+
+    hop = HopCaiDatKenh("K1")
+    o = hop.o_cong_tac["nuoi_trang_chu"]
+    assert "90%" in o.text()
+    bat = []
+    hop.xin_cong_tac.connect(lambda m, k, b: bat.append((m, k, b)))
+    o.setChecked(True)
+    assert bat == [("K1", "nuoi_trang_chu", True)]

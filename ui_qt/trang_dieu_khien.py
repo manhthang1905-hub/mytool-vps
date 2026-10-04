@@ -260,6 +260,9 @@ class HopCaiDatKenh(QDialog):
          "Máy tự trả lời bình luận dưới video của kênh này."),
         ("tu_don", "Tự dọn",
          "Video đã lên sóng thì xoá ảnh, clip và bản dựng cho nhẹ ổ đĩa."),
+        ("nuoi_trang_chu", "Nuôi trang chủ (đến khi > 90% đúng chủ đề)",
+         "Máy tự xem video đúng chủ đề trên trang chủ YouTube của kênh để thuật toán gợi ý đúng đối tượng; "
+         "đạt thì tự tắt."),
     )
 
     def __init__(self, ma: str, cha: Optional[QWidget] = None):
@@ -336,6 +339,10 @@ class HopCaiDatKenh(QDialog):
                 lambda bat, kh=khoa: self._bao_cong_tac(kh, bool(bat)))
             doc.addWidget(o)
             doc.addWidget(self._giai(giai))
+            if khoa == "nuoi_trang_chu":
+                self.nhan_nuoi = self._giai("chưa đo")
+                self.nhan_nuoi.setVisible(True)   # số đo, không phải lời giải thích — luôn hiện
+                doc.addWidget(self.nhan_nuoi)
             doc.addSpacing(4)
             self.o_cong_tac[khoa] = o
 
@@ -518,9 +525,11 @@ class HopCaiDatKenh(QDialog):
             gia_tri = {
                 "tu_chay": bool(k.get("tu_chay")),
                 "tu_don": bool(k.get("tu_don")),
+                "nuoi_trang_chu": bool(k.get("nuoi_trang_chu")),
                 "tu_dang": bool(cai_vm.get("tu_dang")),
                 "tu_tra_loi_cmt": bool(cai_vm.get("tu_tra_loi_cmt")),
             }
+            self.nhan_nuoi.setText(str(k.get("nuoi_so") or "chưa đo"))
             for khoa, o in self.o_cong_tac.items():
                 o.blockSignals(True)
                 o.setChecked(gia_tri.get(khoa, False))
@@ -1602,7 +1611,7 @@ class TrangDieuKhien(QWidget):
             return
         goc = self._app.base_dir
         try:
-            if khoa in ("tu_chay", "tu_don"):
+            if khoa in ("tu_chay", "tu_don", "nuoi_trang_chu"):
                 tt.ghi_cai_kenh(goc, ma, **{khoa: bool(bat)})
             else:
                 from core import vm_cai_dat  # noqa: PLC0415

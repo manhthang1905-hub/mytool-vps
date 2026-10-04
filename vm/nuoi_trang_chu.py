@@ -57,6 +57,10 @@ TOI_DA_VIDEO_NGAY = 40
 NGHI_PHIEN_PHUT = (20, 40)
 NGHI_NGAT_PHUT = 5                       # phiên bị ngắt (nhường đăng/khe nang) thì nghỉ ngắn hơn
 TOI_DA_CHROME_NUOI = 4
+TOI_DA_CHROME_KHI_DUNG = 2               # đang có việc dựng/sản xuất giữ khe nang thì chỉ ≤ 2 Chrome nuôi
+CPU_TOI_DA_PCT = 75.0                    # CPU tổng ≥ ngần này thì nhường
+#: Việc của agent ĐĂNG (khe nang) — nuôi trang chủ nhường tuyệt đối khi những việc này đang giữ.
+VIEC_DANG = ("tai_len", "phien", "viec", "binh_luan", "bu_mhkt", "sua_video")
 RAM_TOI_THIEU_GB = 4.0
 CHU_KY_LICH_AGENT_GIAY = 10 * 60
 NGAN_SACH_PHIEN_PHUT = 90                # quá ngần này thì thôi không mở video mới
@@ -264,10 +268,12 @@ def kiem_gioi_han(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung:
     return "" if so_v else ly
 
 
-def duoc_mo_them(so_chrome_dang_nuoi: int, ram_trong_gb) -> str:
-    """Lý do KHÔNG được mở thêm Chrome nuôi, hoặc "": tối đa 4 Chrome và RAM trống >= 4 GB."""
-    if so_chrome_dang_nuoi >= TOI_DA_CHROME_NUOI:
-        return "đã có {0} Chrome nuôi (tối đa {0})".format(TOI_DA_CHROME_NUOI)
+def duoc_mo_them(so_chrome_dang_nuoi: int, ram_trong_gb, dang_dung: bool = False) -> str:
+    """Lý do KHÔNG được mở thêm Chrome nuôi, hoặc "": tối đa 4 Chrome (2 khi máy đang dựng) và RAM trống >= 4 GB."""
+    tran = TOI_DA_CHROME_KHI_DUNG if dang_dung else TOI_DA_CHROME_NUOI
+    if so_chrome_dang_nuoi >= tran:
+        return "đã có {0} Chrome nuôi (tối đa {1}{2})".format(
+            so_chrome_dang_nuoi, tran, " khi máy đang dựng" if dang_dung else "")
     if ram_trong_gb is None or ram_trong_gb < RAM_TOI_THIEU_GB:
         return "RAM trống {0} GB < {1:.0f} GB".format(
             "?" if ram_trong_gb is None else "{0:.1f}".format(ram_trong_gb), RAM_TOI_THIEU_GB)
@@ -607,15 +613,50 @@ def ram_trong_gb():
         return None
 
 
-def khe_nang_ban(goc_tool: str = GOC_TOOL) -> bool:
-    """Khe "nang" của máy (dựng/phụ đề/tải lên/quét...) đang có người giữ — nhường CPU cho họ."""
+def cpu_tong_pct(giay: float = 3.0):
+    """CPU tổng (%) trung bình `giay` giây qua psutil; không có thì GetSystemTimes (ctypes). None nếu không đo được."""
+    try:
+        import psutil                                          # noqa: PLC0415
+        return float(psutil.cpu_percent(interval=giay))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import ctypes                                          # noqa: PLC0415
+        from ctypes import wintypes                            # noqa: PLC0415
+
+        def _lay():
+            r = [wintypes.FILETIME() for _ in range(3)]
+            ctypes.windll.kernel32.GetSystemTimes(*[ctypes.byref(x) for x in r])
+            return [(x.dwHighDateTime << 32) | x.dwLowDateTime for x in r]   # rảnh, nhân, người dùng
+        d1 = _lay()
+        time.sleep(giay)
+        d2 = _lay()
+        d = [b - a for a, b in zip(d1, d2)]
+        tong = d[1] + d[2]                                     # thời gian nhân đã gồm cả rảnh
+        return 100.0 * (tong - d[0]) / tong if tong > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def khe_nang_viec(goc_tool: str = GOC_TOOL) -> str:
+    """Tên việc đang giữ khe "nang" của máy ("" nếu rảnh; "?" nếu giữ mà không rõ việc)."""
     try:
         if goc_tool not in sys.path:
             sys.path.insert(0, goc_tool)
         from core import khe                                  # noqa: PLC0415
-        return khe.trang_thai(goc_tool).get("nang") is not None
+        du = khe.trang_thai(goc_tool).get("nang")
+        return "" if du is None else str(du.get("viec") or "?")
     except Exception:  # noqa: BLE001
-        return False
+        return ""
+
+
+def khe_nang_ban(goc_tool: str = GOC_TOOL) -> bool:
+    """Máy quá bận để nuôi: việc ĐĂNG đang giữ khe nang (nhường tuyệt đối) hoặc CPU tổng >= 75%.
+    Khe nang bận vì dựng/sản xuất mà CPU còn dư thì vẫn nuôi (tối đa 2 Chrome — xem `duoc_mo_them`)."""
+    if khe_nang_viec(goc_tool) in VIEC_DANG:
+        return True
+    cpu = cpu_tong_pct()
+    return cpu is not None and cpu >= CPU_TOI_DA_PCT
 
 
 def tat_nuoi(kenh: str, goc: str = GOC_TOOL) -> str:
@@ -655,10 +696,11 @@ def kenh_den_luot(luc: float, dang_chay=(), goc: str = GOC_TOOL, ram=None, nang_
     if not ung:
         return [], ly
     if nang_ban if nang_ban is not None else khe_nang_ban(goc):
-        return [], dict(ly, **{k: "khe nang của máy đang bận (dựng/tải lên) — nhường CPU" for k in ung})
+        return [], dict(ly, **{k: "máy đang bận (việc đăng giữ khe hoặc CPU ≥ 75%) — nhường" for k in ung})
     ra, ram = [], (ram_trong_gb() if ram is None else ram)
+    dung = bool(khe_nang_viec(goc)) if nang_ban is None else False      # máy đang dựng → trần 2 Chrome
     for k in ung:
-        r = duoc_mo_them(len(dang) + len(ra), ram)
+        r = duoc_mo_them(len(dang) + len(ra), ram, dung)
         if r:
             ly[k] = r
         else:
@@ -1066,7 +1108,7 @@ def ly_do_dung(agent, kenh: str, luc: float) -> str:
     if khung_cam(luc, 0):
         return khung_cam(luc, 0)
     if khe_nang_ban():
-        return "khe nang của máy đang bận (dựng/tải lên) — nhường CPU"
+        return "máy đang bận (việc đăng giữ khe hoặc CPU ≥ 75%) — nhường"
     return viec_dang_cho(agent, luc, kenh)
 
 
@@ -1082,7 +1124,7 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
     agent = _nap_agent(ghi)
     try:
         kiem_truoc_khi_chay(agent, kenh)
-        for r in (viec_dang_cho(agent, luc0, kenh), "khe nang của máy đang bận" if khe_nang_ban() else ""):
+        for r in (viec_dang_cho(agent, luc0, kenh), "máy đang bận (việc đăng/CPU ≥ 75%)" if khe_nang_ban() else ""):
             if r:
                 raise Hoan("nhường: " + r)
     except Hoan as h:
@@ -1116,7 +1158,8 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
                 return MA_HOAN
             time.sleep(3)
         khoa_mo = True
-        r = duoc_mo_them(len(cac_kenh_dang_nuoi()) - 1, ram_trong_gb())      # trừ chính mình
+        r = duoc_mo_them(len(cac_kenh_dang_nuoi()) - 1, ram_trong_gb(),
+                        bool(khe_nang_viec()))      # trừ chính mình
         if r:
             ghi("hoãn: {0}".format(r))
             phien["ket_qua"] = "hoãn: " + r

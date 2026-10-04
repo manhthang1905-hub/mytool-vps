@@ -75,7 +75,7 @@ __all__ = [
     "duong_khoa_api", "duong_nhat_ky", "pid_con_song", "ram_gb", "so_lan_api",
     "giu", "thu_giu", "trang_thai", "xoa_tep_ben_vung", "mo_ta_nguoi_giu",
     "TRAN_API_TONG_MAC_DINH", "tran_api_tong", "duong_thu_muc_job", "giu_job",
-    "so_job_dang_giu",
+    "so_job_dang_giu", "dat_co_cho_tai_len", "co_cho_tai_len",
 ]
 
 LOP_NANG = "nang"
@@ -363,6 +363,51 @@ def _ghi_nhat_ky(goc: str, muc: Dict[str, Any]) -> None:
         pass
 
 
+# ── Cờ "đang chờ tải lên" (04/10/2026) ──────────────────────────────────────
+#
+# Luật chủ dự án: đăng đúng giờ > quét Studio > dựng > việc nền. Khe "nang" không
+# ngắt việc đang chạy, nhưng khi agent xin khe cho việc ĐĂNG mà hụt (`thu_giu` trả
+# None) thì nó dựng cờ này; mọi việc KHÔNG phải đăng (dựng, phụ đề, quét, nền…) khi
+# thấy cờ còn tươi thì không giành khe mới → khe nhả ra là việc đăng vào ngay (nhịp
+# tim agent 30 giây). Cờ chỉ sống `TUOI_CO_CHO_TAI_LEN_GIAY` kể từ lần hụt cuối (agent
+# làm tươi mỗi lần thử lại) và gắn với PID agent — một lượt tải lên ~4 phút nên
+# sản xuất không bao giờ đứng vô hạn; agent ngừng thử là cờ tự hết.
+
+#: Việc ĐĂNG (agent) — không bị cờ chặn.
+VIEC_DANG_UU_TIEN = ("tai_len", "phien", "viec")
+TUOI_CO_CHO_TAI_LEN_GIAY = 300.0
+
+
+def _duong_co_cho_tai_len(goc: str) -> str:
+    return os.path.join(duong_thu_muc_khe(goc), "cho-tai-len.json")
+
+
+def dat_co_cho_tai_len(goc: str, bat: bool = True) -> None:
+    """Dựng/làm tươi (`bat`) hoặc gỡ cờ "đang chờ tải lên". Không bao giờ ném lỗi."""
+    try:
+        if bat:
+            _ghi_json_nguyen_tu(_duong_co_cho_tai_len(goc), {"pid": os.getpid(), "luc": time.time()})
+        else:
+            du = _doc_json(_duong_co_cho_tai_len(goc))
+            if du is not None and int(du.get("pid") or 0) == os.getpid():
+                _xoa_tep(_duong_co_cho_tai_len(goc))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def co_cho_tai_len(goc: str) -> bool:
+    """Có việc đăng đang chờ khe (cờ còn tươi và agent còn sống) không."""
+    du = _doc_json(_duong_co_cho_tai_len(goc))
+    if du is None:
+        return False
+    try:
+        if time.time() - float(du.get("luc") or 0) > TUOI_CO_CHO_TAI_LEN_GIAY:
+            return False
+        return pid_con_song(int(du.get("pid") or 0))
+    except (TypeError, ValueError):
+        return False
+
+
 # ── Hàng chờ + khoá sắp xếp ưu tiên ─────────────────────────────────────────
 
 
@@ -429,6 +474,8 @@ def _thu_mot_lan(goc: str, lop: str, viec: str, kenh: str, uu_tien: float,
     trong = [d for d in duong_list if _khe_trong(d)]
     if not trong:
         return None
+    if lop == LOP_NANG and viec not in VIEC_DANG_UU_TIEN and co_cho_tai_len(goc):
+        return None     # nhường việc đăng đang chờ: khe nhả ra là nó vào trước
     khoa_minh = (float(uu_tien),
                 float(han) if han is not None else float("inf"),
                 float(luc_xin))

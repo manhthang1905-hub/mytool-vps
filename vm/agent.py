@@ -152,7 +152,17 @@ def giu_khoa_may_chung(viec: str = "phien", kenh: str = "", uu_tien: int = 1) ->
             k = None
         if k is not None:
             if phien is None:
+                if viec in ("tai_len", "phien", "viec"):    # việc ĐĂNG hụt khe: dựng cờ để sản xuất/quét nhường
+                    try:
+                        k.dat_co_cho_tai_len(os.path.dirname(GOC), True)
+                    except Exception:  # noqa: BLE001
+                        pass
                 return False
+            if viec in ("tai_len", "phien", "viec"):
+                try:
+                    k.dat_co_cho_tai_len(os.path.dirname(GOC), False)
+                except Exception:  # noqa: BLE001
+                    pass
             _PHIEN_KHE = phien
             _KHOA_MAY_DANG_GIU = True
             return True

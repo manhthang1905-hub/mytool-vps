@@ -191,7 +191,7 @@ def test_kenh_den_luot_kiem_ram_truoc_moi_lan_mo(tmp_path, monkeypatch):
 def test_kenh_den_luot_nhuong_khi_khe_nang_ban_va_khung_cam(tmp_path, monkeypatch):
     goc = _dung_kenh(tmp_path, monkeypatch, ["A", "B"], {"B": so_dang(trang_thai="dat")})
     ra, ly = n.kenh_den_luot(luc(12), (), goc, ram=40.0, nang_ban=True)
-    assert ra == [] and "khe nang" in ly["A"] and "đã đạt" in ly["B"]
+    assert ra == [] and "bận" in ly["A"] and "đã đạt" in ly["B"]
     ra, ly = n.kenh_den_luot(luc(3), (), goc, ram=40.0, nang_ban=False)
     assert ra == [] and "khung cấm" in ly["A"]
 
@@ -296,7 +296,7 @@ def test_ly_do_dung_nhuong_viec_dang_va_khe_nang(tmp_path, monkeypatch):
     assert "cờ" in n.ly_do_dung(None, "K", t)                   # agent đòi Chrome kênh → dừng
     n.xoa_co_dung("K", str(tmp_path))
     monkeypatch.setattr(n, "khe_nang_ban", lambda goc_tool=None: True)
-    assert "khe nang" in n.ly_do_dung(None, "K", t)
+    assert "bận" in n.ly_do_dung(None, "K", t)
     monkeypatch.setattr(n, "khe_nang_ban", lambda goc_tool=None: False)
     monkeypatch.setattr(n, "viec_dang_cho", lambda ag, t, k: "kênh K có gói chờ tải lên")
     assert "tải lên" in n.ly_do_dung(None, "K", t)
@@ -390,3 +390,17 @@ def test_giu_khoa_may_chung_moi_qua_nhuong_kenh_nuoi(tmp_path, monkeypatch):
     goi = []
     monkeypatch.setattr(mod, "_nhuong_kenh_nuoi", lambda k, *a: goi.append(k) or False)
     assert mod.giu_khoa_may_chung(viec="tai_len", kenh="TL1-T7") is False and goi == ["TL1-T7"]
+
+
+def test_tran_chrome_khi_may_dang_dung_va_cpu(monkeypatch):
+    assert n.duoc_mo_them(1, 8.0, True) == ""
+    assert "tối đa 2" in n.duoc_mo_them(2, 8.0, True)
+    assert n.duoc_mo_them(3, 8.0, False) == ""
+    monkeypatch.setattr(n, "khe_nang_viec", lambda goc_tool=None: "dung")
+    monkeypatch.setattr(n, "cpu_tong_pct", lambda giay=3.0: 40.0)
+    assert n.khe_nang_ban() is False                    # đang dựng nhưng CPU còn dư → vẫn nuôi
+    monkeypatch.setattr(n, "cpu_tong_pct", lambda giay=3.0: 80.0)
+    assert n.khe_nang_ban() is True
+    monkeypatch.setattr(n, "cpu_tong_pct", lambda giay=3.0: 10.0)
+    monkeypatch.setattr(n, "khe_nang_viec", lambda goc_tool=None: "tai_len")
+    assert n.khe_nang_ban() is True                     # việc đăng giữ khe → nhường tuyệt đối

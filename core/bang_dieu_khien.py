@@ -786,10 +786,24 @@ def danh_dau_xong(goc: str, khoa: str, *, bay_gio: Optional[_dt.datetime] = None
 
 def doi_cong_tac(goc: str, ma: str, khoa: str, bat: bool) -> None:
     """`tu_chay`/`tu_don` → `kenh.yaml`; `tu_dang`/`tu_tra_loi_cmt` → máy ảo."""
-    if khoa in ("tu_chay", "tu_don"):
+    if khoa in ("tu_chay", "tu_don", "nuoi_trang_chu"):
         tt.ghi_cai_kenh(goc, ma, **{khoa: bool(bat)})
     else:
         vm_cai_dat.luu(goc, ma, **{khoa: bool(bat)})
+
+
+def nuoi_trang_chu_so(goc: str, ma: str) -> str:
+    """Số đo gần nhất của việc nuôi trang chủ (`vm/logs/nuoi-trang-chu/<mã>.json`) thành một câu."""
+    so = _doc_json(os.path.join(goc, "vm", "logs", "nuoi-trang-chu", ma + ".json"))
+    lan = (so or {}).get("lan_do") if isinstance(so, dict) else None
+    if not lan or not isinstance(lan[-1], dict):
+        return "chưa đo"
+    m, tt_ = lan[-1], str(so.get("trang_thai") or "")
+    cd, ng = _so(m.get("pct_chu_de")) or 0.0, _so(m.get("pct_ngach")) or 0.0
+    if tt_ == "dat":
+        return "đã đạt {0:.0f}% — tắt".format(cd)
+    return "Trang chủ {0:.0f}% đúng chủ đề · {1:.0f}% đúng ngách · {2}".format(
+        cd, ng, "cần người xem" if tt_ == "can_nguoi" else "đang nuôi")
 
 
 def doi_ngan_sach(goc: str, ma: str, gia_tri: int) -> None:
@@ -1505,6 +1519,7 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         k2["may_dang_hoc"] = may_dang_hoc(goc, str(k.get("ma") or ""))
         k2["con_thieu_ypp"] = con_thieu_ypp(k.get("ypp") or {})
         k2["giam_doc"] = giam_doc_the(goc, str(k.get("ma") or ""))
+        k2["nuoi_so"] = nuoi_trang_chu_so(goc, str(k.get("ma") or ""))
         kenh.append(k2)
 
     viec = viec_cua_ban(goc, anh=dict(anh, kenh=kenh), bay_gio=bay_gio, so_du_micro=so_du_micro,
