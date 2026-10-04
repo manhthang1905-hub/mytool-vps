@@ -2948,9 +2948,15 @@ def chay_tai_bo_sung(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: fl
             ghi("tải bổ sung kênh {0} hoãn: đang có máy đăng dở (dang-dodang.json)".format(kenh))
             return False
         if not giu_khoa_may_chung(viec="tai_len", kenh=kenh, uu_tien=1):
-            ghi("tải bổ sung kênh {0} ({1}) hoãn: máy đang bận việc nặng (sản xuất/phiên)".format(
-                kenh, ", ".join(can)))
+            # 04/10/2026: hụt khoá → thử lại sau ~1' (không đợi đủ chu kỳ 25'): cờ "chờ tải lên" chỉ sống 5',
+            # sản xuất nhường ở khâu kế — phải có mặt để giành khe ngay khi khe nhả.
+            _TAI_BO_SUNG["luc"] = luc - CHU_KY_TAI_BO_SUNG_GIAY + 60
+            if not _TAI_BO_SUNG.get("bao_hoan") == (kenh, hom_nay):
+                _TAI_BO_SUNG["bao_hoan"] = (kenh, hom_nay)
+                ghi("tải bổ sung kênh {0} ({1}) hoãn: máy đang bận việc nặng (sản xuất/phiên) — "
+                    "đã dựng cờ ưu tiên, thử lại mỗi phút".format(kenh, ", ".join(can)))
             return False
+        _TAI_BO_SUNG.pop("bao_hoan", None)
         try:
             dem_moi = dict(dem_goi)
             for m in can:
