@@ -1189,9 +1189,31 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         def dung():
             return ly_do_dung(agent, kenh, time.time())
 
-        # Kiểm trang chủ trước: chưa đăng nhập / CAPTCHA thì dừng ngay.
-        o0 = doc_o_trang_chu(tab, can=12, cho_giay=30)
+        def do_va_ghi(o: list, nl: dict, nhan: str) -> None:
+            """04/10/2026: ĐO mỗi lần đã đọc + phân loại trang chủ (đầu phiên, giữa phiên, cuối phiên) — trước đây
+            chỉ đo cuối phiên, mà phiên hay bị ngắt để nhường việc đăng → nhiều kênh không có lần đo nào."""
+            o = o[:SO_O_DO]
+            ket = phan_tram([nl[x["id"]] for x in o if x["id"] in nl])
+            ket["vi_du_lac_de"] = ["{0} — {1}".format(x["kenh"][:25], x["tieu_de"][:60]) for x in o if nl.get(x["id"]) == "lac_de"]
+            if ket["n"] >= TOI_THIEU_O_DO:
+                ghi_lan_do(so, ket, time.strftime("%Y-%m-%d %H:%M"))
+                luu_so(so)
+                ghi("ĐO ({0}): {1} ô · chủ đề {2}% · ngách {3}% · {4}".format(
+                    nhan, ket["n"], ket["pct_chu_de"], ket["pct_ngach"], "ĐẠT" if so["lan_do"][-1]["dat"] else "chưa đạt"))
+                for t in ket["vi_du_lac_de"][:5]:
+                    ghi("   lạc đề: " + t)
+            else:
+                ghi("ĐO KHÔNG TÍNH ({0}): chỉ phân loại được {1} ô (cần >= {2}) — {3} ô đọc được".format(
+                    nhan, ket["n"], TOI_THIEU_O_DO, len(o)))
+
+        # Kiểm trang chủ trước: chưa đăng nhập / CAPTCHA thì dừng ngay. Đọc đủ ô để ĐO luôn đầu phiên.
+        o0 = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=30)
         ghi("trang chủ đã đăng nhập, thấy {0} ô video".format(len(o0)))
+        do_va_ghi(o0, phan_loai(goi, mo_ta, o0[:SO_O_DO], so["cache"]), "đầu phiên")
+        if so.get("trang_thai") == "dat":
+            chon_truoc = True
+        else:
+            chon_truoc = False
         hom = datetime.fromtimestamp(luc0).date()
         ung = doc_ung_vien(kenh, hom)
         cam_id, cam_ten = id_video_cua_minh(), ten_kenh_cua_minh()
@@ -1202,6 +1224,8 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         ghi("đã chọn {0} video ({1} đúng ngách) từ {2} ứng viên".format(
             len(chon), sum(1 for v in chon if v["ngach"]), len(ung)))
         moc_day, so_gan = rng.randint(3, 5), 0
+        if chon_truoc:
+            chon = []                                       # đạt ngay đầu phiên → không cần xem thêm
         for v in chon:
             r = dung()
             if not r and time.time() - luc0 > NGAN_SACH_PHIEN_PHUT * 60:
@@ -1226,6 +1250,9 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
                 so_gan, moc_day = 0, rng.randint(3, 5)
                 o = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=25)
                 nl = phan_loai(goi, mo_ta, o, so["cache"])
+                do_va_ghi(o, nl, "giữa phiên")
+                if so.get("trang_thai") == "dat":
+                    break
                 for x in o:
                     if phien["khong_quan_tam"] >= TOI_DA_KHONG_QUAN_TAM:
                         break
@@ -1234,21 +1261,10 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
                         ghi("   Không quan tâm: {0} — {1}".format(x["kenh"][:20], x["tieu_de"][:40]))
                 luu_so(so)
             tab.ngu(rng.uniform(10, 60))
-        if not bi_ngat:
+        if not bi_ngat and so.get("trang_thai") != "dat":
             # Đo cuối phiên: nạp lại trang chủ, ~30 ô đầu, LLM phân loại.
             o = doc_o_trang_chu(tab, can=SO_O_DO, cho_giay=40)[:SO_O_DO]
-            nl = phan_loai(goi, mo_ta, o, so["cache"])
-            ket = phan_tram([nl[x["id"]] for x in o if x["id"] in nl])
-            ket["vi_du_lac_de"] = ["{0} — {1}".format(x["kenh"][:25], x["tieu_de"][:60]) for x in o if nl.get(x["id"]) == "lac_de"]
-            if ket["n"] >= TOI_THIEU_O_DO:
-                ghi_lan_do(so, ket, time.strftime("%Y-%m-%d %H:%M"))
-                ghi("ĐO: {0} ô · chủ đề {1}% · ngách {2}% · {3}".format(
-                    ket["n"], ket["pct_chu_de"], ket["pct_ngach"], "ĐẠT" if so["lan_do"][-1]["dat"] else "chưa đạt"))
-                for t in ket["vi_du_lac_de"][:5]:
-                    ghi("   lạc đề: " + t)
-            else:
-                ghi("ĐO KHÔNG TÍNH: chỉ phân loại được {0} ô (cần >= {1}) — {2}/{3} ô đọc được".format(
-                    ket["n"], TOI_THIEU_O_DO, len(o), SO_O_DO))
+            do_va_ghi(o, phan_loai(goi, mo_ta, o, so["cache"]), "cuối phiên")
         phien["ket_qua"] = "bị ngắt (nhường việc đăng/khe nang)" if bi_ngat else "xong"
         if so.get("trang_thai") == "dat":
             d = tat_nuoi(kenh)
