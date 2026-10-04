@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.8** — 2026-10-04 — `vps-jp1` — Agent: tai bo sung chay TRUOC quet ngay (dang dung gio > quet Studio); test phien cap nhat cho kenh moi chua co video
 - **2.149.7** — 2026-10-04 — `vps-jp1` — Tai bo sung: tai xong ma con kenh khac cho thi lam ngay kenh ke (khong doi 25 phut) - 7 kenh
 - **2.149.6** — 2026-10-04 — `vps-jp1` — May dang DOM: kenh moi chua co video nao thi danh sach trong khong chan tai len (truoc day hong_truoc ma 3)
 - **2.149.5** — 2026-10-04 — `vps-jp1` — uu tien tai len hon san xuat (co cho-tai-len trong khe), nuoi trang chu theo CPU<75%, cong tac Nuoi trang chu trong cai dat kenh
