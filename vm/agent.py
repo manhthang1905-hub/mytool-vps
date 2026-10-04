@@ -2510,11 +2510,21 @@ def trang_chu_tin_cay(kenh: str) -> Tuple[bool, str]:
     return False, "trang chủ mới {0:.0f}% đúng chủ đề (cần > {1:.0f}%) — đang nuôi".format(pct, TRANG_CHU_TIN_CAY_PCT)
 
 
-def _kenh_da_co_video(kenh: str) -> bool:
-    """Sổ videoId có ít nhất một video của kênh đã tải lên (có video_id)."""
+def _kenh_da_co_video(kenh: str, bay_gio: float = None) -> bool:
+    """Kênh đã có ít nhất một video ĐÃ CÔNG KHAI (có video_id và giờ hẹn `lich` đã qua) — 05/10/2026: video mới
+    tải lên nhưng chưa tới giờ công khai thì Studio vẫn chưa có bảng số liệu kênh → không đòi "đủ dữ liệu"."""
     so = _doc_so_video_id()
-    return any(str(k).startswith(kenh + "/") and isinstance(v, dict) and v.get("video_id")
-               for k, v in so.items())
+    luc = time.time() if bay_gio is None else bay_gio
+    for k, v in so.items():
+        if not (str(k).startswith(kenh + "/") and isinstance(v, dict) and v.get("video_id")):
+            continue
+        try:
+            moc = time.mktime(time.strptime(str(v.get("lich") or "").strip(), "%d/%m/%Y %H:%M"))
+        except (ValueError, OverflowError):
+            return True                     # không có/không đọc được giờ hẹn → coi như đã công khai (kiểm chặt như cũ)
+        if moc <= luc:
+            return True
+    return False
 
 
 def _lan_thu_du_lieu_qua_ngan(ket_qua: dict, cau_hinh_kenh: dict) -> bool:
