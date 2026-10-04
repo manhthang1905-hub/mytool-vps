@@ -2398,10 +2398,19 @@ def _du_lieu_kenh_da_ve_hom_nay(cau_hinh: dict, kenh: str, ngay: str = None):
             ngay_tep = time.strftime("%Y-%m-%d", time.localtime(
                 os.path.getmtime(os.path.join(thu_muc, ten))))
         except OSError:
-            return False
+            # 04/10/2026: kênh MỚI chưa có video nào lên YouTube thì Studio không có bảng kênh để về —
+            # "chưa đủ" ở đây là oan, lượt quét lặp 3 lần/ngày giữ Chrome + khe nặng ~1,5 giờ vô ích.
+            return None if not _kenh_da_co_video(kenh) else False
         if ngay_tep < hom_nay:
             return False
     return True
+
+
+def _kenh_da_co_video(kenh: str) -> bool:
+    """Sổ videoId có ít nhất một video của kênh đã tải lên (có video_id)."""
+    so = _doc_so_video_id()
+    return any(str(k).startswith(kenh + "/") and isinstance(v, dict) and v.get("video_id")
+               for k, v in so.items())
 
 
 def _lan_thu_du_lieu_qua_ngan(ket_qua: dict, cau_hinh_kenh: dict) -> bool:
