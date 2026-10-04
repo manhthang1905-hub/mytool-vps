@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.149.10** — 2026-10-04 — `vps-jp1` — May dang DOM: nhan chu trang thai Studio tieng Han (TL6-T7-K2 Studio tieng Han, ket o 'tien do ?')
 - **2.149.9** — 2026-10-04 — `vps-jp1` — Tai bo sung: hut khoa thi thu lai moi phut (co uu tien tai len song 5 phut, truoc day doi 25 phut nen co het han)
 - **2.149.8** — 2026-10-04 — `vps-jp1` — Agent: tai bo sung chay TRUOC quet ngay (dang dung gio > quet Studio); test phien cap nhat cho kenh moi chua co video
 - **2.149.7** — 2026-10-04 — `vps-jp1` — Tai bo sung: tai xong ma con kenh khac cho thi lam ngay kenh ke (khong doi 25 phut) - 7 kenh
