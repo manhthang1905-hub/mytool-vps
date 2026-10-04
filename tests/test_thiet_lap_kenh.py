@@ -745,3 +745,11 @@ def test_xuat_ban_bao_loi_thi_khong_bao_dat_va_khong_ghi_luot(monkeypatch):
     assert kq["logo"][0] == "hong"
     assert so["ngay_doi"]["ten"] == [] and so["ngay_doi"]["handle"] == []        # lượt chưa tốn
     assert so["truoc"]["loi_xuat_ban"] == "Không thể xuất bản thay đổi"
+
+
+def test_pref_dat_hl_giu_cap_khac():
+    assert t.pref_dat_hl("tz=Asia.Bangkok&hl=vi", "ja") == "tz=Asia.Bangkok&hl=ja"
+    assert t.pref_dat_hl("tz=Asia.Bangkok&f5=30000", "ja") == "tz=Asia.Bangkok&f5=30000&hl=ja"
+    assert t.pref_dat_hl("", "ja") == "hl=ja"
+    assert t.pref_dat_hl("hl=vi&f5=1&hl=en", "ja") == "hl=ja&f5=1"
+    assert t.CACH_NGON_NGU_MAC_DINH.index("cookie") > t.CACH_NGON_NGU_MAC_DINH.index("hl")
