@@ -42,7 +42,8 @@ def test_lich_chup_co_moc_13h():
     `MOC = [24, 48, 72, …]`: mọi con số 13h trong kho đều là ăn may (lượt "chụp ngay" lúc phát
     hiện video rơi trúng, hoặc chụp tay). Đo 05/09/2026: không video nào có mốc 13h do lịch đặt.
     """
-    m = re.search(r"const MOC = \[([^\]]+)\]", _nen())
+    # Mốc dày hai ngày đầu nằm ở `MOC_DAY` (MOC = MOC_DAY + mốc hằng ngày nhẹ từ ngày 6).
+    m = re.search(r"const MOC_DAY = \[([^\]]+)\]", _nen()) or re.search(r"const MOC = \[([^\]]+)\]", _nen())
     assert m, "không tìm thấy danh sách mốc"
     moc = [int(x) for x in m.group(1).split(",")]
     assert 13 in moc, "thiếu mốc 13h — mốc sổ tay kênh dùng để phán sống/chết"

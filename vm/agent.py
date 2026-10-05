@@ -2189,8 +2189,8 @@ def _don_launcher_sot(ten_exe: str, cho_giay: float = 6.0) -> bool:
     def con_song() -> bool:
         try:
             ra = subprocess.run(["tasklist", "/FI", "IMAGENAME eq {0}".format(ten_exe), "/NH"],
-                                capture_output=True, text=True, timeout=10,
-                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             return ten_exe.lower() in (ra.stdout or "").lower()
         except Exception:  # noqa: BLE001
             return False

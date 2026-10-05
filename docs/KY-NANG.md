@@ -11,7 +11,7 @@ Xem theo kênh: `python -m core.ky_nang xem` · skill khởi tạo còn thiếu:
 | K01 | Chrome kênh đã đăng nhập | Chrome Portable riêng của kênh đã đăng nhập Google/YouTube; đọc lại bằng kiểm DOM (UC kênh). | `nguoi: đăng nhập Chrome · rồi python vm/may_dang_dom.py --kenh K --kiem-dom` | nguoi:dang_nhap_chrome |
 | K02 | Tài khoản kênh (kho bí mật) | Email/mật khẩu/2FA cất mã hoá DPAPI ở bi-mat/ (không lên git). | `nguoi: điền dữ liệu ban đầu` | nguoi:du_lieu_ban_dau |
 | K03 | Ngách + tuyến + tệp khán giả | ngach.yaml, nhóm/tệp trong kenh.yaml, tuyến nội dung. | `python -m core.khoi_tao_ngach --kenh K` | K01 |
-| K04 | Giọng đọc | voice_id ElevenLabs từ kho giọng (kho-giong.json). | `python -m core.mo_kenh giong K` | — |
+| K04 | Giọng đọc | voice_id của nhà cung cấp giọng, lấy từ kho giọng (kho-giong.json). | `python -m core.mo_kenh giong K` | — |
 | K05 | Nhân vật tham chiếu | Ảnh nv/ — mọi ảnh cảnh và bìa vẽ đúng nhân vật này. | `core.thiet_lap_kenh (ảnh ShopAPI)` | — |
 | K06 | Ngôn ngữ hiển thị + địa điểm | youtube.com → menu avatar → Ngôn ngữ/Địa điểm = nước kênh; đọc lại menu. | `python vm/thiet_lap_kenh_dom.py --kenh K --ngon-ngu` | K01 |
 | K07 | Tên kênh | Studio → Tuỳ chỉnh → tên; đọc lại trang công khai. | `python vm/thiet_lap_kenh_dom.py --kenh K` | K01, K06 |

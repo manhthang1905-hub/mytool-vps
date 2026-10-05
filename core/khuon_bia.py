@@ -310,7 +310,9 @@ def duong_anh_thang(goc: str, kenh: str, video_id: str) -> str:
 
 def _tai_url(url: str) -> Optional[bytes]:
     try:
-        with urllib.request.urlopen(url, timeout=20) as ph:  # noqa: S310 — URL cố định i.ytimg.com
+        from .mang_an_toan import mo_url  # noqa: PLC0415 — cửa chung có chứng chỉ (certifi)
+
+        with mo_url(url, cho=20) as ph:  # URL cố định https://i.ytimg.com
             if getattr(ph, "status", 200) >= 400:
                 return None
             du = ph.read()

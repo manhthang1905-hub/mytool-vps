@@ -661,10 +661,12 @@ def kiem_handle_trong(handle: str, mo_url: Optional[Callable[[str], Tuple[int, s
     url = "https://www.youtube.com/@" + urllib.parse.quote(h)
 
     def mac_dinh(u: str) -> Tuple[int, str]:
-        rq = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36",
-                                                "Accept-Language": "en"})
+        from .mang_an_toan import mo_url as _mo  # noqa: PLC0415 — cửa chung có chứng chỉ (certifi)
+
+        dau = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36",
+               "Accept-Language": "en"}
         try:
-            with urllib.request.urlopen(rq, timeout=20) as r:  # noqa: S310
+            with _mo(u, cho=20, headers=dau) as r:
                 return r.status, r.read(300000).decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             return e.code, ""

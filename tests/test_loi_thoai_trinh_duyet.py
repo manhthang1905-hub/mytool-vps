@@ -560,6 +560,8 @@ class TestAgentBuocLoiThoai:
                             lambda *a, **k: thu_tu.append(a[2]) or ("xong", 0))
         monkeypatch.setattr(agent, "dong_chrome_kenh", lambda _c: thu_tu.append("dong"))
         monkeypatch.setattr(agent, "tim_chrome", lambda _c: "")
+        # Cổng "trang chủ đã đủ tin để cào" (nuôi xong) đọc sổ thật của kênh — bài này chỉ chốt THỨ TỰ.
+        monkeypatch.setattr(agent, "trang_chu_tin_cay", lambda _k: (True, ""))
         ket = agent.chay_quet_ngay_mot_kenh({}, {"kenh": "K1"}, "K1")
         assert thu_tu == ["studio", "trang-chu", "loi-thoai", "dong"]
         assert ket["loi_thoai"]["lay_duoc"] == 2

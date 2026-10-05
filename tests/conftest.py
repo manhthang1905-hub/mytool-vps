@@ -55,7 +55,7 @@ def _don_trang_thai_dung_chung():
 
 
 @pytest.fixture(autouse=True)
-def _co_lap_vm_agent_goc(tmp_path, monkeypatch):
+def _co_lap_vm_agent_goc(tmp_path_factory, monkeypatch):
     """Lưới an toàn THỨ HAI chặn bài kiểm ghi vào nhật ký/`trang-thai.json`
     THẬT của máy ảo (Đợt 0.2 cô lập test, kiểm toán 29/09/2026).
 
@@ -76,7 +76,10 @@ def _co_lap_vm_agent_goc(tmp_path, monkeypatch):
     thì lưới này không cản gì — `setattr` áp thẳng lên đối tượng module, luôn
     thắng giá trị nạp từ biến môi trường lúc `exec_module`.
     """
-    goc = tmp_path / "vm-goc-mac-dinh"
+    # Thư mục RIÊNG (`tmp_path_factory`), KHÔNG nằm trong `tmp_path` của bài: bài nào
+    # liệt kê `tmp_path` (vd `test_dung_video_quet` — mỗi thư mục con là một dự án)
+    # sẽ thấy thêm một thư mục lạ "vm-goc-mac-dinh" và đỏ oan.
+    goc = tmp_path_factory.mktemp("vm-goc-mac-dinh")
     # `vm/` LUÔN tồn tại như một thư mục thật trên máy ảo — tạo trước để
     # hành vi giống hệt sản xuất (`open(..., "a")` của `ghi()` cần thư mục
     # cha có sẵn; thiếu nó thì lượt ghi âm thầm rơi vào `except OSError: pass`

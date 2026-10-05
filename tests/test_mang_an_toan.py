@@ -112,6 +112,9 @@ class TestKhongAiDungUrlopenTran:
         # Đọc trang YouTube công khai, và có `mo_url` truyền vào để test.
         "core/script_video.py",
         "core/auto_khau.py",
+        # Chỉ hỏi trạm/agent trên loopback `http://127.0.0.1` (cửa chung chỉ nhận
+        # https) — không tải gì từ mạng ngoài.
+        "core/kiem_may.py",
     }
 
     def test_moi_duong_tai_tep_deu_qua_cua_chung(self):

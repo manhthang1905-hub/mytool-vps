@@ -205,6 +205,12 @@ class TestKeHoachHinhTrongTabTuDong:
 
 # ── Ba nơi giữ prompt phải cùng một bản, và bản ấy phải nói đúng luật ────────
 
+#: Kênh để soi lời nhắc/style: kênh thật TL4-T7 nếu máy có, không thì khuôn kênh ship kèm
+#: kho (`_KHUON/kenh-mau/`, bản mọi kênh mới nhận) — bản clone sạch không có kênh thật.
+KENH_SOI = ("TL4-T7" if os.path.isfile(os.path.join(GOC, "CHANNEL", "TL4-T7", "kenh.yaml"))
+            else os.path.join("_KHUON", "kenh-mau"))
+
+
 def _doc(kenh, ten):
     with open(os.path.join(GOC, "CHANNEL", kenh, "prompt", ten), encoding="utf-8") as t:
         return t.read()
@@ -224,7 +230,7 @@ class TestPromptBaNoi:
         *"càng đơn giản thì AI lại càng sáng tạo"*, và bản làm tay của họ chỉ
         có bốn luật. Bài kiểm này giữ **bốn luật ấy** cùng mấy chốt kỹ thuật
         đã đo được, và giữ cho tệp KHÔNG phình lại."""
-        tho = _doc("TL4-T7", "7-canh.md")
+        tho = _doc(KENH_SOI, "7-canh.md")
         chu = " ".join(tho.split())
         assert "<<KE_HOACH>>" in chu
         # Bốn luật gốc của bản làm tay
@@ -254,7 +260,7 @@ class TestPromptBaNoi:
         assert len(tho.splitlines()) < 220, "lời nhắc lại phình thành danh sách luật"
 
     def test_7_ke_hoach_co_du_o_dien_va_doi_JSON_chapters(self):
-        chu = _doc("TL4-T7", "7-ke-hoach.md")
+        chu = _doc(KENH_SOI, "7-ke-hoach.md")
         for o in ("<<SRT>>", "<<DONG_CUOI>>", "<<SO_CHUONG>>", "<<TONG_GIAY>>",
                   "<<AUDIENCE_CULTURE_NOTE>>", "<<CULTURAL_METAPHORS>>"):
             assert o in chu, o
@@ -281,11 +287,11 @@ class TestStyleKhongEpSaMacDaoVaNuCuoi:
         return doc_yaml(os.path.join(GOC, "CHANNEL", *duong))
 
     @pytest.mark.parametrize("duong", [
-        pytest.param(("TL4-T7", "style.yaml")),
+        pytest.param((KENH_SOI, "style.yaml")),
         pytest.param(
             ("_KHUON", "ve", "trang-tron-nen-dao", "ve.yaml"),
             marks=pytest.mark.skipif(
-                not os.path.isdir(os.path.join(GOC, "CHANNEL", "_KHUON")),
+                not os.path.isfile(os.path.join(GOC, "CHANNEL", "_KHUON", "ve", "trang-tron-nen-dao", "ve.yaml")),
                 reason="VPS không mang dữ liệu khuôn mẫu CHANNEL/_KHUON/ (đã xoá khỏi đĩa)")),
     ])
     def test_khong_ep_doi_may_va_nu_cuoi_vao_moi_canh(self, duong):

@@ -173,8 +173,15 @@ class TestPromptKenh:
                       "<<CHARS>>"):
                 assert o in chu, (kenh, o)
 
+    def _kenh_soi(self):
+        """Kênh thật TL4-T7 nếu máy có; bản clone sạch thì soi khuôn kênh ship kèm kho
+        (`CHANNEL/_KHUON/kenh-mau/` — cấu hình sản xuất mọi kênh mới nhận)."""
+        if os.path.isfile(os.path.join(self._goc(), "CHANNEL", "TL4-T7", "kenh.yaml")):
+            return "TL4-T7"
+        return os.path.join("_KHUON", "kenh-mau")
+
     def test_bo_cham_hoi_diem_manh_yeu(self):
-        p = os.path.join(self._goc(), "CHANNEL", "TL4-T7", "prompt", "2b-cham.md")
+        p = os.path.join(self._goc(), "CHANNEL", self._kenh_soi(), "prompt", "2b-cham.md")
         with open(p, encoding="utf-8") as t:
             chu = t.read()
         assert '"diem_manh"' in chu and '"diem_yeu"' in chu
@@ -182,4 +189,4 @@ class TestPromptKenh:
     def test_tl4_bat_hoan_thien(self):
         from core.kenh import doc_kenh
 
-        assert doc_kenh(self._goc(), "TL4-T7").hoan_thien is True
+        assert doc_kenh(self._goc(), self._kenh_soi()).hoan_thien is True

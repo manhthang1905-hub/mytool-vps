@@ -154,7 +154,10 @@ class TestKenhKhaiDuoc:
         from core.kenh import doc_kenh
 
         goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        k = doc_kenh(goc, "TL4-T7")
+        # Kênh thật nếu máy có; bản clone sạch thì khuôn kênh ship kèm kho (mọi kênh mới nhận bản này).
+        ma = "TL4-T7" if os.path.isfile(os.path.join(goc, "CHANNEL", "TL4-T7", "kenh.yaml")) \
+            else os.path.join("_KHUON", "kenh-mau")
+        k = doc_kenh(goc, ma)
         assert k.giay_nghi_phan > 0
         sua = k.prompt.get("3-sua.md", "")
         assert "ba gạch" in sua, "bước rà soát chưa dặn đánh dấu ranh giới phần"

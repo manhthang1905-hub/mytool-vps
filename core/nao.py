@@ -9,7 +9,7 @@ Tư tưởng: dây chuyền (tự chọn → sản xuất → đăng → đo →
 Hai nửa trong một tệp:
   1. CLI an toàn (`xem`, `thu`, `tranh`, `bai-hoc`, `uu-tien-nguon`, `de-xuat`, `cham`, `huy`) — bộ não chỉ có CỬA này.
      Giới hạn kiểm BẰNG MÃ; vượt thì từ chối kèm lý do. Quyền co lại khi dự đoán của chính nó hay sai.
-  2. `phien` — dựng và chạy `claude` headless (qua `core.claude_code`), thư mục làm việc `nao/`,
+  2. `phien` — dựng và chạy `claude` không giao diện (qua `core.claude_code`), thư mục làm việc `nao/`,
      KHÔNG `bypassPermissions`: chỉ Read/Grep/Glob, Write/Edit trong `nao/`, Bash `python -m core.nao`.
 
 Dây chuyền hỏi bộ não qua các hàm "hiệu lực" (`hieu_luc`, `tru_luot`, `he_so_cum`, `ap_uu_tien`, `dong_de_cu`,
@@ -951,7 +951,7 @@ def chuan_bi_thu_muc(goc: str = GOC) -> None:
 
 
 def lenh_phien(duong_claude: str, goc: str = GOC, mo_hinh: str = MO_HINH_PHIEN, so_luot: Optional[int] = SO_LUOT_TOI_DA) -> List[str]:
-    """Dòng lệnh `claude` cho một phiên: headless, KHÔNG bypassPermissions (`dontAsk` = ngoài danh sách cho phép
+    """Dòng lệnh `claude` cho một phiên: không giao diện, KHÔNG bypassPermissions (`dontAsk` = ngoài danh sách cho phép
     thì từ chối, không hỏi). Lời nhắc đi qua stdin (cờ nhiều giá trị không nuốt mất nó)."""
     from . import claude_code  # noqa: PLC0415
 
@@ -1005,7 +1005,7 @@ def _che(chu: str, khoa: str) -> str:
 def _pid_song(pid: int) -> bool:
     try:
         r = subprocess.run(["tasklist", "/FI", "PID eq {0}".format(pid), "/NH"], capture_output=True, text=True,
-                           timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                           encoding="utf-8", errors="replace", timeout=15, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return str(pid) in (r.stdout or "")
     except Exception:  # noqa: BLE001
         return False
@@ -1247,7 +1247,7 @@ def _parser() -> argparse.ArgumentParser:
     c.add_argument("ghi_chu")
     h = s.add_parser("huy", help="gỡ hành động đang mở")
     h.add_argument("id")
-    ph = s.add_parser("phien", help="chạy một phiên não (claude headless)")
+    ph = s.add_parser("phien", help="chạy một phiên não (claude không giao diện)")
     ph.add_argument("--ep", action="store_true", help="bỏ giới hạn một phiên/ngày")
     ph.add_argument("--thu", action="store_true", help="chỉ in lệnh, không chạy")
     return p
