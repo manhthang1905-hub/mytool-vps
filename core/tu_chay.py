@@ -2304,22 +2304,20 @@ def _chay_mot_ngay_trong_khoa(
     # thì bỏ qua lượt này — vòng học có debounce, lượt sau làm bù.
     if getattr(kenh, "vong_hoc", True):
         with dieu_phoi.thu_nang(goc, "nen", kenh=ma_kenh) as _duoc_vong_hoc:
-            if not _duoc_vong_hoc:
-                log("  0) [vòng học] khe máy nặng đang bận — để lượt sau.")
-            else:
-                try:
-                    # Việc 4 (28/09/2026): bước 4 của vòng học (`core.khuon_bia.cap_nhat`)
-                    # cần MỘT lượt AI nhìn ảnh khi người thắng vừa đổi — truyền hàm gọi
-                    # chat THẬT thay vì `None` như trước Việc 4. `_dung_goi_chat_mac_dinh`
-                    # chỉ DỰNG một closure ở đây, chưa gọi mạng; `vong_hoc`/`khuon_bia` tự
-                    # `try/except` khi thật sự gọi, nên `client=None` (chế độ không cần
-                    # ví) vẫn an toàn — lỗi chỉ rơi vào đúng bước 4, không chặn lượt.
-                    vong_hoc.truoc_luot(
-                        goc, ma_kenh, _dung_goi_chat_mac_dinh(client, log, cancel),
-                        log, bay_gio=bay_gio)
-                except Exception as loi:  # noqa: BLE001 — vòng học hỏng không được chặn cả lượt chạy
-                    log("  (vòng học hỏng: {0}) — bỏ qua, không chặn lượt chạy."
-                       .format(str(loi)[:200]))
+            # 05/10: khe bận KHÔNG bỏ cả vòng học — chỉ dời bước nặng (kho nhạc), phần học từ số liệu vẫn chạy.
+            try:
+                # Việc 4 (28/09/2026): bước 4 của vòng học (`core.khuon_bia.cap_nhat`)
+                # cần MỘT lượt AI nhìn ảnh khi người thắng vừa đổi — truyền hàm gọi
+                # chat THẬT thay vì `None` như trước Việc 4. `_dung_goi_chat_mac_dinh`
+                # chỉ DỰNG một closure ở đây, chưa gọi mạng; `vong_hoc`/`khuon_bia` tự
+                # `try/except` khi thật sự gọi, nên `client=None` (chế độ không cần
+                # ví) vẫn an toàn — lỗi chỉ rơi vào đúng bước 4, không chặn lượt.
+                vong_hoc.truoc_luot(
+                    goc, ma_kenh, _dung_goi_chat_mac_dinh(client, log, cancel),
+                    log, bay_gio=bay_gio, bo_kho_nhac=not _duoc_vong_hoc)
+            except Exception as loi:  # noqa: BLE001 — vòng học hỏng không được chặn cả lượt chạy
+                log("  (vòng học hỏng: {0}) — bỏ qua, không chặn lượt chạy."
+                   .format(str(loi)[:200]))
 
     # Lượt dở luôn đi trước nghiên cứu và cửa nhịp đăng: lần chạy sau tiếp tục
     # đúng nguồn cũ, không chất thêm video và không trả tiền lần hai.

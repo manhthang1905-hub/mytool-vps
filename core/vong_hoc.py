@@ -69,7 +69,7 @@ def _can_hoc_lai(goc: str, kenh: str, co_so_moi: bool, *, bay_gio: _dt.datetime,
 
 def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
                log: Callable[[str], None], *,
-               bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+               bay_gio: Optional[_dt.datetime] = None, bo_kho_nhac: bool = False) -> Dict[str, Any]:
     """Bốn bước "học từ số liệu" — gọi TRƯỚC "1) Nghiên cứu" của mỗi lượt.
 
     `goi_chat` dành cho bước 4 (Việc 4, mô tả khuôn ảnh bìa bằng AI) — Việc 3
@@ -82,11 +82,17 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
     ket: Dict[str, Any] = {"kho_nhac": None, "bu_ho_so": [], "chi_so": None,
                            "bai_hoc": False, "khuon_bia": None, "chien_luoc": None}
 
-    # 1) Kho nhạc — chuẩn hoá tăng dần, không chặn lượt nếu ffmpeg/kho nhạc hỏng.
-    try:
-        ket["kho_nhac"] = kho_nhac.cap_nhat(goc, NGAN_SACH_KHO_NHAC_GIAY, ghi=log)
-    except Exception as loi:  # noqa: BLE001
-        log("  0) [vòng học] cập nhật kho nhạc hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
+    # 1) Kho nhạc — chuẩn hoá tăng dần (FFmpeg = việc NẶNG). 05/10: `bo_kho_nhac` khi khe máy nặng đang bận —
+    #    CHỈ bước này dời sang lượt sau (xếp lần lượt, không quá tải); các bước học từ số liệu bên dưới
+    #    (đọc/ghi đĩa, nhẹ) vẫn chạy. Bản cũ bỏ CẢ vòng học → TL1–TL3 (cùng khởi lúc 05:00, khe luôn bận)
+    #    không học từ 03/10.
+    if bo_kho_nhac:
+        log("  0) [vòng học] khe máy nặng bận — dời chuẩn hoá kho nhạc sang lượt sau, vẫn học từ số liệu.")
+    else:
+        try:
+            ket["kho_nhac"] = kho_nhac.cap_nhat(goc, NGAN_SACH_KHO_NHAC_GIAY, ghi=log)
+        except Exception as loi:  # noqa: BLE001
+            log("  0) [vòng học] cập nhật kho nhạc hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
 
     # 2) Hồ sơ video: bù các gói cũ trước, rồi nối video_id + số liệu Studio.
     co_so_moi = False

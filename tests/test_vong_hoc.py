@@ -209,3 +209,14 @@ def test_buoc_5_ghi_chien_luoc_json_cung_debounce_va_hong_khong_chan(tmp_path, m
     ket3 = vong_hoc.truoc_luot(goc, "K5", None, _log_thu(nhat_ky), bay_gio=dt.datetime.now())
     assert ket3["chien_luoc"] is None
     assert any("thống kê theo công thức hỏng" in d for d in nhat_ky)
+
+
+def test_khe_ban_chi_doi_kho_nhac_van_hoc_05_10(tmp_path, monkeypatch):
+    """05/10: TL1–TL3 khởi cùng 05:00, khe nặng luôn bận → bản cũ bỏ CẢ vòng học (bảng điểm đứng từ 03/10)."""
+    from core import vong_hoc, kho_nhac, tu_hoc
+    goi = {"kho_nhac": 0, "cham": 0}
+    monkeypatch.setattr(kho_nhac, "cap_nhat", lambda *a, **k: goi.__setitem__("kho_nhac", goi["kho_nhac"] + 1))
+    monkeypatch.setattr(tu_hoc, "cham_van", lambda *a, **k: goi.__setitem__("cham", goi["cham"] + 1) or {})
+    monkeypatch.setattr(tu_hoc, "ghi_bang_diem_md", lambda *a, **k: "")
+    vong_hoc.truoc_luot(str(tmp_path), "K", None, lambda s: None, bo_kho_nhac=True)
+    assert goi == {"kho_nhac": 0, "cham": 1}

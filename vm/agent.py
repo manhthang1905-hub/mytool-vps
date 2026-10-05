@@ -2321,8 +2321,23 @@ def co_token_oauth(kenh: str) -> bool:
     """Kênh đã có token OAuth cho `may_cmt.py` (YouTube Data API) chưa — cùng chỗ
     `may_cmt._kho("tokens")` tìm: `vm/tokens/<k>.json`, lùi thư mục cha."""
     for thu_muc in (os.path.join(GOC, "tokens"), os.path.join(os.path.dirname(GOC), "tokens")):
-        if os.path.isfile(os.path.join(thu_muc, "{0}.json".format(kenh))):
-            return True
+        p = os.path.join(thu_muc, "{0}.json".format(kenh))
+        if not os.path.isfile(p):
+            continue
+        # 05/10: tệp có mà token HỎNG (không refresh_token / lần làm mới gần nhất hỏng) → coi như KHÔNG có:
+        # bình luận quay về DOM thay vì máy API bỏ qua kênh (kênh mất bình luận hoàn toàn).
+        try:
+            with open(p, "r", encoding="utf-8") as tep:
+                if not (json.load(tep) or {}).get("refresh_token"):
+                    return False
+            with open(os.path.join(GOC, "logs", "oauth", "{0}.json".format(kenh)), "r", encoding="utf-8") as tep:
+                if (json.load(tep) or {}).get("tt") == "hong":
+                    return False
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError):
+            return False
+        return True
     return False
 
 

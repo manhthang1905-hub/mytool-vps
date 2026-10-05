@@ -209,17 +209,33 @@ def load_credentials(channel):
         return None
 
     if creds and creds.valid:
+        ghi_trang_thai_token(channel, "tot")
         return creds
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
             save_credentials(channel, creds)
             print(f"🔄 {channel}: da refresh token.")
+            ghi_trang_thai_token(channel, "tot")
             return creds
         except Exception as e:
-            print(f"⚠️ {channel}: refresh token that bai ({e}). Hay chay: cmt.py setup {channel}")
+            print(f"⚠️ {channel}: refresh token that bai ({type(e).__name__}). Hay chay: setup_oauth.py --kenh {channel}")
+            # 05/10: ghi HỎNG để agent quay về bình luận DOM (trước đây tệp token còn đó → agent vẫn chọn API → kênh mất bình luận)
+            ghi_trang_thai_token(channel, "hong", type(e).__name__)
             return None
+    ghi_trang_thai_token(channel, "hong", "token khong co refresh_token")
     return None
+
+
+def ghi_trang_thai_token(channel, tt, ly_do=""):
+    """vm/logs/oauth/<kenh>.json = {tt: tot|hong, ly_do (TÊN lỗi, không giá trị token), luc}. Hỏng ghi thì thôi."""
+    try:
+        d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "oauth")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f"{channel}.json"), "w", encoding="utf-8") as f:
+            json.dump({"tt": tt, "ly_do": str(ly_do)[:80], "luc": time.strftime("%Y-%m-%d %H:%M:%S")}, f, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def _open_channel_browser_debug(browser_exe, port=DEBUG_PORT):
