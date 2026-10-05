@@ -64,6 +64,8 @@ TRAN_TAI_MOI_NGAY = 2
 TAI_LEN_TOI_DA_NGAY = 6
 HAN_MHKT_GIAY = 600
 HAN_PHIEN_MAC_DINH = 90 * 60
+#: 05/10: giao diện Studio máy đăng đo/kiểm được (ja làm hỏng bìa/phụ đề/MHKT/thẻ/ô giờ) — `lay_uc` tự ép về đây
+NGON_NGU_GIAO_DIEN_DANG = "vi"
 #: 30/09/2026 — CHỜ TẢI XONG 100%: không bao giờ bấm Lên lịch / đóng tab khi chưa
 #: có BẰNG CHỨNG tải xong. Hạn chờ = max(10 phút, dung lượng ÷ 1 MB/s × 2); còn
 #: thấy % tăng thì kéo dài, trần cứng `CHO_TAI_TRAN_GIAY` (và không quá hạn phiên).
@@ -120,7 +122,9 @@ CHU_TRANG_THAI = {
     # tải xong, nên cũng là bằng chứng tải xong.
     "da_tai_xong": ["Đã hoàn tất quá trình tải lên", "Đã tải lên", "Tải lên hoàn tất", "Upload complete",
                     "アップロード完了", "アップロードが完了", "업로드 완료", "업로드가 완료"],
-    "dang_xu_ly": ["Đang xử lý", "Processing", "処理中", "처리 중"],
+    # 05/10: Studio ja đo thật — «HD までの動画を処理しています» / «動画の処理に通常より時間がかかっています»
+    "dang_xu_ly": ["Đang xử lý", "Processing", "処理中", "処理しています", "処理に通常より時間",
+                   "taking longer than usual", "처리 중"],
     "dang_kiem_tra": ["Đang kiểm tra", "Checking", "チェック中", "확인 중", "검사 중"],
     "xu_ly_xong": ["Đã kiểm tra xong", "Checks complete", "Đã xử lý", "チェック完了", "処理が完了", "검사가 완료", "확인 완료", "처리 완료"],
     "dang_tai": ["Đã tải được", "Đang tải lên", "Uploading", "アップロード中", "업로드 중"],
@@ -1184,7 +1188,50 @@ class MayDangDom:
             raise DungKenh("Chrome kênh {0} đang đăng nhập {1}, ghim là {2} — DỪNG kênh".format(
                 self.kenh, uc, cu))
         self.uc = uc
+        self._ep_ngon_ngu_dang(tb)
         return uc
+
+    def _ep_ngon_ngu_dang(self, tb) -> None:
+        """05/10: máy đăng chỉ đo/kiểm trên Studio TIẾNG VIỆT (ja làm hỏng bìa, phụ đề, MHKT, thẻ, ô giờ).
+        Giao diện khác → đặt cookie PREF `hl=vi` (giữ cặp khác; ngôn ngữ tài khoản Google không đụng), mở lại,
+        đọc lại. Vẫn lệch → LoiTruoc (chưa chạm kênh, không đẻ bản nháp hỏng). Trang giả (test) bỏ qua."""
+        if not (hasattr(tb, "cdp") and hasattr(tb, "sid") and hasattr(tb, "js_tho")):
+            return
+        dich = NGON_NGU_GIAO_DIEN_DANG
+
+        def doc():
+            for _ in range(10):
+                try:
+                    lang = str(tb.js_tho("document.documentElement.lang") or "")
+                except Exception:  # noqa: BLE001
+                    lang = ""
+                if lang:
+                    return lang
+                self.ngu(1)
+            return ""
+
+        lang = doc()
+        if not lang or lang.lower().startswith(dich):
+            return
+        self.nk("Studio {0} đang giao diện {1!r} — máy đăng cần {2}: đặt cookie PREF hl={2}".format(self.kenh, lang, dich))
+        try:
+            ck = tb.cdp.goi("Network.getCookies", {"urls": ["https://www.youtube.com/", "https://studio.youtube.com/"]},
+                            sid=tb.sid, han=15).get("cookies") or []
+            goc = ([c for c in ck if c.get("name") == "PREF"] or [{}])[0]
+            cap = [c for c in str(goc.get("value") or "").split("&") if c.strip() and c.split("=", 1)[0] != "hl"]
+            c = {"name": "PREF", "value": "&".join(cap + ["hl=" + dich]), "domain": ".youtube.com", "path": "/",
+                 "secure": True, "sameSite": "None",
+                 "expires": goc["expires"] if (goc.get("expires") or -1) > 0 else time.time() + 400 * 86400}
+            ok = tb.cdp.goi("Network.setCookie", c, sid=tb.sid, han=15).get("success")
+            tb.mo(self._url("studio"), han=60)
+            self.ngu(3)
+        except Exception as loi:  # noqa: BLE001
+            raise LoiTruoc("Studio giao diện {0!r}, đặt cookie hl={1} lỗi: {2}".format(lang, dich, loi))
+        sau = doc()
+        if not sau.lower().startswith(dich):
+            raise LoiTruoc("Studio giao diện {0!r} (cookie hl={1} → {2}), vẫn {3!r} — không đăng trên giao diện lạ".format(
+                lang, dich, ok, sau))
+        self.nk("Studio {0}: giao diện {1!r} → {2!r} — đăng tiếp".format(self.kenh, lang, sau))
 
     # ── bước 2: tra kênh ─────────────────────────────────────────────────
     def _doc_danh_sach(self, tr, han: float = 30.0):
