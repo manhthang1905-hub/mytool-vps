@@ -239,6 +239,8 @@ def k_binh_luan(goc, kenh):
 
 
 def k_tu_hoc(goc, kenh):
+    if _dang_o_may_khac(goc, kenh):
+        return KHONG, "sản xuất ở máy khác — học ở máy đó"
     t = _tuoi_gio(os.path.join(goc, "CHANNEL", kenh, "tu-hoc", "bang-diem.md"))
     if t is None:
         return THIEU, "chưa có bảng điểm tự học"
