@@ -1501,6 +1501,12 @@ def main(argv=None) -> int:
             except OSError:
                 pass
         if cdp is not None:
+            # 05/10: trả ngôn ngữ hiển thị gốc của kênh (lay_uc của máy đăng TẠM dùng vi) — trước khi đóng Chrome
+            try:
+                import ngon_ngu_tam  # noqa: PLC0415
+                ngon_ngu_tam.tra(cdp, a.kenh, log.info)
+            except Exception as loi:  # noqa: BLE001
+                log.warning("trả ngôn ngữ giao diện %s lỗi: %s", a.kenh, loi)
             if cdp.tu_mo and not a.trong_phien:
                 ok = cdp_mod.dong_trinh_duyet(cdp)
                 log.info("đóng Chrome kênh %s (máy này đã mở): %s", a.kenh,

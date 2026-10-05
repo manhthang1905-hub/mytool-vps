@@ -6,6 +6,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "vm"))
 import may_dang_dom as m  # noqa: E402
+import ngon_ngu_tam  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _hl_tam_rieng(tmp_path, monkeypatch):
+    """Tệp hl gốc (logs/hl-tam) KHÔNG được ghi vào thư mục thật của VPS."""
+    monkeypatch.setattr(ngon_ngu_tam, "THU_MUC", str(tmp_path / "hl-tam"))
 
 
 class CdpGia:

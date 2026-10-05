@@ -1120,6 +1120,7 @@ class MayDangDom:
         self.tieu_de_theo_ma = {}    # mã gói → tiêu đề (tìm video nguồn MHKT trong hộp chọn)
         self.mhkt_nguon = ""         # videoId đã nhập MHKT từ đó (ghi sổ `mhkt_nguon`)
         self.tab_giu = []            # tab tải lên cố ý để mở — Chrome KHÔNG được đóng
+        self.thu_muc_hl_tam = None   # None = vm/logs/hl-tam (bài kiểm truyền thư mục tạm)
         self.bao_cao = {"kenh": kenh, "goi": [], "nhap_thua": [], "canh_bao": []}
 
     # ── tiện ích ─────────────────────────────────────────────────────────
@@ -1232,15 +1233,22 @@ class MayDangDom:
             return ""
 
         lang = doc()
-        # Chỉ KIỂM (rẻ, không đổi gì khi đúng). Ngôn ngữ/địa điểm là việc MỘT LẦN của skill thiết lập kênh
-        # (thiet_lap_kenh_dom: dat_ngon_ngu / dat_dia_diem) — đây chỉ là chốt an toàn: giao diện lạ = đăng hỏng.
+        # Kênh giữ ngôn ngữ hiển thị CỦA NƯỚC NÓ (skill thiết lập kênh đặt). Máy đăng chỉ bấm theo chữ `vi` đã kiểm
+        # chứng → TẠM đổi hl=vi cho phiên này, ghi hl GỐC vào logs/hl-tam/<kênh>.json; `main()` TRẢ lại cuối phiên
+        # (`ngon_ngu_tam.tra`). Đúng sẵn thì không đổi gì.
         if not lang or lang.lower().startswith(dich):
             return
-        self.nk("Studio {0} đang giao diện {1!r} — máy đăng cần {2}: đặt cookie PREF hl={2}".format(self.kenh, lang, dich))
+        self.nk("Studio {0} đang giao diện {1!r} — máy đăng TẠM dùng {2} (trả lại cuối phiên)".format(self.kenh, lang, dich))
         try:
             ck = tb.cdp.goi("Network.getCookies", {"urls": ["https://www.youtube.com/", "https://studio.youtube.com/"]},
                             sid=tb.sid, han=15).get("cookies") or []
             goc = ([c for c in ck if c.get("name") == "PREF"] or [{}])[0]
+            try:
+                import ngon_ngu_tam  # noqa: PLC0415
+                ngon_ngu_tam.ghi_tam(self.kenh, ngon_ngu_tam.hl_cua(goc.get("value", "")),
+                                     thu_muc=getattr(self, "thu_muc_hl_tam", None))
+            except Exception as loi:  # noqa: BLE001 — không ghi được gốc thì KHÔNG đổi (không trả lại được)
+                raise LoiTruoc("không ghi được hl gốc trước khi tạm đổi: {0}".format(loi))
             cap = [c for c in str(goc.get("value") or "").split("&") if c.strip() and c.split("=", 1)[0] != "hl"]
             c = {"name": "PREF", "value": "&".join(cap + ["hl=" + dich]), "domain": ".youtube.com", "path": "/",
                  "secure": True, "sameSite": "None",
@@ -3828,6 +3836,14 @@ def main(argv=None) -> int:
         log.exception("lỗi không lường: %s", loi)
         return MA_HONG
     finally:
+        if cdp is not None and not (may is not None and may.tab_giu):
+            # TRẢ ngôn ngữ hiển thị gốc của kênh (máy đăng chỉ TẠM dùng vi) — trước khi đóng Chrome.
+            # Còn tab tải lên dở thì để nguyên; lần chạy sau trả (tệp logs/hl-tam/<kênh>.json còn đó).
+            try:
+                import ngon_ngu_tam  # noqa: PLC0415
+                ngon_ngu_tam.tra(cdp, a.kenh, log.info)
+            except Exception as loi:  # noqa: BLE001
+                log.warning("trả ngôn ngữ giao diện %s lỗi: %s", a.kenh, loi)
         if cdp is not None:
             # Tab của mình đã được đóng ở `may.dong_het()`/`kiem_dom` — trừ tab
             # tải lên CHƯA CHẮC tải xong (cố ý để mở, xem dang_mot_goi).
