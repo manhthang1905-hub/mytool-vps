@@ -13,11 +13,12 @@ import csv
 import datetime as _dt
 import io
 import json
+import math
 import os
 import sys
 from typing import Any, Dict, List
 
-GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GOC = os.environ.get("MYTOOL_GOC") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NGAY = 28
 NGAY_NONG = 14
 KHAC = "khac"
@@ -129,6 +130,83 @@ def ten_vung_tu_khoa() -> Dict[str, str]:
     return _bo_cum(_cac_kenh())[2]
 
 
+def _chan_de(z: Dict[str, Any]) -> float:
+    """Thế chân của ta trong vùng, 0..1: chưa có video = 0,5 (đất trống, trung tính); đã cắm cờ = ~1 (lợi thế cùng tệp
+    khán giả); càng chiếm nhiều thì còn ít chỗ để tăng → giảm dần tới 0,1 khi ta ≥ 50%."""
+    if not z.get("so_ta"):
+        return 0.5
+    return max(0.1, 1.0 - 0.9 * min(1.0, float(z.get("thi_phan") or 0) / 50.0))
+
+
+def tinh_co_hoi(ds: List[Dict[str, Any]]) -> None:
+    """Gắn `co_hoi` (0–100) + `co_hoi_chi_tiet` vào từng vùng (sửa tại chỗ). CÔNG THỨC:
+        co_hoi = 100 × (0,35·cau + 0,25·da + 0,20·yeu + 0,20·chan)
+      cau  = log(1+địch) / log(1+địch lớn nhất)        — cầu: vùng càng nhiều lượt xem càng đáng đánh (thang log)
+      da   = log(1+Σ tăng/ngày) / log(1+max)           — đà: tổng tốc độ tăng của video đối thủ trong vùng
+      yeu  = 1 − (view kênh dẫn đầu / địch)            — địch dẫn đầu càng yếu/phân tán càng dễ chen vào
+      chan = _chan_de(vùng)                            — thế chân của ta (xem trên)
+    Các thành phần đều tăng theo cầu/đà/độ phân tán nên co_hoi đơn điệu theo từng yếu tố khi giữ các yếu tố khác."""
+    that = [z for z in ds if z.get("ma") != KHAC] or ds      # «Đề tài khác» là bãi gom, không làm thước đo
+    # 06/10: cầu/đà = (giá trị / lớn nhất)^0,35 — thang log cũ dồn mọi vùng về 85–90; xếp hạng % thì 2 vùng gần bằng nhau
+    # lệch nhau cả 35 điểm. Thang mũ: gần bằng → gần bằng điểm; nhỏ hơn 100 lần → ~0,2.
+    mx_dich = max([float(z.get("dich") or 0) for z in that] + [1.0])
+    mx_da = max([max(0.0, float(z.get("nong") or 0)) for z in that] + [1.0])
+    for z in ds:
+        dich = float(z.get("dich") or 0)
+        cau = min(1.0, (max(0.0, dich) / mx_dich) ** 0.35)
+        da = min(1.0, (max(0.0, float(z.get("nong") or 0)) / mx_da) ** 0.35)
+        dm = z.get("dich_manh") or []
+        yeu = 1.0 - min(1.0, float(dm[0]["view"]) / dich) if dm and dich > 0 else 0.0
+        chan = _chan_de(z)
+        z["co_hoi"] = round(100.0 * (0.35 * cau + 0.25 * da + 0.20 * yeu + 0.20 * chan), 1)
+        z["co_hoi_chi_tiet"] = {"cau": round(cau, 2), "da": round(da, 2), "yeu": round(yeu, 2), "chan": round(chan, 2)}
+
+
+def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vung: int = 2) -> List[Dict[str, Any]]:
+    """Mỗi kênh ta đang sản xuất (có video) → top `so_vung` vùng theo co_hoi, ưu tiên vùng kênh đó (+12) hoặc kênh anh em (+6)
+    đã có video (cùng tệp khán giả). Bỏ vùng «khac»."""
+    ra = []
+    for q in quan:
+        if not q.get("so_video"):
+            continue
+        ung = []
+        for z in ds:
+            if z["ma"] == KHAC or "co_hoi" not in z:
+                continue
+            own = q["ma"] in (z.get("ta_kenh") or [])
+            anh_em = bool(z.get("ta_kenh")) and not own
+            diem = z["co_hoi"] + (12 if own else 6 if anh_em else 0)
+            cd = z.get("co_hoi_chi_tiet") or {}
+            dm = (z.get("dich_manh") or [{}])[0]
+            ly = "cầu {0}, địch dẫn đầu {1} giữ {2}%".format(
+                _gon(z["dich"]), dm.get("kenh") or "—", round(100 * (1 - cd.get("yeu", 0))))
+            ly += "; kênh này đã có video ở đây" if own else ("; kênh anh em đã có mặt" if anh_em else "; đất trống, chưa ai của ta")
+            if z.get("nong"):
+                ly += "; đà +{0}/ngày".format(_gon(z["nong"]))
+            ung.append({"ma": z["ma"], "ten": z["ten"], "co_hoi": z["co_hoi"], "diem": round(diem, 1),
+                        "thi_phan": z.get("thi_phan", 0), "ly_do": ly})
+        ung.sort(key=lambda x: -x["diem"])
+        ra.append({"kenh": q["ma"], "ten": q.get("ten", ""), "vung": ung[:so_vung]})
+    return ra
+
+
+def _gon(n) -> str:
+    n = float(n or 0)
+    return "%.1ftr" % (n / 1e6) if n >= 1e6 else ("%dN" % round(n / 1e3) if n >= 1e4 else "%d" % round(n))
+
+
+def _lich_su_gon(hom: _dt.date, du: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Ghi ảnh chụp ngày (tối đa 1 lần/ngày; tắt bằng MYTOOL_CHIEN_TRUONG_GHI=0) và trả 30 ngày gần nhất cho biểu đồ."""
+    try:
+        from core import chien_truong_lich_su as ls  # noqa: PLC0415
+        ngay = hom.isoformat()
+        if os.environ.get("MYTOOL_CHIEN_TRUONG_GHI", "1") != "0" and not ls.co_anh_hom_nay(GOC, ngay):
+            ls.ghi_anh_chup(GOC, du, ngay)
+        return ls.chuoi_gon(GOC, 30)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
     hom = bay_gio or _dt.date.today()
     tu = hom - _dt.timedelta(days=NGAY)
@@ -227,7 +305,8 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
     for q in quan:
         q["tan_cong_ten"] = ten_cum.get(q["tan_cong"], "") if q["tan_cong"] else ""
         q["mat_tran_ten"] = [ten_cum.get(m, m) for m in q["mat_tran"]]
-    return {
+    tinh_co_hoi(ds)
+    ra = {
         "luc": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "cua_so_ngay": NGAY, "ngach": "Tâm lý Nhật",
         "cach_do": "lượt xem/tháng ước TỐI THIỂU: video có tốc độ đo được = tăng/ngày×30; video mới trong cửa sổ = toàn bộ "
                    "lượt xem; video cũ chưa đo = 0. Phe ta = lượt xem 28 ngày thật từ Studio.",
@@ -236,6 +315,9 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
                  "so_video_dt": sum(z["so_dt"] for z in ds), "so_kenh_dt": len({k for z in vung.values() for k in z["kenh_dich"]})},
         "vung": ds, "nong": nong[:8], "quan": quan, "dich_top": dich_top,
     }
+    ra["de_xuat_tan_cong"] = de_xuat_tan_cong(ds, quan)
+    ra["lich_su"] = _lich_su_gon(hom, ra)
+    return ra
 
 
 if __name__ == "__main__":
@@ -248,3 +330,9 @@ if __name__ == "__main__":
                                                                          ", ".join(x["kenh"] for x in z["dich_manh"])[:60]))
     for q in d["quan"]:
         print(q["ma"], q["gio_xem"], q["dang_ky"], q["mat_tran_ten"], "→", q["tan_cong_ten"])
+    print("— cơ hội —")
+    for z in sorted(d["vung"], key=lambda z: -z["co_hoi"])[:6]:
+        print("{0:<28} co_hoi {1:>5} {2}".format(z["ten"][:28], z["co_hoi"], z["co_hoi_chi_tiet"]))
+    for x in d["de_xuat_tan_cong"]:
+        print(x["kenh"], "→", " | ".join("%s (%s)" % (v["ten"], v["co_hoi"]) for v in x["vung"]))
+    print("lich_su:", len(d["lich_su"]), "điểm")

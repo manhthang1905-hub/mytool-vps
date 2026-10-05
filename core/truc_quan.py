@@ -242,6 +242,13 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(chien_truong_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/chien-truong-lich-su.json"):      # chuỗi ảnh chụp theo ngày (mặc định 60 ngày)
+            try:
+                from core import chien_truong_lich_su  # noqa: PLC0415
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(chien_truong_lich_su.doc_lich_su(GOC, 60), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/du-lieu.json"):
             try:
                 return self._gui(200, "application/json; charset=utf-8",

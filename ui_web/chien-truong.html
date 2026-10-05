@@ -58,6 +58,13 @@ a{color:var(--xanhduong)}
 .hai{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
 @media (max-width:900px){.hai{grid-template-columns:1fr}}
 #chi-tiet .trong{color:var(--mo);font-style:italic}
+.bd-luoi{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media (max-width:900px){.bd-luoi{grid-template-columns:1fr}}
+svg.bd{width:100%;height:120px;display:block} svg.bd text{fill:var(--mo);font-size:10px}
+svg.bd .duong{fill:none;stroke-width:2;stroke-linejoin:round} svg.bd .luoi{stroke:var(--luoi);stroke-width:1}
+.lenh{border:1px solid var(--vien);border-radius:9px;padding:9px 11px;margin-bottom:9px;background:var(--the2)}
+.lenh .ly{font-size:12px;color:var(--mo);margin:2px 0 6px}
+.diem-ch{display:inline-block;min-width:34px;text-align:center;font-weight:700;font-size:12px;padding:1px 6px;border-radius:999px;background:var(--xanhduong);color:#fff;margin-right:6px}
 .nhan-vung{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--luoi);color:var(--mo)}
 </style>
 </head>
@@ -85,12 +92,17 @@ a{color:var(--xanhduong)}
         <span><span class="co"><span style="background:var(--dich)">🔥n</span></span> đối thủ đang nổ</span>
       </div>
     </div>
+    <div class="bd-luoi">
+      <div class="khung"><h2>Thị phần ta theo ngày</h2><div id="bd-tp"></div></div>
+      <div class="khung"><h2>Quy mô ngách theo ngày</h2><div id="bd-qm"></div></div>
+    </div>
     <div class="hai">
       <div class="khung"><h2>Điểm nóng — video đối thủ đang nổ (14 ngày)</h2><table id="nong"></table></div>
       <div class="khung"><h2>Bảng xếp hạng thị phần — đối thủ và phe ta</h2><table id="dich-top"></table><div class="mo nho" id="cach-do" style="margin-top:8px"></div></div>
     </div>
   </section>
   <aside>
+    <div class="khung" style="margin-bottom:16px"><h2>Lệnh tác chiến — nên đánh vùng nào</h2><div id="lenh"></div></div>
     <div class="khung" id="chi-tiet"><h2>Chi tiết vùng</h2><div class="trong">Bấm một vùng trên bản đồ.</div></div>
     <div class="khung" style="margin-top:16px"><h2>Quân ta — sức chiến đấu (28 ngày)</h2><div id="quan"></div></div>
   </aside>
@@ -141,7 +153,7 @@ function banDo() {
       `<div class="so">địch ${fmt(r.dich)} · ta ${fmt(r.ta)} · <b>${pc(r.thi_phan)}</b></div>` +
       `<div class="dan">dẫn đầu: ${esc((r.dich_manh[0] || {}).kenh || "—")}</div>` + (coTa ? `<div class="co">${coTa}</div>` : "")) +
       (nongTheoVung[r.ma] ? `<span class="nong">🔥${nongTheoVung[r.ma]}</span>` : "");
-    d.title = `${r.ten}\nĐịch: ${fmt(r.dich)} lượt xem · ${r.so_dt} video\nTa: ${fmt(r.ta)} · ${r.so_ta} video\nThị phần ta: ${pc(r.thi_phan)}`;
+    d.title = `${r.ten}\nCơ hội tấn công: ${r.co_hoi == null ? "—" : r.co_hoi + "/100"}\nĐịch: ${fmt(r.dich)} lượt xem · ${r.so_dt} video\nTa: ${fmt(r.ta)} · ${r.so_ta} video\nThị phần ta: ${pc(r.thi_phan)}`;
     d.addEventListener("click", () => { VUNG = r.ma; veLai(); });
     box.appendChild(d);
   }
@@ -187,10 +199,37 @@ function chiTiet() {
   const nong = DU.nong.filter(n => n.cum === z.ma), danh = DU.quan.filter(q => q.tan_cong === z.ma);
   box.innerHTML = `<h2>${esc(z.ten)}</h2>
     <div class="mt">Thị phần ta: <b>${pc(z.thi_phan)}</b> · địch ${fmt(z.dich)} (${z.so_dt} video) · ta ${fmt(z.ta)} (${z.so_ta} video)</div>
+    <div class="mt">Cơ hội tấn công: <b>${z.co_hoi == null ? "—" : z.co_hoi + "/100"}</b>${z.co_hoi_chi_tiet ? ` <span class="mo">(cầu ${z.co_hoi_chi_tiet.cau} · đà ${z.co_hoi_chi_tiet.da} · địch yếu ${z.co_hoi_chi_tiet.yeu} · thế chân ${z.co_hoi_chi_tiet.chan})</span>` : ""}</div>
     <div class="mt"><b>Đối thủ giữ vùng</b></div>${z.dich_manh.map(d => `<div class="mt mo">• ${esc(d.kenh)} — ${fmt(d.view)}</div>`).join("") || '<div class="mt mo">—</div>'}
     <div class="mt"><b>Quân ta có mặt</b></div><div class="mt mo">${z.ta_kenh.length ? z.ta_kenh.join(" · ") : "chưa có"}</div>
     <div class="mt"><b>Sắp tấn công</b></div><div class="mt mo">${danh.length ? danh.map(q => `${q.ma}: ${esc(q.video_mai)}`).join("<br>") : "chưa có"}</div>
     ${nong.length ? `<div class="mt"><b>Đang nổ trong vùng</b></div>${nong.map(n => `<div class="mt mo">🔥 ${esc(n.tieu_de)} (+${fmt(n.tang)}/ngày)</div>`).join("")}` : ""}`;
+}
+function duong(chuoi, key, mau, dang) {
+  // biểu đồ đường SVG nội tuyến; 0 điểm → thông báo; 1 điểm → chấm + giá trị
+  if (!chuoi.length) return '<div class="mo nho">Chưa có lịch sử — mỗi ngày ghi một điểm.</div>';
+  const W = 420, H = 120, L = 8, R = 8, T = 14, B = 18, ys = chuoi.map(p => Number(p[key]) || 0);
+  let lo = Math.min(...ys), hi = Math.max(...ys); if (hi === lo) { hi += Math.abs(hi) * .05 + 1e-9; lo -= Math.abs(lo) * .05; if (hi === lo) hi = lo + 1; }
+  const X = i => chuoi.length === 1 ? W / 2 : L + (W - L - R) * i / (chuoi.length - 1), Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const pts = ys.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`);
+  const cuoi = ys[ys.length - 1], d0 = chuoi[0].ngay.slice(5), d1 = chuoi[chuoi.length - 1].ngay.slice(5);
+  return `<svg class="bd" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(key)}">
+    <line class="luoi" x1="${L}" x2="${W - R}" y1="${Y(lo)}" y2="${Y(lo)}"/><line class="luoi" x1="${L}" x2="${W - R}" y1="${Y(hi)}" y2="${Y(hi)}"/>
+    ${chuoi.length > 1 ? `<polyline class="duong" stroke="${mau}" points="${pts.join(" ")}"/>` : ""}
+    ${ys.map((v, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${chuoi.length > 1 && i < ys.length - 1 ? 0 : 3.5}" fill="${mau}"><title>${chuoi[i].ngay}: ${dang(v)}</title></circle>`).join("")}
+    <text x="${L}" y="${H - 4}">${d0}</text><text x="${W - R}" y="${H - 4}" text-anchor="end">${d1}</text>
+    <text x="${L}" y="10">${dang(hi)}</text></svg>
+    <div class="nho mo">hiện tại <b style="color:var(--chu)">${dang(cuoi)}</b> · ${chuoi.length} ngày</div>`;
+}
+function bieuDo() {
+  const ls = DU.lich_su || [];
+  document.getElementById("bd-tp").innerHTML = duong(ls, "thi_phan", "var(--ta)", v => pc(v));
+  document.getElementById("bd-qm").innerHTML = duong(ls.map(p => ({...p, qm: p.ta + p.dich})), "qm", "var(--xanhduong)", v => fmt(v));
+}
+function lenh() {
+  const ds = DU.de_xuat_tan_cong || [];
+  document.getElementById("lenh").innerHTML = ds.map(c => `<div class="lenh"><b>${esc(c.kenh)}</b> <span class="mo nho">${esc(c.ten)}</span>` +
+    (c.vung.map(v => `<div class="ly"><span class="diem-ch">${v.co_hoi}</span><b style="color:var(--chu)">${esc(v.ten)}</b><br>${esc(v.ly_do)}</div>`).join("") || '<div class="ly">chưa có đề xuất</div>') + `</div>`).join("") || '<div class="mo nho">chưa có đề xuất</div>';
 }
 function veLai() { banDo(); quan(); chiTiet(); }
 async function tai() {
@@ -200,7 +239,7 @@ async function tai() {
     document.getElementById("luc").textContent = `số liệu ${DU.luc} · ngách ${DU.ngach} · cửa sổ ${DU.cua_so_ngay} ngày`;
     document.getElementById("tieu-de-ban-do").textContent = "Bản đồ thị phần — mỗi vùng là một đề tài, to nhỏ theo lượt xem mỗi tháng của cả ngách";
     document.getElementById("cach-do").textContent = "Cách đo: " + (DU.cach_do || "");
-    bangDiem(); bang(); veLai();
+    bangDiem(); bang(); bieuDo(); lenh(); veLai();
   } catch (e) { document.getElementById("luc").textContent = "không đọc được dữ liệu: " + e.message; }
 }
 window.addEventListener("resize", () => DU && banDo());
