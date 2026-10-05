@@ -88,6 +88,7 @@ from typing import Any, Callable, Dict, List, Optional
 from . import auto
 from . import bang_dieu_khien
 from . import bao_dong
+from . import ben_bi
 from . import chi_phi
 from . import don_dep_mo_rong
 from . import khe
@@ -613,7 +614,7 @@ def _tuoi_khoa_may_giay(goc: str, bay_gio: _dt.datetime) -> Dict[str, Any]:
     if not pid or not bat_dau:
         return {"co": True, "tuoi_giay": None, "pid": None, "con_song": None}
     return {"co": True, "tuoi_giay": bay_gio.timestamp() - bat_dau,
-            "pid": pid, "con_song": _pid_con_song(pid)}
+            "pid": pid, "con_song": _pid_con_song(pid), "bat_dau": bat_dau}
 
 
 def _doc_dia(goc: str) -> Dict[str, Optional[float]]:
@@ -762,20 +763,26 @@ def _kiem_khong_video_moi(ma: str, snap: Dict[str, Any],
     if not mocs:
         if snap.get("kenh_moi"):
             return []  # kênh mới (< NGAY_KENH_MOI ngày): đang làm video đầu — chỉ 1 dòng trạng thái trong bản tin
-        return [_su_co(
+        sc = _su_co(
             "khong_video_moi", bao_dong.MUC_KHAN, kenh=ma,
             chuyen_gi="Kênh {0} đang bật tự động nhưng chưa từng có video nào đăng.".format(ma),
             can_lam_gi="Mở tool xem kênh {0} có đang chạy được không.".format(ma),
-            neu_khong_lam="Kênh không có video mới, kênh đứng im mà không ai biết.")]
+            neu_khong_lam="Kênh không có video mới, kênh đứng im mà không ai biết.",
+            dedupe_khoa="khong_video_moi:{0}:chua_tung".format(ma))
+        sc["lap_gio"] = ben_bi.NGUONG_LAP_BAO_TIEN_GIO  # 06/10: báo 1 lần rồi nhắc 1 lần/ngày, không mỗi 15'
+        return [sc]
     gio_gan_nhat = max(mocs)
     tuoi_gio = (bay_gio - gio_gan_nhat).total_seconds() / 3600.0
     if tuoi_gio > NGUONG_KHONG_VIDEO_MOI_GIO:
-        return [_su_co(
+        sc = _su_co(
             "khong_video_moi", bao_dong.MUC_KHAN, kenh=ma,
             chuyen_gi="Kênh {0} đã {1:.0f} giờ không có video mới (video gần nhất {2}).".format(
                 ma, tuoi_gio, gio_gan_nhat.strftime("%d/%m %H:%M")),
             can_lam_gi="Mở tool xem kênh {0} đang bị chặn ở đâu.".format(ma),
-            neu_khong_lam="Kênh ngừng ra video mà không ai biết, có thể mất cả tuần.")]
+            neu_khong_lam="Kênh ngừng ra video mà không ai biết, có thể mất cả tuần.",
+            dedupe_khoa="khong_video_moi:{0}:{1}".format(ma, gio_gan_nhat.strftime("%Y%m%d%H%M")))
+        sc["lap_gio"] = ben_bi.NGUONG_LAP_BAO_TIEN_GIO
+        return [sc]
     return []
 
 
@@ -794,6 +801,8 @@ def _kiem_hen_lich_chua_tai(ma: str, snap: Dict[str, Any], bay_gio: _dt.datetime
         muc = bao_dong.MUC_KHAN if gio_con_lai <= NGUONG_HEN_LICH_KHAN_GIO else bao_dong.MUC_THUONG
         ra.append(_su_co(
             "hen_lich_chua_tai", muc, kenh=ma,
+            # 06/10: cùng video + cùng mức thì 4 giờ mới ghi/báo lại (trước: mỗi 15').
+            dedupe_khoa="hen_lich:{0}:{1}:{2}".format(ma, str(d.get("Mã gói") or tieu_de)[:80], muc),
             chuyen_gi=("Video 「{0}」 của kênh {1} đã QUÁ giờ hẹn đăng {2:.1f} giờ mà "
                       "chưa thấy tải lên YouTube.".format(tieu_de, ma, abs(gio_con_lai))
                       if qua_han else
@@ -812,6 +821,7 @@ def _kiem_tai_len_loi_lap(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]
             tieu_de = str(d.get("Tiêu đề") or d.get("Mã gói") or "").strip()
             ra.append(_su_co(
                 "tai_len_loi_lap", bao_dong.MUC_KHAN, kenh=ma,
+                dedupe_khoa="tai_len_lap:{0}:{1}:{2}".format(ma, str(d.get("Mã gói") or tieu_de)[:80], lan),
                 chuyen_gi="Video 「{0}」 của kênh {1} đã thử tải lên YouTube {2} lần "
                          "hôm nay mà chưa xong.".format(tieu_de, ma, lan),
                 can_lam_gi="Mở tool xem máy đăng kênh {0} báo lỗi gì.".format(ma),
@@ -822,12 +832,15 @@ def _kiem_tai_len_loi_lap(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]
 def _kiem_studio_cu(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]:
     tuoi_gio = snap.get("chi_so_tuoi_gio")
     if snap.get("tu_chay") and tuoi_gio is not None and tuoi_gio > NGUONG_STUDIO_CU_GIO:
-        return [_su_co(
+        sc = _su_co(
             "so_lieu_studio_cu", bao_dong.MUC_THUONG, kenh=ma,
             chuyen_gi="Số liệu Studio của kênh {0} đã {1:.0f} giờ chưa cập nhật.".format(
                 ma, tuoi_gio),
             can_lam_gi="Mở tool bấm quét số liệu Studio kênh {0}.".format(ma),
-            neu_khong_lam="Máy chọn ảnh bìa/kịch bản dựa trên số liệu cũ, có thể học sai.")]
+            neu_khong_lam="Máy chọn ảnh bìa/kịch bản dựa trên số liệu cũ, có thể học sai.",
+            dedupe_khoa="studio_cu:{0}".format(ma))
+        sc["lap_gio"] = 24.0  # 06/10: mức thường mà bao_dong chỉ lặng 1 giờ — trước đây nhắc mỗi giờ cả tuần
+        return [sc]
     return []
 
 
@@ -1061,22 +1074,39 @@ def kiem_su_co(anh: Dict[str, Any], *, so_du_vnd: Optional[float] = None) -> Lis
     (kiểm "ví < 3 ngày chạy"). Để trống thì bỏ qua kiểm đó, không tự gọi mạng
     (xem `NGUONG_VI_SO_NGAY`)."""
     ra: List[Dict[str, Any]] = []
+
+    def _goi(ten: str, ham: Callable[..., List[Dict[str, Any]]], *doi_so: Any) -> None:
+        # 06/10/2026: MỘT kiểm hỏng (dữ liệu lạ trong một kênh) không được nuốt mất
+        # mọi kiểm còn lại — trước đây ngoại lệ ở đây làm cả lượt gác tổng sập im.
+        try:
+            ra.extend(ham(*doi_so))
+        except Exception as loi:  # noqa: BLE001
+            ra.append(_su_co(
+                "kiem_hong", bao_dong.MUC_NHAC,
+                "Một bước kiểm của người gác ({0}) bị lỗi: {1}: {2}".format(
+                    ten, type(loi).__name__, str(loi)[:150]),
+                can_lam_gi="Báo người quản trị tool.", dedupe_khoa="kiem_hong:" + ten))
+
+    try:
+        bay_gio = _dt.datetime.fromisoformat(str(anh.get("luc")))
+    except (TypeError, ValueError):
+        bay_gio = _dt.datetime.now()
     for ma, snap in (anh.get("kenh") or {}).items():
-        ra += _kiem_khong_video_moi(ma, snap, _dt.datetime.fromisoformat(anh["luc"]))
-        ra += _kiem_hen_lich_chua_tai(ma, snap, _dt.datetime.fromisoformat(anh["luc"]))
-        ra += _kiem_tai_len_loi_lap(ma, snap)
-        ra += _kiem_studio_cu(ma, snap)
-        ra += _kiem_khau_dung_qua_lau(ma, snap, anh)
-        ra += _kiem_loi_lap_cung_khau(ma, snap)
-        ra += _kiem_may_dang_khong_nhan_dien(ma, snap)
-    ra += _kiem_dia_day(anh)
-    ra += _kiem_tram_chet(anh)
-    ra += _kiem_khoa_may_qua_lau(anh)
-    ra += _kiem_khoa_may_pid_chet(anh)
-    ra += _kiem_cho_khe_qua_lau(anh)
-    ra += _kiem_ram_thap(anh)
-    ra += _kiem_qua_nhieu_tu_chay(anh)
-    ra += _kiem_vi_sap_can(anh, so_du_vnd)
+        _goi("khong_video_moi", _kiem_khong_video_moi, ma, snap, bay_gio)
+        _goi("hen_lich_chua_tai", _kiem_hen_lich_chua_tai, ma, snap, bay_gio)
+        _goi("tai_len_loi_lap", _kiem_tai_len_loi_lap, ma, snap)
+        _goi("so_lieu_studio_cu", _kiem_studio_cu, ma, snap)
+        _goi("khau_dung_qua_lau", _kiem_khau_dung_qua_lau, ma, snap, anh)
+        _goi("loi_lap_cung_khau", _kiem_loi_lap_cung_khau, ma, snap)
+        _goi("tai_len_hong", _kiem_may_dang_khong_nhan_dien, ma, snap)
+    _goi("dia_day", _kiem_dia_day, anh)
+    _goi("tram_chet", _kiem_tram_chet, anh)
+    _goi("khoa_may_qua_lau", _kiem_khoa_may_qua_lau, anh)
+    _goi("khoa_may_pid_chet", _kiem_khoa_may_pid_chet, anh)
+    _goi("cho_khe_qua_lau", _kiem_cho_khe_qua_lau, anh)
+    _goi("ram_thap", _kiem_ram_thap, anh)
+    _goi("qua_nhieu_tu_chay", _kiem_qua_nhieu_tu_chay, anh)
+    _goi("vi_sap_can", _kiem_vi_sap_can, anh, so_du_vnd)
     return ra
 
 
@@ -1483,12 +1513,24 @@ def tu_sua(
 
     khoa = may.get("khoa_may") or {}
     if khoa.get("co") and khoa.get("pid") and khoa.get("con_song") is False:
+        # VÁ 06/10/2026: KHÔNG xoá theo ẢNH CHỤP đầu lượt nữa — giữa lúc chụp và lúc
+        # tới đây (chốt ví, QA kiểm lại gói… có khi vài phút) một lượt MỚI có thể đã
+        # giành khoá. `ben_bi.don_khoa_chet_an_toan` đọc lại tệp NGAY LÚC XOÁ: chỉ xoá
+        # khi vẫn đúng PID/mốc đã thấy, PID vẫn chết và khoá đủ tuổi
+        # (`ben_bi.TUOI_KHOA_CHET_TOI_THIEU_GIAY`); đổi tên nguyên tử rồi đọc lại.
         if ghi_dia:
-            khe.xoa_tep_ben_vung(khe.duong_khoa_nang(goc))
-        hanh_dong.append({
-            "loai": "don_khoa_may_chet", "kenh": "", "thuc_hien": ghi_dia,
-            "chuyen_gi": "Xoá khoá .khoa-may trỏ PID {0} đã CHẾT.".format(khoa.get("pid")),
-        })
+            da_xoa, _ly_do = ben_bi.don_khoa_chet_an_toan(
+                khe.duong_khoa_nang(goc), pid_thay=int(khoa.get("pid") or 0),
+                bat_dau_thay=khoa.get("bat_dau"), bay_gio=bay_gio.timestamp(),
+                pid_con_song=khe.pid_con_song)
+        else:
+            tuoi = khoa.get("tuoi_giay")
+            da_xoa = tuoi is None or float(tuoi) >= ben_bi.TUOI_KHOA_CHET_TOI_THIEU_GIAY
+        if da_xoa:
+            hanh_dong.append({
+                "loai": "don_khoa_may_chet", "kenh": "", "thuc_hien": ghi_dia,
+                "chuyen_gi": "Xoá khoá .khoa-may trỏ PID {0} đã CHẾT.".format(khoa.get("pid")),
+            })
 
     nang = (may.get("khe") or {}).get("nang")
     # Tuyệt đối không giết giữa lúc tải lên (CLAUDE.local.md luật riêng VPS
@@ -1808,7 +1850,7 @@ def kiem_giam_doc(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
 # ── `python -m core.gac_tong --mot-luot [--thu]` ────────────────────────────
 
 
-def _main(argv: Optional[List[str]] = None) -> int:
+def _main(argv: Optional[List[str]] = None, *, goc: Optional[str] = None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError, OSError):
@@ -1819,14 +1861,49 @@ def _main(argv: Optional[List[str]] = None) -> int:
         print("  --thu: chỉ tính toán và in ra — KHÔNG ghi đĩa, KHÔNG gọi core.bao_dong.")
         return 0
 
-    goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    goc = goc or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     thu = "--thu" in danh_sach
 
+    # 06/10/2026 (kiểm toán 1 năm): trước đây MỘT ngoại lệ ở `chup_trang_thai`/
+    # `bao_cao_su_co`/`tu_sua` làm cả lượt chết im (pythonw không console) — mỗi 15'
+    # lại chết đúng chỗ đó, không ai biết. Giờ: nhịp tim `workspace/gac-tong/nhip.json`
+    # (bộ điều phối canh nó, `ben_bi.canh_gac_tong`), sổ sập liền + báo khẩn từ lần
+    # thứ 2 (`ben_bi.ghi_loi_vong`).
+    if not thu:
+        ben_bi.ghi_nhip(goc, "gac_tong", "bat_dau")
+    try:
+        ma_ra = _mot_luot(goc, thu)
+    except Exception as loi:  # noqa: BLE001 — lưới cuối của cả lượt
+        if not thu:
+            ben_bi.ghi_loi_vong(goc, "gac_tong", loi)
+            ben_bi.ghi_nhip(goc, "gac_tong", "sap: {0}: {1}".format(type(loi).__name__, str(loi)[:120]))
+        print("Gác tổng: lượt này SẬP ({0}: {1}) — lượt 15' sau tự chạy lại.".format(
+            type(loi).__name__, str(loi)[:200]))
+        return 1
+    if not thu:
+        ben_bi.xoa_loi_vong(goc, "gac_tong")
+        ben_bi.ghi_nhip(goc, "gac_tong", "xong")
+    return ma_ra
+
+
+#: Hạn giờ CỨNG một lượt `--mot-luot` (lịch 15', `IgnoreNew`, hạn mặc định 72 giờ):
+#: lượt treo quá mức này tự thoát (`ben_bi.hen_gio_tu_thoat`) để lượt sau chạy được.
+#: Rộng tay vì QA kiểm lại gói (FFmpeg) có thể chạy tới ~30 phút.
+GIAY_TOI_DA_MOT_LUOT = 40 * 60
+
+
+def _mot_luot(goc: str, thu: bool) -> int:
     anh = chup_trang_thai(goc)
     # `so_du_vnd` KHÔNG tự lấy ở đây — `chup_trang_thai`/`kiem_su_co` chủ đích
     # KHÔNG gọi mạng (xem docstring đầu tệp + `NGUONG_VI_SO_NGAY`); kiểm "ví
     # < 3 ngày chạy" chỉ hoạt động khi có nơi khác truyền số dư thật vào.
     ds_su_co = kiem_su_co(anh)
+    # Hai điều kiện THẬT SỰ mất tiền (06/10/2026): kênh 48h không video mới đã ở
+    # `_kiem_khong_video_moi`; đây là "cả máy 36h không ra gói mới" + máy nền chết hẳn.
+    ds_su_co += ben_bi.kiem_khong_san_xuat(goc, anh, ghi_dia=not thu)
+    thu_muc_vm_gt = tt.thu_muc_vm(goc)
+    hanh_dong_hoi_sinh, su_co_hoi_sinh = ben_bi.hoi_sinh_may_nen(goc, thu_muc_vm_gt, ghi_dia=not thu)
+    ds_su_co += su_co_hoi_sinh + ben_bi.kiem_agent_sap(goc, thu_muc_vm_gt)
     # Bốn chốt an toàn 1 năm (30/09/2026, `core/chot_an_toan.py`): ví, license Windows (rearm
     # + khởi động lại lúc rảnh), hạn thuê VPS, giọng đọc trùng. `--thu` chỉ chạy phần thuần
     # (không gọi mạng, không rearm, không ghi đĩa).
@@ -1875,7 +1952,17 @@ def _main(argv: Optional[List[str]] = None) -> int:
     except Exception as loi_mk:  # noqa: BLE001 — mở kênh hỏng không được làm sập gác tổng
         tom_tat_mk = "không chạy được ({0})".format(str(loi_mk)[:200])
     ket_qua = bao_cao_su_co(goc, anh, ds_su_co, ghi_dia=not thu)
-    hanh_dong_tu_sua = tu_sua(goc, anh, ghi_dia=not thu)
+    hanh_dong_tu_sua: List[Dict[str, Any]] = []
+    try:
+        hanh_dong_tu_sua += tu_sua(goc, anh, ghi_dia=not thu)
+    except Exception as loi_ts:  # noqa: BLE001 — tự sửa hỏng không được chặn các bước sau
+        print("Tự sửa: lỗi ({0})".format(str(loi_ts)[:200]))
+    if hanh_dong_hoi_sinh:
+        hanh_dong_tu_sua += hanh_dong_hoi_sinh
+        if not thu:
+            ghi_hs = [_su_co("tu_sua:" + h["loai"], bao_dong.MUC_THUONG, h["chuyen_gi"]) for h in hanh_dong_hoi_sinh]
+            _ghi_nhat_ky_jsonl(goc, _dt.datetime.now(), ghi_hs)
+            _ghi_loi_chay_max_md(goc, _dt.datetime.now(), ghi_hs)
     try:
         hanh_dong_tu_sua += tu_sua_agent_treo(goc, ghi_dia=not thu)
     except Exception:  # noqa: BLE001 — canh nhịp tim hỏng không được làm sập gác tổng
@@ -1943,4 +2030,7 @@ def _main(argv: Optional[List[str]] = None) -> int:
 
 
 if __name__ == "__main__":
+    if "--mot-luot" in sys.argv[1:] and "--thu" not in sys.argv[1:]:
+        ben_bi.hen_gio_tu_thoat(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gac_tong", GIAY_TOI_DA_MOT_LUOT)
     raise SystemExit(_main())

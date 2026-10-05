@@ -3715,6 +3715,8 @@ def mot_minh(cong: int = 8767, duong_pid: str = "", thay: bool = False, duong_da
     cầm tool đăng con).
     """
     global _O_MOT_MINH
+    if _O_MOT_MINH is not None:
+        return True     # chính tiến trình này đã giữ khoá (vòng chính chạy lại sau sập, xem `chay_ben`)
     duong_pid = duong_pid or os.path.join(GOC, "agent.pid")
     for lan in range(2):
         try:
@@ -3992,5 +3994,61 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
         time.sleep(min(NHIP_GIAY * max(1, hong_lien_tiep // 10 + 1), 300))
 
 
+#: Lưới ngoài cùng của vòng chính (06/10/2026). Trước đây một ngoại lệ lọt khỏi
+#: `chay` (vd `chon_tram`/`che_do_phien_bat` ngoài các khối try từng bước) làm
+#: tiến trình chết; giao diện mở lại sau ~12 giây, lỗi lặp là vòng "chết-mở" dày
+#: (mỗi lần mở lại còn dọn Chrome của mọi kênh), không ai được báo. Giờ: ghi
+#: `logs/agent-sap.json` (gác tổng đọc, sập ≥ 3 lần/giờ thì báo khẩn) rồi chạy lại
+#: vòng chính trong CÙNG tiến trình sau 30 s, 60 s, 120 s… (trần 15 phút — dưới
+#: ngưỡng 20 phút nhịp tim của gác tổng, và nhịp tim vẫn được ghi trong lúc chờ).
+SAP_CHO_CO_SO_GIAY = 30.0
+SAP_CHO_TRAN_GIAY = 900.0
+
+
+def _ghi_agent_sap(so_lan: int, loi: BaseException, tu_luc: float) -> None:
+    try:
+        duong = os.path.join(GOC, "logs", "agent-sap.json")
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        tam = duong + ".tmp"
+        with open(tam, "w", encoding="utf-8") as tep:
+            json.dump({"so_lan": so_lan, "luc": time.time(), "tu_luc": tu_luc,
+                       "loi": "{0}: {1}".format(type(loi).__name__, str(loi)[:300])}, tep, ensure_ascii=False)
+        os.replace(tam, duong)
+    except OSError:
+        pass
+
+
+def chay_ben(doc_cfg=None, chay_fn=None, ngu=None) -> None:
+    """Chạy `chay` mãi: vòng chính sập thì ghi sổ, chờ lùi dần rồi chạy lại.
+    `chay` trả về bình thường (agent khác đang chạy / `mot_vong`) thì thoát."""
+    doc_cfg = doc_cfg or doc_cau_hinh
+    chay_fn = chay_fn or chay
+    ngu = ngu or time.sleep
+    so_lan, tu_luc = 0, 0.0
+    while True:
+        bat_dau = time.time()
+        try:
+            chay_fn(doc_cfg())
+            return
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as loi:  # noqa: BLE001 — lưới ngoài cùng, xem ghi chú trên
+            if time.time() - bat_dau > 3600:
+                so_lan = 0          # chạy êm hơn 1 giờ rồi mới sập: đếm lại từ đầu
+            if so_lan == 0:
+                tu_luc = time.time()
+            so_lan += 1
+            cho = min(SAP_CHO_TRAN_GIAY, SAP_CHO_CO_SO_GIAY * (2 ** min(so_lan - 1, 10)))
+            ghi("agent: vòng chính SẬP lần {0} ({1}: {2}) — tự chạy lại sau {3:.0f} giây".format(
+                so_lan, type(loi).__name__, str(loi)[:200], cho))
+            _ghi_agent_sap(so_lan, loi, tu_luc)
+            con_lai = cho
+            while con_lai > 0:
+                nhip_tim("bước: chờ chạy lại sau sập (lần {0})".format(so_lan), ep=True)
+                lat = min(60.0, con_lai)
+                ngu(lat)
+                con_lai -= lat
+
+
 if __name__ == "__main__":
-    chay(doc_cau_hinh())
+    chay_ben()

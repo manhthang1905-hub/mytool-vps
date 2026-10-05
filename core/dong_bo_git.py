@@ -553,6 +553,7 @@ def kiem_khoi(goc: str, *, co_test: bool = True, in_ra: Callable[[str], None] = 
     if ma != 0:
         loi.append("import module chính hỏng:\n" + (ra.strip() or err.strip())[-1500:])
     in_ra("  kiểm khói import: {0} module — {1}".format(len(co_mat), "đạt" if ma == 0 else "HỎNG"))
+    loi += kiem_khoi_vm(goc, env=env, co=co_thap, in_ra=in_ra)
     if co_test and not loi:
         tests = [t for t in TEST_NHANH if os.path.isfile(os.path.join(goc, *t.split("/")))]
         if tests:
@@ -568,6 +569,41 @@ def kiem_khoi(goc: str, *, co_test: bool = True, in_ra: Callable[[str], None] = 
                 if ma not in (0, 5):
                     loi.append("test nhanh hỏng:\n" + (ra + err)[-2000:])
     return loi
+
+
+#: Máy đăng/agent `vm/` — chạy bằng tên TRẦN (`import cdp`, cwd=vm/) nên không nằm
+#: trong `MODULE_CHINH` (gói `core.`). Trước 06/10/2026 bản mới làm hỏng `vm/agent.py`
+#: chỉ lộ ra SAU khi đã áp + khởi động lại (`_theo_doi` thấy cổng 8767 chết lặp), còn
+#: hỏng `may_dang_dom.py` (agent mở mỗi phiên) thì không bao giờ lộ: agent vẫn sống,
+#: chỉ là không video nào lên. Kiểm khói import cả nhóm này ngay trong bản kiểm.
+MODULE_VM = ("agent", "cdp", "may_dang_dom", "may_cmt_dom", "tu_chua_dom", "thiet_lap_kenh_dom")
+
+
+def kiem_khoi_vm(goc: str, *, env: Optional[Dict[str, str]] = None, co: int = 0,
+                 in_ra: Callable[[str], None] = print) -> List[str]:
+    """Import (tiến trình con, `cwd=vm/`) các tệp `MODULE_VM` có mặt. `SHOPAPI_VM_GOC`
+    trỏ thư mục tạm để không mã nào chạm nhật ký/sổ THẬT của máy ảo. Rỗng = đạt."""
+    thu_muc_vm = os.path.join(goc, "vm")
+    co_mat = [m for m in MODULE_VM if os.path.isfile(os.path.join(thu_muc_vm, m + ".py"))]
+    if not co_mat:
+        return []
+    moi_truong = dict(env if env is not None else os.environ)
+    moi_truong["PYTHONDONTWRITEBYTECODE"] = "1"
+    tam = tempfile.mkdtemp(prefix="kiem-khoi-vm-")
+    moi_truong["SHOPAPI_VM_GOC"] = tam
+    ma_lenh = ("import importlib, sys\nsys.path.insert(0, r'{0}')\nsys.path.insert(0, r'{1}')\nloi = []\n"
+               "for m in {2!r}:\n"
+               "    try:\n        importlib.import_module(m)\n"
+               "    except Exception as e:\n        loi.append('vm/%s: %s: %s' % (m, type(e).__name__, e))\n"
+               "print('\\n'.join(loi))\nsys.exit(1 if loi else 0)\n").format(goc, thu_muc_vm, co_mat)
+    try:
+        ma, ra, err = _chay([_python(), "-c", ma_lenh], cwd=thu_muc_vm, timeout=180, env=moi_truong, co=co)
+    finally:
+        shutil.rmtree(tam, ignore_errors=True)
+    in_ra("  kiểm khói vm/: {0} tệp — {1}".format(len(co_mat), "đạt" if ma == 0 else "HỎNG"))
+    if ma != 0:
+        return ["import máy đăng/agent vm/ hỏng:\n" + (ra.strip() or err.strip())[-1500:]]
+    return []
 
 
 def _ly_do_may_ban_nang(goc: str) -> str:

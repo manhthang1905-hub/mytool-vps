@@ -142,6 +142,17 @@ def main(argv=None) -> int:
 
     if args.dieu_phoi:
         log = bo_log_tat_ca(BASE_DIR, in_console=True)
+        # "Ai gác người gác" (06/10/2026): lịch điều phối (10') độc lập với lịch gác
+        # tổng (15') — nhịp tim gác tổng cũ > 60' thì đăng ký lại lịch nếu mất + báo.
+        # Chạy TRƯỚC nhịp điều phối, try riêng: hỏng không được chặn sinh lượt.
+        try:
+            from core import ben_bi  # noqa: PLC0415
+
+            cau_canh = ben_bi.canh_gac_tong(BASE_DIR)
+            if cau_canh:
+                log("[ĐIỀU PHỐI] canh gác tổng: {0}".format(cau_canh))
+        except Exception as loi:  # noqa: BLE001
+            log("[ĐIỀU PHỐI] canh gác tổng hỏng: {0}".format(loi))
         try:
             ket = dieu_phoi.nhip(BASE_DIR)
         except Exception as loi:  # noqa: BLE001 — pythonw không có console, phải tự ghi

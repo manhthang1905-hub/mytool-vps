@@ -393,7 +393,8 @@ def _qua_khoang_lang(goc: str, khoa: str, cooldown_giay: float, bay_gio: float) 
     Khi KHÔNG bị chặn, tự cập nhật mốc "lần bắn gần nhất" ngay — kể cả nếu
     lần bắn này rốt cuộc gửi thất bại (mạng lỗi, token sai...): sự cố dai
     dẳng mà kênh báo cũng đang hỏng thì dội liên tục mỗi vài giây cũng vô
-    ích, cứ để nhịp sau (sau `cooldown_giay`) thử lại.
+    ích, cứ để nhịp sau thử lại — từ 06/10/2026 nhịp đó là 15'/30'/60'… (lùi
+    dần, xem `THU_LAI_SAU_LOI_GIAY`) chứ không phải trọn `cooldown_giay`.
     """
     with _KHOA:
         kho = _doc_kho(goc)
@@ -406,9 +407,50 @@ def _qua_khoang_lang(goc: str, khoa: str, cooldown_giay: float, bay_gio: float) 
                 lan_cuoi = None
         if lan_cuoi is not None and (bay_gio - lan_cuoi) < cooldown_giay:
             return True
-        kho["da_gui"][khoa] = {"lan_cuoi": bay_gio}
+        moi: Dict[str, Any] = {"lan_cuoi": bay_gio}
+        if isinstance(ban_ghi, dict) and ban_ghi.get("so_lan_loi"):
+            moi["so_lan_loi"] = ban_ghi.get("so_lan_loi")  # giữ đếm lỗi liền cho `_hen_thu_lai_sau_loi`
+        kho["da_gui"][khoa] = moi
         _ghi_kho(goc, kho)
         return False
+
+
+#: Gửi HỎNG (mất mạng, Telegram chập) thì KHÔNG tiêu trọn khoảng lặng của mức
+#: (24 giờ với `khan`): thử lại sau 15', rồi 30', 60'… (gấp đôi mỗi lần hỏng liền),
+#: kẹp ở chính khoảng lặng. Trước 06/10/2026: mạng chập đúng lúc báo "kênh 2 ngày
+#: không đăng" là tin đó im tới 24 giờ sau dù mạng có lại sau 5 phút.
+THU_LAI_SAU_LOI_GIAY = 900.0
+
+
+def _hen_thu_lai_sau_loi(goc: str, khoa: str, cooldown_giay: float, luc: float) -> None:
+    """Lùi mốc `lan_cuoi` của `khoa` để lần gọi kế được bắn lại sớm (xem
+    `THU_LAI_SAU_LOI_GIAY`). Không ném lỗi."""
+    try:
+        with _KHOA:
+            kho = _doc_kho(goc)
+            ban_ghi = kho["da_gui"].get(khoa)
+            ban_ghi = dict(ban_ghi) if isinstance(ban_ghi, dict) else {}
+            try:
+                n = int(ban_ghi.get("so_lan_loi") or 0) + 1
+            except (TypeError, ValueError):
+                n = 1
+            cho = min(float(cooldown_giay), THU_LAI_SAU_LOI_GIAY * (2 ** min(n - 1, 16)))
+            ban_ghi.update({"lan_cuoi": luc - float(cooldown_giay) + cho, "so_lan_loi": n})
+            kho["da_gui"][khoa] = ban_ghi
+            _ghi_kho(goc, kho)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _xoa_dem_loi(goc: str, khoa: str) -> None:
+    try:
+        with _KHOA:
+            kho = _doc_kho(goc)
+            ban_ghi = kho["da_gui"].get(khoa)
+            if isinstance(ban_ghi, dict) and ban_ghi.pop("so_lan_loi", None) is not None:
+                _ghi_kho(goc, kho)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def quen_lich_su_chong_spam(
@@ -695,6 +737,9 @@ def bao_dong(
 
         if not da_gui and loi_gan_nhat is not None:
             _ghi_that_bai(thu_muc, loai, loi_gan_nhat, luc)
+            _hen_thu_lai_sau_loi(thu_muc, khoa, cooldown, luc)
+        elif da_gui:
+            _xoa_dem_loi(thu_muc, khoa)
 
         return da_gui
     except Exception:  # noqa: BLE001 — xem lời hứa "không bao giờ ném lỗi" ở trên

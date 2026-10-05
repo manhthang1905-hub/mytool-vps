@@ -211,3 +211,47 @@ class TestChongSpam:
         assert bao_dong.bao_dong("x", "t", goc=str(tmp_path), bay_gio=1.0) is True
         assert len(goi) == 2
 
+
+class TestThuLaiSauLoiMang:
+    """06/10/2026: gửi HỎNG không tiêu trọn khoảng lặng 24 giờ của mức khẩn."""
+
+    def test_khan_gui_hong_thi_15_phut_sau_thu_lai_khong_doi_24_gio(self, tmp_path, monkeypatch):
+        _ghi_cau_hinh(tmp_path, telegram={"bot_token": "1:a", "chat_id": "1"})
+        mang = {"song": False}
+        goi = []
+
+        def _post(*a, **k):
+            goi.append(1)
+            if not mang["song"]:
+                raise RuntimeError("mất mạng")
+
+        monkeypatch.setattr(bao_dong, "_http_post", _post)
+        g = str(tmp_path)
+        assert bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=0.0) is False
+        assert bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=600.0) is False  # còn trong 15'
+        assert len(goi) == 1
+        mang["song"] = True
+        assert bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=901.0) is True
+        assert len(goi) == 2
+        # Gửi được rồi: lại về khoảng lặng 24 giờ bình thường.
+        assert bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=901.0 + 3600) is False
+        assert len(goi) == 2
+
+    def test_hong_lien_thi_gian_cach_gap_doi(self, tmp_path, monkeypatch):
+        _ghi_cau_hinh(tmp_path, telegram={"bot_token": "1:a", "chat_id": "1"})
+        goi = []
+
+        def _post(*a, **k):
+            goi.append(1)
+            raise RuntimeError("mất mạng")
+
+        monkeypatch.setattr(bao_dong, "_http_post", _post)
+        g = str(tmp_path)
+        bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=0.0)        # hỏng 1 → chờ 900
+        bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=901.0)      # hỏng 2 → chờ 1800
+        assert len(goi) == 2
+        bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=901.0 + 1700)
+        assert len(goi) == 2
+        bao_dong.bao_dong_khan("k", "c", "l", "n", goc=g, bay_gio=901.0 + 1801)
+        assert len(goi) == 3
+

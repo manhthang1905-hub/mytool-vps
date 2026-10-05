@@ -935,29 +935,61 @@ class TestTuSua:
     def test_khong_co_gi_de_sua_thi_rong(self):
         assert gac_tong.tu_sua("/khong-dung-toi", _anh(), ghi_dia=False) == []
 
-    def test_khoa_may_pid_chet_thi_xoa(self, tmp_path, monkeypatch):
+    @staticmethod
+    def _ghi_khoa(goc, pid, bat_dau):
+        duong = gac_tong.khe.duong_khoa_nang(goc)
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        with open(duong, "w", encoding="utf-8") as tep:
+            json.dump({"pid": pid, "bat_dau": bat_dau}, tep)
+        return duong
+
+    def test_khoa_may_pid_chet_du_tuoi_thi_xoa(self, tmp_path, monkeypatch):
         goc = str(tmp_path)
+        bat_dau = BAY_GIO.timestamp() - 3600
+        duong = self._ghi_khoa(goc, 111, bat_dau)
         may = dict(_anh()["may"])
-        may["khoa_may"] = {"co": True, "tuoi_giay": 30.0, "pid": 111, "con_song": False}
-        goi = []
-        monkeypatch.setattr(gac_tong.khe, "xoa_tep_ben_vung", lambda d: goi.append(d))
+        may["khoa_may"] = {"co": True, "tuoi_giay": 3600.0, "pid": 111, "con_song": False, "bat_dau": bat_dau}
+        monkeypatch.setattr(gac_tong.khe, "pid_con_song", lambda pid: False)
         hanh_dong = gac_tong.tu_sua(goc, _anh(may=may), bay_gio=BAY_GIO, ghi_dia=True)
         assert len(hanh_dong) == 1 and hanh_dong[0]["loai"] == "don_khoa_may_chet"
-        assert goi  # đã gọi xoá thật (qua seam monkeypatch)
+        assert not os.path.exists(duong)
         duong_jsonl = gac_tong.duong_nhat_ky_ngay(goc, BAY_GIO.strftime("%Y-%m-%d"))
         assert os.path.isfile(duong_jsonl)
         assert os.path.isfile(gac_tong.duong_loi_chay_max(goc))
 
+    def test_khoa_moi_chua_du_tuoi_thi_chua_xoa(self, tmp_path, monkeypatch):
+        """VÁ 06/10: PID chết mà khoá mới 30 giây — chưa dọn (người xin khe thật tự giành)."""
+        goc = str(tmp_path)
+        bat_dau = BAY_GIO.timestamp() - 30
+        duong = self._ghi_khoa(goc, 111, bat_dau)
+        may = dict(_anh()["may"])
+        may["khoa_may"] = {"co": True, "tuoi_giay": 30.0, "pid": 111, "con_song": False, "bat_dau": bat_dau}
+        monkeypatch.setattr(gac_tong.khe, "pid_con_song", lambda pid: False)
+        assert gac_tong.tu_sua(goc, _anh(may=may), bay_gio=BAY_GIO, ghi_dia=True) == []
+        assert os.path.exists(duong)
+
+    def test_khoa_da_doi_chu_sau_anh_chup_thi_khong_xoa(self, tmp_path, monkeypatch):
+        """Ảnh chụp thấy PID 111 chết, nhưng TỚI LÚC XOÁ khoá đã thuộc PID 222 đang sống."""
+        goc = str(tmp_path)
+        duong = self._ghi_khoa(goc, 222, BAY_GIO.timestamp() - 5)
+        may = dict(_anh()["may"])
+        may["khoa_may"] = {"co": True, "tuoi_giay": 3600.0, "pid": 111, "con_song": False,
+                           "bat_dau": BAY_GIO.timestamp() - 3600}
+        monkeypatch.setattr(gac_tong.khe, "pid_con_song", lambda pid: pid == 222)
+        assert gac_tong.tu_sua(goc, _anh(may=may), bay_gio=BAY_GIO, ghi_dia=True) == []
+        with open(duong, encoding="utf-8") as tep:
+            assert json.load(tep)["pid"] == 222
+
     def test_thu_khong_that_su_xoa(self, tmp_path, monkeypatch):
         goc = str(tmp_path)
+        bat_dau = BAY_GIO.timestamp() - 3600
+        duong = self._ghi_khoa(goc, 111, bat_dau)
         may = dict(_anh()["may"])
-        may["khoa_may"] = {"co": True, "tuoi_giay": 30.0, "pid": 111, "con_song": False}
-        goi = []
-        monkeypatch.setattr(gac_tong.khe, "xoa_tep_ben_vung", lambda d: goi.append(d))
+        may["khoa_may"] = {"co": True, "tuoi_giay": 3600.0, "pid": 111, "con_song": False, "bat_dau": bat_dau}
         hanh_dong = gac_tong.tu_sua(goc, _anh(may=may), bay_gio=BAY_GIO, ghi_dia=False)
         assert len(hanh_dong) == 1
         assert hanh_dong[0]["thuc_hien"] is False
-        assert not goi  # --thu: KHÔNG xoá thật
+        assert os.path.exists(duong)  # --thu: KHÔNG xoá thật
         assert not os.path.isfile(gac_tong.duong_nhat_ky_ngay(goc, BAY_GIO.strftime("%Y-%m-%d")))
 
     def test_dang_tai_len_thi_khong_bao_gio_giet(self, tmp_path, monkeypatch):
@@ -1132,3 +1164,79 @@ class TestKiemLaiGoiKet:
                                     kiem_lai=kl, thu_giu=lambda *a, **k: None)
         import json, os
         assert json.load(open(os.path.join(goc, "workspace", "gac-tong", "qa-ket.json")))["luc"] == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Kiểm toán 1 năm (06/10/2026): báo MỘT lần, kiểm hỏng không nuốt kiểm khác,
+# lượt sập có sổ + nhịp tim
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestBaoMotLan:
+    def test_kenh_48h_khong_video_bao_mot_lan_roi_moi_ngay(self, tmp_path):
+        goc = str(tmp_path)
+        anh = _anh({"K1": _snap(ke_hoach=[_dong_da_dang(60)])})
+        ds = gac_tong.kiem_su_co(anh)
+        assert [s["loai"] for s in ds] == ["khong_video_moi"]
+        gui = []
+
+        def _gui(*a, **k):
+            gui.append(a[0])
+            return True
+
+        for phut in (0, 15, 30, 60 * 23):
+            gac_tong.bao_cao_su_co(goc, anh, ds, bay_gio=BAY_GIO + _dt.timedelta(minutes=phut),
+                                   gui_khan=_gui, gui_thuong=_gui)
+        assert gui == ["khong_video_moi"]
+        gac_tong.bao_cao_su_co(goc, anh, ds, bay_gio=BAY_GIO + _dt.timedelta(hours=24, minutes=1),
+                               gui_khan=_gui, gui_thuong=_gui)
+        assert gui == ["khong_video_moi", "khong_video_moi"]
+
+    def test_so_lieu_studio_cu_khong_nhac_moi_gio(self):
+        ds = gac_tong.kiem_su_co(_anh({"K1": _snap(ke_hoach=[_dong_da_dang(1)], chi_so_tuoi_gio=100.0)}))
+        sc = [s for s in ds if s["loai"] == "so_lieu_studio_cu"][0]
+        assert sc["dedupe_khoa"] and sc["lap_gio"] == 24.0
+
+
+class TestKiemHongKhongNuotKiemKhac:
+    def test_mot_kiem_nem_loi_cac_kiem_khac_van_chay(self, monkeypatch):
+        def _no(*a, **k):
+            raise KeyError("du lieu la")
+
+        monkeypatch.setattr(gac_tong, "_kiem_hen_lich_chua_tai", _no)
+        anh = _anh({"K1": _snap(ke_hoach=[_dong_da_dang(60)])})
+        anh["may"]["dia"] = {"con_gb": 3.0}
+        loai = [s["loai"] for s in gac_tong.kiem_su_co(anh)]
+        assert "kiem_hong" in loai and "khong_video_moi" in loai and "dia_day" in loai
+
+
+class TestLuotSap:
+    def test_luot_sap_tra_1_ghi_so_va_nhip(self, tmp_path, monkeypatch):
+        from core import ben_bi
+
+        goc = str(tmp_path)
+
+        def _no(g, thu):
+            raise RuntimeError("chup hong")
+
+        monkeypatch.setattr(gac_tong, "_mot_luot", _no)
+        monkeypatch.setattr(ben_bi, "ghi_loi_vong", lambda g, ten, loi, **k: so.append((g, ten)) or 1)
+        so = []
+        assert gac_tong._main(["--mot-luot"], goc=goc) == 1
+        assert so == [(goc, "gac_tong")]
+        assert ben_bi.doc_nhip(goc, "gac_tong")["buoc"].startswith("sap:")
+
+    def test_luot_tron_ghi_nhip_xong(self, tmp_path, monkeypatch):
+        from core import ben_bi
+
+        goc = str(tmp_path)
+        monkeypatch.setattr(gac_tong, "_mot_luot", lambda g, thu: 0)
+        assert gac_tong._main(["--mot-luot"], goc=goc) == 0
+        nhip = ben_bi.doc_nhip(goc, "gac_tong")
+        assert nhip["buoc"] == "xong" and nhip.get("luc_xong")
+
+    def test_thu_khong_ghi_nhip(self, tmp_path, monkeypatch):
+        goc = str(tmp_path)
+        monkeypatch.setattr(gac_tong, "_mot_luot", lambda g, thu: 0)
+        assert gac_tong._main(["--mot-luot", "--thu"], goc=goc) == 0
+        assert not os.path.exists(os.path.join(goc, "workspace"))
