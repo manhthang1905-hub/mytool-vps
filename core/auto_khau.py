@@ -1099,8 +1099,10 @@ _LOI_NHAC_DOC_BIA = (
     "đổ bóng không. Nêu mã hex gần đúng cho từng màu.\n"
     '- "kieu_chu": nét dày hay mảnh, chữ tròn hay vuông, khoảng cách chữ chặt '
     "hay thưa, có nghiêng không, dòng nào to hơn dòng nào và hơn bao nhiêu.\n"
-    '- "nhan_vat": có nhân vật không, cao khoảng bao nhiêu phần trăm chiều cao '
-    "ảnh, đứng/ngồi ở đâu trong khung, tư thế, hướng mặt, biểu cảm.\n"
+    '- "nhan_vat": có mấy nhân vật, mỗi người cao khoảng bao nhiêu phần trăm chiều cao '
+    "ảnh, đứng/ngồi ở đâu trong khung, tư thế, hướng mặt, biểu cảm. TUYỆT ĐỐI KHÔNG tả "
+    "ngoại hình: không tóc/kiểu tóc, không mặt, không quần áo/trang phục, không tuổi, "
+    "không giới tính, không phụ kiện — kênh dùng nhân vật riêng của mình (ảnh tham chiếu).\n"
     '- "canh": bối cảnh là chỗ nào, có những đồ vật gì, thứ gì còn nhìn ra '
     "được khi ảnh thu nhỏ bằng con tem, thứ gì thì không.\n"
     '- "anh_sang": nguồn sáng ở đâu, chỗ sáng nhất và chỗ tối nhất là chỗ nào, '
@@ -7613,12 +7615,20 @@ _LUAT_BO_CUC_DOI_THU = (
     "Two things stay ours: the drawing language (flat vector, the reference "
     "character) and the exact hook text above. Everything else about the "
     "arrangement copies the competitor.\n"
+    "CHARACTER FIELD — copy ONLY count, size, position, pose, facing and expression. "
+    "NEVER copy the competitor character's appearance: no hair or hairstyle, no face "
+    "shape, no clothes, kimono, suit or colours of clothing, no age, no gender, no "
+    "accessories or props worn. The main figure is ALWAYS `the reference character` "
+    "(its picture is attached) — write no physical descriptor for it at all; every "
+    "physical word pulls the image away from the reference and the channel's "
+    "character stops being the same person. Background figures are plain, "
+    "featureless silhouettes in the reference character's drawing style.\n"
     "For those concepts this REPLACES the `TEXT STYLE` block. Every other "
     "concept keeps the `TEXT STYLE` block exactly as written, so the two "
     "approaches can be compared on real numbers.\n"
     "Push the contrast hard in the `goc_*` concepts: the room must be near-"
     "black and the light source saturated and warm, with no muddy mid-tone "
-    "filling the frame, and the white character must stay the brightest, "
+    "filling the frame, and the reference character must stay the brightest, "
     "crispest shape — never washed into its own pool of light.\n"
 )
 

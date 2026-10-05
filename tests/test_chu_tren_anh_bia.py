@@ -351,3 +351,11 @@ class TestChuanBiBiaLayDuBaLoiNhac:
             _tm, _muc, thieu, ta_bia, _td, _cb = _chuan_bi_bia(bc, _luot(thu))
         assert thieu == [] and ta_bia == {}
         assert bc.loi_nhac_da_gui == []
+
+
+def test_bia_doi_thu_khong_chep_ngoai_hinh_nhan_vat():
+    """05/10: bìa TL1-T7-0020 ra nhân vật khác (tóc, mặt) vì bố cục đối thủ tả ngoại hình."""
+    from core import auto_khau as ak
+    assert "KHÔNG tả" in ak._LOI_NHAC_DOC_BIA and "ngoại hình" in ak._LOI_NHAC_DOC_BIA
+    assert "NEVER copy the competitor character's appearance" in ak._LUAT_BO_CUC_DOI_THU
+    assert "white character" not in ak._LUAT_BO_CUC_DOI_THU
