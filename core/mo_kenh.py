@@ -534,6 +534,18 @@ def duong_kho_giong(goc: str, nhom: str) -> str:
     return os.path.join(goc, "CHANNEL", "_NHOM", nhom, "kho-giong.json")
 
 
+def _tieng_nhom(goc: str, nhom: str) -> str:
+    """Mã tiếng của nhóm theo `ngach.yaml` (`thi_truong.ngon_ngu` > `ngon_ngu_nguon`); "" nếu nhóm chưa có hồ sơ."""
+    try:
+        from .ho_so_ngach import doc_ngach_tho  # noqa: PLC0415
+
+        tho = doc_ngach_tho(goc, nhom) or {}
+    except Exception:  # noqa: BLE001 — hồ sơ hỏng: coi như chưa khai
+        return ""
+    tt = tho.get("thi_truong") if isinstance(tho.get("thi_truong"), dict) else {}
+    return str(tt.get("ngon_ngu") or tho.get("ngon_ngu_nguon") or "").strip().lower().split("-")[0]
+
+
 def doc_kho_giong(goc: str, nhom: str, ghi: bool = True) -> List[Dict[str, Any]]:
     """Kho giọng ĐÃ DUYỆT của nhóm; chưa có thì tạo từ giọng khởi đầu + giọng các kênh đang chạy (đã đo ký tự/phút)."""
     duong = duong_kho_giong(goc, nhom)
@@ -541,7 +553,10 @@ def doc_kho_giong(goc: str, nhom: str, ghi: bool = True) -> List[Dict[str, Any]]
     ds = [dict(x) for x in (du or {}).get("giong", []) if isinstance(x, dict) and x.get("voice_id")] if isinstance(du, dict) else []
     if ds:
         return ds
-    ds = [dict(x) for x in GIONG_KHOI_DAU]
+    # GIONG_KHOI_DAU là giọng TIẾNG NHẬT (ký tự/phút đo cho tiếng Nhật) — chỉ gieo cho nhóm tiếng Nhật / nhóm chưa khai
+    # tiếng. Nhóm tiếng khác (06/10/2026 — chạy thử ngách Hàn) chỉ nhận giọng của chính các kênh trong nhóm; rỗng thì
+    # `chuan_bi` báo rõ "kho giọng hết giọng" thay vì gán nhầm giọng Nhật cho kênh Hàn.
+    ds = [dict(x) for x in GIONG_KHOI_DAU] if _tieng_nhom(goc, nhom) in ("", "ja") else []
     co = {x["voice_id"] for x in ds}
     for m in _cac_kenh(goc):
         y = _kenh_yaml(goc, m)
