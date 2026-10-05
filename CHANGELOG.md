@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.154.0** — 2026-10-06 — `vps-jp1` — feat(chien truong): ban do thi phan nhu tran danh - quy mo ngach/thang, thi phan ta, BXH doi thu, diem nong, quan ta; AI chia vung theo nghia + gop vung
 - **2.153.1** — 2026-10-05 — `vps-jp1` — chore: dua ui_web/ (trang truc quan) vao danh sach trang
 - **2.153.0** — 2026-10-05 — `vps-jp1` — feat(truc quan): Trung tam truc quan chi doc - day chuyen isometric, the kenh, chi tiet, su kien (core/truc_quan.py + ui_web/truc-quan.html, cong 8770)
 - **2.152.4** — 2026-10-05 — `vps-jp1` — fix(quet ngay): kenh moi chua co bang theo ngay (Studio tre) ma bang tom tat da ve = du; het quet lap 3 lan/ngay
