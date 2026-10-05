@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.162.0** — 2026-10-06 — `vps-jp1` — feat(ben-bi): kiem toan chay 1 nam — gac tong boc loi tung buoc + nhip tim + han 40', don khoa PID chet an toan, hoi sinh agent, bao dong mot lan/ngay + Telegram thu lai, kiem import vm/ truoc cap nhat, agent chay_ben (agent I)
 - **2.161.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): tab Nao — bang diem, dong suy nghi, hanh dong+du doan+cham, tri nho, bai hoc (agent L); bao cao ngay tach hom nay/ngay mai; K17 khong ap khi trang chu tin cay
 - **2.160.0** — 2026-10-06 — `vps-jp1` — feat(don-dia): don file nang video da len (them 8-nhac-nen), xoay log theo co, van o 10GB bao dong 24h/lan, nhip don tu gac tong (agent G)
 - **2.159.0** — 2026-10-06 — `vps-jp1` — feat(keo-cheo): keo view cheo qua danh sach phat kenh lon (ke hoach core/keo_cheo + may DOM vm/keo_cheo_dom, agent F); chien truong chia dat theo vong, phat trung vung
