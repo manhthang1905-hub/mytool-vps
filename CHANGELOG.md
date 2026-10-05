@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.151.0** — 2026-10-05 — `vps-jp1` — feat(dom): ngon ngu hien thi kenh giu dung nuoc kenh; may dang/binh luan TAM dung vi roi TRA lai (logs/hl-tam, ben khi chet giua chung) - chay duoc moi ngon ngu VPS
 - **2.150.6** — 2026-10-05 — `vps-jp1` — feat(thiet lap kenh): dia diem xem la buoc 1 lan cua skill (youtube.com avatar -> Dia diem -> nuoc kenh, doc lai menu); may dang chi kiem giao dien; sua nhan nut avatar vi
 - **2.150.5** — 2026-10-05 — `vps-jp1` — feat(dang dom): dat dia diem xem YouTube (cookie PREF gl) theo nuoc cua kenh (ngon_ngu noi dung / dia_diem_xem) moi lan vao Studio
 - **2.150.4** — 2026-10-05 — `vps-jp1` — fix(bia): goc_* khong chep ngoai hinh nhan vat doi thu - chi vi tri/co/dang; doc bia doi thu khong ta toc/mat/quan ao
