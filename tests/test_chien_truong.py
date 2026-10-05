@@ -74,3 +74,24 @@ def test_de_xuat_hinh_dang_va_uu_tien_cung_tep():
     assert ct.KHAC not in [x["ma"] for x in v]
     assert v[0]["ma"] == "a"                               # vùng kênh đã có video lên đầu
     assert v[0]["diem"] >= v[1]["diem"]
+
+
+def test_chia_vung_ai_mot_lan_moi_ngay(tmp_path, monkeypatch):
+    from core import chien_truong_ai as ai
+    monkeypatch.setattr(ai, "TEP", str(tmp_path / "vung-ai.json"))
+    goi = []
+    monkeypatch.setattr(ai, "chay", lambda n, log=None: goi.append(n) or {"da_gan": 7})
+    monkeypatch.setattr(ai, "gop", lambda *a, **k: {"truoc": 20, "sau": 9})
+    bg = dt.datetime(2026, 10, 6, 7, 0)
+    assert ai.chay_hang_ngay(lambda *_: None, bg) == "chia vùng AI: gán 7 video mới"
+    assert ai.chay_hang_ngay(lambda *_: None, bg) == ""                      # cùng ngày → không gọi lại
+    assert goi == [ai.NGAY_TOI_DA]
+    ai.ghi(dict(ai.doc(), vung_moi={"moi-%d" % i: "v" for i in range(13)}))   # vùng vụn vượt trần → gộp
+    assert "gộp 20→9" in ai.chay_hang_ngay(lambda *_: None, bg + dt.timedelta(days=1))
+
+
+def test_mo_ta_ngach_khong_cung_chu_de(monkeypatch):
+    monkeypatch.setattr(ct, "_cac_kenh", lambda: [])
+    assert ct.mo_ta_ngach() == {"ten": "Ngách", "ngon_ngu": ""}
+    from core import chien_truong_ai as ai
+    assert "psycholog" not in ai._de_bai({"a": "A"}, [{"tieu_de": "t"}]).lower()

@@ -48,20 +48,22 @@ def _cac_kenh(goc: str) -> List[str]:
 # ── 1. Video mai ──────────────────────────────────────────────────────────────
 
 def _muc_video(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """Một dòng mỗi TRẠNG THÁI (kênh cùng trạng thái gộp chung) — 10 kênh vẫn gọn trong một tin."""
     from core import truc_quan  # noqa: PLC0415
     mai = bay_gio.date() + _dt.timedelta(days=1)
-    ra = []
+    nhom: Dict[str, List[str]] = {}
     for k in _cac_kenh(goc):
         v = truc_quan._video_mai(k, tu_ngay=mai) or {}  # noqa: SLF001
         if not v:
-            ra.append("- {0}: ? không đọc được kế hoạch đăng".format(k))
+            tt = "? không đọc được kế hoạch đăng"
         elif v.get("co") and v.get("ngay") == mai.strftime("%d/%m"):
-            ra.append("- {0}: có video mai {1} {2}{3}".format(
-                k, v.get("ngay"), v.get("gio") or "", " (đã hẹn lịch)" if v.get("da_hen") else " (chưa hẹn)"))
+            tt = "có video mai {0}{1}".format(v.get("ngay"), " (đã hẹn lịch)" if v.get("da_hen") else " (CHƯA hẹn)")
         elif v.get("co"):
-            ra.append("- {0}: MAI TRỐNG — video gần nhất {1}".format(k, v.get("ngay")))
+            tt = "MAI TRỐNG — video gần nhất {0}".format(v.get("ngay"))
         else:
-            ra.append("- {0}: MAI TRỐNG — chưa có video nào xếp lịch".format(k))
+            tt = "MAI TRỐNG — chưa có video nào xếp lịch"
+        nhom.setdefault(tt, []).append(k)
+    ra = ["- {0}: {1}".format(", ".join(ks), tt) for tt, ks in sorted(nhom.items(), key=lambda x: not x[0].startswith("MAI"))]
     return ra or ["(chưa có kênh)"]
 
 
@@ -262,7 +264,7 @@ def gui(goc: Optional[str] = None, thu_muc: Optional[str] = None, bay_gio: Optio
 
 
 def chay_hang_ngay(goc: Optional[str] = None, thu_muc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None,
-                   ham_gui: Optional[Callable[[str, str], bool]] = None) -> str:
+                   ham_gui: Optional[Callable[[str, str], bool]] = None, chia_vung: bool = True) -> str:
     """Gác tổng gọi mỗi nhịp: sau 06:30, mỗi ngày dựng + ghi + gửi MỘT lần. Trả chuỗi tóm tắt 1 dòng ('' nếu chưa tới giờ/đã xong)."""
     goc = goc or _goc_mac_dinh()
     bay_gio = bay_gio or _dt.datetime.now()
@@ -273,6 +275,14 @@ def chay_hang_ngay(goc: Optional[str] = None, thu_muc: Optional[str] = None, bay
     tt = _doc_tt(tm)
     if tt.get("ngay_ghi") == hom and tt.get("ngay_gui") == hom:
         return ""
+    dong_ai = ""
+    if chia_vung and os.environ.get("MYTOOL_CHIEN_TRUONG_GHI", "1") != "0":
+        try:  # gán vùng AI cho video đối thủ mới TRƯỚC khi dựng mục chiến trường (1 lần/ngày, có trần)
+            from core import chien_truong_ai  # noqa: PLC0415
+
+            dong_ai = chien_truong_ai.chay_hang_ngay(lambda *_a: None, bay_gio)
+        except Exception as loi:  # noqa: BLE001
+            dong_ai = "chia vùng AI: lỗi ({0})".format(str(loi)[:120])
     nd = tao(goc, bay_gio)
     duong = ""
     if tt.get("ngay_ghi") != hom:
@@ -281,7 +291,8 @@ def chay_hang_ngay(goc: Optional[str] = None, thu_muc: Optional[str] = None, bay
         tt["ngay_ghi"] = hom
         _ghi_tt(tm, tt)
     kq = gui(goc, tm, bay_gio, nd, ham_gui)
-    return "báo cáo ngày {0}: ghi {1}, gửi {2}".format(hom, os.path.basename(duong) or "(đã ghi trước)", kq)
+    return "báo cáo ngày {0}: ghi {1}, gửi {2}{3}".format(hom, os.path.basename(duong) or "(đã ghi trước)", kq,
+                                                       " · " + dong_ai if dong_ai else "")
 
 
 def main(argv: Optional[List[str]] = None) -> int:

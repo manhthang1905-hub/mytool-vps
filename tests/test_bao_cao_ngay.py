@@ -107,7 +107,7 @@ def test_chay_hang_ngay_mot_lan(monkeypatch, tmp_path):
     da = []
     f = lambda g, v: da.append(v) or True  # noqa: E731
     tm = str(tmp_path / "bc")
-    s1 = bc.chay_hang_ngay(str(tmp_path), tm, BG, f)
+    s1 = bc.chay_hang_ngay(str(tmp_path), tm, BG, f, chia_vung=False)
     assert "gửi da_gui" in s1 and os.path.isfile(os.path.join(tm, "2026-10-06.md"))
-    assert bc.chay_hang_ngay(str(tmp_path), tm, BG + _dt.timedelta(hours=3), f) == ""
+    assert bc.chay_hang_ngay(str(tmp_path), tm, BG + _dt.timedelta(hours=3), f, chia_vung=False) == ""
     assert len(da) == 1

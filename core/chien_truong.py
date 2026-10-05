@@ -54,6 +54,23 @@ def _cac_kenh() -> List[str]:
         return []
 
 
+def mo_ta_ngach() -> Dict[str, str]:
+    """`{ten, ngon_ngu}` của ngách máy này từ `ngach.yaml` (`mo_ta_ngach`, ngôn ngữ thị trường) — máy khác chủ đề khác
+    tự đúng. Không đọc được → tên chung "Ngách", ngôn ngữ rỗng."""
+    try:
+        if GOC not in sys.path:
+            sys.path.insert(0, GOC)
+        from core import ho_so_ngach  # noqa: PLC0415
+        cac = _cac_kenh()
+        hs = ho_so_ngach.doc_ngach(GOC, cac[0]) if cac else None
+        if hs is not None:
+            ten = (hs.mo_ta_ngach or "").split(" — ")[0].strip() or hs.nhom
+            return {"ten": ten or "Ngách", "ngon_ngu": hs.ngon_ngu()}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ten": "Ngách", "ngon_ngu": ""}
+
+
 def _bo_cum(cac_kenh: List[str]):
     """Gộp bộ cụm của mọi kênh ta → một cấu hình v7 dùng chung cho cả chiến trường."""
     if GOC not in sys.path:
@@ -307,7 +324,7 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
         q["mat_tran_ten"] = [ten_cum.get(m, m) for m in q["mat_tran"]]
     tinh_co_hoi(ds)
     ra = {
-        "luc": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "cua_so_ngay": NGAY, "ngach": "Tâm lý Nhật",
+        "luc": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "cua_so_ngay": NGAY, "ngach": mo_ta_ngach()["ten"],
         "cach_do": "lượt xem/tháng ước TỐI THIỂU: video có tốc độ đo được = tăng/ngày×30; video mới trong cửa sổ = toàn bộ "
                    "lượt xem; video cũ chưa đo = 0. Phe ta = lượt xem 28 ngày thật từ Studio.",
         "tong": {"dich": tong_dich, "ta": tong_ta, "thi_phan": round(100.0 * tong_ta / (tong_dich + tong_ta), 3) if (tong_dich + tong_ta) else 0,

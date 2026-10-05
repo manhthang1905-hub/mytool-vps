@@ -36,17 +36,24 @@ def ghi(d: Dict) -> None:
     os.replace(TEP + ".tam", TEP)
 
 
+def _ngach_chu() -> str:
+    """Mô tả ngách cho đề bài AI, lấy từ `ngach.yaml` (máy khác chủ đề khác tự đúng)."""
+    from core import chien_truong  # noqa: PLC0415
+    n = chien_truong.mo_ta_ngach()
+    return "the YouTube niche \"{0}\"{1}".format(n["ten"], " (market language: {0})".format(n["ngon_ngu"]) if n["ngon_ngu"] else "")
+
+
 def _de_bai(vung: Dict[str, str], lo: List[Dict]) -> str:
     ds_vung = "\n".join("- {0}: {1}".format(m, t) for m, t in vung.items())
     ds = "\n".join("{0}. {1}".format(i + 1, x["tieu_de"]) for i, x in enumerate(lo))
-    return ("You classify Japanese YouTube video titles from a Japanese PSYCHOLOGY niche into TOPIC TERRITORIES, by "
+    return ("You classify YouTube video titles from " + _ngach_chu() + " into TOPIC TERRITORIES, by "
             "MEANING (what the video is about for the viewer), not by keywords.\n\n"
             "Existing territories (id: Vietnamese name):\n" + ds_vung + "\n\n"
             "Rules:\n- Put each title in the ONE best existing territory when it truly fits.\n"
             "- If none fits, create a NEW territory id 'moi-<short-latin-slug>' with a short Vietnamese name (max 6 words) "
-            "describing the psychological topic (e.g. 'moi-noi-doi' → 'Nói dối / lừa dối'). Reuse a new id for every "
+            "describing the topic (e.g. 'moi-noi-doi' → 'Nói dối / lừa dối'). Reuse a new id for every "
             "title of the same topic. Prefer few broad territories over many tiny ones.\n"
-            "- Titles that are not about psychology / human behaviour at all → 'ngoai-ngach'.\n\n"
+            "- Titles that do not belong to this niche at all → 'ngoai-ngach'.\n\n"
             "Titles:\n" + ds + "\n\n"
             "Reply ONLY with JSON: {\"gan\": {\"1\": \"<id>\", \"2\": \"<id>\", ...}, \"moi\": {\"moi-xxx\": \"<Vietnamese name>\"}}")
 
@@ -112,7 +119,7 @@ def gop(toi_da_vung: int = 12, ghi_log=print) -> Dict:
         dem[ma] = dem.get(ma, 0) + 1
     co_san = dict(chien_truong.ten_vung_tu_khoa())
     co_san.pop(chien_truong.KHAC, None)
-    de = ("Merge these fine-grained psychology TOPIC TERRITORIES (Japanese YouTube niche) into at most {0} BROAD new "
+    de = ("Merge these fine-grained TOPIC TERRITORIES of " + _ngach_chu() + " into at most {0} BROAD new "
           "territories, or map them into an existing territory when it fits by meaning.\n\nExisting territories:\n{1}\n\n"
           "Fine territories to merge (id: Vietnamese name — number of videos):\n{2}\n\n"
           "Reply ONLY JSON: {{\"map\": {{\"<fine id>\": \"<existing id OR new broad id moi-<slug>>\"}}, "
@@ -138,6 +145,29 @@ def gop(toi_da_vung: int = 12, ghi_log=print) -> Dict:
     ghi(nho)
     ghi_log("gộp: {0} vùng vụn → {1} vùng mới".format(len(moi), len(nho["vung_moi"])))
     return {"truoc": len(moi), "sau": len(nho["vung_moi"]), "vung_moi": nho["vung_moi"]}
+
+
+NGAY_TOI_DA = 300      # video mới / ngày (≈5 lô AI) — đủ cho lượng đối thủ mới, không đốt tiền vô ích
+
+
+def chay_hang_ngay(ghi_log=print, bay_gio=None) -> str:
+    """Gọi từ báo cáo ngày: MỘT lần/ngày gán vùng cho video đối thủ MỚI (nhớ đệm — video cũ không hỏi lại);
+    gộp lại chỉ khi vùng mới vụn vượt trần. Trả 1 dòng tóm tắt ('' nếu hôm nay đã chạy)."""
+    hom = bay_gio.strftime("%Y-%m-%d") if bay_gio else time.strftime("%Y-%m-%d")
+    nho = doc()
+    if nho.get("ngay_chay") == hom:
+        return ""
+    kq = chay(NGAY_TOI_DA, ghi_log)
+    if kq.get("loi"):
+        return "chia vùng AI: " + str(kq["loi"])
+    nho = doc()
+    nho["ngay_chay"] = hom
+    ghi(nho)
+    dong = "chia vùng AI: gán {0} video mới".format(kq.get("da_gan", 0))
+    if len(nho.get("vung_moi") or {}) > 12:
+        g = gop(12, ghi_log)
+        dong += " · gộp {0}→{1} vùng".format(g.get("truoc", "?"), g.get("sau", "?"))
+    return dong
 
 
 if __name__ == "__main__":
