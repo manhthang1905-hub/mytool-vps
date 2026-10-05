@@ -38,6 +38,7 @@ Xem theo kênh: `python -m core.ky_nang xem` · skill khởi tạo còn thiếu:
 | D04 | Vòng tự học | Bảng điểm cụm/công thức/bìa/tiêu đề/hook theo số Studio. | `tu_chay.py (bước 0)` | D01 |
 | D05 | Bộ não | Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ. | `ShopAPI-Nao` | — |
 | D06 | Bù màn hình kết thúc | Video thiếu MHKT → bù giờ vắng 02:00–05:00. | `agent --bu-mhkt` | K01 |
+| D07 | Đường tới YPP | Dự báo ngày đủ 4000 giờ + 1000 đăng ký từ chỉ số Studio hằng ngày (cận dưới theo cửa sổ 28 ngày); cảnh báo khi gần/đạt. | `python -m core.ypp · --canh-bao` | D01 |
 
 ## SỬA CHỮA — khi hỏng
 

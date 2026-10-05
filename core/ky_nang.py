@@ -265,6 +265,19 @@ def k_mhkt_thieu(goc, kenh):
     return ((CHO, "{0} video thiếu MHKT — bù giờ vắng".format(len(ds))) if ds else (DAT, "không thiếu MHKT"))
 
 
+def k_ypp(goc, kenh):
+    from core import ypp
+    r = ypp.du_bao(goc, kenh)
+    tt = r["trang_thai"]
+    if tt == "dat":
+        return DAT, "đủ 4000 giờ + 1000 đăng ký (theo cửa sổ 28 ngày) — nộp đơn YPP"
+    if tt == "chua_du_so":
+        return THIEU, "chưa đủ 3 lần chụp chỉ số để dự báo"
+    if tt == "cham":
+        return CHO, "chưa tăng ({0:.0f}h, {1} đk) — chưa ước được ngày".format(r["gio"], r["dang_ky"])
+    return CHO, "{0:.0f}h/4000, {1}/1000 đk — ETA ~{2} (còn ~{3:.0f} ngày)".format(r["gio"], r["dang_ky"], r["ngay_du_kien"], r["ngay_toi"])
+
+
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
 
 DANH_MUC: List[KyNang] = [
@@ -302,6 +315,8 @@ DANH_MUC: List[KyNang] = [
     KyNang("D04", "Vòng tự học", "dinh_ky", "Bảng điểm cụm/công thức/bìa/tiêu đề/hook theo số Studio.", "tu_chay.py (bước 0)", k_tu_hoc, ["D01"]),
     KyNang("D05", "Bộ não", "dinh_ky", "Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ.", "ShopAPI-Nao", k_nao, []),
     KyNang("D06", "Bù màn hình kết thúc", "dinh_ky", "Video thiếu MHKT → bù giờ vắng 02:00–05:00.", "agent --bu-mhkt", k_mhkt_thieu, ["K01"]),
+    KyNang("D07", "Đường tới YPP", "dinh_ky", "Dự báo ngày đủ 4000 giờ + 1000 đăng ký từ chỉ số Studio hằng ngày (cận dưới theo cửa sổ 28 ngày); cảnh báo khi gần/đạt.",
+           "python -m core.ypp · --canh-bao", k_ypp, ["D01"]),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
 ]
