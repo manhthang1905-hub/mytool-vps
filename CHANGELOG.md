@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.165.1** — 2026-10-06 — `vps-jp1` — fix(keo-cheo): xac nhan tich bang mo lai hop, khong bam lan 2, ghi so da_co + do hieu qua; anh chan doan truoc khi dong hop (agent F)
 - **2.165.0** — 2026-10-06 — `vps-jp1` — fix(an-toan): bo du lieu kenh that khoi test/fixture o HEAD; bo quet them token/cookie/id Studio/CSV du lieu, quet --lich-su, che khi in; .gitignore chan moi do sau (agent O)
 - **2.164.1** — 2026-10-06 — `vps-jp1` — fix(keo-cheo): tim lai nut Luu moi lan bam, cho hang nut on dinh, lui sang menu ..., anh chan doan khi loi (agent F) — da hoc playlist that 2 kenh lon
 - **2.164.0** — 2026-10-06 — `vps-jp1` — feat(chi-so): nen gz raw chi so cu >7 ngay, moi noi doc deu doc duoc .json.gz, chung minh ket qua giong het (agent P); gac tong xoa tep .py rong o goc che module vm/
