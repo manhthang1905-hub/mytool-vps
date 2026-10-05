@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import hashlib
 import io
 import json
@@ -192,7 +193,7 @@ def ten_ngon_ngu(ma: str) -> str:
 
 
 def tao_prompt(binh_luan: str, ngon_ngu: str, giong_van: str = "", tieu_de_video: str = "",
-               boi_canh: str = "") -> str:
+               boi_canh: str = "", loi_thoai: str = "") -> str:
     """Khuôn câu hỏi CÙNG `may_cmt.process_channel` (giọng người thật, không
     biểu tượng, 1–2 câu), ngôn ngữ LẤY TỪ kenh.yaml `ngon_ngu` — không suy từ đuôi -T7."""
     if ngon_ngu:
@@ -206,25 +207,77 @@ def tao_prompt(binh_luan: str, ngon_ngu: str, giong_van: str = "", tieu_de_video
     p = ("You are the channel owner replying to a comment on your own YouTube video.\n" + dong_nn +
          "Sound like a REAL human typing casually — natural, warm, simple and down-to-earth, "
          "the way a normal person actually replies. Often 1 short sentence is enough (max 2). "
-         "STRICTLY no emojis, no icons, no hashtags, no links. "
+         "STRICTLY no emojis, no icons, no kaomoji/emoticons like (^^) or (*´ω`*), no hashtags, no links, "
+         "no bullet points, no quotation marks around the reply. "
          "Avoid any corporate or marketing tone, avoid stiff/over-formal phrasing and cliches. "
-         "If the comment is hostile, stay calm and kind.\n")
+         "If the comment is hostile, stay calm and kind.\n"
+         "Answer THIS viewer: respond to the exact thing they said or felt. If they refer to a point of the "
+         "video, connect your reply to THAT point as said in the transcript below (you made this video). "
+         "Never invent facts that are not in the video, never summarize the whole video, never repeat their "
+         "comment back, never mention AI. If their comment is about something the video did not cover, do NOT "
+         "correct them or say the video didn't mention it — just answer what they shared, warmly, as a person.\n")
     if giong_van:
-        p += "Channel voice: {0}\n".format(str(giong_van).strip()[:300])
+        p += "Channel voice (write in this personality): {0}\n".format(str(giong_van).strip()[:300])
     if tieu_de_video:
         p += "\nVideo title: {0}\n".format(str(tieu_de_video).strip()[:200])
     if boi_canh:
-        p += "\nVideo context (for relevance only):\n{0}\n".format(str(boi_canh).strip()[:900])
+        p += "\nVideo description:\n{0}\n".format(str(boi_canh).strip()[:900])
+    if loi_thoai:
+        p += "\nVideo transcript (what you said in this video):\n{0}\n".format(str(loi_thoai).strip()[:6500])
     p += "\nViewer comment: {0}\n\n{1}".format(str(binh_luan).strip()[:1500], cuoi)
     return p
 
 
+#: Kaomoji / mặt cười bằng ký tự: (^^) (*´ω`*) (＾▽＾) (;_;) … và "www"/"ｗｗｗ" — người gõ thật trên kênh này không dùng.
+_KAOMOJI = re.compile(r"[\(（][^()（）\n]{0,10}[\^＾ω´`；;*＊°∀▽_＿][^()（）\n]{0,10}[\)）]|(?<![A-Za-z])[wｗ]{3,}")
+#: Chữ đặc trưng của ngôn ngữ (kiểm câu trả lời ĐÚNG ngôn ngữ kênh) — ngôn ngữ không có trong bảng thì không kiểm.
+_CHU_NGON_NGU = {"ja": r"[぀-ヿ]", "ko": r"[가-힯]", "zh": r"[一-鿿]", "th": r"[฀-๿]",
+                 "ru": r"[Ѐ-ӿ]", "ar": r"[؀-ۿ]", "hi": r"[ऀ-ॿ]",
+                 "vi": r"[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]"}
+
+
+def dung_ngon_ngu(chu: str, ma: str) -> bool:
+    """Câu trả lời có viết bằng ngôn ngữ kênh `ma` không (thuần). Không có mẫu cho ngôn ngữ đó → True."""
+    m = _CHU_NGON_NGU.get(str(ma or "").lower().split("-")[0])
+    return True if not m else bool(re.search(m, str(chu or ""), re.I))
+
+
+def van_ban_srt(duong: str) -> str:
+    """Lời thoại thuần từ tệp .srt (bỏ số thứ tự, mốc giờ, dòng trống). Không đọc được → ""."""
+    try:
+        with open(duong, "r", encoding="utf-8", errors="replace") as tep:
+            dong = tep.read().splitlines()
+    except OSError:
+        return ""
+    ra = [d.strip() for d in dong if d.strip() and not d.strip().isdigit() and "-->" not in d]
+    return " ".join(ra)
+
+
+def chon_doan(van_ban: str, binh_luan: str, toi_da: int = 6000, mo_dau: int = 800) -> str:
+    """Lời thoại cho AI: ngắn thì đưa NGUYÊN; dài thì mở đầu + các đoạn GIỐNG bình luận nhất (cặp ký tự chung —
+    chạy với mọi ngôn ngữ, kể cả tiếng Nhật không có dấu cách), giữ thứ tự gốc. Hàm thuần."""
+    s = " ".join(str(van_ban or "").split())
+    if len(s) <= toi_da:
+        return s
+
+    def cap(t):
+        t = re.sub(r"\s+", "", str(t or "").lower())
+        return {t[i:i + 2] for i in range(len(t) - 1)}
+    bl = cap(binh_luan)
+    co = 300
+    khuc = [(i, s[i:i + co]) for i in range(mo_dau, len(s), co)]
+    diem = sorted(khuc, key=lambda x: -len(bl & cap(x[1])))
+    chon = sorted(diem[:max(1, (toi_da - mo_dau) // co)])
+    return s[:mo_dau] + " … " + " … ".join(t for _i, t in chon)
+
+
 def lam_sach_tra_loi(chu: str) -> str:
-    """Bỏ ngoặc bao, biểu tượng, link lỡ lọt; gộp dòng; tối đa 500 ký tự."""
+    """Bỏ ngoặc bao, biểu tượng, kaomoji, link lỡ lọt; gộp dòng; tối đa 500 ký tự."""
     s = str(chu or "").strip()
     if len(s) >= 2 and s[0] in "\"'「『“" and s[-1] in "\"'」』”":
         s = s[1:-1].strip()
     s = "".join(ch for ch in s if not _la_bieu_tuong(ch))
+    s = _KAOMOJI.sub("", s)
     s = _LINK.sub("", s)
     s = re.sub(r"[ \t]+", " ", s)
     s = re.sub(r"\n{3,}", "\n\n", s).strip()
@@ -932,18 +985,51 @@ class MayCmtDom:
 
     # ── trả lời ──────────────────────────────────────────────────────────
     def _boi_canh(self, luong: dict) -> tuple:
-        """(tiêu đề, bối cảnh) của video mà bình luận thuộc về — từ kế hoạch theo Video ID."""
+        """(tiêu đề, mô tả, LỜI THOẠI) của ĐÚNG video mà bình luận thuộc về — kế hoạch theo Video ID; lời thoại
+        từ phụ đề gói (DONE/<kênh>/<mã gói>/3-phu-de.srt, gói giữ tệp này sau khi đăng) — 05/10: mỗi khán giả
+        một video, phải trả lời đúng nội dung video đó, không chỉ theo tiêu đề/mô tả."""
         import may_dang_dom as mdd  # noqa: PLC0415
         vid = ""
         for h in luong.get("hrefs") or []:
             vid = mdd.rut_video_id(h)
             if vid:
                 break
+        tieu_de, mo_ta, ma_goi = "", "", ""
         for d in self.cai.get("_ke_hoach") or []:
             if vid and d.get("Video ID") == vid:
-                return d.get("Tiêu đề") or "", d.get("Mô tả") or ""
-        muc = self.so.lay(vid) if vid else {}
-        return muc.get("tieu_de") or "", ""
+                tieu_de, mo_ta, ma_goi = d.get("Tiêu đề") or "", d.get("Mô tả") or "", d.get("Mã gói") or ""
+                break
+        if not tieu_de:
+            muc = self.so.lay(vid) if vid else {}
+            tieu_de = muc.get("tieu_de") or ""
+        return tieu_de, mo_ta, self._loi_thoai(vid, ma_goi)
+
+    def _loi_thoai(self, vid: str, ma_goi: str = "") -> str:
+        """Lời thoại video `vid` (nhớ đệm theo vid). Mã gói: kế hoạch → hồ sơ video (CHANNEL/<k>/ho-so-video)."""
+        if not vid:
+            return ""
+        nho = self.__dict__.setdefault("_nho_loi_thoai", {})
+        if vid in nho:
+            return nho[vid]
+        goc_tool = os.path.dirname(GOC)
+        if not ma_goi:
+            for p in glob.glob(os.path.join(goc_tool, "CHANNEL", self.kenh, "ho-so-video", "*.json")):
+                try:
+                    with open(p, "r", encoding="utf-8") as tep:
+                        hs = json.load(tep) or {}
+                except (OSError, ValueError):
+                    continue
+                if hs.get("video_id") == vid:
+                    ma_goi = str(hs.get("ma_goi") or "")
+                    break
+        chu = ""
+        if ma_goi:
+            for ten in ("8-phu-de.srt", "3-phu-de.srt"):
+                chu = van_ban_srt(os.path.join(goc_tool, "DONE", self.kenh, ma_goi, ten))
+                if chu:
+                    break
+        nho[vid] = chu
+        return chu
 
     def tra_loi(self, toi_da: int) -> dict:
         kq = {"da_tra_loi": 0, "bo_qua": 0, "loi": 0}
@@ -1007,9 +1093,17 @@ class MayCmtDom:
                                                    "chu": str(x.get("noi_dung") or "")[:80]})
                     self.nk("bỏ qua bình luận {0} ({1}) — để nguyên".format(khoa, ly_do))
                     continue
-                tieu_de, boi_canh = self._boi_canh(x)
-                cau = lam_sach_tra_loi(self.sinh_tra_loi(tao_prompt(
-                    x.get("noi_dung"), ngon_ngu, self.cai.get("giong_van") or "", tieu_de, boi_canh)) or "")
+                tieu_de, boi_canh, loi_thoai = self._boi_canh(x)
+                de = tao_prompt(x.get("noi_dung"), ngon_ngu, self.cai.get("giong_van") or "", tieu_de, boi_canh,
+                                chon_doan(loi_thoai, x.get("noi_dung")))
+                cau = lam_sach_tra_loi(self.sinh_tra_loi(de) or "")
+                if cau and not dung_ngon_ngu(cau, self.cai.get("ngon_ngu")):
+                    # 05/10: sai ngôn ngữ kênh → viết lại MỘT lần, nhắc rõ; vẫn sai thì bỏ (lượt sau)
+                    self.nk("câu trả lời {0} sai ngôn ngữ kênh — viết lại".format(khoa))
+                    cau = lam_sach_tra_loi(self.sinh_tra_loi(de + "\n\nYour previous answer was NOT in {0}. "
+                                                                  "Write it again ONLY in {0}.".format(ngon_ngu or "the channel language")) or "")
+                    if cau and not dung_ngon_ngu(cau, self.cai.get("ngon_ngu")):
+                        cau = ""
                 if not cau:
                     kq["loi"] += 1
                     self.nk("không sinh được câu trả lời cho {0} — lượt sau".format(khoa))

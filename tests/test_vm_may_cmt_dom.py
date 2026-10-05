@@ -558,6 +558,8 @@ class TestAgent:
         assert not ag.co_token_oauth("K")
         (tmp_path / "tokens").mkdir()
         (tmp_path / "tokens" / "K.json").write_text("{}", encoding="utf-8")
+        assert not ag.co_token_oauth("K"), "05/10: token không refresh_token = hỏng → DOM"
+        (tmp_path / "tokens" / "K.json").write_text('{"refresh_token": "r"}', encoding="utf-8")
         assert ag.co_token_oauth("K")
 
     def test_khoa_moi_hai_dau(self, tmp_path, monkeypatch):
