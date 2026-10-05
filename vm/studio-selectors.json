@@ -1151,6 +1151,48 @@
       "英語",
       "English",
       "영어"
+    ],
+    "ko": [
+      "Tiếng Hàn",
+      "韓国語",
+      "Korean",
+      "한국어"
+    ],
+    "th": [
+      "Tiếng Thái",
+      "タイ語",
+      "Thai",
+      "태국어"
+    ],
+    "id": [
+      "Tiếng Indonesia",
+      "インドネシア語",
+      "Indonesian",
+      "인도네시아어"
+    ],
+    "es": [
+      "Tiếng Tây Ban Nha",
+      "スペイン語",
+      "Spanish",
+      "스페인어"
+    ],
+    "pt": [
+      "Tiếng Bồ Đào Nha",
+      "ポルトガル語",
+      "Portuguese",
+      "포르투갈어"
+    ],
+    "fr": [
+      "Tiếng Pháp",
+      "フランス語",
+      "French",
+      "프랑스어"
+    ],
+    "de": [
+      "Tiếng Đức",
+      "ドイツ語",
+      "German",
+      "독일어"
     ]
   },
   "hop_la": [
