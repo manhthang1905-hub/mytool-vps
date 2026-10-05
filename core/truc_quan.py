@@ -76,8 +76,8 @@ def _ten_kenh(kenh: str) -> str:
     return ""
 
 
-def _video_mai(kenh: str) -> Dict[str, Any]:
-    """Video lên sóng SỚM NHẤT từ ngày mai (bỏ dòng «Bỏ»): mã, ngày, tiêu đề, trạng thái."""
+def _video_mai(kenh: str, tu_ngay: Optional[_dt.date] = None) -> Dict[str, Any]:
+    """Video lên sóng SỚM NHẤT từ `tu_ngay` (mặc định ngày mai; bỏ dòng «Bỏ»): mã, ngày, tiêu đề, trạng thái."""
     try:
         sys.path.insert(0, GOC)
         from core import ke_hoach_dang  # noqa: PLC0415
@@ -90,7 +90,7 @@ def _video_mai(kenh: str) -> Dict[str, Any]:
 
     def g(r, c):
         return r[o[c]].strip() if c in o and o[c] < len(r) else ""
-    mai = _dt.date.today() + _dt.timedelta(days=1)
+    mai = tu_ngay or (_dt.date.today() + _dt.timedelta(days=1))
     ung = []
     for r in hang:
         try:
@@ -212,6 +212,18 @@ def chup_nho(han: float = 20.0) -> Dict[str, Any]:
         return _NHO["du"]
 
 
+_NHO_CT: Dict[str, Any] = {"luc": 0.0, "du": None}
+
+
+def chien_truong_nho(han: float = 600.0) -> Dict[str, Any]:
+    """Số liệu chiến trường (đọc ~20.000 video đối thủ) — nhớ đệm 10 phút."""
+    with _KHOA:
+        if _NHO_CT["du"] is None or time.time() - _NHO_CT["luc"] > han:
+            from core import chien_truong  # noqa: PLC0415
+            _NHO_CT["du"], _NHO_CT["luc"] = chien_truong.tinh(), time.time()
+        return _NHO_CT["du"]
+
+
 class _Xu(BaseHTTPRequestHandler):
     def log_message(self, *a):  # im lặng
         pass
@@ -224,13 +236,20 @@ class _Xu(BaseHTTPRequestHandler):
         self.wfile.write(du)
 
     def do_GET(self):  # noqa: N802
+        if self.path.startswith("/chien-truong.json"):
+            try:
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(chien_truong_nho(), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/du-lieu.json"):
             try:
                 return self._gui(200, "application/json; charset=utf-8",
                                  json.dumps(chup_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
-        p = os.path.join(GOC, "ui_web", "truc-quan.html")
+        ten = "truc-quan.html" if self.path.startswith("/hau-can") else "chien-truong.html"
+        p = os.path.join(GOC, "ui_web", ten)
         try:
             with open(p, "rb") as tep:
                 return self._gui(200, "text/html; charset=utf-8", tep.read())
