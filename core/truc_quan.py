@@ -5,6 +5,8 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
 
     python -m core.truc_quan            # mở http://127.0.0.1:8770  (trang: ui_web/truc-quan.html)
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
+    python -m core.truc_quan --cong 8771   # cổng khác (mặc định 8770)
+Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`)
 """
 from __future__ import annotations
 
@@ -249,19 +251,27 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(chien_truong_lich_su.doc_lich_su(GOC, 60), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/nao.json"):      # trang Não: hành động, phiên, trí nhớ, bài học (nhớ đệm 5 phút)
+            try:
+                from core import nao_truc_quan  # noqa: PLC0415
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(nao_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/du-lieu.json"):
             try:
                 return self._gui(200, "application/json; charset=utf-8",
                                  json.dumps(chup_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
-        ten = "truc-quan.html" if self.path.startswith("/hau-can") else "chien-truong.html"
+        ten = ("truc-quan.html" if self.path.startswith("/hau-can") else
+               "nao.html" if self.path.startswith("/nao") else "chien-truong.html")
         p = os.path.join(GOC, "ui_web", ten)
         try:
             with open(p, "rb") as tep:
                 return self._gui(200, "text/html; charset=utf-8", tep.read())
         except OSError:
-            return self._gui(404, "text/plain; charset=utf-8", "thiếu ui_web/truc-quan.html".encode("utf-8"))
+            return self._gui(404, "text/plain; charset=utf-8", "thiếu ui_web/{0}".format(ten).encode("utf-8"))
 
 
 def main(argv=None) -> int:
@@ -269,8 +279,11 @@ def main(argv=None) -> int:
     if "--json" in a:
         print(json.dumps(chup(), ensure_ascii=False, indent=1)[:6000])
         return 0
-    sv = ThreadingHTTPServer(("127.0.0.1", CONG), _Xu)
-    print("Trung tâm trực quan: http://127.0.0.1:{0}".format(CONG), flush=True)
+    cong = CONG
+    if "--cong" in a:      # cổng khác (kiểm thử song song máy chủ thật); mặc định vẫn 8770
+        cong = int(a[a.index("--cong") + 1])
+    sv = ThreadingHTTPServer(("127.0.0.1", cong), _Xu)
+    print("Trung tâm trực quan: http://127.0.0.1:{0}".format(cong), flush=True)
     sv.serve_forever()
     return 0
 

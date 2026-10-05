@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Não MYTOOL</title>
+<style>
+:root{--nen:#0f1214;--the:#171b1e;--the2:#1d2226;--chu:#e9ece8;--mo:#9aa3a0;--mo2:#6d7673;--vien:#2a3135;
+--ta:#3fbf7f;--ta-dam:#1f6e48;--dich:#d65a4a;--dich-dam:#5a2622;--tranh:#e0a33d;--tranh-dam:#5b431c;--cam:#e07a3d;
+--xanhduong:#5aa9e6;--luoi:#232a2e}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--nen:#f2f1ec;--the:#ffffff;--the2:#f7f6f2;--chu:#1b1d1c;--mo:#5f6663;--mo2:#8b918e;
+--vien:#d9d7cf;--ta:#23905a;--ta-dam:#cdeedb;--dich:#c0473a;--dich-dam:#f4d6d1;--tranh:#b07a19;--tranh-dam:#f5e6c8;--cam:#c4632a;--xanhduong:#2f78b7;--luoi:#ebe9e2}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--nen);color:var(--chu);font:14px/1.45 system-ui,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--vien)}
+h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.3px}
+.tab{color:var(--mo);text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.tab.on{color:var(--chu);border-color:var(--vien);background:var(--the)}
+.mo{color:var(--mo)} .nho{font-size:12px}
+.bang-diem{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;padding:14px 20px 0}
+.o-diem{background:var(--the);border:1px solid var(--vien);border-radius:10px;padding:12px 14px}
+.o-diem .so{font-size:26px;font-weight:750;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.o-diem .nhan{font-size:12px;color:var(--mo);text-transform:uppercase;letter-spacing:.6px}
+.o-diem .phu{font-size:12px;color:var(--mo);margin-top:2px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;padding:16px 20px 0}
+@media (max-width:1150px){main{grid-template-columns:1fr}}
+.rong{padding:16px 20px 0} .rong:last-child{padding-bottom:20px}
+.khung{background:var(--the);border:1px solid var(--vien);border-radius:10px;padding:14px}
+.khung h2{font-size:12.5px;margin:0 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--mo)}
+.dau-khung{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px} .dau-khung h2{margin:0}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--mo);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;padding:6px 6px;border-bottom:1px solid var(--vien)}
+td{padding:6px;border-bottom:1px solid var(--luoi);vertical-align:top}
+td.so{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ngan{white-space:nowrap}
+a{color:var(--xanhduong)}
+svg.bd{width:100%;height:120px;display:block} svg.bd text{fill:var(--mo);font-size:10px}
+svg.bd .duong{fill:none;stroke-width:2;stroke-linejoin:round} svg.bd .luoi{stroke:var(--luoi);stroke-width:1}
+.nhan-vung{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--luoi);color:var(--mo);white-space:nowrap}
+.nhan-vung.ta{background:var(--ta-dam);color:var(--chu)} .nhan-vung.dich{background:var(--dich-dam);color:var(--chu)}
+.nhan-vung.tranh{background:var(--tranh-dam);color:var(--chu)} .nhan-vung.xd{background:var(--xanhduong);color:#fff}
+.trong{color:var(--mo);font-style:italic}
+/* dòng suy nghĩ */
+#suy-nghi{max-height:900px;overflow:auto}
+.nghi{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--luoi)}
+.nghi:last-child{border-bottom:0}
+.gio{font:11.5px/1.6 ui-monospace,Consolas,monospace;color:var(--mo2);font-variant-numeric:tabular-nums}
+.nghi .chu p{margin:0 0 3px} .nghi .chu .tde{font-weight:700;margin-top:4px} .nghi .chu .gach{padding-left:14px;text-indent:-10px}
+.nghi.ket .chu{font-weight:600}
+.nghi.cu .chu{color:var(--mo);font-size:12.5px}
+.nghi.tom .chu{border-left:3px solid var(--xanhduong);padding-left:10px}
+.nghi.cuoi .chu{border-left:3px solid var(--ta);padding-left:10px}
+details summary{cursor:pointer;color:var(--mo);font-size:12.5px;list-style:none} details summary::-webkit-details-marker{display:none}
+details summary:before{content:"▸ ";color:var(--mo2)} details[open] summary:before{content:"▾ "}
+.cong-cu{font:11.5px/1.5 ui-monospace,Consolas,monospace;color:var(--mo);margin-top:4px;white-space:pre-wrap;word-break:break-word}
+.vach{display:flex;align-items:center;gap:10px;color:var(--mo);font-size:12px;margin:6px 0 2px}
+.vach:after{content:"";flex:1;height:1px;background:var(--vien)}
+select{background:var(--the2);color:var(--chu);border:1px solid var(--vien);border-radius:6px;padding:3px 6px;font:inherit;font-size:12.5px}
+/* bảng hành động */
+.loc{display:inline-block;cursor:pointer;color:var(--mo);padding:3px 10px;border-radius:999px;border:1px solid var(--vien);font-size:12px;background:transparent;font-family:inherit}
+.loc.on{color:var(--chu);background:var(--the2);border-color:var(--mo2)}
+tr.dung td{background:color-mix(in srgb,var(--ta-dam) 45%,transparent)} tr.dung td:first-child{box-shadow:inset 3px 0 0 var(--ta)}
+tr.sai td{background:color-mix(in srgb,var(--dich-dam) 50%,transparent)} tr.sai td:first-child{box-shadow:inset 3px 0 0 var(--dich)}
+tr.toi-han td:first-child{box-shadow:inset 3px 0 0 var(--tranh)}
+tr.mo-nhat td{color:var(--mo)}
+.cham-o{display:inline-block;min-width:22px;text-align:center;font-weight:800}
+.cham-o.dung{color:var(--ta)} .cham-o.sai{color:var(--dich)}
+.phu-o{font-size:11.5px;color:var(--mo);margin-top:2px}
+/* trí nhớ */
+.tep{border:1px solid var(--vien);border-radius:9px;padding:9px 11px;margin-bottom:9px;background:var(--the2)}
+.tep .dau{display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 8px;align-items:baseline}
+.tep .ten{font-weight:700;overflow-wrap:anywhere}
+th{white-space:nowrap} .tep .dong{font-size:12px;color:var(--mo);margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 Não</h1>
+  <a class="tab" href="/">Chiến trường</a>
+  <a class="tab" href="/hau-can">Hậu cần (dây chuyền, máy)</a>
+  <a class="tab on" href="/nao">Não</a>
+  <span style="flex:1"></span>
+  <span class="mo nho" id="luc">đang tải…</span>
+</header>
+<div class="bang-diem" id="bang-diem"></div>
+<main>
+  <section>
+    <div class="khung">
+      <div class="dau-khung"><h2>Dòng suy nghĩ</h2><span style="flex:1"></span>
+        <label class="mo nho" for="chon-phien">xem phiên trước</label> <select id="chon-phien"></select></div>
+      <div class="mo nho" id="phien-tom" style="margin-bottom:6px"></div>
+      <div id="suy-nghi"><div class="trong">đang tải…</div></div>
+    </div>
+  </section>
+  <aside>
+    <div class="khung" style="margin-bottom:16px"><h2>Tỉ lệ đúng theo ngày chấm (cộng dồn)</h2><div id="bd-dung"></div></div>
+    <div class="khung"><h2>Trí nhớ</h2><div id="tri-nho"></div></div>
+  </aside>
+</main>
+<div class="rong">
+  <div class="khung">
+    <div class="dau-khung"><h2>Hành động của não — dự đoán và chấm</h2><span style="flex:1"></span><span id="loc"></span></div>
+    <table id="hanh-dong"></table>
+  </div>
+</div>
+<div class="rong">
+  <div class="khung">
+    <div class="dau-khung"><h2>Bài học đang áp</h2><span style="flex:1"></span><span class="mo nho" id="bh-tom"></span></div>
+    <table id="bai-hoc"></table>
+  </div>
+</div>
+<script>
+let DU = null, LOC = "tat_ca", PHIEN = 0;
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const so = (n, le) => (Number(n) || 0).toLocaleString("vi-VN", {maximumFractionDigits: le == null ? 0 : le});
+const ngay = s => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "—";
+const loiMuc = (x, ten) => x && !Array.isArray(x) && x.loi ? `<div class="trong">không đọc được ${ten}: ${esc(x.loi)}</div>` : "";
+const TEN_LENH = {"thu": "thử", "tranh": "tránh", "bai-hoc": "bài học", "uu-tien-nguon": "ưu tiên nguồn", "de-xuat": "đề xuất"};
+const TEN_TT = {"mo": ["mở", "xd"], "xong": ["xong", ""], "huy": ["huỷ", ""], "het_han": ["hết hạn", "tranh"]};
+
+function bangDiem() {
+  const d = DU.diem || {}, l = DU.lan_cuoi || {};
+  if (d.loi) { document.getElementById("bang-diem").innerHTML = `<div class="o-diem">${loiMuc(d, "điểm")}</div>`; return; }
+  const dem = d.bai_hoc_dem || {};
+  const lan = !l.co ? ["—", "chưa có log phiên nào"] :
+    [`${ngay(l.ngay)} <span class="nhan-vung ${l.dang_chay ? "xd" : l.thanh_cong ? "ta" : "dich"}" style="font-size:12px;vertical-align:5px">${l.dang_chay ? "đang chạy" : l.thanh_cong ? "xong" : "hỏng"}</span>`,
+     `mã thoát ${l.ma == null ? "?" : l.ma}` + (l.luot ? ` · ${l.luot} lượt` : "") + (l.giay ? ` · ${so(l.giay)} giây` : "") +
+     (l.usd ? ` · ~${so(l.usd, 2)} USD` : "") + (l.so_lan > 1 ? ` · ${l.so_lan} lần chạy` : "") + (l.het_gio ? " · HẾT GIỜ" : "")];
+  const o = [
+    ["Tỉ lệ đúng", d.ti_le == null ? "—" : so(d.ti_le, 1) + "%",
+     `đúng ${d.dung} / đã chấm ${d.da_cham}` + (d.da_cham < d.nguong_cham ? ` · từ ${d.nguong_cham} lần chấm mới xét quyền` : "")],
+    ["Hành động hôm nay", `${d.hom_nay} / ${d.han_muc}`, d.han_muc < d.han_muc_day ? `quyền bị co (đúng < 50%) — bình thường ${d.han_muc_day}/ngày` : "đã dùng / hạn mức ngày"],
+    ["Đang mở", String(d.dang_mo), `trên ${d.tong} hành động đã ghi`],
+    ["Tới hạn kiểm", String(d.toi_han), d.toi_han ? "não phải chấm đúng/sai ở phiên tới" : "chưa có gì tới hạn"],
+    ["Bài học trong sổ", d.bai_hoc_so == null ? "—" : String(d.bai_hoc_so), `thật ${dem.that || 0} · giả thuyết ${dem.gia_thuyet || 0} · não tự ghi ${d.bai_hoc_nao}`],
+    ["Lần chạy gần nhất", lan[0], lan[1]],
+  ];
+  document.getElementById("bang-diem").innerHTML = o.map(([n, s, p]) => `<div class="o-diem"><div class="nhan">${n}</div><div class="so">${s}</div><div class="phu">${esc(p)}</div></div>`).join("");
+}
+
+function dongChu(ds) {
+  // văn bản não (markdown gộp dòng) → đoạn: tiêu đề, gạch đầu dòng, **đậm**
+  const dam = s => esc(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  return ds.map(x => {
+    if (/^---\s*$/.test(x)) return "";
+    if (/^#{1,4}\s/.test(x)) return `<p class="tde">${dam(x.replace(/^#+\s*/, ""))}</p>`;
+    if (/^[-•*]\s/.test(x)) return `<p class="gach">• ${dam(x.replace(/^[-•*]\s+/, ""))}</p>`;
+    if (/^\d{1,2}\.\s/.test(x)) return `<p class="gach">${dam(x)}</p>`;
+    return `<p>${dam(x)}</p>`;
+  }).join("");
+}
+function suyNghi() {
+  const ds = Array.isArray(DU.phien) ? DU.phien : [], box = document.getElementById("suy-nghi"), sel = document.getElementById("chon-phien");
+  if (!Array.isArray(DU.phien)) { box.innerHTML = loiMuc(DU.phien, "log phiên"); return; }
+  if (!ds.length) { box.innerHTML = '<div class="trong">Chưa có log phiên não (nao/nhat-ky/phien-*.log).</div>'; sel.innerHTML = ""; document.getElementById("phien-tom").textContent = ""; return; }
+  if (PHIEN >= ds.length) PHIEN = 0;
+  sel.innerHTML = ds.map((p, i) => `<option value="${i}" ${i === PHIEN ? "selected" : ""}>${ngay(p.ngay)}${i === 0 ? " (mới nhất)" : ""}${p.ket_qua && p.ket_qua.thanh_cong === false ? " · hỏng" : ""}</option>`).join("");
+  const p = ds[PHIEN], k = p.ket_qua || {};
+  document.getElementById("phien-tom").innerHTML = `Phiên ${esc(p.ngay)}` + (k.dong ? ` · ${esc(k.dong.replace("KET QUA: ", "").replace("thanh cong", "thành công").replace("that bai", "thất bại"))}` : " · chưa có dòng kết quả") +
+    ` · nhật ký ngày: ${p.nhat_ky ? "có" : "<b style='color:var(--dich)'>không</b>"}` + (p.an ? ` · ẩn ${p.an} đoạn đầu (chỉ hiện ~60 dòng cuối)` : "");
+  const khoi = p.khoi || [], cuoi = khoi.map(x => x.loai).lastIndexOf("nghi");
+  box.innerHTML = (p.loi ? `<div class="trong">${esc(p.loi)}</div>` : "") + khoi.map((b, i) => {
+    if (b.loai === "bat_dau") return `<div class="vach">▶ ${esc(b.luc)} · ${esc(b.chu)}</div>`;
+    if (b.loai === "nghi") return `<div class="nghi ${i === cuoi ? "cuoi" : ""}"><div class="gio">${esc(b.luc)}</div><div class="chu">${dongChu(b.dong)}</div></div>`;
+    if (b.loai === "tom_tat") return `<div class="nghi tom"><div class="gio">${esc(b.luc)}</div><div class="chu"><div class="mo nho">tóm tắt cuối phiên</div>${dongChu(b.dong)}</div></div>`;
+    if (b.loai === "cong_cu") return `<div class="nghi cu"><div class="gio">${esc(b.luc)}</div><div class="chu"><details><summary>⚙ ${b.so} lệnh công cụ: ${esc(b.tom || "")}${b.loi ? ` · <span style="color:var(--dich)">${b.loi} lỗi</span>` : ""}</summary><div class="cong-cu">${(b.dong || []).map(esc).join("\n")}</div></details></div></div>`;
+    if (b.loai === "ket") return `<div class="nghi ket"><div class="gio">${esc(b.luc)}</div><div class="chu" style="color:${b.thanh_cong ? "var(--ta)" : "var(--dich)"}">${esc(b.chu)}</div></div>`;
+    return `<div class="nghi cu"><div class="gio">${esc(b.luc)}</div><div class="chu">${esc(b.chu)}</div></div>`;
+  }).join("");
+}
+
+function hanhDong() {
+  const tb = document.getElementById("hanh-dong");
+  if (!Array.isArray(DU.hanh_dong)) { tb.innerHTML = `<tr><td>${loiMuc(DU.hanh_dong, "sổ hành động")}</td></tr>`; return; }
+  const tat = DU.hanh_dong, dem = {tat_ca: tat.length, mo: tat.filter(d => d.trang_thai === "mo").length,
+    dung: tat.filter(d => d.cham === "dung").length, sai: tat.filter(d => d.cham === "sai").length};
+  const TEN_LOC = {tat_ca: "tất cả", mo: "đang mở", dung: "đúng", sai: "sai"};
+  document.getElementById("loc").innerHTML = Object.keys(TEN_LOC).map(k => `<button class="loc ${LOC === k ? "on" : ""}" data-loc="${k}">${TEN_LOC[k]} ${dem[k]}</button>`).join(" ");
+  document.querySelectorAll(".loc").forEach(e => e.addEventListener("click", () => { LOC = e.dataset.loc; hanhDong(); }));
+  const ds = tat.filter(d => LOC === "tat_ca" || (LOC === "mo" ? d.trang_thai === "mo" : d.cham === LOC)).slice(0, 50);
+  tb.innerHTML = `<tr><th>Lúc</th><th>Lệnh</th><th>Kênh</th><th>Trục / giá trị · nội dung</th><th>Dự đoán</th><th>Kiểm ngày</th><th>Trạng thái</th><th>Chấm</th></tr>` +
+    (ds.map(d => {
+      const tt = TEN_TT[d.trang_thai] || [d.trang_thai, ""], lop = d.cham === "dung" ? "dung" : d.cham === "sai" ? "sai" : d.toi_han ? "toi-han" : (d.trang_thai === "huy" ? "mo-nhat" : "");
+      const noi = /^https?:\/\//.test(d.noi_dung) ? `<a href="${esc(d.noi_dung)}" target="_blank" rel="noopener">${esc(d.noi_dung.slice(0, 60))}</a>` : esc(d.noi_dung);
+      return `<tr class="${lop}">
+        <td class="ngan">${esc(d.luc.slice(0, 16).replace("T", " "))}<div class="phu-o">${esc(d.id)}</div></td>
+        <td class="ngan">${esc(TEN_LENH[d.lenh] || d.lenh)}</td><td class="ngan">${esc(d.kenh || "—")}</td>
+        <td>${noi}${d.ly_do ? `<div class="phu-o">lý do: ${esc(d.ly_do)}</div>` : ""}${d.ghi_chu_dieu_phoi ? `<div class="phu-o">điều phối: ${esc(d.ghi_chu_dieu_phoi)}</div>` : ""}</td>
+        <td><b>${esc(d.du_doan || "—")}</b>${d.khong_tinh ? '<div class="phu-o">không tính điểm</div>' : ""}</td>
+        <td class="ngan">${esc(d.kiem_ngay || "—")}${d.toi_han ? '<div><span class="nhan-vung tranh">tới hạn</span></div>' : ""}</td>
+        <td class="ngan"><span class="nhan-vung ${tt[1]}">${esc(tt[0])}</span></td>
+        <td><span class="cham-o ${d.cham}">${d.cham === "dung" ? "✓" : d.cham === "sai" ? "✗" : "–"}</span>${d.ghi_chu_cham ? `<div class="phu-o">${esc(d.ghi_chu_cham)}</div>` : ""}</td></tr>`;
+    }).join("") || `<tr><td colspan="8" class="trong">không có hành động nào ở mục này</td></tr>`);
+}
+
+function duong(chuoi, key, mau, dang, coDinh) {
+  // biểu đồ đường SVG nội tuyến (cùng kiểu trang Chiến trường); coDinh=[lo,hi] giữ trục cố định
+  const W = 420, H = 120, L = 8, R = 8, T = 14, B = 18, ys = chuoi.map(p => Number(p[key]) || 0);
+  let lo = coDinh ? coDinh[0] : Math.min(...ys), hi = coDinh ? coDinh[1] : Math.max(...ys); if (hi === lo) { hi += Math.abs(hi) * .05 + 1e-9; lo -= Math.abs(lo) * .05; if (hi === lo) hi = lo + 1; }
+  const X = i => chuoi.length === 1 ? W / 2 : L + (W - L - R) * i / (chuoi.length - 1), Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const pts = ys.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`);
+  const cuoi = ys[ys.length - 1], d0 = chuoi[0].ngay.slice(5), d1 = chuoi[chuoi.length - 1].ngay.slice(5);
+  return `<svg class="bd" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(key)}">
+    <line class="luoi" x1="${L}" x2="${W - R}" y1="${Y(lo)}" y2="${Y(lo)}"/><line class="luoi" x1="${L}" x2="${W - R}" y1="${Y(hi)}" y2="${Y(hi)}"/>
+    ${coDinh ? `<line x1="${L}" x2="${W - R}" y1="${Y(50)}" y2="${Y(50)}" stroke="var(--tranh)" stroke-dasharray="4 4" stroke-width="1"/><text x="${W - R}" y="${Y(50) - 3}" text-anchor="end">50% — dưới mức này quyền co</text>` : ""}
+    ${chuoi.length > 1 ? `<polyline class="duong" stroke="${mau}" points="${pts.join(" ")}"/>` : ""}
+    ${ys.map((v, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="${chuoi.length > 1 && i < ys.length - 1 ? 2 : 3.5}" fill="${mau}"><title>${chuoi[i].ngay}: ${dang(v)} (${chuoi[i].dung}/${chuoi[i].tong})</title></circle>`).join("")}
+    <text x="${L}" y="${H - 4}">${d0}</text><text x="${W - R}" y="${H - 4}" text-anchor="end">${d1}</text>
+    <text x="${L}" y="10">${dang(hi)}</text></svg>
+    <div class="nho mo">hiện tại <b style="color:var(--chu)">${dang(cuoi)}</b> · ${chuoi[chuoi.length - 1].dung}/${chuoi[chuoi.length - 1].tong} đúng · ${chuoi.length} ngày chấm</div>`;
+}
+function bieuDo() {
+  const box = document.getElementById("bd-dung"), ls = DU.chuoi_ti_le;
+  if (!Array.isArray(ls)) { box.innerHTML = loiMuc(ls, "chuỗi chấm"); return; }
+  if (!ls.length) {
+    const cho = (Array.isArray(DU.hanh_dong) ? DU.hanh_dong : []).filter(d => !d.khong_tinh && !d.cham && d.trang_thai !== "huy" && d.kiem_ngay).map(d => d.kiem_ngay).sort();
+    box.innerHTML = `<div class="mo nho">Chưa có dự đoán nào được chấm.${cho.length ? ` Lần chấm sớm nhất: kiểm ngày <b style="color:var(--chu)">${esc(cho[0])}</b> (${cho.length} dự đoán đang chờ).` : ""}</div>`;
+    return;
+  }
+  box.innerHTML = duong(ls, "ti_le", "var(--ta)", v => so(v, 1) + "%", [0, 100]);
+}
+
+function triNho() {
+  const t = DU.tri_nho, box = document.getElementById("tri-nho");
+  if (!t || t.loi) { box.innerHTML = loiMuc(t, "trí nhớ"); return; }
+  const kb = n => n >= 1024 ? so(n / 1024, 1) + " KB" : n + " B";
+  box.innerHTML = ((t.tep || []).map(f => `<div class="tep"><div class="dau"><span class="ten">${esc(f.ten)}</span><span class="nho mo" style="white-space:nowrap">${kb(f.co)} · ${esc(f.sua.slice(5))}</span></div>` +
+    (f.dau || []).map(x => `<div class="dong">${esc(x.replace(/^#+\s*/, "").replace(/\*\*/g, ""))}</div>`).join("") + `</div>`).join("") || '<div class="trong">Trí nhớ trống (nao/tri-nho/).</div>') +
+    `<div class="mo nho" style="margin-top:6px">Kỹ năng tự viết (nao/ky-nang/): ${(t.ky_nang || []).length ? t.ky_nang.map(x => `<span class="nhan-vung">${esc(x)}</span>`).join(" ") : "chưa có"}</div>`;
+}
+
+function baiHoc() {
+  const b = DU.bai_hoc, tb = document.getElementById("bai-hoc");
+  if (!b || b.loi) { tb.innerHTML = `<tr><td>${loiMuc(b, "sổ bài học")}</td></tr>`; return; }
+  document.getElementById("bh-tom").textContent = `${b.ds.length} / ${b.tong} bài còn áp (mới cập nhật trước) · thật: cộng ≥ 3 và ≥ 2× trừ`;
+  tb.innerHTML = `<tr><th>Kênh</th><th>Nội dung</th><th>Trục</th><th>Trạng thái</th><th>Nguồn</th><th>Lúc</th></tr>` +
+    (b.ds.map(x => `<tr><td class="ngan">${esc(x.kenh)}</td><td>${esc(x.noi_dung)}</td>
+      <td class="ngan">${esc(x.truc)}${x.cum ? `<div class="phu-o">${esc(x.cum)}</div>` : ""}</td>
+      <td class="ngan"><span class="nhan-vung ${x.trang_thai === "that" ? "ta" : "tranh"}">${x.trang_thai === "that" ? "thật" : "giả thuyết"}</span> <span class="mo nho">+${x.cong}/−${x.tru}</span>${x.bong ? '<div class="phu-o">bóng (chưa tự áp)</div>' : ""}</td>
+      <td class="ngan">${esc(x.nguon)}${x.moc ? `<div class="phu-o">mốc ${esc(x.moc)}</div>` : ""}</td><td class="ngan">${esc(x.luc)}</td></tr>`).join("") ||
+     `<tr><td colspan="6" class="trong">sổ bài học trống</td></tr>`);
+}
+
+function ve(ten, ham) { try { ham(); } catch (e) { console.error(ten, e); } }
+async function tai() {
+  try {
+    const r = await fetch("/nao.json", {cache: "no-store"}); DU = await r.json();
+    if (DU.loi && !DU.diem) throw new Error(DU.loi);
+    document.getElementById("luc").textContent = `số liệu ${DU.luc} · làm mới mỗi 5 phút · chỉ đọc`;
+    ve("điểm", bangDiem); ve("suy nghĩ", suyNghi); ve("hành động", hanhDong); ve("biểu đồ", bieuDo); ve("trí nhớ", triNho); ve("bài học", baiHoc);
+  } catch (e) { document.getElementById("luc").textContent = "không đọc được dữ liệu: " + e.message; }
+}
+document.getElementById("chon-phien").addEventListener("change", e => { PHIEN = Number(e.target.value) || 0; suyNghi(); });
+tai(); setInterval(tai, 300000);
+</script>
+</body>
+</html>

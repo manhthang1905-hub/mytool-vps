@@ -43,11 +43,16 @@ svg text{font-family:inherit}
 .khau .o{width:10px;height:10px;border-radius:3px;background:var(--luoi)}
 .khau .o.xong{background:var(--xanh)} .khau .o.dang{background:var(--vang)} .khau .o.loi{background:var(--do)}
 .trong{color:var(--mo);font-style:italic}
+.tab{color:var(--mo);text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.tab.on{color:var(--chu);border-color:var(--vien);background:var(--the)}
 </style>
 </head>
 <body>
 <header>
   <h1>Trung tâm MYTOOL VPS</h1>
+  <a class="tab" href="/">Chiến trường</a>
+  <a class="tab on" href="/hau-can">Hậu cần</a>
+  <a class="tab" href="/nao">Não</a>
   <span class="mo nho" id="luc">đang tải…</span>
   <span style="flex:1"></span>
   <span class="chip" id="c-agent"><span class="cham"></span><span>Agent</span></span>

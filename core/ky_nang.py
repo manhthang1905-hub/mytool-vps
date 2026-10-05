@@ -170,6 +170,8 @@ def k_ngon_ngu(goc, kenh):
 def k_nuoi(goc, kenh):
     d = _json(_vm(goc, "logs", "nuoi-trang-chu", kenh + ".json")) or {}
     bat = _yaml(goc, kenh, "nuoi_trang_chu").lower() == "true"
+    if _yaml(goc, kenh, "trang_chu_tin_cay").lower() == "true" and not bat:
+        return KHONG, "trang chủ đã tin cậy (trang_chu_tin_cay) — không cần nuôi"
     if d.get("trang_thai") == "dat":
         return DAT, str(d.get("ly_do") or "đạt")[:80]
     if bat:

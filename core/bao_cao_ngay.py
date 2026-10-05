@@ -47,23 +47,30 @@ def _cac_kenh(goc: str) -> List[str]:
 
 # ── 1. Video mai ──────────────────────────────────────────────────────────────
 
+GIO_BAO_MAI_TRONG = 20   # video ngày mai được sản xuất TRONG ngày (cửa sổ 24h) — trước giờ này chưa xếp là bình thường
+
+
 def _muc_video(goc: str, bay_gio: _dt.datetime) -> List[str]:
-    """Một dòng mỗi TRẠNG THÁI (kênh cùng trạng thái gộp chung) — 10 kênh vẫn gọn trong một tin."""
+    """Hai dòng hỏi đúng việc: khe 05:00 HÔM NAY có video không (sản xuất hôm qua), và NGÀY MAI đã xếp chưa
+    (chỉ gọi là MAI TRỐNG sau `GIO_BAO_MAI_TRONG`). Kênh cùng trạng thái gộp một dòng — 10 kênh vẫn gọn."""
     from core import truc_quan  # noqa: PLC0415
-    mai = bay_gio.date() + _dt.timedelta(days=1)
-    nhom: Dict[str, List[str]] = {}
-    for k in _cac_kenh(goc):
-        v = truc_quan._video_mai(k, tu_ngay=mai) or {}  # noqa: SLF001
-        if not v:
-            tt = "? không đọc được kế hoạch đăng"
-        elif v.get("co") and v.get("ngay") == mai.strftime("%d/%m"):
-            tt = "có video mai {0}{1}".format(v.get("ngay"), " (đã hẹn lịch)" if v.get("da_hen") else " (CHƯA hẹn)")
-        elif v.get("co"):
-            tt = "MAI TRỐNG — video gần nhất {0}".format(v.get("ngay"))
-        else:
-            tt = "MAI TRỐNG — chưa có video nào xếp lịch"
-        nhom.setdefault(tt, []).append(k)
-    ra = ["- {0}: {1}".format(", ".join(ks), tt) for tt, ks in sorted(nhom.items(), key=lambda x: not x[0].startswith("MAI"))]
+    hom, mai = bay_gio.date(), bay_gio.date() + _dt.timedelta(days=1)
+    ra: List[str] = []
+    for nhan, ngay in (("Hôm nay", hom), ("Ngày mai", mai)):
+        nhom: Dict[str, List[str]] = {}
+        for k in _cac_kenh(goc):
+            v = truc_quan._video_mai(k, tu_ngay=ngay) or {}  # noqa: SLF001
+            if not v:
+                tt = "? không đọc được kế hoạch đăng"
+            elif v.get("co") and v.get("ngay") == ngay.strftime("%d/%m"):
+                tt = "có video {0}{1}".format(v.get("ngay"), " (đã hẹn lịch)" if v.get("da_hen") else " (CHƯA hẹn)")
+            elif ngay == mai and bay_gio.hour < GIO_BAO_MAI_TRONG:
+                tt = "chưa xếp — còn trong cửa sổ sản xuất"
+            else:
+                tt = "TRỐNG — video gần nhất {0}".format(v.get("ngay")) if v.get("co") else "TRỐNG — chưa có video nào xếp lịch"
+            nhom.setdefault(tt, []).append(k)
+        for tt, ks in sorted(nhom.items(), key=lambda x: "TRỐNG" not in x[0]):
+            ra.append("- {0} · {1}: {2}".format(nhan, ", ".join(ks), tt))
     return ra or ["(chưa có kênh)"]
 
 
