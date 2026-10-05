@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.150.1** — 2026-10-05 — `vps-jp1` — fix(the): so moc the theo giay MM:SS:FF, cho lech 1 khung hinh (truoc day chua the nao duoc luu)
 - **2.150.0** — 2026-10-05 — `vps-jp1` — fix(dang dom): tu ep Studio ve tieng Viet (cookie PREF hl=vi) truoc khi dang; nhan chu xu ly tieng Nhat lam bang chung tai xong
 - **2.149.26** — 2026-10-05 — `vps-jp1` — Quet ngay: kenh chi bi doi du so lieu khi da co video CONG KHAI (lich da qua), khong phai chi moi tai len
 - **2.149.25** — 2026-10-05 — `vps-jp1` — Bo nao: luat ghi ngay bai hoc bi bac bo/xac nhan (khong tinh quota), nhan ban video thang lon khi con nong
