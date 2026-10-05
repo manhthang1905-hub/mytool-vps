@@ -109,6 +109,7 @@ MODULE_CHINH = (
 #: Nhóm test NHANH, thuần (không mạng, không tiến trình thật) — KHÔNG phải cả kho.
 TEST_NHANH = (
     "tests/test_dong_bo_git.py",
+    "tests/test_dong_bo_git_quet.py",
     "tests/test_cap_nhat_git.py",
     "tests/test_an_toan_khoi_dong.py",
     "tests/test_khong_day_tep_bi_mat.py",
@@ -625,7 +626,23 @@ _MAU_THEM: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
     ("khoá AWS", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("khoá riêng PEM/SSH", re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----")),
     ("khối mã hoá Fernet", re.compile(r"\bgAAAAA[A-Za-z0-9_\-]{60,}")),
-    ("khối DPAPI", re.compile(r"AQAAANCMnd8BFdERjHoAwE/Cl\+sBAAAA")),
+    # (hằng hex viết tách đôi để chính tệp này không tự khớp)
+    ("khối DPAPI", re.compile(r"AQAAANCMnd8BFdERjHoAwE/Cl\+sBAAAA|01000000d08c9ddf" r"0115d1118c7a00c04fc297eb", re.I)),
+    # ── thêm 06/10/2026 (kiểm toàn kho công khai) ──
+    ("token bot Telegram", re.compile(r"(?<![A-Za-z0-9_])(?:bot)?\d{8,10}:[A-Za-z0-9_\-]{35}(?![A-Za-z0-9_\-])")),
+    ("refresh token Google OAuth (1//0…)", re.compile(r"(?<![A-Za-z0-9_/])1//0[A-Za-z0-9_\-]{20,}")),
+    ("access token Google (ya29.…)", re.compile(r"\bya29\.[A-Za-z0-9_\-]{20,}")),
+    ("refresh_token có giá trị", re.compile(r"refresh_token[\"']?\s*[:=]\s*[\"'][^\"'\s]{20,}[\"']", re.I)),
+    ("cookie phiên Google/YouTube", re.compile(
+        r"(?<![A-Za-z0-9_\-])(?:__Secure-[0-9A-Za-z]*(?:PSID|PSIDTS|PSIDCC|PAPISID|OSID)|SAPISID|APISID|"
+        r"HSID|SSID|SIDCC|SID|LOGIN_INFO|VISITOR_INFO1_LIVE)\s*[=:]\s*[\"']?[A-Za-z0-9_\-./%:]{16,}")),
+    ("chat id Telegram", re.compile(r"chat_?id[\"']?\s*[:=]\s*[\"']?-?\d{7,}", re.I)),
+    # URL Studio luôn là kênh CỦA MÌNH (chỉ chủ kênh mở được) — id trong đó là id kênh thật.
+    ("id kênh thật trong URL Studio", re.compile(r"studio\.youtube\.com/channel/UC[A-Za-z0-9_\-]{22}")),
+    ("SID tài khoản Windows", re.compile(r"\bS-1-5-21-\d{6,10}-\d{6,10}-\d{6,10}(?:-\d{3,})?\b")),
+    ("khoá hex dài gán cho biến bí mật", re.compile(
+        r"(?:key|khoa|secret|token|bi_mat|mat_khau|password)[A-Za-z0-9_]*[\"']?\s*[:=]\s*[\"']?[0-9a-fA-F]{32,}\b",
+        re.I)),
 )
 _MAU_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}\b")
 _EMAIL_CHO_PHEP = re.compile(
@@ -644,10 +661,154 @@ _DUOI_VAN_BAN = (".py", ".json", ".yaml", ".yml", ".md", ".txt", ".js", ".ini", 
                  ".bat", ".vbs", ".ps1", ".xml", ".html", ".example", ".toml")
 
 
-def tu_cam_cua_may(goc: str) -> List[Tuple[str, str]]:
+#: Đường KHÔNG BAO GIỜ được theo dõi trong kho chung (lớp thứ hai sau .gitignore).
+_THU_MUC_CAM = ("vm/logs/", "workspace/", "DONE/", "bi-mat/", "PROJECTS/", "runtime/", "models/",
+                "nao/tri-nho/", "nao/nhat-ky/", "nao/ky-nang/", "vm/tien-ich/", "vm/replied/",
+                "vm/da-dang-cmt-moi/", "vm/clients/")
+_TEN_TEP_CAM = frozenset((
+    "cai-dat.json", "cai-dat-tool.json", "secrets.json", "config.json", "cap-nhat.json", "vps.json",
+    "may-ao.json", "trang-thai.json", "hanh-dong.json", "bao-dong.json", "vps-rieng.json",
+    "mang-youtube.json", "hop-viec-may-ao.json", "claude.local.md", "nhat-ky-kenh.md",
+    # hồ sơ Chrome
+    "cookies", "cookies-journal", "login data", "login data-journal", "web data", "local state",
+    "preferences", "secure preferences", "history"))
+_DUOI_CAM = (".dpapi", ".sqlite", ".sqlite3", ".db", ".ldb", ".jsonl", ".csv", ".tsv", ".pem", ".key")
+#: .csv/.tsv/.jsonl được phép ở những chỗ này (khuôn, dữ liệu test tổng hợp) — nội dung vẫn bị soi.
+_CHO_PHEP_DU_LIEU = ("tests/", "CHANNEL/_KHUON/", "docs/")
+_TEP_NHOM_CHO_PHEP = ("ngach.yaml", "INSIGHT-CHON-CONTENT.md")
+
+
+def duong_cam(rel: str) -> str:
+    """Lý do `rel` (đường git, dấu /) không được lên kho chung; '' nếu được."""
+    rel = rel.replace("\\", "/").lstrip("/")
+    thap = rel.lower()
+    phan = rel.split("/")
+    ten = phan[-1].lower()
+    for tm in _THU_MUC_CAM:
+        if thap.startswith(tm.lower()):
+            return "thư mục dữ liệu riêng máy ({0})".format(tm)
+    if phan[0] == "CHANNEL" and len(phan) >= 2:
+        if phan[1] == "_NHOM":
+            if len(phan) >= 4 and (len(phan) > 4 or phan[3] not in _TEP_NHOM_CHO_PHEP):
+                return "CHANNEL/_NHOM/<ngách>/ chỉ được ngach.yaml + INSIGHT-CHON-CONTENT.md"
+        elif phan[1] not in ("_KHUON", "README.md"):
+            return "thư mục kênh thật CHANNEL/<kênh>/"
+    if ten == "kenh.yaml" and not rel.startswith("CHANNEL/_KHUON/"):
+        return "kenh.yaml của kênh thật"
+    if ten in _TEN_TEP_CAM:
+        return "tệp cấu hình/bí mật/hồ sơ trình duyệt riêng máy ({0})".format(ten)
+    if "/user data/" in "/" + thap or "/data/profile/" in "/" + thap or "/trinh-duyet/" in "/" + thap:
+        return "hồ sơ trình duyệt"
+    if thap.endswith(_DUOI_CAM):
+        if thap.endswith((".dpapi", ".pem", ".key", ".sqlite", ".sqlite3", ".db", ".ldb")):
+            return "tệp khoá/cơ sở dữ liệu ({0})".format(os.path.splitext(thap)[1])
+        if not rel.startswith(_CHO_PHEP_DU_LIEU) and ".example" not in thap and "mau" not in ten:
+            return "tệp dữ liệu bảng/dòng ({0}) ngoài tests/ và khuôn".format(os.path.splitext(thap)[1])
+    return ""
+
+
+#: Dòng trông như dữ liệu YouTube (đường video/kênh) — CSV/JSONL có ≥ `_NGUONG_DONG_YT` dòng như vậy là dữ liệu kênh.
+_MAU_DONG_YT = re.compile(r"youtube\.com/(?:watch|shorts/|channel/|@)|youtu\.be/|(?<![A-Za-z0-9_-])UC[A-Za-z0-9_-]{22}(?![A-Za-z0-9_-])")
+_NGUONG_DONG_YT = 3
+_MAU_VIDEO_ID_URL = re.compile(r"(?:[?&]v=|youtu\.be/|/shorts/|/video/|/embed/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])")
+_MAU_KENH_ID = re.compile(r"(?<![A-Za-z0-9_-])UC[A-Za-z0-9_-]{22}(?![A-Za-z0-9_-])")
+_MAU_HANDLE = re.compile(r"(?<![A-Za-z0-9_.@/-])@([A-Za-z0-9][A-Za-z0-9_.\-]{2,29})(?![A-Za-z0-9_\-])")
+_MAU_TOKEN_11 = re.compile(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{11}(?![A-Za-z0-9_-])")
+
+
+def _giong_video_id(s: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{11}", s) and re.search(r"[A-Z]", s) and re.search(r"[a-z0-9]", s))
+
+
+def _bo_dau(s: str) -> str:
+    import unicodedata  # noqa: PLC0415
+    s = unicodedata.normalize("NFD", s.replace("đ", "d").replace("Đ", "D"))
+    return "".join(c for c in s if unicodedata.category(c) != "Mn").lower().strip()
+
+
+def _du_dai_tieu_de(td: str) -> bool:
+    """Tiêu đề đủ dài để khớp mà không báo giả — KHÔNG đoán theo ngôn ngữ: chữ
+    rộng (Hán/Kana/Hangul…) mang nhiều nghĩa hơn mỗi ký tự nên sàn thấp hơn."""
+    import unicodedata  # noqa: PLC0415
+    td = td.strip()
+    rong = sum(1 for c in td if unicodedata.east_asian_width(c) in ("W", "F"))
+    return len(td) >= 12 or (rong >= 4 and len(td) >= 6)
+
+
+def goc_du_lieu(goc: str) -> str:
+    """Thư mục có dữ liệu THẬT của máy (CHANNEL/<kênh>/, vm/, secrets.json). Một git
+    worktree (`.git` là TỆP — phiên agent) không có dữ liệu kênh: đọc từ cây chính,
+    không thì lớp quét chuỗi riêng máy chạy RỖNG mà tưởng sạch."""
+    if [y for y in glob.glob(os.path.join(goc, "CHANNEL", "*", "kenh.yaml"))
+            if not os.path.basename(os.path.dirname(y)).startswith("_")]:
+        return goc
+    tep = os.path.join(goc, ".git")
+    if not os.path.isfile(tep):
+        return goc
+    try:
+        with io.open(tep, encoding="utf-8") as f:
+            m = re.match(r"gitdir:\s*(.+)", f.read().strip())
+        if not m:
+            return goc
+        gitdir = m.group(1).strip()
+        if not os.path.isabs(gitdir):
+            gitdir = os.path.normpath(os.path.join(goc, gitdir))
+        chung = gitdir
+        if os.path.isfile(os.path.join(gitdir, "commondir")):
+            with io.open(os.path.join(gitdir, "commondir"), encoding="utf-8") as f:
+                chung = os.path.normpath(os.path.join(gitdir, f.read().strip()))
+    except OSError:
+        return goc
+    chinh = os.path.dirname(chung) if os.path.basename(chung).lower() == ".git" else ""
+    return chinh if chinh and os.path.isdir(chinh) else goc
+
+
+def _doc_ke_hoach(duong: str) -> Tuple[List[str], List[str]]:
+    """(tiêu đề, video id) trong một tệp kế hoạch CSV — cột nhận theo TÊN cột
+    (bỏ dấu), giá trị thì ngôn ngữ nào cũng được."""
+    import csv  # noqa: PLC0415
+    td: List[str] = []
+    vid: List[str] = []
+    try:
+        with io.open(duong, encoding="utf-8-sig", newline="") as f:
+            dong = list(csv.reader(f))
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return td, vid
+    if not dong:
+        return td, vid
+    dau = [_bo_dau(h) for h in dong[0]]
+    cot_td = [i for i, h in enumerate(dau) if h in ("tieu de", "title", "tieu_de", "ten video")]
+    cot_id = [i for i, h in enumerate(dau) if h.replace("_", " ") in ("video id", "id video", "videoid")]
+    for hang in dong[1:]:
+        for i in cot_td:
+            if i < len(hang) and _du_dai_tieu_de(hang[i]):
+                td.append(hang[i].strip())
+        for i in cot_id:
+            if i < len(hang) and _giong_video_id(hang[i].strip()):
+                vid.append(hang[i].strip())
+        for o in hang:
+            vid += [m.group(1) for m in _MAU_VIDEO_ID_URL.finditer(o) if _giong_video_id(m.group(1))]
+    return td, vid
+
+
+def _doc_chu(duong: str, toi_da: int = 8 * 1024 * 1024) -> str:
+    try:
+        with io.open(duong, "rb") as f:
+            return f.read(toi_da).decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def tu_cam_cua_may(goc: str, *, day_du: bool = False) -> List[Tuple[str, str]]:
     """Chuỗi RIÊNG của máy này không được lên kho: tên kênh thật (kenh.yaml `ten`),
     video id của chính kênh (tên thư mục trong CHANNEL/<kênh>/chi-so/), tên người
-    dùng Windows. Đọc từ đĩa máy này — máy khác tự có danh sách của nó."""
+    dùng Windows. Đọc từ đĩa máy này — máy khác tự có danh sách của nó.
+
+    06/10/2026: thêm tiêu đề + video id đọc từ TỆP KẾ HOẠCH (mọi ngôn ngữ — không
+    đoán theo chữ), id kênh/handle (kenh.yaml, vm/config.json), id kênh/video/handle
+    ĐỐI THỦ trong nghien-cuu/ và _NHOM/, email git toàn cục, khoá secrets.json.
+    Chạy từ worktree thì đọc dữ liệu ở cây chính (`goc_du_lieu`)."""
+    goc = goc_du_lieu(goc)
     ra: List[Tuple[str, str]] = []
     for yaml in glob.glob(os.path.join(goc, "CHANNEL", "*", "kenh.yaml")):
         ma = os.path.basename(os.path.dirname(yaml))
@@ -673,22 +834,226 @@ def tu_cam_cua_may(goc: str) -> List[Tuple[str, str]]:
                     td = str((json.load(tep) or {}).get("tieu_de") or "").strip()
             except (OSError, ValueError, AttributeError):
                 continue
-            if len(td) >= 12:
+            if _du_dai_tieu_de(td):
                 ra.append(("tiêu đề video kênh thật ({0})".format(ma), td))
+        # hồ sơ thiết lập kênh (tên/handle/mô tả/danh sách phát thật trên YouTube)
+        for hs in glob.glob(os.path.join(os.path.dirname(yaml), "ho-so*.json")) + \
+                glob.glob(os.path.join(os.path.dirname(yaml), "thiet-lap", "ho-so*.json")):
+            try:
+                with io.open(hs, encoding="utf-8-sig") as tep:
+                    du = json.load(tep)
+            except (OSError, ValueError):
+                continue
+            if not isinstance(du, dict):
+                continue
+            for k in ("ten", "handle", "banner_chu"):
+                v = str(du.get(k) or "").strip()
+                if len(v) >= 4:
+                    ra.append(("tên/định danh kênh thật ({0})".format(ma), v))
+            mo_ta = str(du.get("mo_ta") or "").strip().splitlines()
+            if mo_ta and len(mo_ta[0]) >= 12:
+                ra.append(("mô tả kênh thật ({0})".format(ma), mo_ta[0][:60]))
+            ds = du.get("danh_sach_phat")
+            for p in ds if isinstance(ds, list) else []:
+                v = str((p.get("ten") if isinstance(p, dict) else p) or "").strip()
+                if _du_dai_tieu_de(v) or len(v) >= 8:
+                    ra.append(("danh sách phát kênh thật ({0})".format(ma), v))
+        # id kênh CỦA MÌNH: số liệu chi-so/ chứa URL Studio (chỉ chủ kênh mở được)
+        so_tep, thay_id = 0, 0
+        for r, _ds, fs in os.walk(os.path.join(os.path.dirname(yaml), "chi-so")):
+            for f in fs:
+                if not f.endswith((".json", ".txt", ".md")):
+                    continue
+                so_tep += 1
+                ids = re.findall(r"studio\.youtube\.com/channel/(UC[A-Za-z0-9_-]{22})",
+                                 _doc_chu(os.path.join(r, f), 512 * 1024))
+                thay_id += len(ids)
+                ra += [("id kênh thật ({0})".format(ma), i) for i in ids]
+            if so_tep >= 300 or (thay_id and so_tep >= 40):
+                break
+        # id kênh / handle viết đâu đó trong kenh.yaml + tệp riêng của kênh
+        for tep in [yaml] + glob.glob(os.path.join(os.path.dirname(yaml), "*.json")) + \
+                glob.glob(os.path.join(os.path.dirname(yaml), "thiet-lap", "*.json")):
+            chu = "\n".join(d for d in _doc_chu(tep, 2 * 1024 * 1024).splitlines()
+                            if not d.lstrip().startswith("#"))
+            ra += [("id kênh thật ({0})".format(ma), m.group(0)) for m in _MAU_KENH_ID.finditer(chu)]
+            ra += [("handle kênh thật ({0})".format(ma), "@" + m.group(1)) for m in _MAU_HANDLE.finditer(chu)
+                   if not _EMAIL_CHO_PHEP.search("@" + m.group(1))]
+        # tệp kế hoạch: tiêu đề + video id, ngôn ngữ nào cũng được
+        for kh in glob.glob(os.path.join(os.path.dirname(yaml), "ke-hoach-dang", "*.csv")) + \
+                glob.glob(os.path.join(goc, "vm", "ke-hoach-{0}.csv".format(ma))):
+            td, vid = _doc_ke_hoach(kh)
+            ra += [("tiêu đề video kênh thật ({0})".format(ma), t) for t in td]
+            ra += [("video id kênh thật ({0})".format(ma), v) for v in vid]
+    # dữ liệu ĐỐI THỦ: id kênh, video id (từ URL), handle trong nghien-cuu/ và _NHOM/
+    nguon_dt = (glob.glob(os.path.join(goc, "CHANNEL", "*", "nghien-cuu", "**", "*.*"), recursive=True)
+                + glob.glob(os.path.join(goc, "CHANNEL", "_NHOM", "*", "**", "*.*"), recursive=True))
+    da_doc = 0
+    # Nhỏ trước: bảng/danh sách (csv, txt, yaml) mang nhiều id nhất trên mỗi byte;
+    # trần 64MB để mỗi lượt `day` không đọc cả GB dữ liệu nghiên cứu.
+    nguon_dt = sorted((t for t in nguon_dt
+                       if t.lower().endswith((".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".yaml"))),
+                      key=lambda t: (not t.lower().endswith((".csv", ".tsv", ".txt", ".yaml")), t))
+    for tep in nguon_dt:
+        if da_doc > (2048 if day_du else 64) * 1024 * 1024:
+            break
+        chu = _doc_chu(tep, (16 if day_du else 2) * 1024 * 1024)
+        da_doc += len(chu)
+        ra += [("id kênh đối thủ", m.group(0)) for m in _MAU_KENH_ID.finditer(chu)]
+        ra += [("video id đối thủ", m.group(1)) for m in _MAU_VIDEO_ID_URL.finditer(chu) if _giong_video_id(m.group(1))]
+        if os.path.basename(tep).lower().startswith("doi-thu"):
+            ra += [("handle kênh đối thủ", "@" + m.group(1)) for m in _MAU_HANDLE.finditer(chu)]
+    # vm/: cấu hình máy đăng (URL Studio có id kênh) + mọi tệp kế hoạch
+    for tep in glob.glob(os.path.join(goc, "vm", "*.json")):
+        chu = _doc_chu(tep, 2 * 1024 * 1024)
+        ra += [("id kênh thật (vm)", m.group(0)) for m in _MAU_KENH_ID.finditer(chu)]
+    for kh in glob.glob(os.path.join(goc, "vm", "ke-hoach-*.csv")):
+        td, vid = _doc_ke_hoach(kh)
+        ra += [("tiêu đề video kênh thật (vm)", t) for t in td] + [("video id kênh thật (vm)", v) for v in vid]
+    # email thật của người dùng (git toàn cục) — tác giả commit đã là `.invalid`
+    try:
+        ma_e, email, _ = _chay(["git", "config", "--global", "user.email"], timeout=20)
+        email = email.strip()
+        if ma_e == 0 and "@" in email and not email.endswith((".invalid", "noreply.github.com")):
+            ra.append(("email người dùng (git toàn cục)", email))
+    except Exception:  # noqa: BLE001
+        pass
+    # khoá giải mã kho bí mật: lọt vào kho là mở được mọi bí mật
+    try:
+        with io.open(os.path.join(goc, "secrets.json"), encoding="utf-8-sig") as tep:
+            sj = json.load(tep)
+        for k in ("khoa", "key"):
+            v = sj.get(k) if isinstance(sj, dict) else None
+            if isinstance(v, str) and len(v) >= 16:
+                ra.append(("khoá giải mã secrets.json", v))
+        v = sj.get("du_lieu") if isinstance(sj, dict) else None
+        if isinstance(v, str) and len(v) >= 40:
+            ra.append(("khối dữ liệu secrets.json", v[:40]))
+    except (OSError, ValueError, AttributeError):
+        pass
     nguoi = os.environ.get("USERNAME") or ""
     if nguoi and len(nguoi) >= 4 and nguoi.lower() not in ("administrator", "admin", "user"):
         ra.append(("tên người dùng Windows", nguoi))
+    thay: Dict[str, str] = {}
+    for loai, c in ra:
+        c = c.strip()
+        if len(c) >= 4 and c not in thay:
+            thay[c] = loai
+    return [(loai, c) for c, loai in thay.items()]
+
+
+def che(chuoi: str, *, giu: int = 0) -> str:
+    """Trích AN TOÀN để in/ghi nhật ký: không in nguyên chuỗi bí mật/tên kênh,
+    chỉ `giu` ký tự đầu (tiền tố loại khoá như `sk-`) + độ dài + băm ngắn để đối chiếu."""
+    h = hashlib.sha1(chuoi.encode("utf-8", "replace")).hexdigest()[:6]
+    return "«{0}…{1}kt#{2}»".format(chuoi[:max(0, min(giu, len(chuoi) // 4))], len(chuoi), h)
+
+
+def _che_email(e: str) -> str:
+    ten, _, mien = e.partition("@")
+    return "{0}***@{1}".format(ten[:1], mien)
+
+
+def che_dong(s: str) -> str:
+    """Che mọi chuỗi giống khoá/token/email trong một dòng sắp in hoặc ghi nhật ký."""
+    for _ten, mau in _MAU_THEM:
+        s = mau.sub(lambda m: che(m.group(0), giu=4), s)
+    return _MAU_EMAIL.sub(lambda m: m.group(0) if (_EMAIL_CHO_PHEP.search(m.group(0))
+                                                    or m.group(0).startswith("git@"))
+                          else _che_email(m.group(0)), s)
+
+
+class _BoKhop:
+    """Khớp nhanh danh sách chuỗi cấm: id/handle (dạng token) tra theo TẬP, chuỗi
+    tự do (tiêu đề, tên kênh, khoá) bằng MỘT biểu thức gộp."""
+
+    def __init__(self, tu_cam: Sequence[Tuple[str, str]]):
+        self.token: Dict[str, Tuple[str, str]] = {}
+        tu_do: Dict[str, str] = {}
+        for loai, c in tu_cam:
+            if not c:
+                continue
+            if _giong_video_id(c) or _MAU_KENH_ID.fullmatch(c):
+                self.token.setdefault(c, (loai, c))
+            elif re.fullmatch(r"@[A-Za-z0-9][A-Za-z0-9_.\-]{2,29}", c):
+                self.token.setdefault(c.lower(), (loai, c))
+            else:
+                tu_do.setdefault(c, loai)
+        self.tu_do = tu_do
+        self.mau = (re.compile("|".join(re.escape(c) for c in sorted(tu_do, key=len, reverse=True)))
+                    if tu_do else None)
+
+    def tim(self, dong: str) -> List[Tuple[str, str]]:
+        ra: List[Tuple[str, str]] = []
+        if self.token:
+            for m in _MAU_TOKEN_11.finditer(dong):
+                if m.group(0) in self.token:
+                    ra.append(self.token[m.group(0)])
+            for m in _MAU_KENH_ID.finditer(dong):
+                if m.group(0) in self.token:
+                    ra.append(self.token[m.group(0)])
+            for m in _MAU_HANDLE.finditer(dong):
+                k = "@" + m.group(1).lower()
+                if k in self.token:
+                    ra.append(self.token[k])
+        if self.mau is not None:
+            for m in self.mau.finditer(dong):
+                ra.append((self.tu_do[m.group(0)], m.group(0)))
+        return ra
+
+
+#: Mẫu ít đặc trưng (số, id kênh) — giá trị MẪU rõ ràng trong tài liệu/test thì bỏ qua.
+#: Không áp cho mẫu khoá: khoá thật không bao giờ được miễn vì "trông giả".
+_MAU_LOC_GIA = frozenset(("chat id Telegram", "id kênh thật trong URL Studio"))
+_GIA = re.compile(r"(.)\1{4,}|x{3,}|example|khongphaithat|dummy|fake|placeholder|123456|987654|abcdef", re.I)
+
+
+def _la_mau_gia(s: str) -> bool:
+    return bool(_GIA.search(s.split("/channel/")[-1] if "/channel/" in s else s))
+
+
+def quet_noi_dung(rel: str, chu: str, khop: "_BoKhop",
+                  mau_phu: Sequence[Tuple[str, "re.Pattern[str]"]] = ()) -> List[Tuple[str, str]]:
+    """Soi NỘI DUNG một tệp. Trả `[(loại, trích ĐÃ CHE)]` — không bao giờ nguyên chuỗi."""
+    ra: List[Tuple[str, str]] = []
+    dong_yt = 0
+    for so, dong in enumerate(chu.splitlines(), 1):
+        if DAU_BO_QUA in dong:
+            continue
+        for ten_mau, mau in tuple(_MAU_THEM) + tuple(mau_phu):
+            m = mau.search(dong)
+            if m and ten_mau in _MAU_LOC_GIA and _la_mau_gia(m.group(0)):
+                continue
+            if m:
+                ra.append((ten_mau, "dòng {0}: {1}".format(so, che(m.group(0), giu=4))))
+        for m in _MAU_EMAIL.finditer(dong):
+            if not _EMAIL_CHO_PHEP.search(m.group(0)) and not m.group(0).startswith("git@"):
+                ra.append(("email", "dòng {0}: {1}".format(so, _che_email(m.group(0)))))
+        for m in _MAU_DUONG_NGUOI_DUNG.finditer(dong):
+            if m.group(1).lower() not in _TEN_NGUOI_DUNG_MAU:
+                ra.append(("đường tuyệt đối có tên người dùng", "dòng {0}: …Users\\{1}".format(so, che(m.group(1)))))
+        for loai, chuoi in khop.tim(dong):
+            ra.append((loai, "dòng {0}: {1}".format(so, che(chuoi))))
+        if so > 1 and _MAU_DONG_YT.search(dong):
+            dong_yt += 1
+    if dong_yt >= _NGUONG_DONG_YT and rel.lower().endswith((".csv", ".tsv", ".jsonl")):
+        ra.append(("dữ liệu YouTube dạng bảng/dòng", "{0} dòng có URL/id kênh YouTube".format(dong_yt)))
     return ra
 
 
 def quet_them(goc: str, tep: Iterable[str], tu_cam: Optional[Sequence[Tuple[str, str]]] = None) -> List[Tuple[str, str, str]]:
     """Lớp quét THÊM (ngoài `core.kiem_phat_hanh`): khoá, email, đường có tên
     người dùng, chuỗi riêng máy. Trả `[(tệp, loại, trích)]`."""
-    tu_cam = list(tu_cam_cua_may(goc) if tu_cam is None else tu_cam)
+    khop = _BoKhop(list(tu_cam_cua_may(goc) if tu_cam is None else tu_cam))
     ra: List[Tuple[str, str, str]] = []
     for rel in tep:
         duong = os.path.join(goc, *rel.split("/"))
-        if not os.path.isfile(duong) or not rel.lower().endswith(_DUOI_VAN_BAN):
+        if not os.path.isfile(duong):
+            continue
+        ly_do = duong_cam(rel)
+        if ly_do:
+            ra.append((rel, "đường cấm", ly_do))
+        if not rel.lower().endswith(_DUOI_VAN_BAN + (".tsv", ".jsonl")):
             continue
         try:
             if os.path.getsize(duong) > 3 * 1024 * 1024:
@@ -697,22 +1062,7 @@ def quet_them(goc: str, tep: Iterable[str], tu_cam: Optional[Sequence[Tuple[str,
                 chu = f.read().decode("utf-8", "replace")
         except OSError:
             continue
-        for so, dong in enumerate(chu.splitlines(), 1):
-            if DAU_BO_QUA in dong:
-                continue
-            for ten_mau, mau in _MAU_THEM:
-                m = mau.search(dong)
-                if m:
-                    ra.append((rel, ten_mau, "dòng {0}: {1}…".format(so, m.group(0)[:12])))
-            for m in _MAU_EMAIL.finditer(dong):
-                if not _EMAIL_CHO_PHEP.search(m.group(0)) and not m.group(0).startswith("git@"):
-                    ra.append((rel, "email", "dòng {0}: {1}".format(so, m.group(0))))
-            for m in _MAU_DUONG_NGUOI_DUNG.finditer(dong):
-                if m.group(1).lower() not in _TEN_NGUOI_DUNG_MAU:
-                    ra.append((rel, "đường tuyệt đối có tên người dùng", "dòng {0}: {1}".format(so, m.group(0)[:60])))
-            for loai, chuoi in tu_cam:
-                if chuoi in dong:
-                    ra.append((rel, loai, "dòng {0}: {1}".format(so, chuoi[:40])))
+        ra += [(rel, loai, trich) for loai, trich in quet_noi_dung(rel, chu, khop)]
     return ra
 
 
@@ -725,6 +1075,261 @@ def quet_bi_mat(goc: str, tep: Sequence[str]) -> List[str]:
     chan = ["[{0}] {1} — {2}".format(p.loai, p.duong, p.ghi_chu) for p in kph.quet_cay_sach(cay)]
     chan += ["[them:{1}] {0} — {2}".format(*x) for x in quet_them(goc, co_mat)]
     return chan
+
+
+# ── quét TOÀN LỊCH SỬ kho (kiểm toán kho công khai: một lệnh) ─────────────────
+
+#: Những gì có trên GitHub: nhánh chính của origin + mọi tag.
+REF_CONG_KHAI = ("{0}/{1}".format(REMOTE, NHANH), "--tags")
+_KICH_BLOB_TOI_DA = 3 * 1024 * 1024
+#: 20 byte đầu của khối DPAPI (CryptProtectData) dạng hex.
+_DAU_DPAPI_HEX = "01000000d08c9ddf" + "0115d1118c7a00c04fc297eb"
+_DUOI_MEDIA = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".mp3", ".mp4", ".wav", ".ttf", ".otf",
+               ".woff", ".woff2", ".zip", ".7z", ".exe", ".dll", ".pyd", ".npy", ".onnx", ".bin", ".pdf")
+
+
+def _doc_blob_that(goc: str, shas: Sequence[str]) -> Iterable[Tuple[str, bytes]]:
+    """Đọc hàng loạt blob qua MỘT tiến trình `git cat-file --batch` (ưu tiên thấp)."""
+    import threading  # noqa: PLC0415
+    co = _CO_AN | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+    p = subprocess.Popen(["git", "cat-file", "--batch"], cwd=goc, stdin=subprocess.PIPE,  # noqa: S603
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=co)
+
+    def ghi() -> None:
+        try:
+            for s in shas:
+                p.stdin.write((s + "\n").encode("ascii"))
+            p.stdin.close()
+        except OSError:
+            pass
+
+    threading.Thread(target=ghi, daemon=True).start()
+    try:
+        for _ in shas:
+            dau = p.stdout.readline().decode("ascii", "replace").split()
+            if len(dau) < 3 or dau[1] == "missing":
+                continue
+            n = int(dau[2])
+            du = p.stdout.read(n)
+            p.stdout.read(1)
+            yield dau[0], du
+    finally:
+        try:
+            p.stdout.close()
+        except OSError:
+            pass
+        p.wait(timeout=60)
+
+
+_doc_blob: Callable[[str, Sequence[str]], Iterable[Tuple[str, bytes]]] = _doc_blob_that
+
+
+def _git_vao(goc: str, tham_so: Sequence[str], vao: str, timeout: float = 600) -> str:
+    try:
+        ket = subprocess.run(["git", *tham_so], cwd=goc, input=vao.encode("utf-8"), capture_output=True,  # noqa: S603
+                             timeout=timeout, creationflags=_CO_AN)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise DongBoLoi("git {0} lỗi: {1}".format(" ".join(tham_so[:2]), e)) from e
+    return ket.stdout.decode("utf-8", "replace")
+
+
+def quet_lich_su(goc: str = GOC, refs: Sequence[str] = REF_CONG_KHAI, *,
+                 tu_cam: Optional[Sequence[Tuple[str, str]]] = None,
+                 in_ra: Callable[[str], None] = lambda s: None) -> List[Dict[str, Any]]:
+    """Quét MỌI blob + MỌI đường từng có trong `refs` (mặc định: những gì đã lên
+    GitHub). Trả danh sách phát hiện đã gộp theo (loại, tệp):
+    `{loai, duong, commit: [...], trong_head, trich, chuoi?}` — `chuoi` (nguyên văn,
+    chỉ để ghi tệp thay thế cho git filter-repo) KHÔNG bao giờ được in."""
+    khop = _BoKhop(list(tu_cam_cua_may(goc, day_du=True) if tu_cam is None else tu_cam))
+    nhanh_dau = next((r for r in refs if not r.startswith("-")), "HEAD")
+    # 1) commit -> blob/đường (đường từng có, cả tệp đã xoá)
+    log = _git_ok(goc, "log", *refs, "--root", "--raw", "--no-abbrev", "--no-renames", "-m",
+                  "--format=@%h", timeout=900)
+    commit_cua_blob: Dict[str, List[str]] = {}
+    commit_cua_duong: Dict[str, List[str]] = {}
+    duong_cua_blob: Dict[str, str] = {}
+    hien = ""
+    for d in log.splitlines():
+        if d.startswith("@"):
+            hien = d[1:].strip()
+        elif d.startswith(":") and "\t" in d:
+            dau, duong = d.split("\t", 1)
+            phan = dau.split()
+            if len(phan) >= 5 and phan[4][:1] in ("A", "M", "T", "C", "R"):
+                blob = phan[3]
+                ds = commit_cua_blob.setdefault(blob, [])
+                if hien not in ds:
+                    ds.append(hien)
+                duong_cua_blob.setdefault(blob, duong)
+                dc = commit_cua_duong.setdefault(duong, [])
+                if hien not in dc:
+                    dc.append(hien)
+    # 2) HEAD công khai
+    trong_head_blob: Dict[str, str] = {}
+    for d in _git_ok(goc, "ls-tree", "-r", nhanh_dau).splitlines():
+        dau, _, duong = d.partition("\t")
+        phan = dau.split()
+        if len(phan) >= 3 and phan[1] == "blob":
+            trong_head_blob[phan[2]] = duong
+    duong_head = set(trong_head_blob.values())
+    # 3) mọi blob với kích thước
+    obj = _git_ok(goc, "rev-list", "--objects", *refs, timeout=900)
+    ung_vien: Dict[str, str] = {}
+    for d in obj.splitlines():
+        sha, _, duong = d.partition(" ")
+        if duong:
+            ung_vien.setdefault(sha, duong)
+    kiem = _git_vao(goc, ["cat-file", "--batch-check"], "\n".join(ung_vien) + "\n")
+    can_doc: List[str] = []
+    for d in kiem.splitlines():
+        phan = d.split()
+        if len(phan) == 3 and phan[1] == "blob" and int(phan[2]) <= _KICH_BLOB_TOI_DA:
+            duong = duong_cua_blob.get(phan[0]) or ung_vien.get(phan[0], "")
+            # mọi blob trừ media đã biết; nhị phân khác bị nhận ra bằng byte NUL
+            if not duong.lower().endswith(_DUOI_MEDIA):
+                can_doc.append(phan[0])
+    in_ra("  lịch sử: {0} đường, {1} blob văn bản cần soi.".format(len(commit_cua_duong), len(can_doc)))
+
+    gop: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+    def them(loai: str, duong: str, commit: Sequence[str], trong_head: bool, trich: str,
+             chuoi: str = "") -> None:
+        k = (loai, duong)
+        g = gop.setdefault(k, {"loai": loai, "duong": duong, "commit": [], "trong_head": False,
+                               "trich": trich, "so": 0, "chuoi": set()})
+        for c in commit:
+            if c not in g["commit"]:
+                g["commit"].append(c)
+        g["trong_head"] = g["trong_head"] or trong_head
+        g["so"] += 1
+        if chuoi:
+            g["chuoi"].add(chuoi)
+
+    # 4) đường cấm (cả tệp đã xoá khỏi HEAD)
+    for duong, cms in commit_cua_duong.items():
+        ly_do = duong_cam(duong)
+        if ly_do:
+            them("đường cấm: " + ly_do, duong, cms, duong in duong_head, "")
+    # 5) nội dung — thêm lớp mẫu của kiem_phat_hanh (mật khẩu, client_secret, cookie=…)
+    mau_kph: Sequence[Tuple[str, "re.Pattern[str]"]] = ()
+    try:
+        from . import kiem_phat_hanh as kph  # noqa: PLC0415
+        mau_kph = kph._MAU_NOI_DUNG_BI_MAT  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        pass
+    for sha, du in _doc_blob(goc, can_doc):
+        duong = trong_head_blob.get(sha) or duong_cua_blob.get(sha) or ung_vien.get(sha, "?")
+        cms = commit_cua_blob.get(sha, ["?"])
+        o_head = sha in trong_head_blob
+        if b"\x00" in du[:4096]:  # nhị phân: chỉ nhận khối DPAPI
+            if du[:20].hex().lower().startswith(_DAU_DPAPI_HEX[:16]) or _DAU_DPAPI_HEX in du[:512].hex().lower():
+                them("khối DPAPI", duong, cms, o_head, "nhị phân")
+            continue
+        chu = du.decode("utf-8", "replace")
+        for loai, trich in quet_noi_dung(duong, chu, khop, mau_phu=mau_kph):
+            them(loai, duong, cms, o_head, trich)
+        # nguyên văn (chỉ cho tệp thay thế — không in)
+        for loai, c in khop.tim(chu):
+            if (loai, duong) in gop:
+                gop[(loai, duong)]["chuoi"].add(c)
+        for ten_mau, mau in tuple(_MAU_THEM) + tuple(mau_kph):
+            if (ten_mau, duong) in gop:
+                gop[(ten_mau, duong)]["chuoi"].update(m.group(0) for m in mau.finditer(chu)
+                                                      if DAU_BO_QUA not in m.group(0))
+        if ("email", duong) in gop:
+            gop[("email", duong)]["chuoi"].update(
+                m.group(0) for m in _MAU_EMAIL.finditer(chu)
+                if not _EMAIL_CHO_PHEP.search(m.group(0)) and not m.group(0).startswith("git@"))
+    # 6) thông điệp commit + tác giả + tag có chú thích (cũng công khai trên GitHub)
+    tdc = _git_ok(goc, "log", *refs, "--format=@@%h%n%an <%ae>%n%cn <%ce>%n%B", timeout=600)
+    for khoi in tdc.split("@@")[1:]:
+        cm, _, than = khoi.partition("\n")
+        for loai, trich in quet_noi_dung("(thông điệp commit)", than, khop, mau_phu=mau_kph):
+            them(loai, "(thông điệp/tác giả commit)", [cm.strip()], False, trich)
+        for loai, c in khop.tim(than):
+            if (loai, "(thông điệp/tác giả commit)") in gop:
+                gop[(loai, "(thông điệp/tác giả commit)")]["chuoi"].add(c)
+    tag = git(goc, "for-each-ref", "refs/tags", "--format=@@%(refname:short)%n%(taggername) %(taggeremail)%n%(contents)")[1]
+    for khoi in tag.split("@@")[1:]:
+        ten, _, than = khoi.partition("\n")
+        for loai, trich in quet_noi_dung("(tag)", than, khop, mau_phu=mau_kph):
+            them(loai, "(chú thích tag)", [ten.strip()], False, trich)
+    return sorted(gop.values(), key=lambda g: (not g["trong_head"], g["loai"], g["duong"]))
+
+
+_NANG = ("khoá", "token", "cookie", "refresh", "DPAPI", "Fernet", "PEM", "secrets.json", "SID", "mật khẩu", "hex")
+
+
+def muc_do(loai: str) -> str:
+    if any(k.lower() in loai.lower() for k in _NANG):
+        return "NGHIÊM TRỌNG"
+    if "email" in loai or "đường cấm" in loai or "kênh thật" in loai or "người dùng" in loai:
+        return "CAO"
+    return "VỪA"
+
+
+def in_bang_lich_su(phat_hien: Sequence[Dict[str, Any]], in_ra: Callable[[str], None]) -> None:
+    """In bảng phát hiện (ĐÃ CHE) + lệnh dọn lịch sử chủ kho tự chạy."""
+    if not phat_hien:
+        in_ra("Lịch sử sạch: không phát hiện nào.")
+        return
+    in_ra("| mức | loại | tệp | commit | còn ở HEAD | trích (đã che) |")
+    in_ra("|---|---|---|---|---|---|")
+    for g in phat_hien:
+        cms = [c[:9] for c in g["commit"]]
+        cm = ", ".join(cms[:3]) + (" … (+{0})".format(len(cms) - 3) if len(cms) > 3 else "")
+        in_ra("| {0} | {1} | {2} | {3} | {4} | {5} |".format(
+            muc_do(g["loai"]), g["loai"], g["duong"], cm, "CÓ" if g["trong_head"] else "không",
+            che_dong(str(g.get("trich") or ""))[:80]))
+    duong = sorted({g["duong"] for g in phat_hien if g["loai"].startswith("đường cấm")})
+    chuoi = sum(len(g.get("chuoi") or ()) for g in phat_hien)
+    in_ra("")
+    in_ra("Dọn lịch sử (CHỦ KHO tự quyết, chạy trên một bản clone --mirror mới):")
+    if duong:
+        in_ra("  git filter-repo --invert-paths " + " ".join("--path '{0}'".format(p) for p in duong))
+    if chuoi:
+        thong_diep = any(g["duong"].startswith("(") for g in phat_hien)
+        in_ra("  git filter-repo --replace-text <tệp-thay-thế>{0}   # {1} chuỗi; tạo tệp: "
+              "quet --lich-su --ghi-thay-the <tệp>".format(
+                  " --replace-message <tệp-thay-thế>" if thong_diep else "", chuoi))
+    in_ra("  rồi: git push --force --mirror origin  (mọi VPS: git fetch && git reset --hard origin/main);"
+          " ĐỔI mọi khoá đã lộ — dọn lịch sử không thu hồi được bản đã bị sao.")
+
+
+def thay_the_giu_hinh(ds: Sequence[str]) -> List[Tuple[str, str]]:
+    """Mỗi chuỗi lộ -> một chuỗi MẪU RIÊNG cùng hình dạng (video id 11 ký tự, id kênh
+    UC+22, @handle, email) để mã/test đọc id vẫn chạy sau khi viết lại lịch sử;
+    còn lại (tiêu đề, tên, khoá) -> `***DA-XOA-n***`. Dài trước để chuỗi chứa nhau không vỡ."""
+    ra: List[Tuple[str, str]] = []
+    dem: Dict[str, int] = {}
+
+    def so(k: str) -> int:
+        dem[k] = dem.get(k, 0) + 1
+        return dem[k]
+
+    for c in sorted(set(ds), key=lambda s: (-len(s), s)):
+        if _giong_video_id(c):
+            ra.append((c, "VidMau%05d" % so("v")))
+        elif _MAU_KENH_ID.fullmatch(c):
+            ra.append((c, "UCkenhMau%015d" % so("uc")))
+        elif re.fullmatch(r"@[A-Za-z0-9][A-Za-z0-9_.\-]{2,29}", c):
+            ra.append((c, "@kenh-mau-%d" % so("h")))
+        elif _MAU_EMAIL.fullmatch(c):
+            ra.append((c, "nguoi%d@example.invalid" % so("e")))
+        else:
+            ra.append((c, "***DA-XOA-%d***" % so("x")))
+    return ra
+
+
+def ghi_tep_thay_the(phat_hien: Sequence[Dict[str, Any]], duong: str) -> int:
+    """Tệp `--replace-text` cho git filter-repo (`literal:<chuỗi>==>mẫu`). Tệp CHỨA
+    chuỗi thật — chỉ ghi ở máy này, ngoài kho (workspace/ đã bị .gitignore chặn)."""
+    ds = [c for g in phat_hien for c in (g.get("chuoi") or ()) if c and "\n" not in c and "==>" not in c]
+    cap = thay_the_giu_hinh(ds)
+    with io.open(duong, "w", encoding="utf-8", newline="\n") as tep:
+        for c, moi in cap:
+            tep.write("literal:{0}==>{1}\n".format(c, moi))
+    return len(cap)
 
 
 # ═══ bài học dùng chung (chia-se/bai-hoc/<ma-may>-<ngach>.json) ═════════════
@@ -1465,6 +2070,8 @@ def huy_lich(goc: str = GOC) -> Tuple[bool, str]:
 
 
 def _in_an_toan(s: str) -> None:
+    # Không bao giờ in/ghi nhật ký chuỗi giống khoá/token/email (vd stderr của git).
+    s = che_dong(s)
     try:
         print(s, flush=True)
     except (UnicodeEncodeError, OSError, AttributeError):
@@ -1497,6 +2104,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sub.add_parser("kiem", help="kiểm có bản mới không")
     sub.add_parser("bai_hoc")
     p = sub.add_parser("quet", help="quét bí mật trên các tệp git sẽ theo dõi")
+    p.add_argument("--lich-su", action="store_true",
+                   help="quét TOÀN LỊCH SỬ những gì đã lên GitHub (origin/main + tag), in bảng")
+    p.add_argument("--ref", nargs="+", default=None, metavar="REF",
+                   help="ref thay cho origin/main --tags (vd --all)")
+    p.add_argument("--ghi-thay-the", default=None, metavar="TỆP",
+                   help="ghi tệp --replace-text cho git filter-repo (CHỨA chuỗi thật — để ngoài kho)")
     p = sub.add_parser("lich")
     p.add_argument("viec", choices=("bat", "tat"))
     ns = ap.parse_args(argv)
@@ -1533,8 +2146,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if ns.lenh == "bai_hoc":
             xuat_bai_hoc(goc, in_ra=_in_an_toan)
             return 0
+        if ns.lenh == "quet" and ns.lich_su:
+            duong_tt = os.path.abspath(ns.ghi_thay_the) if ns.ghi_thay_the else ""
+            # tệp thay thế CHỨA chuỗi thật: chỉ ngoài kho, hoặc trong thư mục kho cấm (workspace/)
+            if duong_tt and os.path.normcase(duong_tt).startswith(os.path.normcase(goc + os.sep)) and \
+                    not duong_cam(os.path.relpath(duong_tt, goc).replace("\\", "/")):
+                _in_an_toan("! --ghi-thay-the phải nằm NGOÀI kho hoặc trong workspace/ (bị .gitignore chặn).")
+                return 3
+            ph = quet_lich_su(goc, tuple(ns.ref) if ns.ref else REF_CONG_KHAI, in_ra=_in_an_toan)
+            in_bang_lich_su(ph, _in_an_toan)
+            if duong_tt:
+                _in_an_toan("  đã ghi {0} chuỗi vào {1} — XOÁ tệp sau khi dọn.".format(
+                    ghi_tep_thay_the(ph, duong_tt), duong_tt))
+            return 1 if ph else 0
         if ns.lenh == "quet":
-            tep = [p for p in _git_ok(goc, "ls-files", "-co", "--exclude-standard", "-z").split("\0") if p]
+            tep =[p for p in _git_ok(goc, "ls-files", "-co", "--exclude-standard", "-z").split("\0") if p]
             chan = quet_bi_mat(goc, tep)
             _in_an_toan("{0} tệp, {1} mục chặn.".format(len(tep), len(chan)))
             for c in chan:

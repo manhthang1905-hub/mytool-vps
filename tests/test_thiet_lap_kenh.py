@@ -28,7 +28,7 @@ from PIL import Image, ImageChops  # noqa: E402
 MO_TA = "「自分のペースで生きたい」。そう感じているあなたのための心理学チャンネルです。" + "休日は家でゆっくり過ごしたい。" * 25
 GUIDE = """# Thiết lập
 
-## 1. TLX-A — 凪の心理学
+## 1. TLX-A — 霞の心理学
 
 - **Tuyến:** x
 
@@ -36,14 +36,14 @@ GUIDE = """# Thiết lập
 
 | | Tên | Handle | Vì sao |
 |---|---|---|---|
-| ★ Khuyên dùng | **凪の心理学** (なぎ) | `@nagi-shinri` | x |
+| ★ Khuyên dùng | **霞の心理学** (かすみ) | `@kasumi-shinri` | x |
 
 ```
-凪の心理学
+霞の心理学
 ```
 
 ```
-nagi-shinri
+kasumi-shinri
 ```
 
 ### Bước 2 · Mô tả kênh (xxx ký tự)
@@ -56,7 +56,7 @@ nagi-shinri
 
 ![logo](TLX-A/logo.png)
 
-Chữ trên banner (code vẽ): 凪の心理学 · 波立たない心で。 · 2日に1本
+Chữ trên banner (code vẽ): 霞の心理学 · 波立たない心で。 · 2日に1本
 
 ### Bước 6 · Từ khoá kênh (3 cụm)
 
@@ -66,10 +66,10 @@ Chữ trên banner (code vẽ): 凪の心理学 · 波立たない心で。 · 2
 
 ### Bước 7 · Danh sách phát (2 cái)
 
-1. **家が好きな人の心理**
+1. **家で過ごす人の心理**
    家で過ごす時間を大切にする人の話。
 
-2. **味方のふりをする人（フレネミー）**
+2. **笑顔で近づく人（フレネミー）**
    見分け方と距離の取り方。
 
 ### Bước 8 · Giọng đọc
@@ -88,7 +88,7 @@ def _kenh_yaml(goc: Path, kenh: str, them: str = ""):
     d = goc / "CHANNEL" / kenh
     d.mkdir(parents=True, exist_ok=True)
     (d / "kenh.yaml").write_text('ten: "(tên tạm) — tâm lý"\nngon_ngu: "ja"\nnhom: "g1"\ntep: "t1"\n'
-                                 'danh_sach_phat_kenh: "家が好きな人の心理 | 動じない人の心理"\n' + them, encoding="utf-8")
+                                 'danh_sach_phat_kenh: "家で過ごす人の心理 | 静かな人の心理"\n' + them, encoding="utf-8")
     return d
 
 
@@ -112,14 +112,14 @@ def test_ho_so_tu_bo_san_du_truong_va_kich_thuoc(goc_tam):
     assert tl.kiem_ho_so(hs, thu_muc) == []
     for k in tl.TRUONG_BAT_BUOC:
         assert hs.get(k), k
-    assert hs["ten"] == "凪の心理学" and hs["handle"] == "@nagi-shinri" and hs["nguon"] == "bo-san"
+    assert hs["ten"] == "霞の心理学" and hs["handle"] == "@kasumi-shinri" and hs["nguon"] == "bo-san"
     # đúng từng chữ như hướng dẫn (không NFKC) + tên còn thiếu lấy từ kenh.yaml `danh_sach_phat_kenh`
-    assert [d["ten"] for d in hs["danh_sach_phat"]] == ["家が好きな人の心理", "味方のふりをする人（フレネミー）", "動じない人の心理"]
+    assert [d["ten"] for d in hs["danh_sach_phat"]] == ["家で過ごす人の心理", "笑顔で近づく人（フレネミー）", "静かな人の心理"]
     assert tl.kich_thuoc_anh(tl.duong_anh(hs, "logo", thu_muc)) == (800, 800)
     assert tl.kich_thuoc_anh(tl.duong_anh(hs, "banner", thu_muc)) == (2560, 1440)
     assert tl.kich_thuoc_anh(tl.duong_anh(hs, "hinh_mo", thu_muc)) == (150, 150)
     assert hs["mac_dinh_tai_len"]["ngon_ngu"] == "ja" and hs["mac_dinh_tai_len"]["danh_muc"] in tl.DANH_MUC
-    assert hs["quoc_gia"] == "JP" and hs["banner_chu"][0] == "凪の心理学"
+    assert hs["quoc_gia"] == "JP" and hs["banner_chu"][0] == "霞の心理学"
 
 
 def test_tao_khong_ghi_de_tru_khi_lam_lai(goc_tam):
@@ -131,7 +131,7 @@ def test_tao_khong_ghi_de_tru_khi_lam_lai(goc_tam):
     hs2 = tl.tao("TLX-A", str(goc_tam), log=lambda s: None)
     assert hs2["ten"] == "TÊN CHỦ SỬA TAY" and hs2["mo_ta"] == "x" * 400          # không ghi đè
     hs3 = tl.tao("TLX-A", str(goc_tam), lam_lai=["ten"], log=lambda s: None)
-    assert hs3["ten"] == "凪の心理学" and hs3["mo_ta"] == "x" * 400                 # chỉ làm lại mục được yêu cầu
+    assert hs3["ten"] == "霞の心理学" and hs3["mo_ta"] == "x" * 400                 # chỉ làm lại mục được yêu cầu
 
 
 def test_tao_thieu_anh_thi_lam_lai_anh(goc_tam):
@@ -151,7 +151,7 @@ def test_ho_so_nhap_llm_va_anh_gia_cho_kenh_chua_co_bo_san(goc_tam):
         return "```json\n" + json.dumps({
             "ten": "夜明けの心理学", "handle": "@Yoake-Shinri!", "tu_khoa_chinh": "心理学",
             "mo_ta": MO_TA, "tu_khoa": ["心理学", "夜", "朝"] + ["kw%d" % i for i in range(200)],
-            "danh_sach_phat": [{"ten": "家が好きな人の心理", "mo_ta": "a"}, {"ten": "新しい", "mo_ta": "b"}],
+            "danh_sach_phat": [{"ten": "家で過ごす人の心理", "mo_ta": "a"}, {"ten": "新しい", "mo_ta": "b"}],
             "danh_muc": "people", "banner_chu": ["夜明けの心理学", "朝のひとやすみ", "毎日7時"]}, ensure_ascii=False) + "\n```"
 
     ve = []
@@ -205,7 +205,7 @@ def test_vung_an_toan_banner_o_giua_va_chu_nam_gon_trong_vung(tmp_path):
     assert tl.vung_an_toan() == (507, 508, 2053, 931)
     nen = _anh(tmp_path / "nen.png", (1600, 900), (20, 20, 20))
     dich = tmp_path / "b.png"
-    tl.anh_banner_tu_nguon(str(nen), str(dich), ["凪の心理学", "波立たない心で、自分のペースを生きる。", "2日に1本・朝7時更新"])
+    tl.anh_banner_tu_nguon(str(nen), str(dich), ["霞の心理学", "波立たない心で、自分のペースを生きる。", "2日に1本・朝7時更新"])
     with Image.open(dich) as b:
         assert b.size == (2560, 1440)
         goc = Image.new("RGB", b.size, (20, 20, 20))
@@ -247,7 +247,7 @@ def test_hom_nay_4_kenh_moi_that_su_doc_duoc_tu_bo_san():
 
 
 # ═══════════════════ PHẦN 2: SO KHÁC BIỆT ════════════════════════════════════
-HS = {"ten": "テスト心理学", "handle": "@nenrin-shinri", "mo_ta": "一行目。\n\n二行目。", "tu_khoa": ["心理学", "老後"],
+HS = {"ten": "テスト心理学", "handle": "@kogarashi-shinri", "mo_ta": "一行目。\n\n二行目。", "tu_khoa": ["心理学", "老後"],
       "quoc_gia": "JP", "logo": "logo.png", "banner": "banner.png", "hinh_mo": "hinh-mo.png",
       "mac_dinh_tai_len": {"ngon_ngu": "ja", "danh_muc": "education", "the": ["心理学", "老後"]},
       "danh_sach_phat": [{"ten": "A", "mo_ta": ""}, {"ten": "B", "mo_ta": ""}]}
@@ -255,7 +255,7 @@ HASH = {"logo": "h1", "banner": "h2", "hinh_mo": "h3"}
 
 
 def ht_dung():
-    return {"ngon_ngu_vi": True, "ten": "テスト心理学", "handle": "nenrin-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
+    return {"ngon_ngu_vi": True, "ten": "テスト心理学", "handle": "kogarashi-shinri", "mo_ta": "一行目。\n二行目。  ", "tu_khoa": ["老後", "心理学"],
             "quoc_gia": "Nhật Bản", "anh": {"logo": True, "banner": True, "hinh_mo": True},
             "mac_dinh": {"ngon_ngu_video": "Tiếng Nhật", "ngon_ngu_mo_ta": "Tiếng Nhật", "danh_muc": "Giáo dục", "the": ["老後", "心理学"]},
             "danh_sach_phat": ["A", "B", "C"]}
@@ -315,10 +315,10 @@ def test_khac_biet_chua_doc_duoc_thi_none_khong_bi_coi_la_dung():
 
 def test_khac_biet_handle_that_la_bien_the():
     so = so_da_dat_anh()
-    so["handle_that"] = "@nenrin-shinri-jp"
+    so["handle_that"] = "@kogarashi-shinri-jp"
     ht = ht_dung()
     assert t.khac_biet(HS, ht, so, HASH)["handle"]["khac"] is True
-    ht["handle"] = "nenrin-shinri-jp"
+    ht["handle"] = "kogarashi-shinri-jp"
     assert t.khac_biet(HS, ht, so, HASH)["handle"]["khac"] is False
 
 
@@ -333,7 +333,7 @@ NOW = time.mktime((2026, 10, 3, 12, 0, 0, 0, 0, -1))
 def test_khong_doi_khi_giong_va_khong_ton_luot():
     so = t.so_moi("K")
     assert t.quyet_doi(so, "ten", "テスト心理学", " テスト心理学 ", NOW)[0] == "giong"
-    assert t.quyet_doi(so, "handle", "@Nenrin-Shinri", "nenrin-shinri", NOW)[0] == "giong"
+    assert t.quyet_doi(so, "handle", "@Kogarashi-Shinri", "kogarashi-shinri", NOW)[0] == "giong"
     assert so["ngay_doi"]["ten"] == []
 
 
@@ -367,8 +367,8 @@ def test_studio_tu_choi_thi_cho_14_ngay_roi_tu_thu_lai():
 
 
 def test_bien_the_handle_toi_da_3_va_hop_le():
-    bt = t.bien_the_handle("@nagi-shinri", "ja")
-    assert bt[0] == "nagi-shinri" and bt[1] == "nagi-shinri-jp" and len(bt) == 4
+    bt = t.bien_the_handle("@kasumi-shinri", "ja")
+    assert bt[0] == "kasumi-shinri" and bt[1] == "kasumi-shinri-jp" and len(bt) == 4
     assert len(set(x.lower() for x in bt)) == 4 and all(tl.handle_hop_le(x) for x in bt)
     dai = t.bien_the_handle("a" * 30, "ja")
     assert all(len(x) <= 30 for x in dai) and len(dai) <= 4
@@ -630,8 +630,8 @@ def test_kenh_moi_dung_tu_khuon_co_thiet_lap_kenh_true():
 def _so_cho_ten():
     so = t.so_moi("K")
     so["uc"] = "UCxxx"
-    t.ghi_tu_choi(so, "ten", "凪の心理学", "Studio từ chối", NOW)
-    t.ghi_tu_choi(so, "handle", "@nagi", "Studio từ chối", NOW)
+    t.ghi_tu_choi(so, "ten", "霞の心理学", "Studio từ chối", NOW)
+    t.ghi_tu_choi(so, "handle", "@kasumi", "Studio từ chối", NOW)
     so["muc"]["ten"] = {"tt": "cho"}
     so["muc"]["handle"] = {"tt": "cho"}
     return so
@@ -713,7 +713,7 @@ def _hs_gia(monkeypatch):
     monkeypatch.setattr(t, "_tl", lambda: TL)
     monkeypatch.setattr(t, "luu_so", lambda so: None)
     monkeypatch.setattr(t, "doc_anh_cong_khai", lambda uc, mo_url=None: {"logo": "a", "banner": "b"})
-    return {"ten": "凪の心理学", "handle": "@nagi", "mo_ta": "x", "logo": "logo.png"}
+    return {"ten": "霞の心理学", "handle": "@kasumi", "mo_ta": "x", "logo": "logo.png"}
 
 
 def test_ho_so_khong_dien_ten_handle_khi_dang_bi_chan(monkeypatch):

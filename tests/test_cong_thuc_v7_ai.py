@@ -34,7 +34,7 @@ OLD = "lonTuoi0001"  # nhắm người lớn tuổi nhưng không có chữ kho�
 def _them_ung_vien(goc):
     cot, hang = so.doc_bang(goc, KENH)
     for ma, kenh, td, view, tang, dai in (
-            (T, "強者が隠す真実", "【脳科学】「これ」を一人でやれる人は高IQの可能性があります", "66000", "3000", "20:29"),
+            (T, "強者が隠す真実", "【脳科学】ひとりの時間が好きな人は高IQかもしれない理由", "66000", "3000", "20:29"),
             (OLD, "お金の心理", "お金に困らない人が人生の最終章で静かにしていること", "150000", "2500", "18:00")):
         d = dict.fromkeys(cot, "")
         d.update({"Kênh": kenh, "Tiêu đề video": td, "Link video": "https://www.youtube.com/watch?v=" + ma,

@@ -10,7 +10,7 @@ Số đo — hiển thị, tỷ lệ bấm, thời lượng xem, view, Tăng/ng�
 17/09 chạy trên dữ liệu thật nó đã sai đúng ở đó:
 
     cụm chủ đề     "脳" kéo mọi video 【脳科学】 vào cụm thắng; nhãn 【雑学】 loại nhầm nguồn của V12
-    trùng đề tài   「これ」を一人でやれる人は高IQ đứng hạng 2 dù cùng luận điểm với V7 đã đăng
+    trùng đề tài   「ひとりの時間が好きな人は高IQ」(mẫu) đứng hạng 2 dù cùng luận điểm với V7 đã đăng
     dạng video     chân dung người hay "cách làm" — vài từ khoá không phân nổi
     tệp tuổi       tiêu đề nhắm người 60+ không phải lúc nào cũng có chữ 60代
 

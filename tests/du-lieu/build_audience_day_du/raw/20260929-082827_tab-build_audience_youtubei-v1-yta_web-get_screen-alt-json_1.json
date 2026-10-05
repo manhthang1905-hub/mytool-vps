@@ -1,6 +1,6 @@
 {
  "captured_at": "2026-09-29T01:28:27.180Z",
- "href": "https://studio.youtube.com/channel/UCqJ26cTbE3lKymUekbIThKQ/analytics/tab-build_audience/period-default",
+ "href": "https://studio.youtube.com/channel/UCkenhMau000000000000001/analytics/tab-build_audience/period-default",
  "response": {
   "cards": [
    {
@@ -180,23 +180,23 @@
    {
     "channelCompetitionCardData": {
      "externalChannelIds": [
-      "UCFb9vrcZtNaIWam3vf2xOTw",
-      "UCbCvztp767wlz9HyvX56iqg",
-      "UC24giqozylTeMlUglZYleQw",
-      "UC9CjC8_gEBJyUZCCxILHLpg",
-      "UCHkZKf9_2QSOlgqNqMZAHuw"
+      "UCkenhMau000000000000002",
+      "UCkenhMau000000000000003",
+      "UCkenhMau000000000000004",
+      "UCkenhMau000000000000005",
+      "UCkenhMau000000000000006"
      ]
     }
    },
    {
     "audienceInterestsCardData": {
      "externalVideoIds": [
-      "ItU1H33KqMw",
-      "1XGzIqTWSQ0"
+      "VidMau00001",
+      "VidMau00002"
      ],
      "externalChannelIds": [
-      "UC2jGalazV4L7CvXeKD4_VDA",
-      "UCbCvztp767wlz9HyvX56iqg"
+      "UCkenhMau000000000000007",
+      "UCkenhMau000000000000003"
      ],
      "tables": [
       {
@@ -204,14 +204,14 @@
        "rows": [
         {
          "video": {
-          "externalVideoId": "ItU1H33KqMw",
-          "externalChannelId": "UC2jGalazV4L7CvXeKD4_VDA"
+          "externalVideoId": "VidMau00001",
+          "externalChannelId": "UCkenhMau000000000000007"
          }
         },
         {
          "video": {
-          "externalVideoId": "1XGzIqTWSQ0",
-          "externalChannelId": "UCbCvztp767wlz9HyvX56iqg"
+          "externalVideoId": "VidMau00002",
+          "externalChannelId": "UCkenhMau000000000000003"
          }
         }
        ]

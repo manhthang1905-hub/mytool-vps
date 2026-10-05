@@ -140,6 +140,31 @@ id_ed25519*
 **/Data/profile/
 **/App/Chrome-bin/
 **/trinh-duyet/
+# Chrome "User Data" / tệp phiên ở MỌI độ sâu (06/10/2026 — kiểm toàn kho).
+**/User Data/
+Login Data*
+Local State
+Web Data*
+
+# Dữ liệu máy ở MỌI độ sâu (06/10/2026): trước đây chỉ bị chặn nhờ `/*` ở gốc —
+# một thư mục cùng tên nằm trong core/, tests/, docs/ sẽ lọt lên.
+bi-mat/
+workspace/
+DONE/
+PROJECTS/
+*.dpapi
+*.sqlite
+*.sqlite3
+*.db
+*.ldb
+*.jsonl
+*.csv
+*.tsv
+kenh.yaml
+!/CHANNEL/_KHUON/**/kenh.yaml
+# Bảng mẫu cố ý (tổng hợp, không phải dữ liệu thật) thì đặt tên *.example.csv / *-mau.csv.
+!*.example.csv
+!*-mau.csv
 
 # Media — không lên kho (trừ ảnh nút vm/icon, logo giao diện, ảnh tài liệu docs/).
 *.mp4

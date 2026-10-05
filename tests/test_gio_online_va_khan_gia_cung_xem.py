@@ -3,9 +3,9 @@
 Canh ba việc mới trong `core/chi_so_ytb/giai_ma.py` (đọc), `core/nghien_cuu_chung.py`
 (kho chung nhóm) và `core/xep_lich.py::goi_y_khe` (gợi ý, không tự đổi `nhip_dang`).
 
-Fixture raw ở `tests/du-lieu/build_audience_*` là bản THẬT chép nguyên từ
+Fixture raw ở `tests/du-lieu/build_audience_*` chép CẤU TRÚC thật (id kênh/video đã thay bằng mẫu) từ
 `CHANNEL/TL4-T7/chi-so/kenh/kenh-20260929/` (mảng `hourlyUsersOnline` 168 ô) và
-`CHANNEL/TL1-T7/nghien-cuu/doi-thu.csv` thật (kênh `UCFb9vrcZtNaIWam3vf2xOTw` đã
+`CHANNEL/TL1-T7/nghien-cuu/doi-thu.csv` (kênh mẫu `UCkenhMau000000000000002` đã
 theo dõi dưới dạng link `/channel/<id>`) — không gọi mạng.
 """
 import json
@@ -24,10 +24,10 @@ RAW_KENH_MOI = os.path.join(DU_LIEU, "build_audience_kenh_moi", "raw")
 RAW_CU_HON = os.path.join(DU_LIEU, "build_audience_cu_hon", "raw")
 
 # 5 ID kênh thật trong fixture `build_audience_day_du` (channelCompetitionCardData).
-ID_DA_BIET = "UCFb9vrcZtNaIWam3vf2xOTw"     # đã có trong doi-thu.csv thật của TL1-T7
-IDS_CANH_TRANH = {"UCFb9vrcZtNaIWam3vf2xOTw", "UCbCvztp767wlz9HyvX56iqg",
-                  "UC24giqozylTeMlUglZYleQw", "UC9CjC8_gEBJyUZCCxILHLpg",
-                  "UCHkZKf9_2QSOlgqNqMZAHuw"}
+ID_DA_BIET = "UCkenhMau000000000000002"     # đã có trong doi-thu.csv thật của TL1-T7
+IDS_CANH_TRANH = {"UCkenhMau000000000000002", "UCkenhMau000000000000003",
+                  "UCkenhMau000000000000004", "UCkenhMau000000000000005",
+                  "UCkenhMau000000000000006"}
 
 
 def _kenh(goc, ma, nhom=""):
@@ -41,7 +41,7 @@ def _kenh(goc, ma, nhom=""):
 def _doi_thu_csv(goc, ma, link_da_theo_doi):
     """Sổ đối thủ tối giản, đúng cột thật của `danh_ba_doi_thu.COT`, theo dõi 1 kênh
     dưới dạng link `/channel/<id>` — đúng hình dạng bắt gặp thật trong `doi-thu.csv`
-    của TL1-T7 (dòng "知らないと一生損するお金の話-..." )."""
+    của TL1-T7 (dòng "<tên kênh đối thủ>-..." )."""
     p = os.path.join(goc, "CHANNEL", ma, "nghien-cuu", "doi-thu.csv")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "w", encoding="utf-8-sig") as tep:
@@ -111,7 +111,7 @@ def test_doc_khan_gia_cung_xem_lay_dung_id():
     tho = giai_ma.doc_khan_gia_cung_xem(RAW_DAY_DU)
     assert tho is not None
     assert set(tho["kenh_canh_tranh"]) == IDS_CANH_TRANH
-    assert {v["video_id"] for v in tho["video_dang_xem"]} == {"ItU1H33KqMw", "1XGzIqTWSQ0"}
+    assert {v["video_id"] for v in tho["video_dang_xem"]} == {"VidMau00001", "VidMau00002"}
 
 
 def test_doc_khan_gia_cung_xem_khong_co_card_tra_none():
@@ -130,7 +130,7 @@ def test_cap_nhat_khan_gia_cung_xem_loc_dung_ung_vien_va_ghi_kho_nhom(tmp_path):
     ids_ung_vien = {u["channel_id"] for u in ban_ghi["ung_vien_doi_thu_uu_tien"]}
     assert ID_DA_BIET not in ids_ung_vien, "kênh đã theo dõi (dù ở kênh khác cùng nhóm) không được lên ứng viên"
     # 5 kênh cạnh tranh + 2 kênh trong audienceInterests, trừ ID_DA_BIET, trừ trùng lặp
-    assert ids_ung_vien == (IDS_CANH_TRANH | {"UC2jGalazV4L7CvXeKD4_VDA", "UCbCvztp767wlz9HyvX56iqg"}) - {ID_DA_BIET}
+    assert ids_ung_vien == (IDS_CANH_TRANH | {"UCkenhMau000000000000007", "UCkenhMau000000000000003"}) - {ID_DA_BIET}
 
     # ghi vào kho NHÓM — kênh khác trong nhóm đọc lại được (thư mục CHANNEL/_NHOM/tam-ly-nhat/nghien-cuu/)
     duong_nhom = os.path.join(goc, "CHANNEL", "_NHOM", "tam-ly-nhat", "nghien-cuu", "khan-gia-cung-xem.json")
