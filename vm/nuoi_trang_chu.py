@@ -827,7 +827,7 @@ _JS_KIEM_TRANG = r"""(() => {
   const t = ((document.body && document.body.innerText) || '').toLowerCase();
   const u = location.href;
   if (/consent\.youtube|consent\.google/.test(u)) return 'dong_y';
-  if (/google\.com\/sorry|recaptcha/.test(u) || /unusual traffic|not a robot|not a bot|ロボットではありません|ボットでない|自動(送信|化)されたトラフィック/.test(t)) return 'captcha';
+  if (/google\.com\/sorry|recaptcha/.test(u) || /unusual traffic|not a robot|not a bot|ロボットではありません|ボットでない|自動(送信|化)されたトラフィック|로봇이 아닙니다|비정상적인 트래픽|người máy|rô-bốt|lưu lượng truy cập bất thường/.test(t)) return 'captcha';
   if (/accounts\.google\.com/.test(u)) return 'dang_xuat';
   if (document.querySelector('ytd-masthead a[href*="ServiceLogin"], ytd-masthead a[href*="accounts.google.com"]') && !document.querySelector('#avatar-btn')) return 'dang_xuat';
   if (document.querySelector('ytd-masthead') && !document.querySelector('#avatar-btn')) return 'chua_ro';

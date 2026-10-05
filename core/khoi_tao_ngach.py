@@ -473,7 +473,9 @@ def chuan_hoa_ho_so(du: Dict[str, Any], yc: YeuCau) -> Dict[str, Any]:
     ra["ngon_ngu_nguon"] = yc.ngon_ngu
     ra["dang_thang"] = _mot_dong(du.get("dang_thang"), 400)
     ra["mo_ta_cho_loc_ai"] = " ".join(str(du.get("mo_ta_cho_loc_ai") or "").split())[:1500]
-    ra["khan_gia_mo_ta"] = _mot_dong(du.get("khan_gia_mo_ta"), 300)
+    # Không bao giờ để trống: `bien_tap_content` lùi về khán giả MẶC ĐỊNH của mã (người Nhật 55+) khi khoá rỗng.
+    ra["khan_gia_mo_ta"] = _mot_dong(du.get("khan_gia_mo_ta"), 300) or "khán giả {0} xem {1} ({2})".format(
+        tieng, yc.chu_de, yc.quoc_gia)
     ra["luat_chon"] = _ds_chuoi(du.get("luat_chon"), 8, 400)
     ra["tieu_chi_doi_thu"] = _ds_chuoi(du.get("tieu_chi_doi_thu"), 6, 300)
 
@@ -542,6 +544,12 @@ def chuan_hoa_ho_so(du: Dict[str, Any], yc: YeuCau) -> Dict[str, Any]:
     ra["luat_nan_khuon"] = _ds_chuoi(du.get("luat_nan_khuon"), 2, 400)
     ra["the_loai_en"] = _mot_dong(du.get("the_loai_en"), 40)
     ra["tu_khoa_tim"] = _ds_chuoi(list(du.get("tu_khoa_tim") or []) + list(yc.tu_khoa), 14, 80)
+    # Kênh thứ 2+ của nhóm DÙNG LẠI hồ sơ (không hỏi AI lại) — giữ giọng văn + tên gợi ý trong tệp để kênh sau
+    # không rơi về câu tiếng Việt "<chủ đề> — <QG>" làm tên kênh.
+    if str(du.get("giong_van") or "").strip():
+        ra["giong_van"] = _mot_dong(du.get("giong_van"), 200)
+    if str(du.get("ten_kenh_goi_y") or "").strip():
+        ra["ten_kenh_goi_y"] = _mot_dong(du.get("ten_kenh_goi_y"), 80)
     ra["ctr_trang_chu_thang"] = "~5–6% (ước, chưa đo trên kênh)"
     ra["ctr_trang_chu_truot"] = "~3–4% (ước, chưa đo trên kênh)"
 
@@ -688,6 +696,32 @@ def chon_ma_kenh(goc: str, yc: YeuCau) -> str:
     while os.path.exists(duong_kenh(goc, "K{0}".format(i))):
         i += 1
     return "K{0}".format(i)
+
+
+def _kenh_cung_nhom(goc: str, nhom: str, tru: str = "") -> List[Dict[str, Any]]:
+    """kenh.yaml (thô) của các kênh khác đã thuộc nhóm `nhom` (bỏ `tru`, bỏ thư mục `_…`)."""
+    ra: List[Dict[str, Any]] = []
+    try:
+        ten = sorted(os.listdir(duong_kenh(goc)))
+    except OSError:
+        return ra
+    for t in ten:
+        if t.startswith(("_", ".")) or t == tru:
+            continue
+        y = doc_yaml(os.path.join(duong_kenh(goc, t), TEP_KENH)) or {}
+        if str(y.get("nhom") or "").strip() == nhom:
+            ra.append(y)
+    return ra
+
+
+def chon_tep(goc: str, nhom: str, hs: Dict[str, Any], ma: str) -> Dict[str, Any]:
+    """Tệp khán giả cho kênh `ma`: tệp ĐẦU TIÊN của hồ sơ chưa kênh nào trong nhóm đánh (mỗi kênh một tệp —
+    `DE_BAI_HO_SO` mục 2); hết tệp trống thì tệp đầu."""
+    ds = [t for t in (hs.get("tep_khan_gia") or []) if isinstance(t, dict) and t.get("ma")]
+    if not ds:
+        return {}
+    da_dung = {str(y.get("tep") or "").strip() for y in _kenh_cung_nhom(goc, nhom, tru=ma)}
+    return next((t for t in ds if str(t["ma"]) not in da_dung), ds[0])
 
 
 def kiem_loi_nhac(cu: str, moi: str) -> str:
@@ -854,15 +888,24 @@ def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,
         if loi:
             raise RuntimeError(loi)
 
-    tep = (hs.get("tep_khan_gia") or [{}])[0]
+    tep = chon_tep(goc, yc.nhom, hs, ma)
     tt = hs.get("thi_truong") or {}
     tieng = thong_tin_tieng(yc.ngon_ngu)
     ten_anh = ten_tieng(yc.ngon_ngu, anh=True) or yc.ngon_ngu
-    giong = hs.get("_giong_van") or "{0} — natural, warm, conversational, clear for listening".format(ten_anh)
+    giong = (hs.get("_giong_van") or hs.get("giong_van")
+             or "{0} — natural, warm, conversational, clear for listening".format(ten_anh))
+    # Tên gợi ý của hồ sơ chỉ cho kênh ĐẦU của nhóm; kênh sau ghép thêm tên ngắn của tệp (tên thật trên Studio do
+    # bước thiết lập kênh viết lại sau — đây chỉ là tên làm việc).
+    goi_y = hs.get("_ten_kenh") or hs.get("ten_kenh_goi_y") or ""
+    if goi_y and any(str(y.get("ten") or "").strip() == goi_y for y in _kenh_cung_nhom(goc, yc.nhom, tru=ma)):
+        goi_y = "{0} · {1}".format(goi_y, tep.get("ten_ngan") or tep.get("ma") or ma)
     gio = _gio_vps(tt.get("gio_dang_goi_y") or "", yc.quoc_gia, tt.get("mui_gio") or "")
     khoa_kenh: Dict[str, Any] = {
-        "ma": ma, "ten": yc.ten_kenh or hs.get("_ten_kenh") or "{0} — {1}".format(yc.chu_de, yc.quoc_gia),
+        "ma": ma, "ten": yc.ten_kenh or goi_y or "{0} — {1}".format(yc.chu_de, yc.quoc_gia),
         "nhom": yc.nhom, "tep": tep.get("ma") or "", "ngon_ngu": yc.ngon_ngu, "giong_van": giong,
+        # Nước của kênh: hồ sơ Studio (quốc gia cư trú) + địa điểm xem youtube.com (skill K06) đọc khoá này —
+        # không suy từ tiếng (en ≠ luôn US, es ≠ luôn ES).
+        "quoc_gia": yc.quoc_gia, "dia_diem_xem": yc.quoc_gia,
         "ky_tu_moi_phut": int(tieng["ky_tu"]), "chu_bia_hoa": bool(tieng["hoa"]),
         "ngay_bat_dau": _dt.date.today().isoformat(), "chien_luoc": "tu_dong", "de_bai_bien_tap": "gon",
         "kenh_rieng": True,

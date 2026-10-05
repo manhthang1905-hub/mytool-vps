@@ -197,10 +197,19 @@ RE_NUT_AVATAR = r"^(trình đơn tài khoản|trình đơn avatar|avatar|アカ�
 TEN_NUOC = {"JP": ("Nhật Bản", "Japan", "日本", "일본"), "KR": ("Hàn Quốc", "South Korea", "韓国", "대한민국"),
             "VN": ("Việt Nam", "Vietnam", "ベトナム", "베트남"), "US": ("Hoa Kỳ", "United States", "アメリカ合衆国", "미국"),
             "TW": ("Đài Loan", "Taiwan", "台湾", "대만"), "TH": ("Thái Lan", "Thailand", "タイ", "태국"),
-            "ID": ("Indonesia", "インドネシア", "인도네시아")}
+            "ID": ("Indonesia", "インドネシア", "인도네시아"),
+            # 06/10/2026 — thêm cho máy/ngách khác nước (CHƯA đo trên menu thật — tên theo bản dịch YouTube thường gặp;
+            # lệch thì `TEN_NUOC.get(gl) or (gl,)` vẫn thử mã nước và skill K06 đọc lại menu để báo).
+            "GB": ("Vương quốc Anh", "United Kingdom", "イギリス", "영국"), "CA": ("Canada", "カナダ", "캐나다"),
+            "AU": ("Úc", "Australia", "オーストラリア", "오스트레일리아"), "IN": ("Ấn Độ", "India", "インド", "인도"),
+            "PH": ("Philippines", "フィリピン", "필리핀"), "SG": ("Singapore", "シンガポール", "싱가포르"),
+            "MY": ("Malaysia", "マレーシア", "말레이시아"), "DE": ("Đức", "Germany", "ドイツ", "독일"),
+            "FR": ("Pháp", "France", "フランス", "프랑스"), "ES": ("Tây Ban Nha", "Spain", "スペイン", "스페인"),
+            "BR": ("Brazil", "ブラジル", "브라질"), "MX": ("Mexico", "México", "メキシコ", "멕시코")}
 
 #: Ngôn ngữ nội dung → nước (khi hồ sơ thiết lập chưa có `quoc_gia`).
-GL_THEO_NGON_NGU = {"ja": "JP", "ko": "KR", "vi": "VN", "en": "US", "zh": "TW", "th": "TH", "id": "ID"}
+GL_THEO_NGON_NGU = {"ja": "JP", "ko": "KR", "vi": "VN", "en": "US", "zh": "TW", "th": "TH", "id": "ID",
+                    "de": "DE", "fr": "FR", "pt": "BR", "ms": "MY", "tl": "PH"}
 
 
 def dia_diem_kenh(kenh: str, goc: str = GOC_TOOL) -> str:

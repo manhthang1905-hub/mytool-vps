@@ -1503,7 +1503,8 @@ class MayDangDom:
                 ten = (self.bo.get("ngon_ngu_video") or {}).get(ngon)
                 ten = [ten] if isinstance(ten, str) else list(ten or [])      # nhiều tên: Việt/Nhật/Anh/Hàn
                 if not ten:
-                    raise Exception("Studio hỏi ngôn ngữ video mà kênh chưa khai ngon_ngu")
+                    raise Exception("Studio hỏi ngôn ngữ video mà kênh chưa khai ngon_ngu" if not ngon else
+                                    "ngôn ngữ «{0}» chưa có trong studio-selectors.json → ngon_ngu_video".format(ngon))
                 ta.bam("phu_de_ngon_ngu")
                 muc = ta.tim_chu(ten, han=5)
                 if not muc:

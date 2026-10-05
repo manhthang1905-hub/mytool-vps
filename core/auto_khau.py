@@ -4857,12 +4857,14 @@ def _chen_muc_luc_seo(bc: BoiCanh, d: str, duong_srt: str) -> None:
         # sẽ đặt lại (`phan_video.muc_luc`), nên hai khâu không cãi nhau.
         if seo and _muc_luc_tu_phan(bc, d, duong_srt, duong_seo):
             return
-        if not seo or "目次" in seo or "Chapters\n" in seo:
+        from .phan_video import co_muc_luc, dau_muc_luc  # noqa: PLC0415
+
+        if not seo or co_muc_luc(seo):
             return
         muc = _muc_luc_tu_srt(_doc_chu(duong_srt))
         if not muc:
             return
-        dau = "📌 目次" if bc.kenh.ngon_ngu == "ja" else "📌 Chapters"
+        dau = dau_muc_luc(bc.kenh.ngon_ngu)
         khoi = ("━━━━━━━━━━━━━━\n{0}\n".format(dau)
                 + "\n".join(muc) + "\n━━━━━━━━━━━━━━")
         dong = seo.split("\n")
@@ -7989,7 +7991,8 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
             _tai_ket_qua(bc, goi, 0, nen)
             _xoa_dau(bc, nen)
             if ma_ve:
-                _btk.ve_chu_len_anh(nen, tep, _btk.bo_tri_chu("khuon", bt["chu_tang"], kc), goc=bc.goc)
+                _btk.ve_chu_len_anh(nen, tep, _btk.bo_tri_chu("khuon", bt["chu_tang"], kc), goc=bc.goc,
+                                    ngon_ngu=bc.kenh.ngon_ngu)
             from PIL import Image  # noqa: PLC0415
             nho = tep[:-4] + "-120.png"
             Image.open(tep).convert("RGB").resize((120, 68)).save(nho)
@@ -8103,7 +8106,8 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
             except Exception as loi:  # noqa: BLE001 — giữ nền cũ, bộ chọn sẽ chấm
                 bc.ghi("    (vẽ lại hỏng: {0})".format(str(loi)[:100]))
         loai = "khuon" if kh.get("nhom") == "khuon" else "chuan_ngach"
-        if not _btk.ve_chu_len_anh(dich, tep, _btk.bo_tri_chu(loai, kh["chu_tang"]), goc=bc.goc):
+        if not _btk.ve_chu_len_anh(dich, tep, _btk.bo_tri_chu(loai, kh["chu_tang"]), goc=bc.goc,
+                                   ngon_ngu=bc.kenh.ngon_ngu):
             bc.ghi("  (ảnh bìa {0}: không vẽ được chữ — không có font Nhật?)".format(so_bia))
             return so_bia, False
     return so_bia, False
