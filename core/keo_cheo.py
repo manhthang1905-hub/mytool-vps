@@ -706,7 +706,9 @@ def _ty_le_tang(truoc: Optional[float], sau: Optional[float]) -> Optional[float]
 
 def do_hieu_qua(goc: str, thu_muc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None,
                 cai_dat: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """Đo các lần thêm `ok` đã đủ `kiem_sau_ngay` ngày mà chưa đo: ghi `do_sau` vào sổ, trả các mục vừa đo."""
+    """Đo các lần thêm `ok`/`da_co` đã đủ `kiem_sau_ngay` ngày mà chưa đo: ghi `do_sau` vào sổ, trả các mục
+    vừa đo. `da_co` (máy DOM thấy video ĐÃ nằm sẵn trong danh sách — vd lượt trước tích được mà báo lỗi oan)
+    cũng đo, tính từ mốc lúc ghi."""
     thu_muc = thu_muc or thu_muc_mac_dinh(goc)
     cai = doc_cai_dat(thu_muc, cai_dat)
     bay_gio = bay_gio or _dt.datetime.now()
@@ -714,7 +716,7 @@ def do_hieu_qua(goc: str, thu_muc: Optional[str] = None, bay_gio: Optional[_dt.d
     vua_do = []
     bang_cache: Dict[str, Dict[str, Dict[str, str]]] = {}
     for m in so["muc"]:
-        if m.get("ket") != "ok" or m.get("do_sau"):
+        if m.get("ket") not in _KET_DA_THEM or m.get("do_sau"):
             continue
         dd = m.get("du_doan") or {}
         try:

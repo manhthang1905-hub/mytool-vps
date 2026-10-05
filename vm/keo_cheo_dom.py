@@ -145,6 +145,14 @@ _JS_DOC_HOP = r"""
       }
       if (chon !== null) break;
     }
+    if (chon === null) {
+      // không có aria: thuộc tính `checked` / lớp có chữ checked (thuộc tính JS của Polymer KHÔNG thấy
+      // được từ thế giới riêng — chỉ thuộc tính/lớp trên DOM)
+      for (const c of ung) {
+        if (c.hasAttribute && c.hasAttribute('checked')) { chon = true; break; }
+        if (/(^|[\s_-])(checked|isChecked)([\s_-]|$)/i.test(String(c.className || ''))) { chon = true; break; }
+      }
+    }
     const o = Y.tra(nut || r, 'kc_hang', '', 1);
     o.khoa = 'kc_hang_ds'; o.ten = ten; o.chon = chon; o.chu_hang = Y.chuan(r.innerText).slice(0, 120);
     ra.push(o);
@@ -211,6 +219,14 @@ class TrangXem:
         except Exception:  # noqa: BLE001
             return ""
 
+    def doc_thong_bao(self) -> str:
+        """Chữ mọi thông báo nổi đang hiện (toast «Đã lưu vào …») — "" nếu không có/lỗi."""
+        spec = {"chon": self._spec("kc_thong_bao").get("chon") or list(THONG_BAO_MAC_DINH)}
+        try:
+            return str(self.tr.js_tho(_JS_THONG_BAO % json.dumps(spec, ensure_ascii=False)) or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
     def ghi_chan_doan(self, nhan: str) -> dict:
         """Bằng chứng khi hỏng: ảnh + bản đồ DOM (`TrangStudio.ghi_bang_chung`, vm/logs/dom, giữ 50 bộ) + MỌI
         nút trong hàng nút dưới video (aria/chữ/khung) và outerHTML của hàng."""
@@ -237,6 +253,13 @@ class TrangXem:
         return ra
 
 
+#: Chữ thông báo nổi sau khi tích/bỏ tích một danh sách phát (vi/ja/en). "BỎ" dò TRƯỚC "LƯU".
+THONG_BAO_LUU = ("Đã lưu vào", "Đã thêm vào", "Saved to", "Added to", "に保存しました", "に追加しました", "保存しました")
+THONG_BAO_BO = ("Đã xóa khỏi", "Đã xoá khỏi", "Đã bỏ khỏi", "Removed from", "から削除しました", "削除しました")
+#: Nơi YouTube hiện thông báo nổi khi JSON chưa có `kc_thong_bao`.
+THONG_BAO_MAC_DINH = ("tp-yt-paper-toast", "yt-notification-action-renderer", "ytd-notification-action-renderer",
+                      "yt-snackbar-view-model", "[role=alert]", "[role=status]")
+
 #: Hàng nút dưới video khi JSON chưa có `kc_hang_nut`.
 HANG_NUT_MAC_DINH = ("ytd-watch-metadata #actions", "ytd-watch-metadata #top-level-buttons-computed",
                      "ytd-watch-metadata")
@@ -255,6 +278,18 @@ _JS_DAU_VAN = r"""
     }
   }
   return '';
+})(%s)
+"""
+
+_JS_THONG_BAO = r"""
+(function(spec){
+  const Y = window.__yd; if (!Y) return '';
+  const roots = Y.goc(), ra = [];
+  for (const s of (spec.chon || [])) {
+    let x = []; try { x = Y.qsa(roots, s).filter(Y.hien); } catch (e) {}
+    for (const e of x) { const t = Y.chuan(e.innerText); if (t && ra.indexOf(t) < 0) ra.push(t); }
+  }
+  return ra.join(' | ').slice(0, 2000);
 })(%s)
 """
 
@@ -289,6 +324,8 @@ class KeoCheo:
     NGHI = 0.5
     SO_LAN_BAM = 4
     SO_LAN_ON_DINH = 12
+    SO_LAN_TICH = 14
+    NGHI_TICH = 0.3
 
     def __init__(self, trang, nhat_ky=None, ngu=None):
         self.trang = trang
@@ -423,8 +460,58 @@ class KeoCheo:
         except Exception:  # noqa: BLE001 — bằng chứng hỏng không che lỗi gốc
             pass
 
+    def _doc_tich(self, ten: str):
+        """Trạng thái tích của hàng `ten` trong hộp ĐANG MỞ: True | False | None (hộp đóng, không thấy hàng,
+        không rõ)."""
+        h = self.trang.doc_hop()
+        if not h.get("hop"):
+            return None
+        k = hang_cua(h, ten)
+        c = k[0].get("chon") if len(k) == 1 else None
+        return c if c in (True, False) else None
+
+    def _doc_thong_bao(self, ten: str, ten_khac=()):
+        """Thông báo nổi sau khi tích: True «Đã lưu vào <ten>» | False «Đã xoá khỏi…» | None (không có/không
+        nhắc tên, hoặc nhắc một tên KHÁC chứa `ten` — vd «おすすめ 2»). Trang không có `doc_thong_bao` → None."""
+        f = getattr(self.trang, "doc_thong_bao", None)
+        if f is None:
+            return None
+        try:
+            chu = chuan_ten(f() or "")
+        except Exception:  # noqa: BLE001
+            return None
+        if not chu:
+            return None
+        dich = chuan_ten(ten)
+        dai_hon = [chuan_ten(k) for k in ten_khac if dich in chuan_ten(k) and chuan_ten(k) != dich]
+        if dich not in chu or any(k in chu for k in dai_hon):
+            return None
+        if any(w in chu for w in THONG_BAO_BO):
+            return False
+        if any(w in chu for w in THONG_BAO_LUU):
+            return True
+        return None
+
+    def _cho_tich(self, ten: str, ten_khac=()) -> tuple:
+        """Dò ~`SO_LAN_TICH`×`NGHI_TICH` giây sau khi bấm hàng: `(True|False|None, nguồn)`. Chỉ để ghi
+        nhật ký/bằng chứng — quyết định là lần đọc sau khi MỞ LẠI hộp."""
+        cuoi = None
+        for _ in range(self.SO_LAN_TICH):
+            tb = self._doc_thong_bao(ten, ten_khac)
+            if tb is not None:
+                return tb, "thong_bao"
+            v = self._doc_tich(ten)
+            if v is True:
+                return True, "hang"
+            if v is False:
+                cuoi = False
+            self.ngu(self.NGHI_TICH)
+        return cuoi, ("hang_chua_tich" if cuoi is False else "")
+
     def dong_hop(self) -> None:
         self.buoc = "dong_hop"
+        if self._hop_da_dong():          # hộp đời mới có thể tự đóng sau khi tích — không Escape thừa
+            return
         pt = self.trang.tim("kc_dong_hop")
         if pt:
             try:
@@ -488,9 +575,9 @@ class KeoCheo:
             kq["loi_buoc"] = self.buoc or "?"
         if kq["ket"].startswith("loi"):
             self.nk("học danh sách phát qua {0}: {1}".format(vid, kq["ket"]))
+            self._chan_doan(kq, "keo-cheo-hoc-loi-{0}".format(vid))
             if hop_mo:
                 self._dong_im()
-            self._chan_doan(kq, "keo-cheo-hoc-loi-{0}".format(vid))
         return kq
 
     def them(self, vid: str, ten_ds: str, che_do: str = "that") -> dict:
@@ -533,13 +620,12 @@ class KeoCheo:
                 hop_mo = False
                 return kq
             self.buoc = "tich"
-            self.trang.bam(h)
-
-            def da_tich():
-                k = hang_cua(self.trang.doc_hop(), ten_ds)
-                return len(k) == 1 and k[0].get("chon") is True
-            if not self._cho(da_tich, so_lan=16):
-                raise LoiKeoCheo("tich", "đã bấm «{0}» nhưng hộp chưa hiện tích".format(ten_ds))
+            self.trang.bam(h)                    # MỘT lần duy nhất — bấm nữa là BỎ tích
+            # 06/10/2026 đo thật: tích ĐÃ lưu trên YouTube mà đọc ngay sau bấm không thấy (hộp đời mới tự
+            # đóng / hàng dựng lại / trạng thái về chậm) → báo lỗi oan. Giờ: dò ~4 giây mọi tín hiệu
+            # (trạng thái hàng + thông báo «Đã lưu vào…»), rồi ĐÓNG + MỞ LẠI hộp — lần đọc sau khi mở lại
+            # mới quyết định. Không rõ thì KHÔNG bấm lại.
+            kq["tich_ngay"], kq["tich_nguon"] = self._cho_tich(ten_ds, kq.get("danh_sach_co") or ())
             self.dong_hop()
             hop_mo = False
             self.ngu(2.0)
@@ -547,13 +633,22 @@ class KeoCheo:
             hop2 = self.mo_hop()
             hop_mo = True
             k2 = hang_cua(hop2, ten_ds)
-            ok = len(k2) == 1 and k2[0].get("chon") is True
+            sau = k2[0].get("chon") if len(k2) == 1 else None
             self.dong_hop()
             hop_mo = False
-            if not ok:
-                raise LoiKeoCheo("doc_lai", "mở lại hộp: «{0}» KHÔNG còn tích (YouTube chưa lưu?)".format(ten_ds))
+            kq["tich_mo_lai"] = sau
+            if sau is not True:
+                if sau is None:
+                    raise LoiKeoCheo("trang_thai", "mở lại hộp: không đọc được trạng thái «{0}» (tích ngay sau bấm: "
+                                                   "{1})".format(ten_ds, kq["tich_ngay"]))
+                if kq["tich_ngay"] is True:
+                    raise LoiKeoCheo("doc_lai", "mở lại hộp: «{0}» KHÔNG còn tích (YouTube chưa lưu?)".format(ten_ds))
+                raise LoiKeoCheo("tich", "đã bấm «{0}» một lần, mở lại hộp vẫn chưa tích ({1})".format(
+                    ten_ds, kq["tich_nguon"] or "không tín hiệu"))
             kq["ket"] = "ok"
-            self.nk("đã thêm {0} vào «{1}» — đọc lại: đã tích".format(vid, ten_ds))
+            self.nk("đã thêm {0} vào «{1}» — {2}; mở lại hộp: đã tích".format(
+                vid, ten_ds, "thấy tích ngay ({0})".format(kq["tich_nguon"]) if kq["tich_ngay"] else
+                "ngay sau bấm chưa đọc được tích"))
         except LoiKeoCheo as loi:
             kq["ket"] = "loi:{0}: {1}".format(loi.buoc, loi.ly_do)
             kq["loi_buoc"] = loi.buoc
@@ -562,9 +657,9 @@ class KeoCheo:
             kq["loi_buoc"] = self.buoc or "?"
         if kq["ket"].startswith("loi"):
             self.nk("kéo chéo {0} → «{1}»: {2}".format(vid, ten_ds, kq["ket"]))
+            self._chan_doan(kq, "keo-cheo-loi-{0}".format(vid))     # TRƯỚC khi đóng hộp: bằng chứng có hộp
             if hop_mo:
                 self._dong_im()
-            self._chan_doan(kq, "keo-cheo-loi-{0}".format(vid))
         return kq
 
 

@@ -671,6 +671,110 @@ class TestPhanTuMat:
         assert kcd.TrangXem(TrHong(), {}).dau_van() == ""
 
 
+class TrangTichCham(TrangGia):
+    """Đo thật 06/10/2026: tích ĐÃ lưu mà đọc ngay sau bấm không thấy. `cham`: số lần đọc hộp sau bấm hàng mà
+    trạng thái còn None (aria chưa về); `tu_dong`: hộp tự đóng ngay khi bấm hàng; `thong_bao`: chữ toast."""
+
+    def __init__(self, ds, cham=0, tu_dong=False, thong_bao="", **kw):
+        super().__init__(ds, **kw)
+        self.cham, self.tu_dong, self.tb = cham, tu_dong, thong_bao
+        self.da_bam_hang = False
+        self.chan_doan_khi_mo = []
+
+    def bam(self, pt):
+        super().bam(pt)
+        if pt["id"].startswith("hang:"):
+            self.da_bam_hang = True
+            if self.tu_dong:
+                self.mo = False
+
+    def doc_hop(self):
+        h = super().doc_hop()
+        if self.da_bam_hang and self.cham > 0 and h.get("hop"):
+            self.cham -= 1
+            return {"hop": True, "hang": [dict(x, chon=None) for x in h["hang"]]}
+        return h
+
+    def doc_thong_bao(self):
+        return self.tb if self.da_bam_hang else ""
+
+    def ghi_chan_doan(self, nhan):
+        self.chan_doan_khi_mo.append(self.mo)
+        return {"anh": "anh-" + nhan}
+
+
+class TestXacNhanTich:
+    def _so_bam_hang(self, tr):
+        return sum(1 for b in tr.bam_ds if b.startswith("hang:"))
+
+    def test_aria_ve_cham_hai_lan_doc(self):
+        tr = TrangTichCham(DS, cham=2)
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["ket"] == "ok" and kq["tich_ngay"] is True and kq["tich_nguon"] == "hang"
+        assert self._so_bam_hang(tr) == 1 and tr.luu["おすすめ"] is True
+
+    def test_aria_khong_ve_mo_lai_quyet_dinh(self):
+        tr = TrangTichCham(DS, cham=999)                       # cả 14 lần dò đều None
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["tich_ngay"] is None
+        # lần mở lại cũng None (cham còn) → không quyết được → lỗi trạng thái, KHÔNG bấm lần hai
+        assert kq["ket"].startswith("loi:trang_thai") and self._so_bam_hang(tr) == 1
+
+    def test_hop_tu_dong_mo_lai_thay_tich_la_ok(self):
+        tr = TrangTichCham(DS, tu_dong=True)
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["ket"] == "ok" and kq["tich_ngay"] is None and kq["tich_mo_lai"] is True
+        assert self._so_bam_hang(tr) == 1
+        assert tr.bam_ds == ["nut_luu", "hang:おすすめ", "nut_luu", "dong"] and tr.esc == 0
+
+    def test_hop_tu_dong_mo_lai_chua_tich_la_loi(self):
+        tr = TrangTichCham(DS, tu_dong=True, an_tich=True)
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["ket"].startswith("loi:tich") and "mở lại" in kq["ket"] and self._so_bam_hang(tr) == 1
+
+    def test_thong_bao_luu(self):
+        tr = TrangTichCham(DS, tu_dong=True, thong_bao="Đã lưu vào おすすめ Hoàn tác")
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["ket"] == "ok" and kq["tich_ngay"] is True and kq["tich_nguon"] == "thong_bao"
+
+    def test_thong_bao_ten_khac_khong_tinh(self):
+        tr = TrangTichCham(DS, tu_dong=True, thong_bao="Đã lưu vào おすすめ 2")
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["tich_nguon"] != "thong_bao" and kq["ket"] == "ok"   # mở lại vẫn quyết
+
+    def test_thong_bao_bo_tich_khong_bam_lai(self):
+        tr = TrangTichCham({"おすすめ": False}, tu_dong=True, an_tich=True, thong_bao="Đã xóa khỏi おすすめ")
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["tich_ngay"] is False and kq["ket"].startswith("loi:tich") and self._so_bam_hang(tr) == 1
+
+    def test_bang_chung_truoc_khi_dong_hop(self):
+        tr = TrangTichCham(DS)
+        kq = may(tr).them("abcdefghijk", "không tồn tại")
+        assert kq["ket"].startswith("loi:tim_ds") and tr.chan_doan_khi_mo == [True] and not tr.mo
+
+    def test_da_co_ghi_so_co_du_doan_va_duoc_do(self, tmp_path):
+        tm = str(tmp_path / "tt")
+        tr = TrangGia(DS)
+        hd = {"viec": "them", "kenh_chu": "L", "danh_sach_phat": "孤独を楽しむ人", "video_id": "abcdefghijk",
+              "kenh_video": "E1", "du_doan": {"view_luc_them": 10, "doi_chung": {}, "kiem_sau_ngay": 7}}
+        ra = kcd.chay_viec(may(tr), "L", [hd], "that", thu_muc=tm, ngu=lambda _s: None)
+        assert ra[0]["ket"] == "da_co" and self._so_bam_hang(tr) == 0
+        muc = kc.doc_da_them(tm)["muc"]
+        assert [m["ket"] for m in muc] == ["da_co"] and muc[0]["du_doan"]["view_luc_them"] == 10
+        do = kc.do_hieu_qua(str(tmp_path), tm, bay_gio=dt.datetime.now() + dt.timedelta(days=8))
+        assert len(do) == 1 and do[0]["do_sau"]["ket"] == "khong_du_so"   # có đo (không có bảng → thiếu số)
+
+    def test_da_co_thi_ke_hoach_khong_lap_lai(self, tmp_path):
+        dung_kenh(tmp_path, "L", (100, 900), ds="孤独を楽しむ人")
+        dung_kenh(tmp_path, "E1", (0, 1), video=[(_vid(1), "孤独A", truoc(30), 1)])
+        tm = str(tmp_path / "trang-thai")
+        hd = lap(tmp_path)[0]
+        kc.ghi_ket_qua(tm, hd, "loi:tich: đã bấm", luc=BAY_GIO)
+        assert [h["video_id"] for h in _them(lap(tmp_path))] == [_vid(1)]    # lỗi oan → lên lại
+        kc.ghi_ket_qua(tm, hd, "da_co", luc=BAY_GIO)
+        assert _them(lap(tmp_path)) == []
+
+
 class TestHocDs:
     def test_hoc_ds_khong_tich(self):
         tr = TrangGia(DS)

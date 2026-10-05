@@ -959,6 +959,17 @@
         "#above-the-fold #actions",
         "ytd-watch-metadata"
       ]
+    },
+    "kc_thong_bao": {
+      "ghi_chu": "07/10/2026 thông báo nổi sau khi tích («Đã lưu vào <tên>» / «保存しました» / «Saved to») — tín hiệu phụ; quyết định vẫn là lần mở lại hộp",
+      "chon": [
+        "tp-yt-paper-toast",
+        "yt-notification-action-renderer",
+        "ytd-notification-action-renderer",
+        "yt-snackbar-view-model",
+        "[role=alert]",
+        "[role=status]"
+      ]
     }
   },
   "cam_bam_binh_luan": {
