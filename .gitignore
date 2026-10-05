@@ -19,6 +19,7 @@
 !/.gitattributes
 !/core/
 !/ui_qt/
+!/ui_web/
 !/_sdk/
 !/tests/
 !/vm/
