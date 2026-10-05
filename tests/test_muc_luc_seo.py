@@ -133,10 +133,11 @@ def test_dat_muc_luc_chen_khi_chua_co_va_go_khi_duoi_3_chuong(tmp_path):
 
     seo = tmp_path / "1-seo.txt"
     seo.write_text("DESCRIPTION:\nmô tả.\n\n#a #b\n\nHASHTAGS:\n#a #b\n", encoding="utf-8")
-    assert dat_muc_luc_seo(str(seo), ["00:00 a", "00:30 b", "01:00 c"], "vi") == "chen"
+    # Tiếng không có nhãn riêng (en) → "Chapters"; nhãn theo tiếng (目次/목차/Mục lục): tests/test_ngach_khac_tieng.py.
+    assert dat_muc_luc_seo(str(seo), ["00:00 a", "00:30 b", "01:00 c"], "en") == "chen"
     chu = seo.read_text(encoding="utf-8")
     assert "📌 Chapters" in chu and chu.index("Chapters") < chu.index("HASHTAGS:")
-    assert dat_muc_luc_seo(str(seo), [], "vi") == "go"
+    assert dat_muc_luc_seo(str(seo), [], "en") == "go"
     assert "Chapters" not in seo.read_text(encoding="utf-8")
 
 

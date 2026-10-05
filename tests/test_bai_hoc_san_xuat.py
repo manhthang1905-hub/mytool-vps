@@ -367,6 +367,9 @@ def test_tren_du_lieu_that_tl4_t7_co_ca_ba_muc_tin_cay():
     """`CHANNEL/TL4-T7/chi-so/` là số liệu Studio THẬT đã có sẵn trong kho — không dựng giả,
     không gọi mạng. `bay_gio` cố định để bài kiểm không tự đổi kết quả theo ngày chạy (một
     video (`v18718ee920`) sẽ vượt mốc 168h trong vài ngày tới nếu dùng "bây giờ" thật)."""
+    if not os.path.isdir(os.path.join(GOC_THAT, "CHANNEL", "TL4-T7", "chi-so")):
+        import pytest
+        pytest.skip("không có số liệu kênh thật (bản clone sạch / máy khác)")
     videos = bh.video_du_tuoi_de_hoc(GOC_THAT, "TL4-T7", bay_gio=BAY_GIO)
     assert len(videos) >= 10, "kênh có số liệu thật, phải rút được một lượng video hợp lý"
     bai_hoc = bh.rut_bai_hoc(GOC_THAT, "TL4-T7", bay_gio=BAY_GIO)

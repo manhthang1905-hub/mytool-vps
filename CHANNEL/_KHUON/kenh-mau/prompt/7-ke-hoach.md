@@ -25,7 +25,7 @@ only thing they share.
 4. **A place is used at most twice in the whole video, and never in two
    chapters in a row.** Pick from the everyday settings of the audience note
    below; at least half the chapters happen in real everyday places
-   (apartment, office, train, konbini, cafe, park, street), the rest may be a
+   (apartment, office, train, convenience store, cafe, park, street), the rest may be a
    more symbolic space when the narration is about an idea rather than a
    person.
 5. Each place gets an hour and a light: `Friday 9 pm, only the desk lamp on`,

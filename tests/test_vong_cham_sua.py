@@ -42,6 +42,11 @@ def _muc(nhan: str, thu_muc: str):
         reason="VPS không mang dữ liệu khuôn mẫu ({0} không tồn tại)".format(thu_muc)))
 
 
+#: Hai bài so TL4-T7-v2 với TL4-T7 cũ cần CẢ HAI kênh thật — bản clone sạch / máy khác không có.
+_CO_HAI_KENH_THAT = all(os.path.isfile(os.path.join(GOC, "CHANNEL", k, "kenh.yaml")) for k in ("TL4-T7", "TL4-T7-v2"))
+_CAN_HAI_KENH_THAT = pytest.mark.skipif(not _CO_HAI_KENH_THAT,
+                                        reason="không có kênh thật TL4-T7 / TL4-T7-v2 (bản clone sạch)")
+
 #: Vòng này bật ở TL4-T7-v2 (bản thử lời nhắc). TL4-T7 cũ giữ nguyên dây chuyền cũ —
 #: chủ dự án 09/09/2026: *"cập nhật cho TL4-T7-V2, TL4-T7 cũ cứ để như cũ"*.
 KENH = [_muc("TL4-T7-v2", os.path.join(GOC, "CHANNEL", "TL4-T7-v2", "prompt")),
@@ -295,6 +300,7 @@ class TestDuLieu:
             assert "<<" not in p, "{0}: còn ô chưa điền: {1}".format(nhan, p[:200])
         assert GOC_DOI_THU in va.nhan[0] and "đoạn 2 khô" in va.nhan[0]
 
+    @_CAN_HAI_KENH_THAT
     def test_v2_moi_bo_cham_sua_deu_nhan_du_lieu_khan_gia(self):
         """Ở v2, chấm 3 bản / hoàn thiện / chấm hook cũng được xem bình luận gốc + số kênh."""
         d = os.path.join(GOC, "CHANNEL", "TL4-T7-v2", "prompt")
@@ -380,6 +386,7 @@ class TestDuLieu:
         assert any(x.startswith("mời đăng ký ở 9:30 (95% bài)") for x in dong)
         assert any("đoán còn 70% người, thật 95%" in x for x in dong)
 
+    @_CAN_HAI_KENH_THAT
     def test_kenh_v2_bat_vong_kenh_cu_giu_nguyen(self):
         from core.kenh import doc_kenh
         k = doc_kenh(os.path.join(GOC), "TL4-T7-v2")

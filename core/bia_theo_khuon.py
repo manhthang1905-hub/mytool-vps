@@ -730,6 +730,17 @@ _LUAT_CHU_TU_DO = ("Keep the hook's meaning; you may shorten it. HARD LIMITS: ea
 #: aV4: 8 + 10 = 18). Đếm bằng `_chuan` (bỏ dấu câu/khoảng trắng).
 TRAN_KY_TU_TANG = 12
 TRAN_KY_TU_TONG = 20
+#: 06/10/2026 — trần trên đếm cho chữ Nhật/Hàn/Trung (một ký tự ≈ một âm tiết, ô vuông rộng). Chữ La-tinh
+#: (en/vi/es…) cần ~gấp đôi ký tự cho cùng lượng ý và cùng bề ngang: 12/20 cắt cụt mọi bìa tiếng Anh.
+HE_SO_TRAN_LA_TINH = 2
+
+
+def tran_ky_tu(chu: str) -> Tuple[int, int]:
+    """(trần mỗi tầng, trần tổng) cho chữ bìa `chu`: có kana/kanji/Hangul → (12, 20) như cũ; chỉ chữ
+    La-tinh → nhân `HE_SO_TRAN_LA_TINH`."""
+    if not chu or re.search(r"[\u1100-\u11ff\u3000-\u30ff\u3130-\u318f\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]", chu):
+        return TRAN_KY_TU_TANG, TRAN_KY_TU_TONG
+    return TRAN_KY_TU_TANG * HE_SO_TRAN_LA_TINH, TRAN_KY_TU_TONG * HE_SO_TRAN_LA_TINH
 
 
 def _chuan(s: str) -> str:
@@ -747,7 +758,8 @@ def kiem_chu_tang(chu_tang: Any, chu_bia: str, *, co_dinh: bool) -> bool:
     if not isinstance(chu_tang, list) or not chu_tang:
         return False
     cac = [_chuan(chu_cua_tang(t)) for t in chu_tang if isinstance(t, dict)]
-    if not all(cac) or any(len(c) > TRAN_KY_TU_TANG for c in cac) or sum(map(len, cac)) > TRAN_KY_TU_TONG:
+    tran_tang, tran_tong = tran_ky_tu(chu_bia or "".join(cac))
+    if not all(cac) or any(len(c) > tran_tang for c in cac) or sum(map(len, cac)) > tran_tong:
         return False
     if co_dinh and chu_bia:
         goc = _chuan(chu_bia)
@@ -763,10 +775,11 @@ def kiem_chu_tang(chu_tang: Any, chu_bia: str, *, co_dinh: bool) -> bool:
 def _cat_theo_tran(s: str) -> str:
     """Chữ bìa dài hơn TRAN_KY_TU_TONG → bỏ bớt mệnh đề ĐẦU (theo khoảng trắng/dấu
     câu) cho tới khi vừa; không có chỗ cắt thì giữ TRAN_KY_TU_TONG ký tự cuối."""
-    while len(_chuan(s)) > TRAN_KY_TU_TONG:
+    tran = tran_ky_tu(s)[1]
+    while len(_chuan(s)) > tran:
         m = re.search(r"[\s、。！？!?「」『』]+", s)
         if not m or m.end() >= len(s):
-            s = s[-TRAN_KY_TU_TONG:]
+            s = s[-tran:]
             break
         s = s[m.end():].strip()
     return s
@@ -851,7 +864,7 @@ def viet_bien_the(goi_chat: Optional[Callable[..., str]], khuon_chu: Dict[str, A
     mau_chu = json.dumps([{"vi_tri": t.get("vi_tri"), "noi_dung": t.get("noi_dung"),
                            "phan_mau": t.get("phan_mau")} for t in tang_k], ensure_ascii=False)
     _ = tong
-    luat = (_LUAT_CHU_CO_DINH if co_dinh_chu else _LUAT_CHU_TU_DO).format(TRAN_KY_TU_TANG, TRAN_KY_TU_TONG)
+    luat = (_LUAT_CHU_CO_DINH if co_dinh_chu else _LUAT_CHU_TU_DO).format(*tran_ky_tu(chu_bia))
     ra: Dict[str, Any] = {}
     if goi_chat is not None:
         try:
@@ -888,14 +901,42 @@ _FONT_UU_TIEN = ("YuGothB.ttc", "meiryob.ttc", "msgothic.ttc", "YuGothM.ttc", "m
                  "NotoSansJP-Black.otf", "NotoSansCJK-Black.ttc")
 
 
-def _tim_font(goc: str = "") -> str:
+#: 06/10/2026 — máy/ngách khác tiếng (thử dựng ngách nấu ăn Hàn): Yu Gothic/Meiryo KHÔNG có chữ Hangul (bìa ra ô
+#: vuông) và thiếu nhiều chữ La-tinh có dấu (tiếng Việt). Chọn bộ font theo CHỮ sẽ vẽ (+ tiếng kênh nếu biết);
+#: chữ Nhật (có kana/kanji) giữ nguyên thứ tự cũ.
+_FONT_HAN = ("malgunbd.ttf", "NotoSansKR-Black.otf", "NotoSansCJKkr-Black.otf", "NotoSansCJK-Black.ttc",
+             "malgun.ttf", "gulim.ttc")
+_FONT_LA_TINH = ("arialbd.ttf", "segoeuib.ttf", "NotoSans-Black.ttf", "DejaVuSans-Bold.ttf", "arial.ttf",
+                 "segoeui.ttf")
+_RE_HANGUL = re.compile(r"[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]")
+_RE_CJK_NHAT_TRUNG = re.compile(r"[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]")
+
+
+def bo_font_cho(chu: str = "", ngon_ngu: str = "") -> Tuple[str, ...]:
+    """Thứ tự tên tệp font nên thử cho chữ `chu` (kênh tiếng `ngon_ngu`, có thể rỗng).
+
+    - có Hangul, hoặc kênh `ko` mà chữ không có kana/kanji → font Hàn trước;
+    - không kana/kanji/Hangul, và (kênh khai tiếng khác ja/zh, hoặc chữ có ký tự ngoài ASCII như chữ Việt có dấu)
+      → font La-tinh trước;
+    - còn lại (chữ Nhật, hoặc chữ ASCII trơn mà không biết tiếng kênh) → thứ tự cũ (font Nhật)."""
+    chu = str(chu or "")
+    nn = str(ngon_ngu or "").strip().lower().split("-")[0].split("_")[0]
+    co_cjk = bool(_RE_CJK_NHAT_TRUNG.search(chu))
+    if _RE_HANGUL.search(chu) or (nn == "ko" and not co_cjk):
+        return _FONT_HAN + _FONT_UU_TIEN
+    if not co_cjk and ((nn and nn not in ("ja", "zh")) or (not nn and re.search(r"[^\x00-\x7f]", chu))):
+        return _FONT_LA_TINH + _FONT_UU_TIEN
+    return ("NotoSansJP-Black.otf",) + _FONT_UU_TIEN
+
+
+def _tim_font(goc: str = "", chu: str = "", ngon_ngu: str = "") -> str:
     cho = []
     if goc:
         cho.append(os.path.join(goc, "assets", "fonts"))
     cho.append(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
     cho.append(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"))
     for thu_muc in cho:
-        for ten in (("NotoSansJP-Black.otf",) + _FONT_UU_TIEN):
+        for ten in bo_font_cho(chu, ngon_ngu):
             d = os.path.join(thu_muc, ten)
             if os.path.isfile(d):
                 return d
@@ -951,7 +992,7 @@ def _cho_xuong_dong(s: str) -> int:
 
 
 def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
-                   goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720)) -> bool:
+                   goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "") -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
@@ -962,7 +1003,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     có font/không mở được ảnh."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
-    font_duong = _tim_font(goc)
+    font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu)
     if not font_duong:
         return False
     try:

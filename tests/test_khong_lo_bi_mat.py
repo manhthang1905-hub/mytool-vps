@@ -122,6 +122,11 @@ NGOAI_LE = (
         "liên kết khách bấm để lấy Voice ID — xem ghi chú NỢ ở trên",
     ),
     (
+        "core/giam_doc/_tu_dong.py", "|captcha",
+        "CHUỖI CÓ VIỆC THẬT: nằm trong `_RE_NGUOI` để NHẬN RA việc chỉ người làm "
+        "được (giải captcha) và báo người — không phải chuyện qua mặt máy dò.",
+    ),
+    (
         "_sdk/shopapi/_validation.py", "elevenlabs.io/app/voice-library",
         "câu báo lỗi chỉ khách chỗ lấy Voice ID — xem ghi chú NỢ ở trên",
     ),

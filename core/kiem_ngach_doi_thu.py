@@ -537,11 +537,11 @@ def _ghi_lam_ai(goc: str, ma_kenh: str, phan: Dict[str, Dict[str, Any]]) -> None
 
 
 def _tai_url(url: str) -> Optional[bytes]:
-    import urllib.request  # noqa: PLC0415
+    from .mang_an_toan import mo_url  # noqa: PLC0415 — cửa chung có chứng chỉ (certifi)
 
     try:
-        rq = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "ja,en;q=0.8"})
-        with urllib.request.urlopen(rq, timeout=20) as ph:  # noqa: S310 — chỉ youtube.com / i.ytimg.com
+        with mo_url(url, cho=20, headers={"User-Agent": "Mozilla/5.0",
+                                          "Accept-Language": "ja,en;q=0.8"}) as ph:  # chỉ youtube.com / i.ytimg.com
             return ph.read() or None
     except Exception:  # noqa: BLE001 — mạng hỏng / ảnh gỡ là chuyện thường
         return None

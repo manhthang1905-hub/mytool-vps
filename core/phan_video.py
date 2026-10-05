@@ -744,6 +744,22 @@ def muc_luc(kh: KeHoach, srt_sach: str, lam_sach: bool = False) -> List[str]:
 
 _GACH = "━━━━━━━━━━━━━━"
 
+#: Nhãn khối mục lục theo tiếng kênh (06/10/2026 — ngách/máy khác tiếng). Tiếng không có trong bảng → "Chapters".
+NHAN_MUC_LUC = {"ja": "目次", "ko": "목차", "vi": "Mục lục", "zh": "目录"}
+
+
+def dau_muc_luc(ngon_ngu: str) -> str:
+    """Dòng đầu khối mục lục: `📌 目次` (ja, như cũ), `📌 목차` (ko)…, mặc định `📌 Chapters`."""
+    ma = str(ngon_ngu or "").strip().lower().split("-")[0].split("_")[0]
+    return "📌 " + NHAN_MUC_LUC.get(ma, "Chapters")
+
+
+def co_muc_luc(seo: str) -> bool:
+    """Mô tả đã có một khối mục lục (của tool hay người/AI viết) — để không chèn đúp."""
+    seo = str(seo or "")
+    # "目次" khớp ở bất cứ đâu như luật cũ; nhãn khác chỉ khớp khi đứng cuối dòng (tránh khớp nhầm câu thường).
+    return "目次" in seo or any((n + "\n") in seo for n in ("Chapters",) + tuple(NHAN_MUC_LUC.values()))
+
 
 def dat_muc_luc_seo(duong_seo: str, dong: Sequence[str], ngon_ngu: str) -> str:
     """ĐẶT khối mục lục trong `1-seo.txt`: thay khối cũ (giữa hai dòng `━…`
@@ -755,7 +771,7 @@ def dat_muc_luc_seo(duong_seo: str, dong: Sequence[str], ngon_ngu: str) -> str:
     seo = _doc_chu(duong_seo)
     if not seo:
         return ""
-    dau = "📌 目次" if ngon_ngu == "ja" else "📌 Chapters"
+    dau = dau_muc_luc(ngon_ngu)
     khoi = [_GACH, dau] + list(dong) + [_GACH] if dong else []
     cac = seo.replace("\r\n", "\n").split("\n")
     # Tìm khối của tool: dòng ━…, rồi dòng 📌, …, dòng ━… đóng.
@@ -776,7 +792,7 @@ def dat_muc_luc_seo(duong_seo: str, dong: Sequence[str], ngon_ngu: str) -> str:
     else:
         if not khoi:
             return "giu"
-        if "目次" in seo or "Chapters\n" in seo:
+        if co_muc_luc(seo):
             return "giu"        # khối lạ do người/AI viết — không chèn đúp
         vi_tri = None
         for i, x in enumerate(cac):

@@ -44,6 +44,10 @@ Lệnh làm bốn việc, chạy lại an toàn (đã có thì dùng lại, câu
    (trạm giao 3 cụm/ngày qua `/tim-kiem/can-tim`).
 4. **Giai đoạn:** `chien_luoc: "tu_dong"` — kênh mới chọn nguồn bằng VPH + lượt thăm dò; có video thắng thật thì tự sang V7.
 
+Kênh thứ hai, thứ ba của cùng ngách: chạy lại đúng lệnh với cùng `--nhom` và `--ma-kenh` khác — hồ sơ ngách dùng lại,
+kênh tự nhận tệp khán giả còn trống. Danh sách đầy đủ cho máy mới + tiếng mới (font, giọng, việc chỉ kiểm được khi chạy
+thật): `docs/PHAT-TRIEN.md` mục 7.
+
 Công tắc tiền và tự động để TẮT. Việc của người (giọng đọc, đăng nhập Chrome kênh, bật `ngan_sach_ngay`/`tu_chay`) ghi ở
 `CHANNEL/<MÃ>/KHOI-TAO.md`. Trước khi cho tiêu tiền: `python tu_chay.py --kenh <mã> --thu`.
 

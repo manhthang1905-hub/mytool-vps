@@ -27,7 +27,10 @@ class TestTenTieng:
 
 class TestPromptTL4:
     def test_prompt_viet_noi_ro_tieng(self):
-        k = doc_kenh(GOC, "TL4-T7")
+        # Kênh thật nếu máy có; bản clone sạch thì khuôn kênh ship kèm kho.
+        ma = "TL4-T7" if os.path.isfile(os.path.join(GOC, "CHANNEL", "TL4-T7", "kenh.yaml")) \
+            else os.path.join("_KHUON", "kenh-mau")
+        k = doc_kenh(GOC, ma)
         assert "<<NGON_NGU>>" in k.prompt["2-viet.md"]
         assert "viết lại cho tôi" in k.prompt["2-viet.md"]
         assert "cho t " not in k.prompt["2-viet.md"]

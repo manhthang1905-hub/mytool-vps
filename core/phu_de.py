@@ -667,7 +667,9 @@ def nghe_trong_tien_trinh_nay(duong_mp3: str, *, ngon_ngu: str = "",
     may = WhisperModel(ten, device=device, compute_type=compute_type,
                        local_files_only=bool(san and os.path.isdir(san)))
     doan, _tin = may.transcribe(
-        duong_mp3, language=(ngon_ngu or None), word_timestamps=True,
+        # Whisper chỉ nhận mã ngắn ("ko", không "ko-KR"/"KO") — kenh.yaml máy khác có thể khai dạng dài.
+        duong_mp3, language=(str(ngon_ngu or "").strip().lower().split("-")[0].split("_")[0] or None),
+        word_timestamps=True,
         vad_filter=True, beam_size=1, condition_on_previous_text=False)
     ra: List[Tuple[str, float, float]] = []
     for muc in doan:

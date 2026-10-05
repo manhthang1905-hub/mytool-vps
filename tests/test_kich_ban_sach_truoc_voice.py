@@ -300,7 +300,9 @@ class TestChayThatTungKenhMau:
         from core.kenh import doc_kenh, liet_ke_kenh
 
         ra = []
-        for ma in liet_ke_kenh(self.GOC):
+        # Khuôn kênh ship kèm kho (`khoi_tao_ngach` chép nó cho mọi kênh mới) cũng là
+        # "thứ tool phát đi" — và là kênh mẫu DUY NHẤT trên bản clone sạch.
+        for ma in list(liet_ke_kenh(self.GOC)) + [os.path.join("_KHUON", "kenh-mau")]:
             try:
                 k = doc_kenh(self.GOC, ma)
             except Exception:  # noqa: BLE001 — kênh hỏng là việc của bài kiểm khác
@@ -310,7 +312,11 @@ class TestChayThatTungKenhMau:
         return ra
 
     def test_co_kenh_mau_de_ma_kiem(self):
-        assert len(self._cac_kenh_mau()) >= 5
+        from core.kenh import liet_ke_kenh
+
+        # Máy có kênh thật: khuôn + ≥4 kênh. Bản clone sạch (không có CHANNEL/<kênh>/): chỉ khuôn.
+        can = 5 if list(liet_ke_kenh(self.GOC)) else 1
+        assert len(self._cac_kenh_mau()) >= can
 
     def test_moi_kenh_mau_ra_tep_sach(self):
         hong = []

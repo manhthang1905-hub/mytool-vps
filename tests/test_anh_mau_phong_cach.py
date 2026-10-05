@@ -181,8 +181,14 @@ def test_moi_phong_cach_that_su_co_bo_anh_mau():
     thôi, mỗi mẫu 1 video và làm nó bé". Ba video 720p mỗi phong cách là 105 MB
     nằm vĩnh viễn trong lịch sử git; một video 640×360 là 177 KB.
     """
-    from ui_qt.kenh import (PHONG_CACH, _anh_mau_cua, _mau_xem_duoc,
+    from ui_qt.kenh import (PHONG_CACH, THU_MUC_MAU, _anh_mau_cua, _mau_xem_duoc,
                             _video_mau_cua_nhieu)
+
+    # Bộ mẫu là tệp media (`*.jpg`/`*.mp4`) — `.gitignore` chặn media nên bản clone
+    # sạch từ GitHub KHÔNG có thư mục này. Thiếu HẲN thư mục = máy chưa tải bộ mẫu
+    # (bỏ qua); có thư mục mà thiếu phong cách = quên tạo mẫu (vẫn đánh hỏng).
+    if not os.path.isdir(THU_MUC_MAU):
+        pytest.skip("chưa có bộ ảnh mẫu (bản clone sạch — media bị .gitignore)")
 
     thieu = []
     for i, (ten, kv) in enumerate(PHONG_CACH):

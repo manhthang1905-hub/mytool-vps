@@ -1614,7 +1614,7 @@ def _dang_tai_len(goc: str) -> bool:
         ra = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command",
              "(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*may_dang_dom.p[y]*' }).ProcessId"],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         return any(d.strip().isdigit() for d in (ra.stdout or "").splitlines())
     except Exception:  # noqa: BLE001 — không dò được thì coi như ĐANG tải (an toàn: không giết)
         return True
@@ -1626,7 +1626,7 @@ def _pid_la_agent(pid: int) -> bool:
         ra = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command",
              "(Get-CimInstance Win32_Process -Filter 'ProcessId={0}').CommandLine".format(int(pid))],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         return "agent.py" in (ra.stdout or "")
     except Exception:  # noqa: BLE001
         return False

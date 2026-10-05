@@ -272,8 +272,10 @@ class TestDauNoiVaoTool:
         assert "dung_tat_ca()" in chu[chu.index("def closeEvent"):]
 
     def test_tien_trinh_cap_nhat_tach_job(self):
-        chu = self._doc("ui_qt", "cap_nhat.py")
-        assert "CO_TACH_KHOI_JOB" in chu[chu.index("def _tai_xong"):]
+        # Hệ cập nhật duy nhất giờ là `core/cap_nhat_git.py` (docs/PHAT-TRIEN.md mục 3): `sinh_tien_trinh`
+        # mở lượt `keo` tách khỏi job của giao diện. Đường tải zip cũ (`ui_qt/cap_nhat._tai_xong`) đã gỡ.
+        chu = self._doc("core", "cap_nhat_git.py")
+        assert "CO_TACH_KHOI_JOB" in chu[chu.index("def sinh_tien_trinh"):chu.index("def nhip")]
 
     def test_vs_code_va_dong_lenh_tach_job(self):
         chu = self._doc("core", "claude_code.py")

@@ -142,10 +142,12 @@ _LINK = re.compile(r"(https?://|www\.|youtu\.be/|\bt\.me/|\bbit\.ly/|discord\.gg
 _SPAM = ("sub4sub", "sub 4 sub", "check my channel", "visit my channel", "my channel",
          "subscribe to me", "đăng ký kênh mình", "ghé kênh", "sub chéo", "kênh của mình",
          "チャンネル登録お願い", "私のチャンネル", "whatsapp", "telegram", "crypto", "bitcoin",
-         "forex", "nhận quà", "free gift", "giveaway", "promo code", "onlyfans", "18+")
+         "forex", "nhận quà", "free gift", "giveaway", "promo code", "onlyfans", "18+",
+         "맞구독", "구독 부탁", "내 채널")
 _XUC_PHAM = ("fuck", "shit", "bitch", "idiot", "stupid", "retard", "đm", "đmm", "dmm", "địt",
              "đĩ", "ngu vãi", "óc chó", "súc vật", "cút", "死ね", "しね", "バカ", "ばか", "アホ",
-             "あほ", "カス", "きもい", "キモい", "ゴミ", "くず", "クズ", "うざい")
+             "あほ", "カス", "きもい", "キモい", "ゴミ", "くず", "クズ", "うざい",
+             "씨발", "시발", "병신", "개새끼", "꺼져")
 
 
 def loai_binh_luan(noi_dung: str) -> str:
@@ -906,7 +908,7 @@ class MayCmtDom:
             return "cho-xac-minh"
         pt_xn = tr.tim("xem_xac_nhan_ghim", han=5)
         chu_xn = unicodedata.normalize("NFKC", str(tr.doc_chu(pt_xn) or "")).strip() if pt_xn else ""
-        if not pt_xn or chu_xn not in ("Ghim", "Pin", "固定"):
+        if not pt_xn or chu_xn not in ("Ghim", "Pin", "固定", "고정"):
             tr.phim("Escape")
             raise LoiMay("hộp xác nhận ghim lạ (nút «{0}») — không bấm".format(chu_xn[:30]))
         tr.bam(pt_xn)

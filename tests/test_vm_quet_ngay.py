@@ -130,6 +130,8 @@ class TestMotLuotQuetNgay:
         monkeypatch.setattr(ag, "ghi_che_do_mat_cao",
                             lambda ch, quet, han_giay=0, ma="": thu_tu.append(("cong", quet)))
         monkeypatch.setattr(ag, "dong_chrome_kenh", lambda ch: thu_tu.append("dong"))
+        # Cổng "trang chủ đủ tin để cào" đọc sổ thật của kênh — bài này chỉ chốt THỨ TỰ các bước.
+        monkeypatch.setattr(ag, "trang_chu_tin_cay", lambda _k: (True, ""))
         ket = ag.chay_quet_ngay_mot_kenh({}, {"kenh": "A"}, "A")
         assert thu_tu == [("studio", True, True), "trang_chu", "loi_thoai", ("cong", False), "dong"]
         assert ket["xong"] is True

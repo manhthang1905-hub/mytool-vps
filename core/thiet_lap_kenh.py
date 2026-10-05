@@ -239,10 +239,11 @@ def kiem_ho_so(ho_so: Dict[str, Any], thu_muc: str = "", kiem_anh: bool = True) 
 
 
 # ═══════════════════════════ ẢNH BẰNG PIL ════════════════════════════════════
-def _font(goc: str = GOC_TOOL) -> str:
+def _font(goc: str = GOC_TOOL, chu: str = "") -> str:
+    """Font vẽ chữ banner — chọn theo chữ (Hangul / La-tinh có dấu / Nhật), xem `bia_theo_khuon.bo_font_cho`."""
     try:
         from .bia_theo_khuon import _tim_font  # noqa: PLC0415
-        return _tim_font(goc)
+        return _tim_font(goc, chu)
     except Exception:  # noqa: BLE001
         return ""
 
@@ -279,7 +280,7 @@ def anh_banner_tu_nguon(nguon: str, dich: str, dong_chu: Sequence[str] = (), goc
     dong = [chuan_chu(d) for d in dong_chu if chuan_chu(d)][:KHAU_HIEU_TOI_DA]
     if dong:
         x0, y0, x1, y1 = vung_an_toan(rong, cao)
-        fp = _font(goc)
+        fp = _font(goc, " ".join(dong))
         ve = ImageDraw.Draw(nen)
         le = 24
         rong_hop, cao_hop = (x1 - x0) - 2 * le, (y1 - y0) - 2 * le
@@ -308,8 +309,8 @@ def hop_chu_banner(dich: str, dong_chu: Sequence[str], goc: str = GOC_TOOL) -> T
 
     x0, y0, x1, y1 = vung_an_toan(*KICH_THUOC["banner"])
     ve = ImageDraw.Draw(Image.new("RGB", (8, 8)))
-    fp = _font(goc)
     dong = [chuan_chu(d) for d in dong_chu if chuan_chu(d)][:KHAU_HIEU_TOI_DA]
+    fp = _font(goc, " ".join(dong))
     if not dong or not fp:
         return x0, y0, x0, y0
     f = ImageFont.truetype(fp, 40)
@@ -375,9 +376,28 @@ def doc_bo_san(kenh: str, goc: str = GOC_TOOL) -> Dict[str, Any]:
 
 # ═══════════════════════════ NGUỒN (b): LLM + CỔNG ẢNH ═══════════════════════
 def _yaml_kenh(kenh: str, goc: str) -> Dict[str, Any]:
+    """kenh.yaml của kênh, BÙ từ hồ sơ ngách của nhóm những khoá kenh.yaml không khai (06/10/2026 — kênh dựng bởi
+    `khoi_tao_ngach` không có `luat_chon`/`quoc_gia` riêng, LLM viết hồ sơ Studio thiếu hẳn mô tả ngách):
+    `quoc_gia` ← `thi_truong.quoc_gia`, `luat_chon` ← `mo_ta_ngach` + `luat_chon` của ngách. kenh.yaml vẫn thắng."""
     from .kenh import doc_yaml  # noqa: PLC0415
 
-    return doc_yaml(os.path.join(thu_muc_kenh(kenh, goc), "kenh.yaml")) or {}
+    kh = doc_yaml(os.path.join(thu_muc_kenh(kenh, goc), "kenh.yaml")) or {}
+    if kh.get("nhom") and not (kh.get("luat_chon") and kh.get("quoc_gia")):
+        try:
+            from .ho_so_ngach import doc_ngach  # noqa: PLC0415
+
+            hs = doc_ngach(goc, kenh)
+        except Exception:  # noqa: BLE001 — hồ sơ ngách hỏng: dùng kenh.yaml như cũ
+            hs = None
+        if hs is not None and hs.co():
+            kh = dict(kh)
+            qg = str((hs.thi_truong or {}).get("quoc_gia") or "").strip().upper()
+            if qg and not kh.get("quoc_gia"):
+                kh["quoc_gia"] = qg
+            luat = " ".join(x for x in [hs.mo_ta_ngach] + list(hs.luat_chon or []) if x).strip()
+            if luat and not kh.get("luat_chon"):
+                kh["luat_chon"] = luat
+    return kh
 
 
 def _kenh_cung_tuyen(kenh: str, kh: Dict[str, Any], goc: str) -> List[Dict[str, Any]]:

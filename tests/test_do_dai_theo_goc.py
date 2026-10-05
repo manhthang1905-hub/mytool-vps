@@ -91,6 +91,8 @@ class TestNanTheoMucTieuTruyenVao:
 class TestCauHinhTL4:
     def test_TL4_ve_moc_12_15_phut_bang_mot_dong_trong_prompt_viet(self):
         goc = os.path.join(os.path.dirname(__file__), "..")
+        if not os.path.isfile(os.path.join(goc, "CHANNEL", "TL4-T7", "kenh.yaml")):
+            pytest.skip("không có kênh thật TL4-T7 (bản clone sạch / máy khác)")
         k = doc_kenh(goc, "TL4-T7")
         assert k.do_dai_theo_goc is False, (
             "24/08/2026: kênh luôn về 12–15 phút, không bám độ dài gốc nữa")
