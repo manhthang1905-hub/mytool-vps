@@ -95,3 +95,21 @@ def test_nguon_tool_doc_cot_danh_sach_phat():
     csv_ = "Mã gói,Tiêu đề,Sẵn sàng,Danh sách phát\nK-1,T,x,B two\nK-2,T,x,\n"
     hang = nt._dung_hang(csv_, "K", "EDIT XONG")
     assert hang[0][nt.O_DSP] == "B two" and hang[1][nt.O_DSP] == ""
+
+
+def test_chon_danh_sach_phat_qua_han_tra_rong():
+    """05/10: AI treo (ShopAPI mất mạng) không được chặn bàn giao."""
+    import time as _t
+    from core.ban_giao_dang import chon_danh_sach_phat as _chon
+
+    def cham(de):
+        _t.sleep(5)
+        return "A"
+    t0 = _t.monotonic()
+    assert _chon("A | B", "t", "m", cham, han_giay=0.3) == ""
+    assert _t.monotonic() - t0 < 2
+
+
+def test_chon_danh_sach_phat_trong_han_van_chon():
+    from core.ban_giao_dang import chon_danh_sach_phat as _chon
+    assert _chon("A | B", "t", "m", lambda de: "B", han_giay=5) == "B"

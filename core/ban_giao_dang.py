@@ -54,9 +54,36 @@ def ma_goi(kenh: str, luot: str) -> str:
     return "{0}-{1}".format(str(kenh).strip(), str(luot).strip())
 
 
-def chon_danh_sach_phat(danh_sach: str, tieu_de: str, mo_ta: str, goi_ai) -> str:
+#: 05/10: trần chờ AI chọn danh sách phát. Lời gọi chat chờ VÔ HẠN khi mất mạng (su_co.goi_kien_nhan) —
+#: ShopAPI treo 13:09 làm gói TL5 đã dựng xong kẹt ở bàn giao, giữ luôn khe "nang" của cả máy.
+HAN_CHON_DSP_GIAY = 120
+
+
+def _goi_co_han(goi_ai, de: str, han: float):
+    """Gọi `goi_ai(de)` trong luồng nền; quá `han` giây → None (luồng daemon tự chết theo tiến trình)."""
+    import threading  # noqa: PLC0415
+    kq: dict = {}
+
+    def chay():
+        try:
+            kq["tra"] = goi_ai(de)
+        except Exception as loi:  # noqa: BLE001
+            kq["loi"] = loi
+
+    t = threading.Thread(target=chay, name="chon-dsp", daemon=True)
+    t.start()
+    t.join(han)
+    if t.is_alive():
+        return None
+    if "loi" in kq:
+        raise kq["loi"]
+    return kq.get("tra")
+
+
+def chon_danh_sach_phat(danh_sach: str, tieu_de: str, mo_ta: str, goi_ai,
+                        han_giay: float = HAN_CHON_DSP_GIAY) -> str:
     """1 lượt LLM rẻ chọn đúng 1 tên trong `danh_sach` ("a | b | c"). Trả tên
-    ĐÚNG NGUYÊN VĂN, hoặc "" khi không chọn được (lỗi/không khớp) — không ném."""
+    ĐÚNG NGUYÊN VĂN, hoặc "" khi không chọn được (lỗi/không khớp/quá `han_giay`) — không ném."""
     ten = [t.strip() for t in str(danh_sach or "").split("|") if t.strip()]
     if not ten or goi_ai is None:
         return ""
@@ -68,7 +95,7 @@ def chon_danh_sach_phat(danh_sach: str, tieu_de: str, mo_ta: str, goi_ai) -> str
           + "\nVideo description: " + str(mo_ta)[:1500]
           + "\n\nReply with ONLY the exact playlist name, nothing else.")
     try:
-        tra = str(goi_ai(de) or "").strip().strip("\"'`「」- ").strip()
+        tra = str(_goi_co_han(goi_ai, de, han_giay) or "").strip().strip("\"'`「」- ").strip()
     except Exception:  # noqa: BLE001 — AI hỏng: bỏ, máy đăng lùi về hành vi cũ
         return ""
     for t in ten:
