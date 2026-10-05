@@ -429,7 +429,7 @@ def chuan_bi_bo(bo: dict) -> tuple:
 
 def _kc():
     if GOC_TOOL not in sys.path:
-        sys.path.insert(0, GOC_TOOL)
+        sys.path.append(GOC_TOOL)
     from core import keo_cheo  # noqa: PLC0415
     return keo_cheo
 
@@ -638,7 +638,7 @@ def _doc_lenh(argv):
 def _ke_hoach(ngay: str, do: bool = False) -> list:
     """Kế hoạch hôm nay; `do` (chỉ lượt THẬT) — trước đó đo các lần thêm đã đủ ngày (ghi `do_sau` vào sổ)."""
     if GOC_TOOL not in sys.path:
-        sys.path.insert(0, GOC_TOOL)
+        sys.path.append(GOC_TOOL)
     from core import keo_cheo  # noqa: PLC0415
     if not do:
         return keo_cheo.lap_ke_hoach(GOC_TOOL, ngay or None, nhat_ky=log.info)
@@ -656,7 +656,7 @@ def _viec_tay(a) -> dict:
           "cum": "", "cach_chon": "tay", "ly_do": "lệnh tay", "ngay": time.strftime("%Y-%m-%d")}
     try:
         if GOC_TOOL not in sys.path:
-            sys.path.insert(0, GOC_TOOL)
+            sys.path.append(GOC_TOOL)
         from core import keo_cheo  # noqa: PLC0415
         duong_so = os.path.join(GOC, "logs", "so-video-id.json")
         if not hd["kenh_video"]:
