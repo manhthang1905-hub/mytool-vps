@@ -2451,3 +2451,12 @@ def test_luot_thu_khong_duoc_nhan_nuoi(tmp_path):
     auto.ghi_luot(luot)
     assert _nhan_nuoi_luot_mo_coi(goc, "K1", _dt.date.today().isoformat(), set()) == ""
     assert _doc_bao_cao_ngay(goc, "K1", _dt.date.today().isoformat())["runs"] == []
+
+
+def test_xong_chua_ban_giao_05_10(tmp_path):
+    """05/10: video đã dựng mà sổ chưa bàn giao → còn dở (lượt sau bàn giao bù)."""
+    from core.tu_chay import _xong_chua_ban_giao
+    (tmp_path / "8-video.mp4").write_bytes(b"x")
+    assert _xong_chua_ban_giao({"ban_giao": {"da_ban_giao": False}}, str(tmp_path))
+    assert not _xong_chua_ban_giao({"ban_giao": {"da_ban_giao": True}}, str(tmp_path))
+    assert not _xong_chua_ban_giao({"ban_giao": {"da_ban_giao": False}}, str(tmp_path / "khong-co"))

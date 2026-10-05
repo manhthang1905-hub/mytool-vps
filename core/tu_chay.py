@@ -399,6 +399,17 @@ def _coi_nhu_da_xong(luot: auto.LuotChay) -> bool:
     return luot.xong_het or luot.tt("dung").trang_thai == auto.XONG
 
 
+def _xong_chua_ban_giao(r: Dict[str, Any], thu_muc_luot: str) -> bool:
+    """05/10/2026 — video ĐÃ DỰNG (có `8-video.mp4`) mà sổ ngày ghi CHƯA bàn giao: tiến trình chết
+    giữa bàn giao (ca TL5-T7/0002: ShopAPI treo ở bước AI chọn danh sách phát, lượt bị dừng).
+    `_coi_nhu_da_xong` coi lượt như vậy là XONG nên không ai bàn giao nữa — video bỏ phí, kênh làm
+    video mới. Giờ coi là còn dở: lượt sau chạy tiếp (khâu XONG bỏ qua, không trả tiền lại) rồi bàn giao.
+    Trần tự phục hồi L3 vẫn chặn vòng lặp vô hạn nếu bàn giao hỏng mãi."""
+    if (r.get("ban_giao") or {}).get("da_ban_giao"):
+        return False
+    return os.path.isfile(os.path.join(thu_muc_luot, "8-video.mp4"))
+
+
 def _luot_da_bi_bo(thu_muc_luot: str) -> bool:
     """Thư mục lượt có tệp đánh dấu `BO-VI-*.txt` (L3 đã tự bỏ) không."""
     try:
@@ -561,8 +572,9 @@ def _tim_run_chua_xong(goc: str, ma_kenh: str, ngay_hien_tai: _dt.date,
             ma_luot = str(r.get("ma_luot") or "")
             if not ma_luot:
                 continue
-            luot = auto.doc_luot(auto.duong_luot(goc, ma_kenh, ma_luot))
-            if luot is None or not _coi_nhu_da_xong(luot):
+            thu_muc_luot = auto.duong_luot(goc, ma_kenh, ma_luot)
+            luot = auto.doc_luot(thu_muc_luot)
+            if luot is None or not _coi_nhu_da_xong(luot) or _xong_chua_ban_giao(r, thu_muc_luot):
                 ung_vien.append((ngay_str, ma_luot))
     if not ung_vien:
         ma_nuoi = _nhan_nuoi_luot_mo_coi(goc, ma_kenh, ngay_hien_tai.isoformat(), da_thay_ma_luot,
