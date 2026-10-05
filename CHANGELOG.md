@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.167.0** — 2026-10-06 — `vps-jp1` — test+fix: bo test xanh tren clone sach (28→0 loi); may/ngach khac tieng: font Han/La-tinh, ngon_ngu_video ko+, muc luc theo tieng, kenh thu 2 nhan tep trong, ho so Studio tu ngach, Whisper ma ngan, captcha/ghim tieng Han; conftest khong gh…
 - **2.166.0** — 2026-10-06 — `vps-jp1` — feat(agent): buoc keo cheo 1 lan/ngay 09-20h qua hang doi Chrome (tran 60', khong khi IPv4 mo/con khac); ky nang D08
 - **2.165.1** — 2026-10-06 — `vps-jp1` — fix(keo-cheo): xac nhan tich bang mo lai hop, khong bam lan 2, ghi so da_co + do hieu qua; anh chan doan truoc khi dong hop (agent F)
 - **2.165.0** — 2026-10-06 — `vps-jp1` — fix(an-toan): bo du lieu kenh that khoi test/fixture o HEAD; bo quet them token/cookie/id Studio/CSV du lieu, quet --lich-su, che khi in; .gitignore chan moi do sau (agent O)
@@ -74,7 +75,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 - **2.148.0** — 2026-10-04 — `vps-jp1` — Thiet lap kenh tu dong (core/thiet_lap_kenh ho so: ten/handle/mo ta SEO/tu khoa/danh sach phat/mac dinh tai len + logo/banner/hinh mo; vm/thiet_lap_kenh_dom dien Studio, doc lai xac nhan, chi doi muc khac, luat doi ten/handle; agent tu cha…
 - **2.147.1** — 2026-10-03 — `vps-jp1` — Nuoi trang chu: chong loi NoneType khi trinh phat chua nap/dang quang cao
 - **2.147.0** — 2026-10-03 — `vps-jp1` — Nuoi trang chu (cong tac nuoi_trang_chu): Chrome kenh xem video doi thu THANG (view>=30k va >=2x trung vi kenh do, <=60 ngay), 70% ngach/30% chu de, tat tieng, thoi luong ngau nhien, Khong quan tam muc lac de; dat >90% chu de thi tu tat; s…
-- **2.146.0** — 2026-10-03 — `vps-jp1` — Bo nao (kieu Hermes/Claude Code): core/nao.py CLI an toan (thu/tranh/bai-hoc/uu-tien-nguon/de-xuat, gioi han + quyen theo ti le dung, ngay kiem >= luc co so 48h), phien Claude Code headless 04:10 hang ngay (ShopAPI-Nao), nao/CLAUDE.md 6 bu…
+- **2.146.0** — 2026-10-03 — `vps-jp1` — Bo nao (kieu Hermes/Claude Code): core/nao.py CLI an toan (thu/tranh/bai-hoc/uu-tien-nguon/de-xuat, gioi han + quyen theo ti le dung, ngay kiem >= luc co so 48h), phien Claude Code chay nen 04:10 hang ngay (ShopAPI-Nao), nao/CLAUDE.md 6 bu…
 - **2.145.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 3: so bai hoc co bo dem cong/tru (kieu ExpeL/ACE, delta <=3 thao tac/video, that khi >=3 video xac nhan, chu gach = bo); hieu chinh du doan bien tap (lech CTR/AVD, ti le dung) dua vao loi nhac + so do chinh xac
 - **2.144.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 2: truc kieu_tieu_de + hook (nhan theo nghia do LLM tra kem luc cham, regex chi la duong lui), Thompson he so 0.9-1.1 khi chon tieu de/hook/kieu bia, ghi nhan vao ho so + van
 - **2.143.0** — 2026-10-03 — `vps-jp1` — Vong tu hoc dot 1 (kieu AI co vua): core/tu_hoc ghi van (nuoc di + du doan) luc ban giao, cham ket qua 48h/7 ngay (gio xem), bang diem Beta + tien nghiem nhom, Thompson sampling he so cum 0.8-1.2 trong xep hang nguon
