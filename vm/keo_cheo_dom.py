@@ -201,6 +201,85 @@ class TrangXem:
     def chup(self, nhan: str) -> str:
         return self.tr.chup(nhan)
 
+    def _spec_hang_nut(self) -> dict:
+        return {"chon": self._spec("kc_hang_nut").get("chon") or list(HANG_NUT_MAC_DINH)}
+
+    def dau_van(self) -> str:
+        """Dấu vân hàng nút dưới video (độ dài + băm outerHTML + khung) — "" nếu không thấy/lỗi."""
+        try:
+            return str(self.tr.js_tho(_JS_DAU_VAN % json.dumps(self._spec_hang_nut(), ensure_ascii=False)) or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def ghi_chan_doan(self, nhan: str) -> dict:
+        """Bằng chứng khi hỏng: ảnh + bản đồ DOM (`TrangStudio.ghi_bang_chung`, vm/logs/dom, giữ 50 bộ) + MỌI
+        nút trong hàng nút dưới video (aria/chữ/khung) và outerHTML của hàng."""
+        ra: dict = {}
+        try:
+            ra.update(self.tr.ghi_bang_chung(nhan) or {})
+        except Exception as loi:  # noqa: BLE001
+            ra["loi_bang_chung"] = str(loi)[:120]
+        try:
+            hang = self.tr.js_tho(_JS_HANG_NUT % json.dumps(self._spec_hang_nut(), ensure_ascii=False))
+        except Exception as loi:  # noqa: BLE001
+            hang = {"loi": str(loi)[:200]}
+        try:
+            thu_muc = getattr(self.tr, "thu_muc_dom", None) or os.path.join(THU_MUC_LOG, "dom")
+            os.makedirs(thu_muc, exist_ok=True)
+            duong = os.path.join(thu_muc, "{0}-{1}-hang-nut-ban-do.json".format(
+                time.strftime("%Y%m%d-%H%M%S"), re.sub(r"[^A-Za-z0-9_.-]+", "-", nhan)[:60]))
+            with open(duong, "w", encoding="utf-8") as tep:
+                json.dump({"url": self.url(), "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "nhan": nhan,
+                           "hang_nut": hang}, tep, ensure_ascii=False, indent=1)
+            ra["hang_nut"] = duong
+        except Exception as loi:  # noqa: BLE001
+            ra["loi_hang_nut"] = str(loi)[:120]
+        return ra
+
+
+#: Hàng nút dưới video khi JSON chưa có `kc_hang_nut`.
+HANG_NUT_MAC_DINH = ("ytd-watch-metadata #actions", "ytd-watch-metadata #top-level-buttons-computed",
+                     "ytd-watch-metadata")
+
+_JS_DAU_VAN = r"""
+(function(spec){
+  const Y = window.__yd; if (!Y) return '';
+  const roots = Y.goc();
+  for (const s of (spec.chon || [])) {
+    let x = []; try { x = Y.qsa(roots, s).filter(Y.hien); } catch (e) {}
+    if (x.length) {
+      const e = x[0], h = e.outerHTML; let n = 0;
+      for (let i = 0; i < h.length; i++) { n = (n * 31 + h.charCodeAt(i)) | 0; }
+      const r = e.getBoundingClientRect();
+      return h.length + ':' + n + ':' + Math.round(r.x) + ',' + Math.round(r.y) + ',' + Math.round(r.width);
+    }
+  }
+  return '';
+})(%s)
+"""
+
+_JS_HANG_NUT = r"""
+(function(spec){
+  const Y = window.__yd; if (!Y) return {loi: 'chưa có __yd'};
+  const roots = Y.goc();
+  let hang = null, sel = '';
+  for (const s of (spec.chon || [])) {
+    let x = []; try { x = Y.qsa(roots, s).filter(Y.hien); } catch (e) {}
+    if (x.length) { hang = x[0]; sel = s; break; }
+  }
+  const nut = [];
+  const goc = hang ? Y.trong(hang, 'button, a, [role=button], yt-button-view-model, ytd-menu-renderer') : [];
+  for (const e of goc) {
+    const r = e.getBoundingClientRect();
+    nut.push({tag: e.tagName.toLowerCase(), id: e.id || '', aria: (e.getAttribute('aria-label') || '').slice(0, 80),
+              chu: Y.chuan(e.innerText).slice(0, 60), hien: Y.hien(e), tat: Y.tat(e),
+              rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]});
+    if (nut.length >= 120) break;
+  }
+  return {sel: sel, co_hang: !!hang, nut: nut, html: hang ? String(hang.outerHTML).slice(0, 20000) : ''};
+})(%s)
+"""
+
 
 class KeoCheo:
     """Một việc kéo chéo trên trang xem (thật: `TrangXem`; kiểm: trang giả)."""
@@ -208,6 +287,8 @@ class KeoCheo:
     #: Số lượt dò × `ngu(NGHI)` — đếm lượt (không đồng hồ) nên trang giả chạy tức thì.
     SO_LAN_CHO = 20
     NGHI = 0.5
+    SO_LAN_BAM = 4
+    SO_LAN_ON_DINH = 12
 
     def __init__(self, trang, nhat_ky=None, ngu=None):
         self.trang = trang
@@ -230,36 +311,117 @@ class KeoCheo:
     def _hop_da_dong(self) -> bool:
         return not self.trang.doc_hop().get("hop")
 
-    def tim_nut_luu(self):
-        """`(phần tử, cách)` — cách `truc_tiep` (nút Lưu cạnh Thích/Chia sẻ) | `menu` (nằm trong «⋯»)."""
-        def thu():
-            pt = self.trang.tim("kc_nut_luu")
-            if pt:
-                return pt, "truc_tiep"
-            pm = self.trang.tim("kc_nut_them")
-            if pm:
-                return pm, "menu"
-            return None
-        return self._cho(thu) or (None, "")
+    def cho_on_dinh(self, so_lan: int = None) -> bool:
+        """Chờ hàng nút dưới video ĐỨNG YÊN — cùng dấu vân hai lần liền cách `NGHI` giây. 07/10/2026 TL2-T7:
+        sau khi đổi giao diện, hàng nút dựng lại giữa lúc bấm → «phần tử đã mất khỏi trang». Trang (giả)
+        không có `dau_van` thì coi như yên. Hết lượt mà vẫn động → False (vẫn đi tiếp, có thử lại)."""
+        dau_van = getattr(self.trang, "dau_van", None)
+        if dau_van is None:
+            return True
+        truoc = None
+        for _ in range(int(so_lan or self.SO_LAN_ON_DINH)):
+            d = dau_van()
+            if d and d == truoc:
+                return True
+            truoc = d
+            self.ngu(self.NGHI)
+        self.nk("hàng nút dưới video chưa đứng yên sau {0} lượt — bấm thử".format(so_lan or self.SO_LAN_ON_DINH))
+        return False
 
-    def mo_hop(self) -> dict:
-        self.buoc = "nut_luu"
-        pt, cach = self.tim_nut_luu()
-        if not pt:
-            raise LoiKeoCheo("nut_luu", "không thấy nút Lưu trên trang xem (video riêng tư/đã gỡ, hay bộ chọn lệch)")
-        self.trang.bam(pt)
-        if cach == "menu":
-            self.buoc = "menu_luu"
-            pm = self._cho(lambda: self.trang.tim_loc_chu("kc_menu_luu"), so_lan=10)
-            if not pm:
-                self.trang.phim_esc()
-                raise LoiKeoCheo("menu_luu", "mở «⋯» nhưng không thấy mục Lưu/保存/Save")
-            self.trang.bam(pm)
+    def _bam_lai(self, tim, ten: str) -> dict:
+        """Dò MỚI (`tim()` → phần tử | None) rồi bấm; phần tử mất/bị che/chưa có → chờ hàng nút đứng yên, dò
+        lại, bấm lại — đủ `SO_LAN_BAM` lần. CHỈ dùng cho nút mở (Lưu, ⋯, mục Lưu): `TrangStudio.bam` ném
+        lỗi TRƯỚC khi nhấn chuột, nên thử lại không bao giờ bấm hai lần. Hết lần → LoiKeoCheo(ten)."""
+        loi_cuoi = "không thấy"
+        for lan in range(self.SO_LAN_BAM):
+            pt = tim()
+            if pt:
+                try:
+                    self.trang.bam(pt)
+                    if lan:
+                        self.nk("bấm {0}: được ở lần {1}/{2}".format(ten, lan + 1, self.SO_LAN_BAM))
+                    return pt
+                except Exception as loi:  # noqa: BLE001 — LoiThaoTac/CdpLoi: dò lại
+                    loi_cuoi = str(loi)[:160]
+            else:
+                loi_cuoi = "không thấy"
+            self.nk("bấm {0}: {1} (lần {2}/{3}) — chờ hàng nút đứng yên, dò lại".format(
+                ten, loi_cuoi, lan + 1, self.SO_LAN_BAM))
+            if lan < self.SO_LAN_BAM - 1:
+                self.cho_on_dinh()
+        raise LoiKeoCheo(ten, "bấm {0} lần không được: {1}".format(self.SO_LAN_BAM, loi_cuoi))
+
+    def tim_nut_luu(self):
+        """`(phần tử, cách)` — cách `truc_tiep` (nút Lưu cạnh Thích/Chia sẻ) | `menu` (nằm trong «⋯»).
+        Chờ hàng nút đứng yên, dò nút Lưu trước (đủ `SO_LAN_CHO` lượt); không có mới tới «⋯»."""
+        self.cho_on_dinh()
+        pt = self._cho(lambda: self.trang.tim("kc_nut_luu"))
+        if pt:
+            return pt, "truc_tiep"
+        pm = self._cho(lambda: self.trang.tim("kc_nut_them"), so_lan=4)
+        if pm:
+            return pm, "menu"
+        return None, ""
+
+    def _qua_menu(self) -> dict:
+        self.buoc = "menu_luu"
+        try:
+            self._bam_lai(lambda: self.trang.tim("kc_nut_them"), "kc_nut_them")
+        except LoiKeoCheo as loi:
+            raise LoiKeoCheo("menu_luu", "nút ⋯: " + loi.ly_do)
+        if not self._cho(lambda: self.trang.tim_loc_chu("kc_menu_luu"), so_lan=10):
+            self.trang.phim_esc()
+            raise LoiKeoCheo("menu_luu", "mở «⋯» nhưng không thấy mục Lưu/保存/Save")
+        try:
+            self._bam_lai(lambda: self.trang.tim_loc_chu("kc_menu_luu"), "kc_menu_luu")
+        except LoiKeoCheo as loi:
+            self.trang.phim_esc()
+            raise LoiKeoCheo("menu_luu", "mục Lưu: " + loi.ly_do)
         self.buoc = "hop_luu"
         hop = self._cho(self._hop_co_hang)
         if not hop:
-            raise LoiKeoCheo("hop_luu", "bấm Lưu mà không thấy hộp danh sách phát (có hàng)")
+            raise LoiKeoCheo("hop_luu", "bấm «⋯ → Lưu» mà không thấy hộp danh sách phát (có hàng)")
         return hop
+
+    def mo_hop(self) -> dict:
+        """Mở hộp «Lưu vào…». Nút Lưu thẳng (có thử lại khi phần tử mất); bấm hỏng hẳn hoặc bấm rồi mà
+        hộp không hiện → lùi đường «⋯ → Lưu» nếu trang có nút ⋯."""
+        self.buoc = "nut_luu"
+        pt, cach = self.tim_nut_luu()
+        if not pt:
+            raise LoiKeoCheo("nut_luu", "không thấy nút Lưu lẫn nút ⋯ trên trang xem (video riêng tư/đã gỡ, "
+                                        "hay bộ chọn lệch)")
+        if cach == "menu":
+            return self._qua_menu()
+        try:
+            self._bam_lai(lambda: self.trang.tim("kc_nut_luu"), "kc_nut_luu")
+        except LoiKeoCheo as loi:
+            if not self.trang.tim("kc_nut_them"):
+                raise LoiKeoCheo("nut_luu", loi.ly_do)
+            self.nk("nút Lưu thẳng hỏng ({0}) — thử đường «⋯ → Lưu»".format(loi.ly_do[:120]))
+            return self._qua_menu()
+        self.buoc = "hop_luu"
+        hop = self._cho(self._hop_co_hang)
+        if hop:
+            return hop
+        if self.trang.tim("kc_nut_them"):
+            self.nk("bấm Lưu mà hộp không hiện — thử đường «⋯ → Lưu»")
+            self.trang.phim_esc()
+            return self._qua_menu()
+        raise LoiKeoCheo("hop_luu", "bấm Lưu mà không thấy hộp danh sách phát (có hàng)")
+
+    def _chan_doan(self, kq: dict, nhan: str) -> None:
+        """Ghi bằng chứng vào kq: `ghi_chan_doan` (trang thật: ảnh + bản đồ + hàng nút) hoặc chỉ ảnh."""
+        try:
+            gd = getattr(self.trang, "ghi_chan_doan", None)
+            if gd is not None:
+                d = gd(nhan) or {}
+                kq["anh"] = d.get("anh", "")
+                kq["chan_doan"] = d
+            else:
+                kq["anh"] = self.trang.chup(nhan)
+        except Exception:  # noqa: BLE001 — bằng chứng hỏng không che lỗi gốc
+            pass
 
     def dong_hop(self) -> None:
         self.buoc = "dong_hop"
@@ -328,10 +490,7 @@ class KeoCheo:
             self.nk("học danh sách phát qua {0}: {1}".format(vid, kq["ket"]))
             if hop_mo:
                 self._dong_im()
-            try:
-                kq["anh"] = self.trang.chup("keo-cheo-hoc-loi-{0}".format(vid))
-            except Exception:  # noqa: BLE001
-                pass
+            self._chan_doan(kq, "keo-cheo-hoc-loi-{0}".format(vid))
         return kq
 
     def them(self, vid: str, ten_ds: str, che_do: str = "that") -> dict:
@@ -405,10 +564,7 @@ class KeoCheo:
             self.nk("kéo chéo {0} → «{1}»: {2}".format(vid, ten_ds, kq["ket"]))
             if hop_mo:
                 self._dong_im()
-            try:
-                kq["anh"] = self.trang.chup("keo-cheo-loi-{0}".format(vid))
-            except Exception:  # noqa: BLE001
-                pass
+            self._chan_doan(kq, "keo-cheo-loi-{0}".format(vid))
         return kq
 
 

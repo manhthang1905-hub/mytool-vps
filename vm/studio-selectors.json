@@ -885,7 +885,10 @@
         "tp-yt-iron-dropdown yt-list-item-view-model",
         "ytd-menu-popup-renderer tp-yt-paper-item",
         "tp-yt-iron-dropdown [role=menuitem]",
-        "tp-yt-iron-dropdown [role=option]"
+        "tp-yt-iron-dropdown [role=option]",
+        "ytd-popup-container yt-list-item-view-model",
+        "ytd-popup-container ytd-menu-service-item-renderer",
+        "yt-sheet-view-model yt-list-item-view-model"
       ],
       "chu": [
         "Lưu",
@@ -946,6 +949,15 @@
         "yt-sheet-view-model button[aria-label='Đóng']",
         "yt-sheet-view-model button[aria-label='閉じる']",
         "yt-sheet-view-model button[aria-label='Close']"
+      ]
+    },
+    "kc_hang_nut": {
+      "ghi_chu": "07/10/2026 hàng nút dưới video (Thích/Chia sẻ/Lưu/⋯) — keo_cheo_dom chờ hàng này ĐỨNG YÊN (cùng dấu vân hai lần cách 0,5s) trước khi bấm Lưu: TL2-T7 hàng nút dựng lại sau khi đổi giao diện → 'phần tử đã mất'. Cũng là vùng được ghi vào bằng chứng khi hỏng.",
+      "chon": [
+        "ytd-watch-metadata #actions",
+        "ytd-watch-metadata #top-level-buttons-computed",
+        "#above-the-fold #actions",
+        "ytd-watch-metadata"
       ]
     }
   },

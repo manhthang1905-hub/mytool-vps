@@ -565,6 +565,112 @@ class TestMayDom:
         assert kq["ket"].startswith("loi:trang_thai") and all(not b.startswith("hang:") for b in tr.bam_ds)
 
 
+class TrangTach(TrangGia):
+    """Hàng nút DỰNG LẠI (đo thật 07/10/2026, kênh lớn thứ hai sau khi đổi giao diện): `tach` lần bấm Lưu
+    đầu ném «phần tử đã mất» (không có tác dụng); dấu vân hàng nút đổi vài lượt rồi mới yên.
+    `co_menu`: có cả nút ⋯; `luu_cam`: bấm Lưu mà hộp không mở."""
+
+    def __init__(self, ds, tach=1, co_menu=False, luu_cam=False, van=("a", "b", "c", "c"), **kw):
+        super().__init__(ds, **kw)
+        self.tach, self.co_menu, self.luu_cam = tach, co_menu, luu_cam
+        self.van, self.goi_van, self.chan_doan = list(van), 0, []
+
+    def dau_van(self):
+        self.goi_van += 1
+        return self.van[min(self.goi_van, len(self.van)) - 1]
+
+    def tim(self, khoa):
+        if khoa == "kc_nut_them" and self.co_menu and self.trang:
+            return {"id": "nut_them", "khoa": khoa}
+        return super().tim(khoa)
+
+    def bam(self, pt):
+        if pt["id"] == "nut_luu" and self.tach > 0:
+            self.tach -= 1
+            self.bam_ds.append("nut_luu:mat")
+            raise RuntimeError("kc_nut_luu: phần tử đã mất khỏi trang")
+        if pt["id"] == "nut_luu" and self.luu_cam:
+            self.bam_ds.append("nut_luu:cam")
+            return
+        super().bam(pt)
+
+    def ghi_chan_doan(self, nhan):
+        self.chan_doan.append(nhan)
+        return {"anh": "anh-" + nhan, "hang_nut": "hang-nut-" + nhan}
+
+
+class TestPhanTuMat:
+    def test_mat_mot_lan_roi_bam_lai_duoc(self):
+        tr = TrangTach(DS, tach=1)
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"] == "hoc_ds:ok"
+        assert tr.bam_ds == ["nut_luu:mat", "nut_luu", "dong"]
+        assert tr.goi_van >= 4                                  # đã chờ hàng nút đứng yên (a,b,c,c)
+        assert tr.chan_doan == []
+
+    def test_mat_khi_them_that(self):
+        tr = TrangTach(DS, tach=1)
+        kq = may(tr).them("abcdefghijk", "おすすめ")
+        assert kq["ket"] == "ok" and tr.luu["おすすめ"] is True
+        assert tr.bam_ds == ["nut_luu:mat", "nut_luu", "hang:おすすめ", "dong", "nut_luu", "dong"]
+
+    def test_mat_ba_lan_van_trong_bon_lan(self):
+        tr = TrangTach(DS, tach=3)
+        assert may(tr).hoc_ds("abcdefghijk")["ket"] == "hoc_ds:ok"
+        assert tr.bam_ds.count("nut_luu:mat") == 3
+
+    def test_mat_ca_bon_lan_thi_lui_menu(self):
+        tr = TrangTach(DS, tach=4, co_menu=True)
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"] == "hoc_ds:ok"
+        assert tr.bam_ds == ["nut_luu:mat"] * 4 + ["nut_them", "menu_luu", "dong"]
+
+    def test_mat_ca_bon_lan_khong_menu_thi_loi_co_bang_chung(self):
+        tr = TrangTach(DS, tach=4)
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"].startswith("loi:nut_luu") and "4 lần" in kq["ket"]
+        assert tr.chan_doan == ["keo-cheo-hoc-loi-abcdefghijk"]
+        assert kq["chan_doan"]["hang_nut"] == "hang-nut-keo-cheo-hoc-loi-abcdefghijk"
+
+    def test_bam_luu_ma_hop_khong_mo_thi_lui_menu(self):
+        tr = TrangTach(DS, tach=0, co_menu=True, luu_cam=True)
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"] == "hoc_ds:ok"
+        assert tr.bam_ds == ["nut_luu:cam", "nut_them", "menu_luu", "dong"]
+
+    def test_hang_nut_khong_bao_gio_yen_van_di_tiep(self):
+        tr = TrangTach(DS, tach=0, van=[str(i) for i in range(500)])
+        m = may(tr)
+        assert m.cho_on_dinh() is False and tr.goi_van == m.SO_LAN_ON_DINH
+        assert m.hoc_ds("abcdefghijk")["ket"] == "hoc_ds:ok"
+
+    def test_trang_xem_chan_doan_ghi_tep(self, tmp_path):
+        class TrGia:
+            thu_muc_dom = str(tmp_path)
+
+            def ghi_bang_chung(self, nhan):
+                return {"anh": "a.png", "ban_do": "b.json"}
+
+            def js_tho(self, bt):
+                assert "ytd-watch-metadata" in bt
+                return {"sel": "ytd-watch-metadata #actions", "co_hang": True, "nut": [{"aria": "Lưu"}], "html": "<x>"}
+
+            def url(self):
+                return "https://www.youtube.com/watch?v=abcdefghijk"
+        tx = kcd.TrangXem(TrGia(), cdp_studio.doc_bo_chon())
+        d = tx.ghi_chan_doan("keo-cheo-hoc-loi-abcdefghijk")
+        assert d["anh"] == "a.png" and d["ban_do"] == "b.json"
+        ghi = json.loads(Path(d["hang_nut"]).read_text(encoding="utf-8"))
+        assert ghi["hang_nut"]["nut"] == [{"aria": "Lưu"}] and ghi["url"].endswith("abcdefghijk")
+        assert Path(d["hang_nut"]).name.endswith("-hang-nut-ban-do.json")   # don_bang_chung dọn được
+
+    def test_dau_van_loi_thi_rong(self):
+        class TrHong:
+            def js_tho(self, bt):
+                raise RuntimeError("context mất")
+        assert kcd.TrangXem(TrHong(), {}).dau_van() == ""
+
+
 class TestHocDs:
     def test_hoc_ds_khong_tich(self):
         tr = TrangGia(DS)
