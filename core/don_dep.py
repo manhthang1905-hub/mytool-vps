@@ -102,8 +102,13 @@ TRANG_THAI_DA_DANG = ("ĐÃ ĐĂNG", ban_giao_dang.TRANG_THAI_DANG_TAY)
 #: để chúng lại MÃI, ăn đĩa vô ích. Vẫn nằm NGAY trong thư mục lượt, giống hệt
 #: các mục còn lại nên `_muc_nang_trong_luot` ăn theo tự động (đã kiểm
 #: `os.path.exists` trước khi thêm vào danh sách xoá).
+#:
+#: 06/10/2026: thêm `8-nhac-nen.m4a` (lớp nhạc nền cả video, `core/kho_nhac.py`)
+#: — đo thật: 49 lượt đã dọn vẫn còn nguyên tệp này, ~23 MB/lượt = 1,15 GB, tức
+#: ~180 MB/ngày với 8 kênh (~65 GB/năm). Chỉ khâu DỰNG đọc nó; lượt đã mất
+#: `5-anh/`+`6-clip/` thì không dựng lại được nữa nên giữ nó là vô ích.
 _MUC_NANG = ("5-anh", "6-clip", "8-video.mp4", "9-video-capcut.mp4", "2-giong-doc.mp3",
-            "_lam-lai", "_dung-do", "_cat")
+            "8-nhac-nen.m4a", "_lam-lai", "_dung-do", "_cat")
 
 #: THÊM cho luật "quá N lượt" (`ung_vien_qua_so_luot`): các mảnh mp3 giọng đọc
 #: từng đoạn. Lượt ĐÃ ĐĂNG không xoá thư mục này (giữ nguyên `_MUC_NANG` đời
@@ -617,6 +622,11 @@ def don_sao_luu(goc: str) -> List[str]:
 #: Chủ kênh 01/10: "video đã lên thì xoá hết — xử lý dứt điểm". Lên YouTube xong (có video_id,
 #: lịch đã xác nhận) là xoá NGAY; gói "Bỏ" cũng xoá ngay. Chỉ giữ tệp chữ vài KB (.srt kịch bản,
 #: .txt, .json) vì khám nghiệm đọc câu kịch bản tại điểm khán giả thoát.
+#:
+#: Một trong HAI số của luật giữ đĩa (cùng `don_dep_mo_rong.NGUONG_O_GB`, xem `core/don_dia.py`):
+#: `N > 0` = giữ file nặng tới khi giờ công khai `lich` đã qua N ngày. `0` = xoá ngay khi đã xác
+#: nhận lên YouTube (hành vi từ 01/10). Đo 06/10/2026: mỗi video ~0,9 GB nặng → N=3 giữ thêm
+#: ~8 kênh × 3 ngày × 0,9 ≈ 22 GB, ổ còn ~27 GB thì van ổ 10 GB chặn sản xuất.
 NGAY_SAU_CONG_KHAI = 0
 NGAY_GOI_BO = 0
 TRANG_THAI_SO_DA_LEN = ("xac-nhan", "da-len-lich")
@@ -672,6 +682,10 @@ def ung_vien_done(goc: str, ma_kenh: str, *,
             pass
         if muc.get("video_id") and muc.get("trang_thai") in TRANG_THAI_SO_DA_LEN:
             ly_do, moc = LY_DO_DONE, lich or bay_gio
+            if NGAY_SAU_CONG_KHAI > 0:
+                moc_lich = lich or datetime.datetime.fromtimestamp(os.path.getmtime(goi))
+                if bay_gio - moc_lich < datetime.timedelta(days=NGAY_SAU_CONG_KHAI):
+                    continue  # chưa đủ N ngày sau giờ công khai
         elif str(ghi_chu.get(ma) or "").strip().lower().startswith("bỏ") and not muc \
                 and bay_gio.timestamp() - os.path.getmtime(goi) >= NGAY_GOI_BO * 86400:
             ly_do, moc = LY_DO_DONE_BO, datetime.datetime.fromtimestamp(os.path.getmtime(goi))

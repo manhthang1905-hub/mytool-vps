@@ -179,14 +179,19 @@ class TestStudioCu:
 
 
 class TestDiaDay:
-    def test_duoi_15gb_thi_bao(self):
-        anh = _anh(may={"dia": {"con_gb": 10.0}, "cong_8765_tram": True,
+    def test_duoi_nguong_van_o_thi_bao_mot_lan_moi_ngay(self):
+        anh = _anh(may={"dia": {"con_gb": 9.0}, "cong_8765_tram": True,
                         "cong_8767_agent": False,
                         "schtasks_tu_chay": {}, "schtasks_canh_tram": {},
                         "khoa_may": {"co": False}})
         ds = [s for s in gac_tong.kiem_su_co(anh) if s["loai"] == "dia_day"]
         assert len(ds) == 1
         assert ds[0]["muc"] == bao_dong.MUC_KHAN
+        assert ds[0]["dedupe_khoa"] == "dia_day" and ds[0]["lap_gio"] == 24.0
+
+    def test_nguong_bao_dong_trung_van_o(self):
+        from core import don_dep_mo_rong
+        assert gac_tong.NGUONG_DIA_GB == don_dep_mo_rong.NGUONG_O_GB
 
     def test_tren_15gb_thi_khong_bao(self):
         anh = _anh()  # mặc định 40 GB

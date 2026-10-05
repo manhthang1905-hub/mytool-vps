@@ -89,6 +89,7 @@ from . import auto
 from . import bang_dieu_khien
 from . import bao_dong
 from . import chi_phi
+from . import don_dep_mo_rong
 from . import khe
 from . import ke_hoach_dang
 from . import kenh as kenh_mod
@@ -134,10 +135,13 @@ NGUONG_TAI_LEN_LAP_LAI = 3
 #: của module này — `gac_tong` chỉ báo, không tự giành/xoá khoá).
 NGUONG_CANH_BAO_KHOA_GIAY = 6 * 3600
 
-#: "đĩa <15GB" — đúng số kế hoạch V3 nêu (khác ngưỡng HỎNG 10GB của Bảng điều
-#: khiển, `core.bang_dieu_khien.GB_DIA_HONG` — hai module, hai mục đích, cố
-#: tình không dùng chung một hằng số).
-NGUONG_DIA_GB = 15.0
+#: Ổ trống dưới ngưỡng này thì báo động — 06/10/2026 dùng CHUNG đúng số của van ổ
+#: (`don_dep_mo_rong.NGUONG_O_GB`, 10 GB: dưới mức ấy không mở video mới). Luật chủ:
+#: "ổ trống <10 GB thì không bắt đầu dựng video mới và báo động" — một con số, không hai.
+NGUONG_DIA_GB = don_dep_mo_rong.NGUONG_O_GB
+
+#: Ổ đầy kéo dài thì nhắc lại mỗi ngần này giờ (không phải mỗi lượt 15').
+LAP_DIA_DAY_GIO = 24.0
 
 #: "số liệu Studio cũ >48h" — đúng số kế hoạch nêu, khớp ngưỡng đã có sẵn ở
 #: `core.bang_dieu_khien` (dòng ~1012-1018, không có hằng số export riêng).
@@ -830,11 +834,15 @@ def _kiem_studio_cu(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _kiem_dia_day(anh: Dict[str, Any]) -> List[Dict[str, Any]]:
     con_gb = ((anh.get("may") or {}).get("dia") or {}).get("con_gb")
     if con_gb is not None and con_gb < NGUONG_DIA_GB:
-        return [_su_co(
+        sc = _su_co(
             "dia_day", bao_dong.MUC_KHAN,
-            chuyen_gi="Ổ đĩa máy chỉ còn {0:.1f} GB trống.".format(con_gb),
-            can_lam_gi="Dọn bớt PROJECTS/DONE cũ, hoặc thêm dung lượng ổ đĩa.",
-            neu_khong_lam="Đĩa đầy giữa lượt sản xuất có thể hỏng CẢ MÁY, không riêng một kênh.")]
+            chuyen_gi="Ổ đĩa máy chỉ còn {0:.1f} GB trống (< {1:g} GB) — máy ngừng dựng video "
+                      "mới.".format(con_gb, NGUONG_DIA_GB),
+            can_lam_gi="Thêm dung lượng ổ đĩa cho VPS (máy đã tự dọn file nặng của video đã lên).",
+            neu_khong_lam="Không có video mới cho tới khi ổ đủ chỗ.",
+            dedupe_khoa="dia_day")
+        sc["lap_gio"] = LAP_DIA_DAY_GIO
+        return [sc]
     return []
 
 
@@ -1896,6 +1904,18 @@ def _main(argv: Optional[List[str]] = None) -> int:
     if tom_tat_mk and "không có việc" not in tom_tat_mk:
         print("")
         print("Mở kênh: {0}".format(tom_tat_mk))
+    # Dọn đĩa (06/10/2026, `core/don_dia.py`): mỗi 3 giờ xoá file nặng của video đã lên YouTube +
+    # xoay *.log quá cỡ — để dọn không phụ thuộc lượt sản xuất. `--thu` không dọn. try riêng.
+    if not thu:
+        try:
+            from core import don_dia  # noqa: PLC0415
+
+            kq_dd = don_dia.nhip(goc)
+            if kq_dd is not None:
+                print("")
+                print(don_dia.tom_tat(kq_dd))
+        except Exception as loi_dd:  # noqa: BLE001 — dọn đĩa hỏng không được làm sập gác tổng
+            print("Dọn đĩa: lỗi ({0})".format(str(loi_dd)[:200]))
     # Báo cáo sức khoẻ hằng ngày (06/10/2026, `core/bao_cao_ngay.py`): sau 06:30 ghi + gửi MỘT lần/ngày. try riêng.
     if not thu:
         try:
