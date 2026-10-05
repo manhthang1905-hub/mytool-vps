@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.163.1** — 2026-10-06 — `vps-jp1` — fix(keo-cheo): vm/ luon thang goc repo trong sys.path (tep .py rong o goc tung che vm/cdp_studio)
 - **2.163.0** — 2026-10-06 — `vps-jp1` — feat(tu-hoc+keo-cheo): vong hoc kin — nhan chuan, ket qua so trung vi 48h/CTR, lenh chien truong vao chon content (+30% toi da), nao thay ket qua lan thu, bai hoc vao loi nhac tieu de/bia, canh bao hoc (agent J); playlist tu tim: ho-so/thi…
 - **2.162.0** — 2026-10-06 — `vps-jp1` — feat(ben-bi): kiem toan chay 1 nam — gac tong boc loi tung buoc + nhip tim + han 40', don khoa PID chet an toan, hoi sinh agent, bao dong mot lan/ngay + Telegram thu lai, kiem import vm/ truoc cap nhat, agent chay_ben (agent I)
 - **2.161.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): tab Nao — bang diem, dong suy nghi, hanh dong+du doan+cham, tri nho, bai hoc (agent L); bao cao ngay tach hom nay/ngay mai; K17 khong ap khi trang chu tin cay
