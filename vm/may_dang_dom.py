@@ -433,6 +433,27 @@ def compute_card_timestamps(duration, n=5, tail_gap=10):
     return [_fmt_card_ts(t_start + i * step) for i in range(n)]
 
 
+def _giay_moc_the(s) -> float:
+    """'MM:SS:FF' (phút:giây:khung hình — định dạng ô mốc thẻ) hoặc 'MM:SS' → giây; hỏng → -1."""
+    try:
+        p = [int(x) for x in str(s or "").strip().split(":")]
+    except ValueError:
+        return -1.0
+    if len(p) == 3:
+        return p[0] * 60 + p[1] + p[2] / 30.0
+    if len(p) == 2:
+        return p[0] * 60 + p[1]
+    return -1.0
+
+
+def moc_the_khop(thay: list, mong: list, lech_giay: float = 1.0) -> bool:
+    """05/10: trình soạn Thẻ đặt mốc theo KHUNG HÌNH — gõ '08:28:00' đọc lại '08:27:23' (sớm 1 khung).
+    Bản cũ so chuỗi nên CHƯA thẻ nào được lưu từ 03/10. Giờ: cùng số thẻ, từng mốc lệch ≤ `lech_giay`."""
+    a = sorted(_giay_moc_the(x) for x in thay or [])
+    b = sorted(_giay_moc_the(x) for x in mong or [])
+    return len(a) == len(b) and all(x >= 0 and y >= 0 and abs(x - y) <= lech_giay for x, y in zip(a, b))
+
+
 def _doc_ngay_ke_hoach(s):
     s = str(s or "").strip()
     for f in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
@@ -2368,7 +2389,7 @@ class MayDangDom:
             raise Exception("không thêm được thẻ nào")
         thay = sorted(x.get("value") or x.get("chu") for x in ta.doc_tat_ca("the_moc"))
         mong = sorted(moc[:so_the])
-        if thay != mong:
+        if not moc_the_khop(thay, mong):
             raise Exception("mốc thẻ đọc lại {0} ≠ {1} — không lưu".format(thay, mong))
         ta.bam("the_luu", hau_dieu_kien=lambda: not ta.co("hop_the"), han_hau=30)
         self.nk("{0}: đã lưu {1} thẻ, mốc {2}".format(d["ma"], so_the, ", ".join(thay)))
