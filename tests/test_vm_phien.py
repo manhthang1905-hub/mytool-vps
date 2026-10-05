@@ -18,6 +18,7 @@ import csv
 import importlib.util
 import io
 import json
+import os
 import sys
 import time
 import types
@@ -288,6 +289,14 @@ def test_phien_chi_thanh_cong_khi_hai_bang_du_lieu_da_ve_hom_nay(tmp_path, monke
     (cs / "bang-tom-tat.csv").write_text("Video\n", encoding="utf-8")
     (cs / "kenh-theo-ngay.csv").write_text("Ngày\n", encoding="utf-8")
     assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is True
+    # 05/10: kênh mới — bảng tóm tắt hôm nay có, bảng THEO NGÀY chưa từng có (Studio trễ) → đủ
+    (cs / "kenh-theo-ngay.csv").unlink()
+    assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is True
+    # bảng theo ngày CÓ mà cũ → vẫn chưa đủ (quét lại)
+    (cs / "kenh-theo-ngay.csv").write_text("Ngày\n", encoding="utf-8")
+    cu = time.time() - 3 * 86400
+    os.utime(cs / "kenh-theo-ngay.csv", (cu, cu))
+    assert agent._du_lieu_kenh_da_ve_hom_nay({}, "A") is False
 
 
 def test_thieu_bang_du_lieu_thi_tu_xep_mot_lan_sua(tmp_path, monkeypatch):

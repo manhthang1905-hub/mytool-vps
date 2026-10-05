@@ -2490,6 +2490,11 @@ def _du_lieu_kenh_da_ve_hom_nay(cau_hinh: dict, kenh: str, ngay: str = None):
             ngay_tep = time.strftime("%Y-%m-%d", time.localtime(
                 os.path.getmtime(os.path.join(thu_muc, ten))))
         except OSError:
+            if ten == "kenh-theo-ngay.csv":
+                # 05/10/2026: kênh mới — video đầu vừa lên, Studio chưa có số THEO NGÀY (trễ 1–2 ngày). Bảng
+                # tóm tắt đã về (vòng trước kiểm) mà bảng theo ngày CHƯA TỪNG có = đủ; trước đây TL5/TL6 quét
+                # lặp 3 lần/ngày vô ích. Bảng theo ngày có rồi mà CŨ thì vẫn False như cũ (nhánh dưới).
+                return True
             # 04/10/2026: kênh MỚI chưa có video nào lên YouTube thì Studio không có bảng kênh để về —
             # "chưa đủ" ở đây là oan, lượt quét lặp 3 lần/ngày giữ Chrome + khe nặng ~1,5 giờ vô ích.
             return None if not _kenh_da_co_video(kenh) else False
