@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.152.2** — 2026-10-05 — `vps-jp1` — chore(ky nang): OAuth/token = khong dung (binh luan DOM); mo ta D03
 - **2.152.1** — 2026-10-05 — `vps-jp1` — feat(binh luan DOM): tra loi dung NOI DUNG video (loi thoai tu phu de goi), dung ngon ngu kenh (viet lai neu sai), khong kaomoji, khong sua lung khan gia
 - **2.152.0** — 2026-10-05 — `vps-jp1` — fix(vong hoc): khe nang ban chi doi kho nhac, van hoc tu so lieu (TL1-3 khong hoc tu 03/10); feat: danh muc skill core/ky_nang + docs/KY-NANG.md; token hong -> binh luan DOM; kho bi mat DPAPI
 - **2.151.1** — 2026-10-05 — `vps-jp1` — fix(dang dom): doc ten danh sach phat o li/label (o tick khong co chu) - truoc day video kenh moi luon vao danh sach dau
