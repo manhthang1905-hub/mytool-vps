@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.157.0** — 2026-10-06 — `vps-jp1` — feat(nao): muc VIEC BAT BUOC XEM — nhan ban video thang, gach bai hoc bi bac bo (agent D); test nao khong phu thuoc ngay
 - **2.156.0** — 2026-10-06 — `vps-jp1` — feat(chien truong): lich su thi phan theo ngay + bieu do, diem co hoi tung vung (thang mu), lenh tac chien cho tung kenh (agent C)
 - **2.155.0** — 2026-10-06 — `vps-jp1` — feat(ypp): du bao ngay dat 4000h/1000 dang ky moi kenh, canh bao khi gan/dat, skill D07 (agent B)
 - **2.154.0** — 2026-10-06 — `vps-jp1` — feat(chien truong): ban do thi phan nhu tran danh - quy mo ngach/thang, thi phan ta, BXH doi thu, diem nong, quan ta; AI chia vung theo nghia + gop vung
