@@ -95,3 +95,18 @@ def test_mo_ta_ngach_khong_cung_chu_de(monkeypatch):
     assert ct.mo_ta_ngach() == {"ten": "Ngách", "ngon_ngu": ""}
     from core import chien_truong_ai as ai
     assert "psycholog" not in ai._de_bai({"a": "A"}, [{"tieu_de": "t"}]).lower()
+
+
+def test_de_xuat_toa_kenh_ra_nhieu_vung():
+    """8 kênh không được cùng dồn 1 vùng: lệnh chính của mỗi kênh khác nhau khi còn đủ vùng tốt (phủ cả ngách)."""
+    ds = [_vung("v%d" % i, 1e6 - i * 1e4) for i in range(10)]
+    ct.tinh_co_hoi(ds)
+    quan = [{"ma": "K%d" % i, "ten": "", "so_video": 1} for i in range(8)]
+    r = ct.de_xuat_tan_cong(ds, quan)
+    chinh = [x["vung"][0]["ma"] for x in r]
+    assert len(set(chinh)) == 8 and all(len(x["vung"]) == 2 for x in r)
+    # vùng vượt trội hẳn thì vẫn được cấp cho nhiều kênh (chịu phạt) — không cấm tuyệt đối
+    ds2 = [_vung("sieu", 1e8), _vung("yeu1", 1e3), _vung("yeu2", 1e3)]
+    ct.tinh_co_hoi(ds2)
+    r2 = ct.de_xuat_tan_cong(ds2, quan[:3])
+    assert sum(1 for x in r2 if x["vung"][0]["ma"] == "sieu") >= 2

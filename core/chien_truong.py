@@ -179,13 +179,19 @@ def tinh_co_hoi(ds: List[Dict[str, Any]]) -> None:
         z["co_hoi_chi_tiet"] = {"cau": round(cau, 2), "da": round(da, 2), "yeu": round(yeu, 2), "chan": round(chan, 2)}
 
 
+PHAT_TRUNG_VUNG = 15.0   # mỗi kênh ta khác đã được lệnh đánh cùng vùng → trừ chừng này (mục tiêu: PHỦ cả ngách, không giành đất nhau)
+
+
 def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vung: int = 2) -> List[Dict[str, Any]]:
-    """Mỗi kênh ta đang sản xuất (có video) → top `so_vung` vùng theo co_hoi, ưu tiên vùng kênh đó (+12) hoặc kênh anh em (+6)
-    đã có video (cùng tệp khán giả). Bỏ vùng «khac»."""
-    ra = []
-    for q in quan:
-        if not q.get("so_video"):
-            continue
+    """Mỗi kênh ta đang sản xuất (có video) → `so_vung` vùng theo co_hoi, ưu tiên vùng kênh đó (+12) hoặc kênh anh em (+6)
+    đã có video (cùng tệp khán giả). Bỏ vùng «khac».
+
+    Chia đất: cấp lệnh THAM LAM theo cặp (kênh, vùng) điểm cao nhất trước; vùng đã cấp cho kênh khác bị trừ
+    `PHAT_TRUNG_VUNG` mỗi kênh — nên 8 kênh không cùng dồn vào 1 vùng mà toả ra phủ cả ngách (chỉ trùng khi vùng
+    đó vượt trội tới mức chịu được phạt)."""
+    kenh_ds = [q for q in quan if q.get("so_video")]
+    ung_theo_kenh: Dict[str, List[Dict[str, Any]]] = {}
+    for q in kenh_ds:
         ung = []
         for z in ds:
             if z["ma"] == KHAC or "co_hoi" not in z:
@@ -202,8 +208,36 @@ def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vu
                 ly += "; đà +{0}/ngày".format(_gon(z["nong"]))
             ung.append({"ma": z["ma"], "ten": z["ten"], "co_hoi": z["co_hoi"], "diem": round(diem, 1),
                         "thi_phan": z.get("thi_phan", 0), "ly_do": ly})
-        ung.sort(key=lambda x: -x["diem"])
-        ra.append({"kenh": q["ma"], "ten": q.get("ten", ""), "vung": ung[:so_vung]})
+        ung_theo_kenh[q["ma"]] = ung
+    # Cấp lệnh theo VÒNG: vòng 1 mọi kênh nhận vùng CHÍNH, vòng 2 vùng phụ… (kênh nào cũng có đất trước khi ai được
+    # miếng thứ hai). Trong vòng, chọn tham lam cặp (kênh, vùng) điểm-sau-phạt cao nhất.
+    da_cap: Dict[str, List[Dict[str, Any]]] = {q["ma"]: [] for q in kenh_ds}
+    dem_vung: Dict[str, int] = {}
+    for vong in range(so_vung):
+        con = {k for k in ung_theo_kenh if len(da_cap[k]) <= vong}
+        while con:
+            tot = None
+            for k in con:
+                co = {x["ma"] for x in da_cap[k]}
+                for u in ung_theo_kenh[k]:
+                    if u["ma"] in co:
+                        continue
+                    d = u["diem"] - PHAT_TRUNG_VUNG * dem_vung.get(u["ma"], 0)
+                    if tot is None or d > tot[0] or (d == tot[0] and k < tot[1]):
+                        tot = (d, k, u)
+            if tot is None:
+                break
+            _d, k, u = tot
+            u = dict(u, diem=round(_d, 1))
+            if dem_vung.get(u["ma"]):
+                u["ly_do"] += "; {0} kênh ta khác cũng được lệnh vùng này".format(dem_vung[u["ma"]])
+            da_cap[k].append(u)
+            dem_vung[u["ma"]] = dem_vung.get(u["ma"], 0) + 1
+            con.discard(k)
+    ra = []
+    for q in kenh_ds:
+        v = sorted(da_cap[q["ma"]], key=lambda x: -x["diem"])
+        ra.append({"kenh": q["ma"], "ten": q.get("ten", ""), "vung": v})
     return ra
 
 

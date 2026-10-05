@@ -1,1081 +1,1218 @@
 {
- "phien_ban": 1,
- "kiem_cuoi": "2026-09-29 08:56 --kiem-dom TL1/TL2/TL3 mức 1 + mức 2 thay thế (trang sửa, kênh không có nháp) 0 hỏng 0 dự phòng; TL4 hỏng tieu_de ở trang sửa (giao diện mới, Studio tiếng Nhật). CHƯA đo trên trang thật: link_video, nut_thumbnail, tien_do, nut_tiep, buoc_hien_thi, phu_de_*, mhkt_*, the_*, nut_xong, hop_da_xong, dong_hop_da_xong, hang_sua_nhap (cần một bản nháp/lượt tải).",
- "ghi_chu": "Sửa khi YouTube đổi giao diện; chạy --kiem-dom sau khi sửa. Mỗi khoá: 'chon' thử lần lượt (chon#1 là đường chính, còn lại là DỰ PHÒNG), 'chu' là dự phòng cuối theo chữ trên nút, 'an': true = phần tử ẩn (ô tệp), 'phu': true = bước PHỤ (hỏng thì bỏ qua).",
- "url": {
-  "studio": "https://studio.youtube.com/",
-  "upload": "https://studio.youtube.com/channel/{uc}/videos/upload?d=ud",
-  "danh_sach": "https://studio.youtube.com/channel/{uc}/videos/upload",
-  "loc_tieu_de": "https://studio.youtube.com/channel/{uc}/videos/upload?filter=%5B%7B%22name%22%3A%22TITLE%22%2C%22value%22%3A%22{q}%22%7D%5D",
-  "sua": "https://studio.youtube.com/video/{id}/edit",
-  "xem": "https://www.youtube.com/watch?v={id}",
-  "cmt_video": "https://studio.youtube.com/video/{id}/comments",
-  "cmt_chua_phan_hoi": "https://studio.youtube.com/channel/{uc}/comments/inbox?filter=%5B%7B%22isDisabled%22%3Afalse%2C%22isPinned%22%3Atrue%2C%22name%22%3A%22SORT_BY%22%2C%22value%22%3A%22SORT_BY_NEWEST%22%7D%2C%7B%22name%22%3A%22ENGAGED_STATUS%22%2C%22value%22%3A%5B%22COMMENT_CATEGORY_NOT_ENGAGED%22%5D%7D%2C%7B%22name%22%3A%22PARENT_ENTITY_CONTENT_TYPE%22%2C%22value%22%3A%5B%22PARENT_ENTITY_CONTENT_TYPE_WATCH%22%2C%22PARENT_ENTITY_CONTENT_TYPE_SHORT%22%5D%7D%5D"
- },
- "phan_tu": {
-  "hop_upload": {
-   "chon": [
-    "ytcp-uploads-dialog tp-yt-paper-dialog#dialog",
-    "tp-yt-paper-dialog.ytcp-uploads-dialog"
-   ]
-  },
-  "nut_chon_tep": {
-   "chon": [
-    "ytcp-uploads-file-picker #select-files-button",
-    "#select-files-button"
-   ],
-   "chu": [
-    "Chọn tệp"
-   ]
-  },
-  "o_tep_video": {
-   "chon": [
-    "ytcp-uploads-file-picker input[type=file]",
-    "input[name=Filedata]"
-   ],
-   "an": true
-  },
-  "link_video": {
-   "chon": [
-    "ytcp-uploads-dialog a[href*='youtu.be/']",
-    "ytcp-video-info a[href*='youtu.be/']"
-   ]
-  },
-  "tieu_de": {
-   "chon": [
-    "#title-textarea #textbox",
-    "ytcp-social-suggestions-textbox#title-textarea [contenteditable=true]"
-   ]
-  },
-  "mo_ta": {
-   "chon": [
-    "#description-textarea #textbox",
-    "#description-container [contenteditable=true]"
-   ]
-  },
-  "nut_thumbnail": {
-   "chon": [
-    "ytcp-thumbnails-compact-editor-uploader #select-button",
-    "#file-loader"
-   ],
-   "chu": [
-    "Tải tệp lên"
-   ]
-  },
-  "playlist_mo": {
-   "chon": [
-    "ytcp-video-metadata-playlists ytcp-dropdown-trigger",
-    "ytcp-video-metadata-playlists .dropdown-trigger-text"
-   ]
-  },
-  "playlist_muc": {
-   "chon": [
-    "ytcp-playlist-dialog ytcp-checkbox-lit div[role=checkbox]",
-    "ytcp-playlist-dialog ytcp-checkbox-lit",
-    "ytcp-playlist-dialog [role=checkbox]"
-   ]
-  },
-  "playlist_ten": {
-   "ghi_chu": "05/10: TÊN danh sách phát nằm ở li/label bao ô tick (div[role=checkbox] không có chữ) — cùng thứ tự với playlist_muc",
-   "chon": [
-    "ytcp-playlist-dialog li",
-    "ytcp-playlist-dialog ytcp-ve[role=none]"
-   ]
-  },
-  "playlist_xong": {
-   "chon": [
-    "ytcp-playlist-dialog .done-button",
-    "ytcp-playlist-dialog #done-button"
-   ],
-   "chu": [
-    "Xong"
-   ]
-  },
-  "khong_tre_em": {
-   "chon": [
-    "tp-yt-paper-radio-button[name=VIDEO_MADE_FOR_KIDS_NOT_MFK]"
-   ],
-   "chu": [
-    "Không, nội dung này không dành cho trẻ em"
-   ],
-   "kiem": "aria-checked=true"
-  },
-  "hien_them": {
-   "chon": [
-    "ytcp-button#toggle-button",
-    "#toggle-button"
-   ],
-   "chu": [
-    "Hiện thêm"
-   ]
-  },
-  "ai_co": {
-   "chon": [
-    "tp-yt-paper-radio-button[name=VIDEO_HAS_ALTERED_CONTENT_YES]"
-   ],
-   "kiem": "aria-checked=true"
-  },
-  "o_the": {
-   "chon": [
-    "#tags-container input#text-input",
-    "ytcp-free-text-chip-bar input",
-    "input[aria-label='Thẻ']"
-   ]
-  },
-  "the_da_co": {
-   "chon": [
-    "#tags-container ytcp-chip",
-    "ytcp-free-text-chip-bar ytcp-chip"
-   ]
-  },
-  "tien_do": {
-   "chon": [
-    "ytcp-uploads-dialog ytcp-video-upload-progress",
-    "ytcp-video-upload-progress .progress-label"
-   ]
-  },
-  "nut_tiep": {
-   "chon": [
-    "ytcp-uploads-dialog #next-button"
-   ],
-   "chu": [
-    "Tiếp"
-   ]
-  },
-  "hop_con_huy": {
-   "chon": [
-    "ytve-modal-host #discard-button"
-   ],
-   "chu": [
-    "Hủy thay đổi",
-    "Huỷ thay đổi"
-   ],
-   "phu": true
-  },
-  "phu_de_trinh_soan": {
-   "chon": [
-    "ytve-captions-editor-modal #publish-button",
-    "ytve-captions-editor-modal #save-draft-button"
-   ],
-   "phu": true
-  },
-  "buoc_hien_thi": {
-   "chon": [
-    "ytcp-stepper #step-badge-3",
-    "#step-badge-3"
-   ]
-  },
-  "phu_de_them": {
-   "chon": [
-    "#subtitles-button"
-   ],
-   "phu": true
-  },
-  "phu_de_tai_tep": {
-   "chon": [
-    "ytgn-captions-upload-button",
-    "#upload-caption-button"
-   ],
-   "chu": [
-    "Tải tệp lên"
-   ],
-   "phu": true
-  },
-  "phu_de_co_moc": {
-   "chon": [
-    "tp-yt-paper-radio-button[name=WITH_TIMING]"
-   ],
-   "chu": [
-    "Có dấu thời gian"
-   ],
-   "phu": true
-  },
-  "phu_de_tiep_tuc": {
-   "chon": [
-    "ytcp-button#confirm-button",
-    "ytcp-button#continue-button"
-   ],
-   "chu": [
-    "Tiếp tục"
-   ],
-   "phu": true
-  },
-  "phu_de_ngon_ngu": {
-   "chon": [
-    "ytcp-captions-language-selection ytcp-dropdown-trigger"
-   ],
-   "phu": true
-  },
-  "phu_de_xong": {
-   "chon": [
-    "ytve-captions-editor-modal #publish-button",
-    "ytcp-button#publish-button"
-   ],
-   "chu": [
-    "Xong"
-   ],
-   "phu": true
-  },
-  "mhkt_nhap": {
-   "chon": [
-    "ytcp-uploads-video-elements #import-from-video-button",
-    "#import-from-video-button"
-   ],
-   "chu": [
-    "Nhập từ video"
-   ],
-   "phu": true
-  },
-  "hop_mhkt": {
-   "chon": [
-    "ytve-modal-host ytve-endscreen-editor-options-panel"
-   ],
-   "phu": true
-  },
-  "mhkt_mau": {
-   "chon": [
-    "ytve-endscreen-template-picker div.card"
-   ],
-   "phu": true
-  },
-  "mhkt_luu": {
-   "chon": [
-    "ytve-modal-host ytcp-button#save-button"
-   ],
-   "chu": [
-    "Lưu"
-   ],
-   "phu": true
-  },
-  "mhkt_chon_video": {
-   "chon": [
-    "ytcp-video-pick-dialog-contents ytcp-entity-card"
-   ],
-   "phu": true
-  },
-  "mhkt_nhap_trong": {
-   "chon": [
-    "ytve-endscreen-editor-options-panel ytcp-button#import-endscreen-from-video-button"
-   ],
-   "phu": true
-  },
-  "mhkt_mo_sua": {
-   "chon": [
-    "ytcp-text-dropdown-trigger#endscreen-editor-link"
-   ],
-   "chu": [
-    "Màn hình kết thúc"
-   ],
-   "phu": true
-  },
-  "mhkt_video_dau": {
-   "chon": [
-    "ytcp-video-pick-dialog-contents ytcp-entity-card",
-    "ytcp-video-pick-dialog ytcp-entity-card"
-   ],
-   "phu": true
-  },
-  "mhkt_xac_nhan": {
-   "chon": [
-    "ytcp-video-pick-dialog #save-button"
-   ],
-   "chu": [
-    "Lưu",
-    "Chọn"
-   ],
-   "phu": true
-  },
-  "mhkt_them": {
-   "chon": [
-    "ytcp-uploads-video-elements #endscreens-button",
-    "#endscreens-button"
-   ],
-   "phu": true
-  },
-  "mhkt_hop_chon": {
-   "chon": [
-    "ytcp-video-pick-dialog tp-yt-paper-dialog",
-    "ytcp-video-pick-dialog ytcp-dialog"
-   ],
-   "phu": true
-  },
-  "mhkt_tim_video": {
-   "chon": [
-    "ytcp-video-pick-dialog input#search-yours",
-    "ytcp-video-pick-dialog input"
-   ],
-   "phu": true
-  },
-  "mhkt_dong_chon": {
-   "chon": [
-    "ytcp-video-pick-dialog ytcp-icon-button#close",
-    "ytcp-video-pick-dialog #close"
-   ],
-   "phu": true
-  },
-  "mhkt_phan_tu": {
-   "chon": [
-    "ytve-modal-host ytve-endscreen-row",
-    "ytve-modal-host ytve-options-panel-entity-item"
-   ],
-   "phu": true
-  },
-  "mhkt_mau_video_dk": {
-   "chon": [
-    "ytve-endscreen-template-picker div.card[aria-label='1 video, 1 đăng ký']",
-    "ytve-endscreen-template-picker div.card[aria-label='1 video, 1 subscribe']"
-   ],
-   "phu": true
-  },
-  "the_them": {
-   "chon": [
-    "ytcp-uploads-video-elements #cards-button",
-    "#cards-button"
-   ],
-   "phu": true
-  },
-  "the_mo_sua": {
-   "chon": [
-    "ytcp-text-dropdown-trigger#info-cards-editor-link"
-   ],
-   "chu": [
-    "Thẻ"
-   ],
-   "phu": true
-  },
-  "hop_the": {
-   "chon": [
-    "ytve-modal-host ytve-info-cards-editor-options-panel"
-   ],
-   "phu": true
-  },
-  "the_loai_dau": {
-   "chon": [
-    "ytve-info-cards-editor-default-options ytcp-icon-button.add-card-icon-button"
-   ],
-   "phu": true
-  },
-  "the_nut_them": {
-   "chon": [
-    "ytve-info-cards-editor-options-panel ytcp-button#add-card-button"
-   ],
-   "chu": [
-    "Thẻ"
-   ],
-   "phu": true
-  },
-  "the_menu_video": {
-   "chon": [
-    "tp-yt-paper-item#text-item-0"
-   ],
-   "chu": [
-    "Video"
-   ],
-   "phu": true
-  },
-  "the_menu_ds": {
-   "chon": [
-    "tp-yt-paper-item#text-item-1"
-   ],
-   "chu": [
-    "Danh sách phát"
-   ],
-   "phu": true
-  },
-  "the_chon_ds": {
-   "chon": [
-    "ytcp-playlist-pick-dialog ytcp-entity-card"
-   ],
-   "phu": true
-  },
-  "the_chon_video": {
-   "chon": [
-    "ytcp-video-pick-dialog-contents ytcp-entity-card"
-   ],
-   "phu": true
-  },
-  "the_tim_video": {
-   "chon": [
-    "ytcp-video-pick-dialog input#search-yours"
-   ],
-   "phu": true
-  },
-  "the_dong_chon": {
-   "chon": [
-    "ytcp-video-pick-dialog ytcp-icon-button#close",
-    "ytcp-playlist-pick-dialog ytcp-icon-button#close"
-   ],
-   "phu": true
-  },
-  "the_moc": {
-   "chon": [
-    "ytve-info-cards-editor-options-panel ytcp-media-timestamp-input.teaser-start-time-input"
-   ],
-   "phu": true
-  },
-  "the_moc_o": {
-   "chon": [
-    "ytve-info-cards-editor-options-panel ytcp-media-timestamp-input.teaser-start-time-input input"
-   ],
-   "an": true,
-   "phu": true
-  },
-  "the_muc_ten": {
-   "chon": [
-    "ytve-info-cards-editor-options-panel ytve-options-panel-entity-item"
-   ],
-   "phu": true
-  },
-  "the_dau_phat": {
-   "chon": [
-    "ytve-toolbar ytcp-media-timestamp-input"
-   ],
-   "phu": true
-  },
-  "the_xoa": {
-   "chon": [
-    "ytve-info-cards-editor-options-panel ytcp-icon-button.delete"
-   ],
-   "phu": true
-  },
-  "the_luu": {
-   "chon": [
-    "ytve-modal-host ytcp-button#save-button"
-   ],
-   "chu": [
-    "Lưu"
-   ],
-   "phu": true
-  },
-  "nut_thu_lai": {
-   "chu": [
-    "Thử lại"
-   ],
-   "phu": true
-  },
-  "len_lich_mo": {
-   "chon": [
-    "#second-container-expand-button"
-   ],
-   "chu": [
-    "Lên lịch"
-   ]
-  },
-  "o_ngay_mo": {
-   "chon": [
-    "#datepicker-trigger"
-   ]
-  },
-  "o_ngay": {
-   "chon": [
-    "ytcp-date-picker tp-yt-paper-input input",
-    "ytcp-date-picker input"
-   ]
-  },
-  "o_gio": {
-   "chon": [
-    "#time-of-day-container input",
-    "ytcp-form-input-container#time-of-day-container input"
-   ]
-  },
-  "nut_xong": {
-   "chon": [
-    "ytcp-uploads-dialog #done-button"
-   ],
-   "chu": [
-    "Lên lịch",
-    "Lưu"
-   ]
-  },
-  "hop_da_xong": {
-   "chon": [
-    "ytcp-video-share-dialog",
-    "ytcp-uploads-still-processing-dialog"
-   ]
-  },
-  "dong_hop_da_xong": {
-   "chon": [
-    "ytcp-video-share-dialog #close-button",
-    "ytcp-uploads-still-processing-dialog #close-button"
-   ],
-   "chu": [
-    "Đóng",
-    "Đã hiểu"
-   ]
-  },
-  "dong_hop_upload": {
-   "chon": [
-    "#ytcp-uploads-dialog-close-button",
-    "tp-yt-paper-dialog.ytcp-uploads-dialog button[aria-label='Đóng']"
-   ]
-  },
-  "nut_phan_hoi": {
-   "chon": [
-    "ytcp-uploads-dialog ytcp-send-feedback-button button",
-    "ytcp-send-feedback-button"
-   ],
-   "chi_kiem": true
-  },
-  "hang_video": {
-   "chon": [
-    "ytcp-video-row"
-   ]
-  },
-  "hang_tieu_de": {
-   "chon": [
-    "#video-title",
-    "a#video-title"
-   ]
-  },
-  "hang_che_do": {
-   "chon": [
-    "div.tablecell-visibility",
-    ".tablecell-visibility"
-   ]
-  },
-  "hang_ngay": {
-   "chon": [
-    "div.tablecell-date",
-    ".tablecell-date"
-   ]
-  },
-  "hang_sua_nhap": {
-   "chon": [
-    "ytcp-button.edit-draft-button",
-    "#draft-button"
-   ],
-   "chu": [
-    "Chỉnh sửa bản nháp"
-   ]
-  },
-  "danh_sach_trong": {
-   "chon": [
-    "ytcp-video-section-content #empty-state",
-    "ytcp-illustrated-empty-state",
-    "#empty-state"
-   ]
-  },
-  "hien_thi_trang_sua": {
-   "chon": [
-    "ytcp-video-metadata-visibility",
-    "#visibility-container"
-   ]
-  },
-  "sua_hien_thi_mo": {
-   "chon": [
-    "ytcp-video-metadata-visibility #select-button",
-    "ytcp-video-metadata-visibility ytcp-dropdown-trigger",
-    "ytcp-video-metadata-visibility"
-   ],
-   "chi_kiem": true
-  },
-  "sua_hop_hien_thi": {
-   "chon": [
-    "tp-yt-paper-dialog.ytcp-video-visibility-edit-popup",
-    "tp-yt-paper-dialog ytcp-video-visibility-select",
-    "ytcp-video-visibility-edit-popup tp-yt-paper-dialog",
-    "ytcp-video-visibility-select",
-    "tp-yt-paper-dialog #datepicker-trigger"
-   ],
-   "chi_kiem": true,
-   "ghi_chu": "30/09: 2 bộ chọn đầu không khớp (xác nhận TL1-T7-0011 hỏng 'hậu điều kiện không đạt') — thêm dự phòng, luồng còn nhận o_ngay_mo/o_gio làm dấu hộp đã mở"
-  },
-  "sua_hop_xong": {
-   "chon": [
-    "ytcp-video-visibility-edit-popup #save-button",
-    "ytcp-video-visibility-edit-popup ytcp-button#done-button",
-    "tp-yt-paper-dialog.ytcp-video-visibility-edit-popup #save-button"
-   ],
-   "chu": [
-    "Xong",
-    "Done",
-    "完了"
-   ],
-   "chi_kiem": true,
-   "ghi_chu": "01/10: nút Xong của hộp Chế độ hiển thị ở trang sửa (áp vào form, rồi mới bấm sua_luu) — dùng cho --doi-lich; chạy --doi-lich --kiem-dom --video <id> để đo"
-  },
-  "sua_luu": {
-   "chon": [
-    "ytcp-video-details-section ytcp-button#save"
-   ],
-   "chi_kiem": true
-  },
-  "sua_huy_thay_doi": {
-   "chon": [
-    "ytcp-video-details-section ytcp-button#discard"
-   ],
-   "chi_kiem": true
-  },
-  "sua_bia_tai": {
-   "chon": [
-    "ytcp-video-custom-still-editor ytcp-thumbnail-editor #select-button",
-    "ytcp-thumbnail-uploader ytcp-thumbnail-editor #select-button"
-   ],
-   "chu": [
-    "Tải tệp lên"
-   ],
-   "phu": true,
-   "ghi_chu": "01/10 đo TL3: trang sửa video CHƯA có bìa tuỳ chỉnh — ô Tải tệp lên của khối Hình thu nhỏ"
-  },
-  "sua_bia_menu": {
-   "chon": [
-    "ytcp-video-custom-still-editor ytcp-thumbnail-editor #options-button",
-    "ytcp-thumbnail-uploader ytcp-thumbnail-editor #options-button"
-   ],
-   "chu": [],
-   "phu": true,
-   "ghi_chu": "01/10 đo TL3 (C432…): video ĐÃ có bìa tuỳ chỉnh — nút ⋮ (aria Tùy chọn) mở menu Thay đổi / Tải xuống / Chọn trong video / Thử nghiệm A/B"
-  },
-  "sua_bia_doi": {
-   "chon": [
-    "tp-yt-paper-item[test-id='CHANGE']",
-    "ytcp-text-menu tp-yt-paper-item#text-item-0"
-   ],
-   "chu": [
-    "Thay đổi",
-    "Change",
-    "変更"
-   ],
-   "phu": true
-  },
-  "sua_bia_input": {
-   "chon": [
-    "ytcp-video-custom-still-editor input#file-loader",
-    "ytcp-thumbnail-uploader input#file-loader"
-   ],
-   "an": true,
-   "phu": true
-  },
-  "xem_bl_khung": {
-   "chon": [
-    "ytd-comments#comments ytd-comments-header-renderer",
-    "ytd-comments#comments #header"
-   ]
-  },
-  "xem_bl_tat": {
-   "chon": [
-    "ytd-comments#comments ytd-message-renderer",
-    "ytd-comments#comments #message"
-   ]
-  },
-  "xem_o_mo": {
-   "chon": [
-    "ytd-comment-simplebox-renderer #simplebox-placeholder",
-    "ytd-comment-simplebox-renderer #placeholder-area"
-   ]
-  },
-  "xem_o_go": {
-   "chon": [
-    "ytd-comment-simplebox-renderer ytd-commentbox #contenteditable-root[contenteditable=true]",
-    "ytd-commentbox #contenteditable-root"
-   ]
-  },
-  "xem_gui": {
-   "chon": [
-    "ytd-comment-simplebox-renderer ytd-commentbox #submit-button button",
-    "ytd-commentbox #submit-button button"
-   ],
-   "chu": [
-    "Bình luận",
-    "Comment"
-   ]
-  },
-  "xem_huy": {
-   "chon": [
-    "ytd-comment-simplebox-renderer ytd-commentbox #cancel-button button",
-    "ytd-commentbox #cancel-button button"
-   ],
-   "chu": [
-    "Hủy",
-    "Cancel"
-   ]
-  },
-  "xem_luong": {
-   "chon": [
-    "ytd-comments#comments ytd-comment-thread-renderer",
-    "ytd-comment-thread-renderer"
-   ]
-  },
-  "xem_noi_dung": {
-   "chon": [
-    "#content-text"
-   ]
-  },
-  "xem_tac_gia": {
-   "chon": [
-    "#author-text",
-    "a#author-text",
-    "#header-author a"
-   ]
-  },
-  "xem_huy_hieu_ghim": {
-   "chon": [
-    "ytd-pinned-comment-badge-renderer",
-    "#pinned-comment-badge ytd-pinned-comment-badge-renderer"
-   ]
-  },
-  "xem_menu": {
-   "chon": [
-    "#action-menu button",
-    "#action-menu yt-icon-button",
-    "#action-menu"
-   ]
-  },
-  "xem_menu_ghim": {
-   "chu": [
-    "Ghim",
-    "Pin",
-    "固定"
-   ],
-   "ghi_chu": "CHỈ theo chữ — menu ⋮ còn Chỉnh sửa/Xóa, không được chọn theo vị trí"
-  },
-  "xem_xac_nhan_ghim": {
-   "chon": [
-    "yt-confirm-dialog-renderer #confirm-button button",
-    "yt-confirm-dialog-renderer #confirm-button"
-   ],
-   "chu": [
-    "Ghim",
-    "Pin",
-    "固定"
-   ]
-  },
-  "xem_hop_xac_minh": {
-   "chon": [
-    "ytd-popup-container tp-yt-paper-dialog ytd-flow-step-renderer",
-    "tp-yt-paper-dialog ytd-flow-step-renderer"
-   ],
-   "ghi_chu": "đo 29/09 TL1: bấm Ghim → 'Tận hưởng các tính năng nâng cao — Để ghim bình luận, hãy hoàn tất quy trình xác minh…' (kênh chưa bật tính năng nâng cao)"
-  },
-  "xem_hop_xac_minh_huy": {
-   "chon": [
-    "button[aria-label='Huỷ']",
-    "button[aria-label='Hủy']",
-    "button[aria-label='Cancel']"
-   ],
-   "chu": [
-    "Huỷ",
-    "Hủy",
-    "Cancel"
-   ]
-  },
-  "xem_chu_kenh": {
-   "chon": [
-    "ytd-watch-metadata ytd-video-owner-renderer a[href*='/@']",
-    "ytd-video-owner-renderer a[href*='/@']",
-    "ytd-video-owner-renderer a[href*='/channel/']"
-   ]
-  },
-  "sc_khung": {
-   "chon": [
-    "ytcp-comments-section#comments-section",
-    "ytcp-comments-section"
-   ]
-  },
-  "sc_bo_loc_phan_hoi": {
-   "chon": [
-    "ytcp-chip[aria-label*='Trạng thái phản hồi'] #delete-icon",
-    "ytcp-chip[aria-label*='Response status'] #delete-icon"
-   ],
-   "chi_kiem": true
-  },
-  "sc_trong": {
-   "chon": [
-    "ytcp-comments-section #comments-section-message"
-   ]
-  },
-  "sc_luong": {
-   "chon": [
-    "ytcp-comments-section ytcp-comment-thread",
-    "ytcp-comments-section ytd-comment-thread-renderer"
-   ]
-  },
-  "sc_noi_dung": {
-   "chon": [
-    "#content-text"
-   ]
-  },
-  "sc_tac_gia": {
-   "chon": [
-    "ytcp-comment a#name",
-    "#author-text",
-    "#name"
-   ]
-  },
-  "sc_nut_tra_loi": {
-   "chon": [
-    "ytcp-comment-action-buttons #reply-button button",
-    "#reply-button button",
-    "#reply-button-end button"
-   ],
-   "chu": [
-    "Phản hồi",
-    "Reply",
-    "返信"
-   ]
-  },
-  "sc_o_tra_loi": {
-   "chon": [
-    "ytcp-commentbox#reply-dialog-id textarea",
-    "#reply-dialog-container ytcp-commentbox textarea",
-    "ytcp-commentbox textarea"
-   ]
-  },
-  "sc_gui_tra_loi": {
-   "chon": [
-    "ytcp-commentbox#reply-dialog-id #submit-button button",
-    "#reply-dialog-container ytcp-commentbox #submit-button button"
-   ],
-   "chu": [
-    "Phản hồi",
-    "Reply",
-    "返信"
-   ]
-  },
-  "sc_huy_tra_loi": {
-   "chon": [
-    "ytcp-commentbox#reply-dialog-id #cancel-button button",
-    "#reply-dialog-container ytcp-commentbox #cancel-button button"
-   ],
-   "chu": [
-    "Hủy",
-    "Cancel"
-   ]
+  "phien_ban": 1,
+  "kiem_cuoi": "2026-09-29 08:56 --kiem-dom TL1/TL2/TL3 mức 1 + mức 2 thay thế (trang sửa, kênh không có nháp) 0 hỏng 0 dự phòng; TL4 hỏng tieu_de ở trang sửa (giao diện mới, Studio tiếng Nhật). CHƯA đo trên trang thật: link_video, nut_thumbnail, tien_do, nut_tiep, buoc_hien_thi, phu_de_*, mhkt_*, the_*, nut_xong, hop_da_xong, dong_hop_da_xong, hang_sua_nhap (cần một bản nháp/lượt tải).",
+  "ghi_chu": "Sửa khi YouTube đổi giao diện; chạy --kiem-dom sau khi sửa. Mỗi khoá: 'chon' thử lần lượt (chon#1 là đường chính, còn lại là DỰ PHÒNG), 'chu' là dự phòng cuối theo chữ trên nút, 'an': true = phần tử ẩn (ô tệp), 'phu': true = bước PHỤ (hỏng thì bỏ qua).",
+  "url": {
+    "studio": "https://studio.youtube.com/",
+    "upload": "https://studio.youtube.com/channel/{uc}/videos/upload?d=ud",
+    "danh_sach": "https://studio.youtube.com/channel/{uc}/videos/upload",
+    "loc_tieu_de": "https://studio.youtube.com/channel/{uc}/videos/upload?filter=%5B%7B%22name%22%3A%22TITLE%22%2C%22value%22%3A%22{q}%22%7D%5D",
+    "sua": "https://studio.youtube.com/video/{id}/edit",
+    "xem": "https://www.youtube.com/watch?v={id}",
+    "cmt_video": "https://studio.youtube.com/video/{id}/comments",
+    "cmt_chua_phan_hoi": "https://studio.youtube.com/channel/{uc}/comments/inbox?filter=%5B%7B%22isDisabled%22%3Afalse%2C%22isPinned%22%3Atrue%2C%22name%22%3A%22SORT_BY%22%2C%22value%22%3A%22SORT_BY_NEWEST%22%7D%2C%7B%22name%22%3A%22ENGAGED_STATUS%22%2C%22value%22%3A%5B%22COMMENT_CATEGORY_NOT_ENGAGED%22%5D%7D%2C%7B%22name%22%3A%22PARENT_ENTITY_CONTENT_TYPE%22%2C%22value%22%3A%5B%22PARENT_ENTITY_CONTENT_TYPE_WATCH%22%2C%22PARENT_ENTITY_CONTENT_TYPE_SHORT%22%5D%7D%5D"
+  },
+  "phan_tu": {
+    "hop_upload": {
+      "chon": [
+        "ytcp-uploads-dialog tp-yt-paper-dialog#dialog",
+        "tp-yt-paper-dialog.ytcp-uploads-dialog"
+      ]
+    },
+    "nut_chon_tep": {
+      "chon": [
+        "ytcp-uploads-file-picker #select-files-button",
+        "#select-files-button"
+      ],
+      "chu": [
+        "Chọn tệp"
+      ]
+    },
+    "o_tep_video": {
+      "chon": [
+        "ytcp-uploads-file-picker input[type=file]",
+        "input[name=Filedata]"
+      ],
+      "an": true
+    },
+    "link_video": {
+      "chon": [
+        "ytcp-uploads-dialog a[href*='youtu.be/']",
+        "ytcp-video-info a[href*='youtu.be/']"
+      ]
+    },
+    "tieu_de": {
+      "chon": [
+        "#title-textarea #textbox",
+        "ytcp-social-suggestions-textbox#title-textarea [contenteditable=true]"
+      ]
+    },
+    "mo_ta": {
+      "chon": [
+        "#description-textarea #textbox",
+        "#description-container [contenteditable=true]"
+      ]
+    },
+    "nut_thumbnail": {
+      "chon": [
+        "ytcp-thumbnails-compact-editor-uploader #select-button",
+        "#file-loader"
+      ],
+      "chu": [
+        "Tải tệp lên"
+      ]
+    },
+    "playlist_mo": {
+      "chon": [
+        "ytcp-video-metadata-playlists ytcp-dropdown-trigger",
+        "ytcp-video-metadata-playlists .dropdown-trigger-text"
+      ]
+    },
+    "playlist_muc": {
+      "chon": [
+        "ytcp-playlist-dialog ytcp-checkbox-lit div[role=checkbox]",
+        "ytcp-playlist-dialog ytcp-checkbox-lit",
+        "ytcp-playlist-dialog [role=checkbox]"
+      ]
+    },
+    "playlist_ten": {
+      "ghi_chu": "05/10: TÊN danh sách phát nằm ở li/label bao ô tick (div[role=checkbox] không có chữ) — cùng thứ tự với playlist_muc",
+      "chon": [
+        "ytcp-playlist-dialog li",
+        "ytcp-playlist-dialog ytcp-ve[role=none]"
+      ]
+    },
+    "playlist_xong": {
+      "chon": [
+        "ytcp-playlist-dialog .done-button",
+        "ytcp-playlist-dialog #done-button"
+      ],
+      "chu": [
+        "Xong"
+      ]
+    },
+    "khong_tre_em": {
+      "chon": [
+        "tp-yt-paper-radio-button[name=VIDEO_MADE_FOR_KIDS_NOT_MFK]"
+      ],
+      "chu": [
+        "Không, nội dung này không dành cho trẻ em"
+      ],
+      "kiem": "aria-checked=true"
+    },
+    "hien_them": {
+      "chon": [
+        "ytcp-button#toggle-button",
+        "#toggle-button"
+      ],
+      "chu": [
+        "Hiện thêm"
+      ]
+    },
+    "ai_co": {
+      "chon": [
+        "tp-yt-paper-radio-button[name=VIDEO_HAS_ALTERED_CONTENT_YES]"
+      ],
+      "kiem": "aria-checked=true"
+    },
+    "o_the": {
+      "chon": [
+        "#tags-container input#text-input",
+        "ytcp-free-text-chip-bar input",
+        "input[aria-label='Thẻ']"
+      ]
+    },
+    "the_da_co": {
+      "chon": [
+        "#tags-container ytcp-chip",
+        "ytcp-free-text-chip-bar ytcp-chip"
+      ]
+    },
+    "tien_do": {
+      "chon": [
+        "ytcp-uploads-dialog ytcp-video-upload-progress",
+        "ytcp-video-upload-progress .progress-label"
+      ]
+    },
+    "nut_tiep": {
+      "chon": [
+        "ytcp-uploads-dialog #next-button"
+      ],
+      "chu": [
+        "Tiếp"
+      ]
+    },
+    "hop_con_huy": {
+      "chon": [
+        "ytve-modal-host #discard-button"
+      ],
+      "chu": [
+        "Hủy thay đổi",
+        "Huỷ thay đổi"
+      ],
+      "phu": true
+    },
+    "phu_de_trinh_soan": {
+      "chon": [
+        "ytve-captions-editor-modal #publish-button",
+        "ytve-captions-editor-modal #save-draft-button"
+      ],
+      "phu": true
+    },
+    "buoc_hien_thi": {
+      "chon": [
+        "ytcp-stepper #step-badge-3",
+        "#step-badge-3"
+      ]
+    },
+    "phu_de_them": {
+      "chon": [
+        "#subtitles-button"
+      ],
+      "phu": true
+    },
+    "phu_de_tai_tep": {
+      "chon": [
+        "ytgn-captions-upload-button",
+        "#upload-caption-button"
+      ],
+      "chu": [
+        "Tải tệp lên"
+      ],
+      "phu": true
+    },
+    "phu_de_co_moc": {
+      "chon": [
+        "tp-yt-paper-radio-button[name=WITH_TIMING]"
+      ],
+      "chu": [
+        "Có dấu thời gian"
+      ],
+      "phu": true
+    },
+    "phu_de_tiep_tuc": {
+      "chon": [
+        "ytcp-button#confirm-button",
+        "ytcp-button#continue-button"
+      ],
+      "chu": [
+        "Tiếp tục"
+      ],
+      "phu": true
+    },
+    "phu_de_ngon_ngu": {
+      "chon": [
+        "ytcp-captions-language-selection ytcp-dropdown-trigger"
+      ],
+      "phu": true
+    },
+    "phu_de_xong": {
+      "chon": [
+        "ytve-captions-editor-modal #publish-button",
+        "ytcp-button#publish-button"
+      ],
+      "chu": [
+        "Xong"
+      ],
+      "phu": true
+    },
+    "mhkt_nhap": {
+      "chon": [
+        "ytcp-uploads-video-elements #import-from-video-button",
+        "#import-from-video-button"
+      ],
+      "chu": [
+        "Nhập từ video"
+      ],
+      "phu": true
+    },
+    "hop_mhkt": {
+      "chon": [
+        "ytve-modal-host ytve-endscreen-editor-options-panel"
+      ],
+      "phu": true
+    },
+    "mhkt_mau": {
+      "chon": [
+        "ytve-endscreen-template-picker div.card"
+      ],
+      "phu": true
+    },
+    "mhkt_luu": {
+      "chon": [
+        "ytve-modal-host ytcp-button#save-button"
+      ],
+      "chu": [
+        "Lưu"
+      ],
+      "phu": true
+    },
+    "mhkt_chon_video": {
+      "chon": [
+        "ytcp-video-pick-dialog-contents ytcp-entity-card"
+      ],
+      "phu": true
+    },
+    "mhkt_nhap_trong": {
+      "chon": [
+        "ytve-endscreen-editor-options-panel ytcp-button#import-endscreen-from-video-button"
+      ],
+      "phu": true
+    },
+    "mhkt_mo_sua": {
+      "chon": [
+        "ytcp-text-dropdown-trigger#endscreen-editor-link"
+      ],
+      "chu": [
+        "Màn hình kết thúc"
+      ],
+      "phu": true
+    },
+    "mhkt_video_dau": {
+      "chon": [
+        "ytcp-video-pick-dialog-contents ytcp-entity-card",
+        "ytcp-video-pick-dialog ytcp-entity-card"
+      ],
+      "phu": true
+    },
+    "mhkt_xac_nhan": {
+      "chon": [
+        "ytcp-video-pick-dialog #save-button"
+      ],
+      "chu": [
+        "Lưu",
+        "Chọn"
+      ],
+      "phu": true
+    },
+    "mhkt_them": {
+      "chon": [
+        "ytcp-uploads-video-elements #endscreens-button",
+        "#endscreens-button"
+      ],
+      "phu": true
+    },
+    "mhkt_hop_chon": {
+      "chon": [
+        "ytcp-video-pick-dialog tp-yt-paper-dialog",
+        "ytcp-video-pick-dialog ytcp-dialog"
+      ],
+      "phu": true
+    },
+    "mhkt_tim_video": {
+      "chon": [
+        "ytcp-video-pick-dialog input#search-yours",
+        "ytcp-video-pick-dialog input"
+      ],
+      "phu": true
+    },
+    "mhkt_dong_chon": {
+      "chon": [
+        "ytcp-video-pick-dialog ytcp-icon-button#close",
+        "ytcp-video-pick-dialog #close"
+      ],
+      "phu": true
+    },
+    "mhkt_phan_tu": {
+      "chon": [
+        "ytve-modal-host ytve-endscreen-row",
+        "ytve-modal-host ytve-options-panel-entity-item"
+      ],
+      "phu": true
+    },
+    "mhkt_mau_video_dk": {
+      "chon": [
+        "ytve-endscreen-template-picker div.card[aria-label='1 video, 1 đăng ký']",
+        "ytve-endscreen-template-picker div.card[aria-label='1 video, 1 subscribe']"
+      ],
+      "phu": true
+    },
+    "the_them": {
+      "chon": [
+        "ytcp-uploads-video-elements #cards-button",
+        "#cards-button"
+      ],
+      "phu": true
+    },
+    "the_mo_sua": {
+      "chon": [
+        "ytcp-text-dropdown-trigger#info-cards-editor-link"
+      ],
+      "chu": [
+        "Thẻ"
+      ],
+      "phu": true
+    },
+    "hop_the": {
+      "chon": [
+        "ytve-modal-host ytve-info-cards-editor-options-panel"
+      ],
+      "phu": true
+    },
+    "the_loai_dau": {
+      "chon": [
+        "ytve-info-cards-editor-default-options ytcp-icon-button.add-card-icon-button"
+      ],
+      "phu": true
+    },
+    "the_nut_them": {
+      "chon": [
+        "ytve-info-cards-editor-options-panel ytcp-button#add-card-button"
+      ],
+      "chu": [
+        "Thẻ"
+      ],
+      "phu": true
+    },
+    "the_menu_video": {
+      "chon": [
+        "tp-yt-paper-item#text-item-0"
+      ],
+      "chu": [
+        "Video"
+      ],
+      "phu": true
+    },
+    "the_menu_ds": {
+      "chon": [
+        "tp-yt-paper-item#text-item-1"
+      ],
+      "chu": [
+        "Danh sách phát"
+      ],
+      "phu": true
+    },
+    "the_chon_ds": {
+      "chon": [
+        "ytcp-playlist-pick-dialog ytcp-entity-card"
+      ],
+      "phu": true
+    },
+    "the_chon_video": {
+      "chon": [
+        "ytcp-video-pick-dialog-contents ytcp-entity-card"
+      ],
+      "phu": true
+    },
+    "the_tim_video": {
+      "chon": [
+        "ytcp-video-pick-dialog input#search-yours"
+      ],
+      "phu": true
+    },
+    "the_dong_chon": {
+      "chon": [
+        "ytcp-video-pick-dialog ytcp-icon-button#close",
+        "ytcp-playlist-pick-dialog ytcp-icon-button#close"
+      ],
+      "phu": true
+    },
+    "the_moc": {
+      "chon": [
+        "ytve-info-cards-editor-options-panel ytcp-media-timestamp-input.teaser-start-time-input"
+      ],
+      "phu": true
+    },
+    "the_moc_o": {
+      "chon": [
+        "ytve-info-cards-editor-options-panel ytcp-media-timestamp-input.teaser-start-time-input input"
+      ],
+      "an": true,
+      "phu": true
+    },
+    "the_muc_ten": {
+      "chon": [
+        "ytve-info-cards-editor-options-panel ytve-options-panel-entity-item"
+      ],
+      "phu": true
+    },
+    "the_dau_phat": {
+      "chon": [
+        "ytve-toolbar ytcp-media-timestamp-input"
+      ],
+      "phu": true
+    },
+    "the_xoa": {
+      "chon": [
+        "ytve-info-cards-editor-options-panel ytcp-icon-button.delete"
+      ],
+      "phu": true
+    },
+    "the_luu": {
+      "chon": [
+        "ytve-modal-host ytcp-button#save-button"
+      ],
+      "chu": [
+        "Lưu"
+      ],
+      "phu": true
+    },
+    "nut_thu_lai": {
+      "chu": [
+        "Thử lại"
+      ],
+      "phu": true
+    },
+    "len_lich_mo": {
+      "chon": [
+        "#second-container-expand-button"
+      ],
+      "chu": [
+        "Lên lịch"
+      ]
+    },
+    "o_ngay_mo": {
+      "chon": [
+        "#datepicker-trigger"
+      ]
+    },
+    "o_ngay": {
+      "chon": [
+        "ytcp-date-picker tp-yt-paper-input input",
+        "ytcp-date-picker input"
+      ]
+    },
+    "o_gio": {
+      "chon": [
+        "#time-of-day-container input",
+        "ytcp-form-input-container#time-of-day-container input"
+      ]
+    },
+    "nut_xong": {
+      "chon": [
+        "ytcp-uploads-dialog #done-button"
+      ],
+      "chu": [
+        "Lên lịch",
+        "Lưu"
+      ]
+    },
+    "hop_da_xong": {
+      "chon": [
+        "ytcp-video-share-dialog",
+        "ytcp-uploads-still-processing-dialog"
+      ]
+    },
+    "dong_hop_da_xong": {
+      "chon": [
+        "ytcp-video-share-dialog #close-button",
+        "ytcp-uploads-still-processing-dialog #close-button"
+      ],
+      "chu": [
+        "Đóng",
+        "Đã hiểu"
+      ]
+    },
+    "dong_hop_upload": {
+      "chon": [
+        "#ytcp-uploads-dialog-close-button",
+        "tp-yt-paper-dialog.ytcp-uploads-dialog button[aria-label='Đóng']"
+      ]
+    },
+    "nut_phan_hoi": {
+      "chon": [
+        "ytcp-uploads-dialog ytcp-send-feedback-button button",
+        "ytcp-send-feedback-button"
+      ],
+      "chi_kiem": true
+    },
+    "hang_video": {
+      "chon": [
+        "ytcp-video-row"
+      ]
+    },
+    "hang_tieu_de": {
+      "chon": [
+        "#video-title",
+        "a#video-title"
+      ]
+    },
+    "hang_che_do": {
+      "chon": [
+        "div.tablecell-visibility",
+        ".tablecell-visibility"
+      ]
+    },
+    "hang_ngay": {
+      "chon": [
+        "div.tablecell-date",
+        ".tablecell-date"
+      ]
+    },
+    "hang_sua_nhap": {
+      "chon": [
+        "ytcp-button.edit-draft-button",
+        "#draft-button"
+      ],
+      "chu": [
+        "Chỉnh sửa bản nháp"
+      ]
+    },
+    "danh_sach_trong": {
+      "chon": [
+        "ytcp-video-section-content #empty-state",
+        "ytcp-illustrated-empty-state",
+        "#empty-state"
+      ]
+    },
+    "hien_thi_trang_sua": {
+      "chon": [
+        "ytcp-video-metadata-visibility",
+        "#visibility-container"
+      ]
+    },
+    "sua_hien_thi_mo": {
+      "chon": [
+        "ytcp-video-metadata-visibility #select-button",
+        "ytcp-video-metadata-visibility ytcp-dropdown-trigger",
+        "ytcp-video-metadata-visibility"
+      ],
+      "chi_kiem": true
+    },
+    "sua_hop_hien_thi": {
+      "chon": [
+        "tp-yt-paper-dialog.ytcp-video-visibility-edit-popup",
+        "tp-yt-paper-dialog ytcp-video-visibility-select",
+        "ytcp-video-visibility-edit-popup tp-yt-paper-dialog",
+        "ytcp-video-visibility-select",
+        "tp-yt-paper-dialog #datepicker-trigger"
+      ],
+      "chi_kiem": true,
+      "ghi_chu": "30/09: 2 bộ chọn đầu không khớp (xác nhận TL1-T7-0011 hỏng 'hậu điều kiện không đạt') — thêm dự phòng, luồng còn nhận o_ngay_mo/o_gio làm dấu hộp đã mở"
+    },
+    "sua_hop_xong": {
+      "chon": [
+        "ytcp-video-visibility-edit-popup #save-button",
+        "ytcp-video-visibility-edit-popup ytcp-button#done-button",
+        "tp-yt-paper-dialog.ytcp-video-visibility-edit-popup #save-button"
+      ],
+      "chu": [
+        "Xong",
+        "Done",
+        "完了"
+      ],
+      "chi_kiem": true,
+      "ghi_chu": "01/10: nút Xong của hộp Chế độ hiển thị ở trang sửa (áp vào form, rồi mới bấm sua_luu) — dùng cho --doi-lich; chạy --doi-lich --kiem-dom --video <id> để đo"
+    },
+    "sua_luu": {
+      "chon": [
+        "ytcp-video-details-section ytcp-button#save"
+      ],
+      "chi_kiem": true
+    },
+    "sua_huy_thay_doi": {
+      "chon": [
+        "ytcp-video-details-section ytcp-button#discard"
+      ],
+      "chi_kiem": true
+    },
+    "sua_bia_tai": {
+      "chon": [
+        "ytcp-video-custom-still-editor ytcp-thumbnail-editor #select-button",
+        "ytcp-thumbnail-uploader ytcp-thumbnail-editor #select-button"
+      ],
+      "chu": [
+        "Tải tệp lên"
+      ],
+      "phu": true,
+      "ghi_chu": "01/10 đo TL3: trang sửa video CHƯA có bìa tuỳ chỉnh — ô Tải tệp lên của khối Hình thu nhỏ"
+    },
+    "sua_bia_menu": {
+      "chon": [
+        "ytcp-video-custom-still-editor ytcp-thumbnail-editor #options-button",
+        "ytcp-thumbnail-uploader ytcp-thumbnail-editor #options-button"
+      ],
+      "chu": [],
+      "phu": true,
+      "ghi_chu": "01/10 đo TL3 (C432…): video ĐÃ có bìa tuỳ chỉnh — nút ⋮ (aria Tùy chọn) mở menu Thay đổi / Tải xuống / Chọn trong video / Thử nghiệm A/B"
+    },
+    "sua_bia_doi": {
+      "chon": [
+        "tp-yt-paper-item[test-id='CHANGE']",
+        "ytcp-text-menu tp-yt-paper-item#text-item-0"
+      ],
+      "chu": [
+        "Thay đổi",
+        "Change",
+        "変更"
+      ],
+      "phu": true
+    },
+    "sua_bia_input": {
+      "chon": [
+        "ytcp-video-custom-still-editor input#file-loader",
+        "ytcp-thumbnail-uploader input#file-loader"
+      ],
+      "an": true,
+      "phu": true
+    },
+    "xem_bl_khung": {
+      "chon": [
+        "ytd-comments#comments ytd-comments-header-renderer",
+        "ytd-comments#comments #header"
+      ]
+    },
+    "xem_bl_tat": {
+      "chon": [
+        "ytd-comments#comments ytd-message-renderer",
+        "ytd-comments#comments #message"
+      ]
+    },
+    "xem_o_mo": {
+      "chon": [
+        "ytd-comment-simplebox-renderer #simplebox-placeholder",
+        "ytd-comment-simplebox-renderer #placeholder-area"
+      ]
+    },
+    "xem_o_go": {
+      "chon": [
+        "ytd-comment-simplebox-renderer ytd-commentbox #contenteditable-root[contenteditable=true]",
+        "ytd-commentbox #contenteditable-root"
+      ]
+    },
+    "xem_gui": {
+      "chon": [
+        "ytd-comment-simplebox-renderer ytd-commentbox #submit-button button",
+        "ytd-commentbox #submit-button button"
+      ],
+      "chu": [
+        "Bình luận",
+        "Comment"
+      ]
+    },
+    "xem_huy": {
+      "chon": [
+        "ytd-comment-simplebox-renderer ytd-commentbox #cancel-button button",
+        "ytd-commentbox #cancel-button button"
+      ],
+      "chu": [
+        "Hủy",
+        "Cancel"
+      ]
+    },
+    "xem_luong": {
+      "chon": [
+        "ytd-comments#comments ytd-comment-thread-renderer",
+        "ytd-comment-thread-renderer"
+      ]
+    },
+    "xem_noi_dung": {
+      "chon": [
+        "#content-text"
+      ]
+    },
+    "xem_tac_gia": {
+      "chon": [
+        "#author-text",
+        "a#author-text",
+        "#header-author a"
+      ]
+    },
+    "xem_huy_hieu_ghim": {
+      "chon": [
+        "ytd-pinned-comment-badge-renderer",
+        "#pinned-comment-badge ytd-pinned-comment-badge-renderer"
+      ]
+    },
+    "xem_menu": {
+      "chon": [
+        "#action-menu button",
+        "#action-menu yt-icon-button",
+        "#action-menu"
+      ]
+    },
+    "xem_menu_ghim": {
+      "chu": [
+        "Ghim",
+        "Pin",
+        "固定"
+      ],
+      "ghi_chu": "CHỈ theo chữ — menu ⋮ còn Chỉnh sửa/Xóa, không được chọn theo vị trí"
+    },
+    "xem_xac_nhan_ghim": {
+      "chon": [
+        "yt-confirm-dialog-renderer #confirm-button button",
+        "yt-confirm-dialog-renderer #confirm-button"
+      ],
+      "chu": [
+        "Ghim",
+        "Pin",
+        "固定"
+      ]
+    },
+    "xem_hop_xac_minh": {
+      "chon": [
+        "ytd-popup-container tp-yt-paper-dialog ytd-flow-step-renderer",
+        "tp-yt-paper-dialog ytd-flow-step-renderer"
+      ],
+      "ghi_chu": "đo 29/09 TL1: bấm Ghim → 'Tận hưởng các tính năng nâng cao — Để ghim bình luận, hãy hoàn tất quy trình xác minh…' (kênh chưa bật tính năng nâng cao)"
+    },
+    "xem_hop_xac_minh_huy": {
+      "chon": [
+        "button[aria-label='Huỷ']",
+        "button[aria-label='Hủy']",
+        "button[aria-label='Cancel']"
+      ],
+      "chu": [
+        "Huỷ",
+        "Hủy",
+        "Cancel"
+      ]
+    },
+    "xem_chu_kenh": {
+      "chon": [
+        "ytd-watch-metadata ytd-video-owner-renderer a[href*='/@']",
+        "ytd-video-owner-renderer a[href*='/@']",
+        "ytd-video-owner-renderer a[href*='/channel/']"
+      ]
+    },
+    "sc_khung": {
+      "chon": [
+        "ytcp-comments-section#comments-section",
+        "ytcp-comments-section"
+      ]
+    },
+    "sc_bo_loc_phan_hoi": {
+      "chon": [
+        "ytcp-chip[aria-label*='Trạng thái phản hồi'] #delete-icon",
+        "ytcp-chip[aria-label*='Response status'] #delete-icon"
+      ],
+      "chi_kiem": true
+    },
+    "sc_trong": {
+      "chon": [
+        "ytcp-comments-section #comments-section-message"
+      ]
+    },
+    "sc_luong": {
+      "chon": [
+        "ytcp-comments-section ytcp-comment-thread",
+        "ytcp-comments-section ytd-comment-thread-renderer"
+      ]
+    },
+    "sc_noi_dung": {
+      "chon": [
+        "#content-text"
+      ]
+    },
+    "sc_tac_gia": {
+      "chon": [
+        "ytcp-comment a#name",
+        "#author-text",
+        "#name"
+      ]
+    },
+    "sc_nut_tra_loi": {
+      "chon": [
+        "ytcp-comment-action-buttons #reply-button button",
+        "#reply-button button",
+        "#reply-button-end button"
+      ],
+      "chu": [
+        "Phản hồi",
+        "Reply",
+        "返信"
+      ]
+    },
+    "sc_o_tra_loi": {
+      "chon": [
+        "ytcp-commentbox#reply-dialog-id textarea",
+        "#reply-dialog-container ytcp-commentbox textarea",
+        "ytcp-commentbox textarea"
+      ]
+    },
+    "sc_gui_tra_loi": {
+      "chon": [
+        "ytcp-commentbox#reply-dialog-id #submit-button button",
+        "#reply-dialog-container ytcp-commentbox #submit-button button"
+      ],
+      "chu": [
+        "Phản hồi",
+        "Reply",
+        "返信"
+      ]
+    },
+    "sc_huy_tra_loi": {
+      "chon": [
+        "ytcp-commentbox#reply-dialog-id #cancel-button button",
+        "#reply-dialog-container ytcp-commentbox #cancel-button button"
+      ],
+      "chu": [
+        "Hủy",
+        "Cancel"
+      ]
+    },
+    "kc_nut_luu": {
+      "ghi_chu": "06/10/2026 kéo chéo (vm/keo_cheo_dom.py): nút «Lưu» trên trang xem youtube.com. CHƯA đo trên trang thật — chạy --thu rồi --doc-hop để kiểm.",
+      "chon": [
+        "ytd-watch-metadata button[aria-label='Lưu vào danh sách phát']",
+        "ytd-watch-metadata button[aria-label='再生リストに保存']",
+        "ytd-watch-metadata button[aria-label='Save to playlist']",
+        "ytd-watch-metadata button[aria-label='Lưu']",
+        "ytd-watch-metadata button[aria-label='保存']",
+        "ytd-watch-metadata button[aria-label='Save']"
+      ],
+      "chu": [
+        "Lưu",
+        "保存",
+        "Save",
+        "Lưu vào danh sách phát",
+        "再生リストに保存",
+        "Save to playlist"
+      ]
+    },
+    "kc_nut_them": {
+      "ghi_chu": "nút «⋯ Thao tác khác» cạnh Thích/Chia sẻ — khi cửa sổ hẹp, Lưu nằm trong menu này",
+      "chon": [
+        "ytd-watch-metadata #actions ytd-menu-renderer yt-button-shape#button-shape button",
+        "ytd-watch-metadata ytd-menu-renderer #button-shape button",
+        "ytd-watch-metadata ytd-menu-renderer yt-icon-button#button button",
+        "ytd-watch-metadata button[aria-label='Thao tác khác']",
+        "ytd-watch-metadata button[aria-label='その他の操作']",
+        "ytd-watch-metadata button[aria-label='More actions']"
+      ],
+      "chu": [
+        "Thao tác khác",
+        "その他の操作",
+        "More actions"
+      ]
+    },
+    "kc_menu_luu": {
+      "ghi_chu": "mục «Lưu» trong menu «⋯» — loc_chu: phần tử khớp chon VÀ chữ/aria đúng một trong chu (keo_cheo_dom tự dò, không qua TrangStudio.tim)",
+      "loc_chu": true,
+      "chon": [
+        "tp-yt-iron-dropdown ytd-menu-service-item-renderer",
+        "tp-yt-iron-dropdown yt-list-item-view-model",
+        "ytd-menu-popup-renderer tp-yt-paper-item",
+        "tp-yt-iron-dropdown [role=menuitem]",
+        "tp-yt-iron-dropdown [role=option]"
+      ],
+      "chu": [
+        "Lưu",
+        "保存",
+        "Save",
+        "Lưu vào danh sách phát",
+        "再生リストに保存",
+        "Save to playlist"
+      ]
+    },
+    "kc_hop_luu": {
+      "ghi_chu": "hộp «Lưu vào…» (đời cũ ytd-add-to-playlist-renderer, đời mới yt-sheet-view-model) — lấy phần tử hiện CUỐI của bộ chọn đầu tiên khớp",
+      "chon": [
+        "ytd-add-to-playlist-renderer",
+        "yt-sheet-view-model yt-contextual-sheet-layout",
+        "yt-contextual-sheet-layout",
+        "yt-sheet-view-model",
+        "tp-yt-paper-dialog[role=dialog]"
+      ]
+    },
+    "kc_hang_ds": {
+      "ghi_chu": "một hàng danh sách phát trong hộp Lưu (hàng lồng nhau chỉ lấy hàng ngoài cùng)",
+      "chon": [
+        "ytd-playlist-add-to-option-renderer",
+        "toggleable-list-item-view-model",
+        "yt-list-item-view-model",
+        "[role=listitem]",
+        "[role=checkbox]"
+      ]
+    },
+    "kc_ten_ds": {
+      "ghi_chu": "tên danh sách phát trong một hàng (không khớp → dòng đầu chữ của hàng)",
+      "chon": [
+        "yt-formatted-string#label",
+        "#label",
+        ".yt-list-item-view-model__title",
+        ".yt-list-item-view-model-wiz__title",
+        ".yt-core-attributed-string"
+      ]
+    },
+    "kc_o_tich": {
+      "ghi_chu": "ô tích trong hàng (bấm vào đây; trạng thái đọc ở aria-checked/aria-pressed/aria-selected)",
+      "chon": [
+        "tp-yt-paper-checkbox#checkbox",
+        "tp-yt-paper-checkbox",
+        "[role=checkbox]",
+        "button[aria-pressed]",
+        "[aria-pressed]"
+      ]
+    },
+    "kc_dong_hop": {
+      "chon": [
+        "ytd-add-to-playlist-renderer #close-button button",
+        "ytd-add-to-playlist-renderer yt-icon-button#close-button",
+        "ytd-add-to-playlist-renderer button[aria-label='Đóng']",
+        "ytd-add-to-playlist-renderer button[aria-label='閉じる']",
+        "ytd-add-to-playlist-renderer button[aria-label='Close']",
+        "yt-sheet-view-model button[aria-label='Đóng']",
+        "yt-sheet-view-model button[aria-label='閉じる']",
+        "yt-sheet-view-model button[aria-label='Close']"
+      ]
+    }
+  },
+  "cam_bam_binh_luan": {
+    "ghi_chu": "Dùng THAY cam_bam trong vm/may_cmt_dom.py: nút Phản hồi/Trả lời của bình luận mang chữ 'phản hồi' — cam_bam chung sẽ chặn nhầm. Vẫn chặn nút 'Gửi ý kiến phản hồi' (nghi nguồn hộp Allow … see this tab).",
+    "aria_chua": [
+      "feedback",
+      "gửi ý kiến",
+      "ý kiến phản hồi"
+    ],
+    "chon": [
+      "ytcp-send-feedback-button",
+      "ytcp-feedback-button",
+      "#feedback-button",
+      "ytcp-video-details-section ytcp-button#save"
+    ]
+  },
+  "cam_bam_sua_video": {
+    "ghi_chu": "Dùng THAY cam_bam trong vm/may_dang_dom.py --sua-video (01/10/2026, cứu CTR thấp): luồng này PHẢI bấm nút Lưu của trang sửa (sua_luu). Vẫn chặn nút Gửi ý kiến phản hồi.",
+    "aria_chua": [
+      "phản hồi",
+      "feedback",
+      "Gửi ý kiến"
+    ],
+    "chon": [
+      "ytcp-send-feedback-button",
+      "ytcp-feedback-button",
+      "#feedback-button"
+    ]
+  },
+  "cam_bam": {
+    "aria_chua": [
+      "phản hồi",
+      "feedback",
+      "Gửi ý kiến"
+    ],
+    "chon": [
+      "ytcp-send-feedback-button",
+      "ytcp-feedback-button",
+      "#feedback-button",
+      "ytcp-video-details-section ytcp-button#save"
+    ]
+  },
+  "chu_trang_thai": {
+    "da_len_lich": [
+      "Đã lên lịch",
+      "Scheduled",
+      "予約済み",
+      "予約",
+      "公開予約",
+      "예약됨",
+      "예약"
+    ],
+    "cong_khai": [
+      "Công khai",
+      "Public",
+      "公開",
+      "공개"
+    ],
+    "khong_cong_khai": [
+      "Không công khai",
+      "Unlisted",
+      "限定公開",
+      "일부 공개"
+    ],
+    "rieng_tu": [
+      "Riêng tư",
+      "Private",
+      "非公開",
+      "비공개"
+    ],
+    "nhap": [
+      "Nháp",
+      "Draft",
+      "下書き",
+      "임시보관함",
+      "초안"
+    ],
+    "loi_tai": [
+      "Tải lên không thành công",
+      "Đã xảy ra lỗi",
+      "đã bị hủy",
+      "アップロードに失敗",
+      "업로드 실패",
+      "오류가 발생"
+    ],
+    "gioi_han": [
+      "giới hạn tải lên",
+      "upload limit"
+    ],
+    "da_tai_xong": [
+      "Đã hoàn tất quá trình tải lên",
+      "Đã tải lên",
+      "Tải lên hoàn tất",
+      "Upload complete",
+      "アップロード完了",
+      "アップロードが完了",
+      "업로드 완료",
+      "업로드가 완료"
+    ],
+    "dang_xu_ly": [
+      "Đang xử lý",
+      "Processing",
+      "処理中",
+      "処理しています",
+      "処理に通常より時間",
+      "taking longer than usual",
+      "처리 중"
+    ],
+    "dang_kiem_tra": [
+      "Đang kiểm tra",
+      "Checking",
+      "チェック中",
+      "확인 중",
+      "검사 중"
+    ],
+    "xu_ly_xong": [
+      "Đã kiểm tra xong",
+      "Checks complete",
+      "Đã xử lý",
+      "チェック完了",
+      "処理が完了",
+      "검사가 완료",
+      "확인 완료",
+      "처리 완료"
+    ],
+    "dang_tai": [
+      "Đã tải được",
+      "Đang tải lên",
+      "Uploading",
+      "アップロード中",
+      "업로드 중"
+    ],
+    "tai_do": [
+      "bị gián đoạn",
+      "chưa hoàn tất",
+      "Tải lên không thành công",
+      "đã bị hủy",
+      "interrupted",
+      "Upload failed",
+      "Processing abandoned",
+      "アップロードが中断",
+      "処理が中止",
+      "업로드가 중단",
+      "처리가 중단"
+    ],
+    "mhkt_khong_nguon": [
+      "không có màn hình kết thúc để nhập",
+      "no end screen to import",
+      "doesn't have an end screen",
+      "終了画面がありません"
+    ],
+    "loi_mhkt": [
+      "Rất tiếc, đã xảy ra lỗi"
+    ]
+  },
+  "dinh_dang_ngay": [
+    "{d} thg {m}, {Y}",
+    "{dd}/{mm}/{Y}",
+    "{Y}/{mm}/{dd}",
+    "{Y}/{m}/{d}",
+    "{Y}年{m}月{d}日"
+  ],
+  "dinh_dang_gio": "{HH}:{MM}",
+  "ngon_ngu_video": {
+    "ja": [
+      "Tiếng Nhật",
+      "日本語",
+      "Japanese",
+      "일본어"
+    ],
+    "vi": [
+      "Tiếng Việt",
+      "ベトナム語",
+      "Vietnamese",
+      "베트남어"
+    ],
+    "en": [
+      "Tiếng Anh",
+      "英語",
+      "English",
+      "영어"
+    ]
+  },
+  "hop_la": [
+    {
+      "chon": "ytcp-warm-welcome-dialog",
+      "dong": [
+        "#dismiss-button",
+        "#close-button"
+      ]
+    },
+    {
+      "chon": "tp-yt-paper-dialog[opened]:not(ytcp-uploads-dialog *)",
+      "dong": [
+        "#close-button",
+        "[aria-label='Đóng']",
+        "[aria-label='閉じる']",
+        "[aria-label='Close']"
+      ]
+    }
+  ],
+  "hop_che": [
+    {
+      "chon": "ytve-captions-editor-modal tp-yt-paper-dialog, ytve-captions-editor-modal",
+      "dong": [
+        "#publish-button"
+      ],
+      "ghi_chu": "30/09: trình soạn phụ đề sót lại (panel 'Bản xem trước phụ đề' che the_them/nut_tiep) → bấm Xong của nó; chỉ dùng khi nó CHE nút khác"
+    }
+  ],
+  "bam_js_an_toan": [
+    "nut_tiep",
+    "the_them",
+    "phu_de_xong",
+    "hop_con_huy",
+    "the_dong_chon"
+  ],
+  "kiem_muc_1": [
+    "hop_upload",
+    "nut_chon_tep",
+    "o_tep_video",
+    "dong_hop_upload",
+    "hang_video",
+    "hang_tieu_de",
+    "tieu_de",
+    "mo_ta",
+    "playlist_mo",
+    "hien_them",
+    "o_the",
+    "hien_thi_trang_sua"
+  ],
+  "kiem_muc_2": [
+    "tieu_de",
+    "mo_ta",
+    "nut_thumbnail",
+    "playlist_mo",
+    "khong_tre_em",
+    "hien_them",
+    "ai_co",
+    "o_the",
+    "nut_tiep",
+    "phu_de_them",
+    "mhkt_nhap",
+    "mhkt_them",
+    "the_them",
+    "len_lich_mo",
+    "o_ngay_mo",
+    "o_ngay",
+    "o_gio",
+    "nut_xong",
+    "dong_hop_upload"
+  ],
+  "cam_bam_keo_cheo": {
+    "ghi_chu": "Dùng THAY cam_bam trong vm/keo_cheo_dom.py (trang xem youtube.com): chỉ chặn nút gửi phản hồi/báo vi phạm.",
+    "aria_chua": [
+      "feedback",
+      "gửi ý kiến",
+      "ý kiến phản hồi",
+      "フィードバック",
+      "báo vi phạm",
+      "報告"
+    ],
+    "chon": [
+      "ytd-feedback-button",
+      "#feedback-button",
+      "ytcp-send-feedback-button"
+    ]
   }
- },
- "cam_bam_binh_luan": {
-  "ghi_chu": "Dùng THAY cam_bam trong vm/may_cmt_dom.py: nút Phản hồi/Trả lời của bình luận mang chữ 'phản hồi' — cam_bam chung sẽ chặn nhầm. Vẫn chặn nút 'Gửi ý kiến phản hồi' (nghi nguồn hộp Allow … see this tab).",
-  "aria_chua": [
-   "feedback",
-   "gửi ý kiến",
-   "ý kiến phản hồi"
-  ],
-  "chon": [
-   "ytcp-send-feedback-button",
-   "ytcp-feedback-button",
-   "#feedback-button",
-   "ytcp-video-details-section ytcp-button#save"
-  ]
- },
- "cam_bam_sua_video": {
-  "ghi_chu": "Dùng THAY cam_bam trong vm/may_dang_dom.py --sua-video (01/10/2026, cứu CTR thấp): luồng này PHẢI bấm nút Lưu của trang sửa (sua_luu). Vẫn chặn nút Gửi ý kiến phản hồi.",
-  "aria_chua": [
-   "phản hồi",
-   "feedback",
-   "Gửi ý kiến"
-  ],
-  "chon": [
-   "ytcp-send-feedback-button",
-   "ytcp-feedback-button",
-   "#feedback-button"
-  ]
- },
- "cam_bam": {
-  "aria_chua": [
-   "phản hồi",
-   "feedback",
-   "Gửi ý kiến"
-  ],
-  "chon": [
-   "ytcp-send-feedback-button",
-   "ytcp-feedback-button",
-   "#feedback-button",
-   "ytcp-video-details-section ytcp-button#save"
-  ]
- },
- "chu_trang_thai": {
-  "da_len_lich": [
-   "Đã lên lịch",
-   "Scheduled",
-   "予約済み",
-   "予約",
-   "公開予約",
-   "예약됨",
-   "예약"
-  ],
-  "cong_khai": [
-   "Công khai",
-   "Public",
-   "公開",
-   "공개"
-  ],
-  "khong_cong_khai": [
-   "Không công khai",
-   "Unlisted",
-   "限定公開",
-   "일부 공개"
-  ],
-  "rieng_tu": [
-   "Riêng tư",
-   "Private",
-   "非公開",
-   "비공개"
-  ],
-  "nhap": [
-   "Nháp",
-   "Draft",
-   "下書き",
-   "임시보관함",
-   "초안"
-  ],
-  "loi_tai": [
-   "Tải lên không thành công",
-   "Đã xảy ra lỗi",
-   "đã bị hủy",
-   "アップロードに失敗",
-   "업로드 실패",
-   "오류가 발생"
-  ],
-  "gioi_han": [
-   "giới hạn tải lên",
-   "upload limit"
-  ],
-  "da_tai_xong": [
-   "Đã hoàn tất quá trình tải lên",
-   "Đã tải lên",
-   "Tải lên hoàn tất",
-   "Upload complete",
-   "アップロード完了",
-   "アップロードが完了",
-   "업로드 완료",
-   "업로드가 완료"
-  ],
-  "dang_xu_ly": [
-   "Đang xử lý",
-   "Processing",
-   "処理中",
-   "処理しています",
-   "処理に通常より時間",
-   "taking longer than usual",
-   "처리 중"
-  ],
-  "dang_kiem_tra": [
-   "Đang kiểm tra",
-   "Checking",
-   "チェック中",
-   "확인 중",
-   "검사 중"
-  ],
-  "xu_ly_xong": [
-   "Đã kiểm tra xong",
-   "Checks complete",
-   "Đã xử lý",
-   "チェック完了",
-   "処理が完了",
-   "검사가 완료",
-   "확인 완료",
-   "처리 완료"
-  ],
-  "dang_tai": [
-   "Đã tải được",
-   "Đang tải lên",
-   "Uploading",
-   "アップロード中",
-   "업로드 중"
-  ],
-  "tai_do": [
-   "bị gián đoạn",
-   "chưa hoàn tất",
-   "Tải lên không thành công",
-   "đã bị hủy",
-   "interrupted",
-   "Upload failed",
-   "Processing abandoned",
-   "アップロードが中断",
-   "処理が中止",
-   "업로드가 중단",
-   "처리가 중단"
-  ],
-  "mhkt_khong_nguon": [
-   "không có màn hình kết thúc để nhập",
-   "no end screen to import",
-   "doesn't have an end screen",
-   "終了画面がありません"
-  ],
-  "loi_mhkt": [
-   "Rất tiếc, đã xảy ra lỗi"
-  ]
- },
- "dinh_dang_ngay": [
-  "{d} thg {m}, {Y}",
-  "{dd}/{mm}/{Y}",
-  "{Y}/{mm}/{dd}",
-  "{Y}/{m}/{d}",
-  "{Y}年{m}月{d}日"
- ],
- "dinh_dang_gio": "{HH}:{MM}",
- "ngon_ngu_video": {
-  "ja": ["Tiếng Nhật", "日本語", "Japanese", "일본어"],
-  "vi": ["Tiếng Việt", "ベトナム語", "Vietnamese", "베트남어"],
-  "en": ["Tiếng Anh", "英語", "English", "영어"]
- },
- "hop_la": [
-  {
-   "chon": "ytcp-warm-welcome-dialog",
-   "dong": [
-    "#dismiss-button",
-    "#close-button"
-   ]
-  },
-  {
-   "chon": "tp-yt-paper-dialog[opened]:not(ytcp-uploads-dialog *)",
-   "dong": [
-    "#close-button",
-    "[aria-label='Đóng']",
-    "[aria-label='閉じる']",
-    "[aria-label='Close']"
-   ]
-  }
- ],
- "hop_che": [
-  {
-   "chon": "ytve-captions-editor-modal tp-yt-paper-dialog, ytve-captions-editor-modal",
-   "dong": [
-    "#publish-button"
-   ],
-   "ghi_chu": "30/09: trình soạn phụ đề sót lại (panel 'Bản xem trước phụ đề' che the_them/nut_tiep) → bấm Xong của nó; chỉ dùng khi nó CHE nút khác"
-  }
- ],
- "bam_js_an_toan": [
-  "nut_tiep",
-  "the_them",
-  "phu_de_xong",
-  "hop_con_huy",
-  "the_dong_chon"
- ],
- "kiem_muc_1": [
-  "hop_upload",
-  "nut_chon_tep",
-  "o_tep_video",
-  "dong_hop_upload",
-  "hang_video",
-  "hang_tieu_de",
-  "tieu_de",
-  "mo_ta",
-  "playlist_mo",
-  "hien_them",
-  "o_the",
-  "hien_thi_trang_sua"
- ],
- "kiem_muc_2": [
-  "tieu_de",
-  "mo_ta",
-  "nut_thumbnail",
-  "playlist_mo",
-  "khong_tre_em",
-  "hien_them",
-  "ai_co",
-  "o_the",
-  "nut_tiep",
-  "phu_de_them",
-  "mhkt_nhap",
-  "mhkt_them",
-  "the_them",
-  "len_lich_mo",
-  "o_ngay_mo",
-  "o_ngay",
-  "o_gio",
-  "nut_xong",
-  "dong_hop_upload"
- ]
 }
