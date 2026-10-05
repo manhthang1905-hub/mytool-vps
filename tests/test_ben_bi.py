@@ -435,3 +435,13 @@ class TestKiemKhoiVm:
         from core import dong_bo_git
 
         assert dong_bo_git.kiem_khoi_vm(str(tmp_path), in_ra=lambda s: None) == []
+
+
+def test_don_tep_py_rong_goc(tmp_path):
+    (tmp_path / "cdp_studio.py").write_text("")
+    (tmp_path / "that.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "vm").mkdir()
+    (tmp_path / "vm" / "rong.py").write_text("")                  # không đệ quy
+    assert ben_bi.don_tep_py_rong_goc(str(tmp_path)) == ["cdp_studio.py"]
+    assert (tmp_path / "that.py").exists() and (tmp_path / "vm" / "rong.py").exists()
+    assert ben_bi.don_tep_py_rong_goc(str(tmp_path)) == []

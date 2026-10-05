@@ -2003,6 +2003,14 @@ def _mot_luot(goc: str, thu: bool) -> int:
                 print(don_dia.tom_tat(kq_dd))
         except Exception as loi_dd:  # noqa: BLE001 — dọn đĩa hỏng không được làm sập gác tổng
             print("Dọn đĩa: lỗi ({0})".format(str(loi_dd)[:200]))
+    # Tệp .py rỗng ở gốc che module vm/ (06/10/2026, `ben_bi.don_tep_py_rong_goc`) — xoá, in một dòng.
+    if not thu:
+        try:
+            da_xoa_rong = ben_bi.don_tep_py_rong_goc(goc)
+            if da_xoa_rong:
+                print("Đã xoá tệp .py rỗng ở gốc (che module vm/): {0}".format(", ".join(da_xoa_rong)))
+        except Exception as loi_rong:  # noqa: BLE001
+            print("Dọn tệp .py rỗng: lỗi ({0})".format(str(loi_rong)[:120]))
     # Báo cáo sức khoẻ hằng ngày (06/10/2026, `core/bao_cao_ngay.py`): sau 06:30 ghi + gửi MỘT lần/ngày. try riêng.
     if not thu:
         try:

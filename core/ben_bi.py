@@ -620,3 +620,24 @@ def gop(*ds: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for d in ds:
         ra.extend(d or [])
     return ra
+
+
+# ── Tệp .py RỖNG ở gốc repo (06/10/2026) ─────────────────────────────────────
+# Sự cố thật: `cdp_studio.py` 0 byte nằm ở gốc che mất `vm/cdp_studio.py` khi gốc đứng trước `vm/` trong
+# sys.path → máy kéo chéo chết "module has no attribute". Luật một câu: tệp .py rỗng ở gốc repo thì xoá.
+
+def don_tep_py_rong_goc(goc: str) -> List[str]:
+    """Xoá mọi `*.py` 0 byte ngay tại gốc `goc` (không đệ quy). Trả tên các tệp đã xoá."""
+    da: List[str] = []
+    try:
+        for ten in sorted(os.listdir(goc)):
+            duong = os.path.join(goc, ten)
+            if ten.endswith(".py") and os.path.isfile(duong) and os.path.getsize(duong) == 0:
+                try:
+                    os.remove(duong)
+                    da.append(ten)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return da
