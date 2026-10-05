@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.152.4** — 2026-10-05 — `vps-jp1` — fix(quet ngay): kenh moi chua co bang theo ngay (Studio tre) ma bang tom tat da ve = du; het quet lap 3 lan/ngay
 - **2.152.3** — 2026-10-05 — `vps-jp1` — fix(ky nang): tu hoc kenh san xuat may khac = khong ap
 - **2.152.2** — 2026-10-05 — `vps-jp1` — chore(ky nang): OAuth/token = khong dung (binh luan DOM); mo ta D03
 - **2.152.1** — 2026-10-05 — `vps-jp1` — feat(binh luan DOM): tra loi dung NOI DUNG video (loi thoai tu phu de goi), dung ngon ngu kenh (viet lai neu sai), khong kaomoji, khong sua lung khan gia
