@@ -190,6 +190,38 @@ def la_ngon_ngu_dich(ma: str, lang: Any, chu: Any) -> bool:
     return sum(1 for w in b["chu"] if w in t) >= 2
 
 
+#: Nút avatar (menu tài khoản) của youtube.com theo nhãn aria — đo 05/10: vi «Trình đơn tài khoản».
+RE_NUT_AVATAR = r"^(trình đơn tài khoản|trình đơn avatar|avatar|アカウント|account menu|menu tài khoản|ảnh hồ sơ|프로필|계정 메뉴)"
+
+#: Tên nước trong menu «Địa điểm» của youtube.com theo ngôn ngữ giao diện (vi/en/ja/ko) — khớp NGUYÊN mục.
+TEN_NUOC = {"JP": ("Nhật Bản", "Japan", "日本", "일본"), "KR": ("Hàn Quốc", "South Korea", "韓国", "대한민국"),
+            "VN": ("Việt Nam", "Vietnam", "ベトナム", "베트남"), "US": ("Hoa Kỳ", "United States", "アメリカ合衆国", "미국"),
+            "TW": ("Đài Loan", "Taiwan", "台湾", "대만"), "TH": ("Thái Lan", "Thailand", "タイ", "태국"),
+            "ID": ("Indonesia", "インドネシア", "인도네시아")}
+
+#: Ngôn ngữ nội dung → nước (khi hồ sơ thiết lập chưa có `quoc_gia`).
+GL_THEO_NGON_NGU = {"ja": "JP", "ko": "KR", "vi": "VN", "en": "US", "zh": "TW", "th": "TH", "id": "ID"}
+
+
+def dia_diem_kenh(kenh: str, goc: str = GOC_TOOL) -> str:
+    """05/10: ĐỊA ĐIỂM XEM của kênh (menu avatar YouTube → "Địa điểm" = cookie PREF `gl`) — quyết định trang chủ /
+    xu hướng YouTube đề xuất nội dung nước nào. Ưu tiên: `dia_diem_xem` trong kenh.yaml → `quoc_gia` hồ sơ thiết lập
+    → suy từ NGÔN NGỮ NỘI DUNG `ngon_ngu` (ja → JP). KHÔNG suy từ ngôn ngữ giao diện (có thể tạm là vi cho máy đăng)."""
+    d = nuoi.duong_kenh_yaml(kenh, goc)
+    khai = _yaml_gia_tri(d, "dia_diem_xem") if d else ""
+    if re.match(r"^[A-Za-z]{2}$", str(khai or "").strip()):
+        return str(khai).strip().upper()
+    try:
+        with open(os.path.join(goc, "CHANNEL", kenh, "thiet-lap", "ho-so.json"), "r", encoding="utf-8") as tep:
+            qg = str((json.load(tep) or {}).get("quoc_gia") or "").strip().upper()
+        if re.match(r"^[A-Z]{2}$", qg):
+            return qg
+    except (OSError, ValueError):
+        pass
+    nn = str((_yaml_gia_tri(d, "ngon_ngu") if d else "") or "").strip().lower()[:2]
+    return GL_THEO_NGON_NGU.get(nn, "")
+
+
 def ngon_ngu_dich_kenh(kenh: str, goc: str = GOC_TOOL) -> Tuple[str, str]:
     """Đọc `ngon_ngu_tai_khoan_dich` của kenh.yaml + quốc gia trong hồ sơ thiết lập (nếu đã dựng)."""
     d = nuoi.duong_kenh_yaml(kenh, goc)
@@ -1002,7 +1034,7 @@ class Studio:
         self.st.mo("https://www.youtube.com/", han=60)
         self.ngu(4.0)
         self.kiem_chan()
-        self._bam_nhan(r"^(trình đơn avatar|avatar|アカウント|account menu|menu tài khoản|ảnh hồ sơ|프로필)", "avatar youtube", sel="button#avatar-btn, #avatar-btn, button[aria-label]")
+        self._bam_nhan(RE_NUT_AVATAR, "avatar youtube", sel="button#avatar-btn, #avatar-btn, button[aria-label]")
         self.ngu(1.5)
         ghi("   youtube.com menu avatar: {0}".format(" || ".join(self.js(_JS_MENU_MO) or [])[:300]))
         self._bam_muc_menu(r"ngôn ngữ|language|言語|언어", "Ngôn ngữ")
@@ -1029,6 +1061,116 @@ class Studio:
         ghi("   đặt PREF={0} → {1}".format(moi, r.get("success")))
         if not r.get("success"):
             raise LoiMuc("Network.setCookie không thành công")
+
+    def _doc_dia_diem_menu(self, ghi) -> str:
+        """Mở youtube.com → menu avatar → đọc dòng «Địa điểm: X» (vi/en/ja/ko). Menu để MỞ cho bước sau. Trả X ("" nếu không thấy)."""
+        self.st.mo("https://www.youtube.com/", han=60)
+        self.ngu(4.0)
+        self.kiem_chan()
+        self._bam_nhan(RE_NUT_AVATAR, "avatar youtube",
+                       sel="button#avatar-btn, #avatar-btn, button[aria-label]")
+        self.ngu(1.5)
+        chu = " || ".join(self.js(_JS_MENU_MO) or [])
+        m = re.search(r"(địa điểm|location|場所|위치)\s*[:：]\s*([^|\n]+?)(?=\s*(?:\|\||phím tắt|keyboard|キーボード|단축키|cài đặt|settings|設定|$))",
+                      chu, re.I)
+        return m.group(2).strip() if m else ""
+
+    def _bam_muc_cuon(self, re_src: str, nhan: str, han: float = 8.0) -> str:
+        """Như `_bam_muc_menu` nhưng CUỘN mục vào giữa trước khi bấm (danh sách nước dài, phải cuộn)."""
+        js = ("((reSrc) => { const Y = window.__yd, re = new RegExp(reSrc, 'i');"
+              " for (const e of Y.qsa(Y.goc(), 'tp-yt-paper-item, ytd-compact-link-renderer, [role=menuitem], [role=option], [role=radio], yt-formatted-string')) {"
+              "  const t = Y.chuan(e.innerText || e.textContent); if (!t || t.length > 60 || !re.test(t)) continue;"
+              "  e.scrollIntoView({block: 'center'}); const r = e.getBoundingClientRect(); if (r.width < 4 || r.height < 4) continue;"
+              "  return {chu: t, x: r.x + r.width / 2, y: r.y + r.height / 2}; } return null; })")
+        het = time.monotonic() + han
+        while True:
+            try:
+                x = self.js("({0})({1})".format(js, json.dumps(re_src, ensure_ascii=False)))
+            except Exception:  # noqa: BLE001
+                x = None
+            if x:
+                self.ngu(0.6)
+                x = self.js("({0})({1})".format(js, json.dumps(re_src, ensure_ascii=False))) or x   # toạ độ sau khi cuộn xong
+                self.st._bam_diem(round(x["x"], 1), round(x["y"], 1))      # noqa: SLF001
+                return x["chu"]
+            if time.monotonic() >= het:
+                self.chup("khong-thay-" + nhan.replace(" ", "-")[:30])
+                raise LoiMuc("không thấy «{0}» trong menu".format(nhan))
+            self.ngu(0.8)
+
+    def dat_dia_diem(self, ghi, gl: str, chi_doc: bool = False) -> dict:
+        """05/10: ĐỊA ĐIỂM XEM = nước `gl` — làm ĐÚNG như người: youtube.com → avatar → «Địa điểm» → chọn nước, rồi mở lại
+        menu ĐỌC LẠI «Địa điểm: X» (đã đăng nhập thì YouTube có thể lưu theo tài khoản — chỉ ghi cookie chưa chắc ăn).
+        Hỏng đường menu → lùi về cookie PREF `gl` rồi vẫn đọc lại bằng menu. Làm MỘT LẦN trong thiết lập kênh (skill).
+        Không đổi chữ giao diện → không hại máy đăng. Trả {ket: giong|doi|khac|hong|bo, hien_truoc, hien_sau}."""
+        gl = str(gl or "").strip().upper()
+        if not gl:
+            ghi("địa điểm xem: không xác định được nước của kênh — bỏ qua")
+            return {"ket": "bo", "hien_truoc": "", "hien_sau": ""}
+        ten = TEN_NUOC.get(gl) or (gl,)
+        re_ten = r"^(" + "|".join(re.escape(t) for t in ten) + r")$"
+        khop = lambda s: any(t.lower() == str(s or "").strip().lower() for t in ten)   # noqa: E731
+        try:
+            truoc = self._doc_dia_diem_menu(ghi)
+        except Exception as e:  # noqa: BLE001
+            truoc = ""
+            ghi("địa điểm xem: không đọc được menu ({0})".format(str(e)[:100]))
+        ghi("địa điểm xem (menu youtube.com): {0!r} — đích {1}".format(truoc or "?", ten[0]))
+        if khop(truoc):
+            self.st.phim("Escape")
+            return {"ket": "giong", "hien_truoc": truoc, "hien_sau": truoc}
+        if chi_doc:
+            self.st.phim("Escape")
+            return {"ket": "khac", "hien_truoc": truoc, "hien_sau": truoc}
+        try:
+            if not truoc:
+                raise LoiMuc("menu avatar không có dòng Địa điểm")
+            self._bam_muc_menu(r"^(địa điểm|location|場所|위치)", "Địa điểm")
+            self.ngu(1.5)
+            chon = self._bam_muc_cuon(re_ten, ten[0])
+            ghi("   youtube.com chọn địa điểm «{0}»".format(chon))
+            self.ngu(4.0)
+        except Exception as e:  # noqa: BLE001
+            ghi("   đường menu hỏng ({0}) — lùi về cookie PREF gl={1}".format(str(e)[:100], gl))
+            try:
+                self.st.phim("Escape")
+            except Exception:  # noqa: BLE001
+                pass
+            self._dia_diem_cookie(ghi, gl)
+        try:
+            sau = self._doc_dia_diem_menu(ghi)
+            self.st.phim("Escape")
+        except Exception as e:  # noqa: BLE001
+            sau = ""
+            ghi("   đọc lại menu lỗi: {0}".format(str(e)[:100]))
+        ok = khop(sau)
+        ghi("*** ĐỊA ĐIỂM XEM: {0!r} → {1!r} ({2}) ***".format(truoc or "?", sau or "?", "ĐẠT" if ok else "HỎNG"))
+        return {"ket": "doi" if ok else "hong", "hien_truoc": truoc, "hien_sau": sau}
+
+    def _dia_diem_cookie(self, ghi, gl: str) -> dict:
+        """Đường lùi: cookie PREF `gl=<gl>` trên .youtube.com (giữ mọi cặp khác)."""
+        gl = str(gl or "").strip().upper()
+        cdp, sid = self.st.cdp, self.st.sid
+
+        def doc_pref():
+            ck = cdp.goi("Network.getCookies", {"urls": ["https://www.youtube.com/"]}, sid=sid, han=15).get("cookies") or []
+            return ([c for c in ck if c.get("name") == "PREF"] or [{}])[0]
+        try:
+            goc = doc_pref()
+            cu = next((c.split("=", 1)[1] for c in str(goc.get("value") or "").split("&")
+                       if c.split("=", 1)[0] == "gl" and "=" in c), "").upper()
+            cap =[c for c in str(goc.get("value") or "").split("&") if c.strip() and c.split("=", 1)[0] != "gl"]
+            c = {"name": "PREF", "value": "&".join(cap + ["gl=" + gl]), "domain": ".youtube.com", "path": "/",
+                 "secure": True, "sameSite": "None",
+                 "expires": goc["expires"] if (goc.get("expires") or -1) > 0 else time.time() + 400 * 86400}
+            cdp.goi("Network.setCookie", c, sid=sid, han=15)
+            sau = next((x.split("=", 1)[1] for x in str(doc_pref().get("value") or "").split("&")
+                        if x.split("=", 1)[0] == "gl" and "=" in x), "").upper()
+        except Exception as e:  # noqa: BLE001 — phụ: không chặn các mục thiết lập khác
+            ghi("địa điểm xem: lỗi {0}".format(str(e)[:120]))
+            return {"ket": "hong", "gl_truoc": "", "gl_sau": "", "ly_do": str(e)[:200]}
+        ghi("   cookie PREF gl: {0!r} → {1!r}".format(cu or "mặc định", sau))
+        return {"ket": "doi" if sau == gl else "hong", "gl_truoc": cu, "gl_sau": sau}
 
     def _ngon_ngu_tai_khoan(self, ghi, dich: str = "vi") -> None:
         """Đường CHÍNH: Studio theo ngôn ngữ của TÀI KHOẢN Google (menu youtube.com chỉ đổi riêng trình duyệt).
@@ -1836,6 +1978,8 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
             ghi("   ⚠ " + ghi_chu_dich)
         ghi("   ngôn ngữ tài khoản ĐÍCH: {0} ({1})".format(dich, NGON_NGU_DICH[dich]["ten"]))
         nn = S.dat_ngon_ngu(ghi, chi_doc=thu, dich=dich)
+        # BƯỚC 0b — ĐỊA ĐIỂM XEM (05/10): đúng nước của kênh, một lần như ngôn ngữ (skill, không phải việc mỗi lượt đăng)
+        nn["dia_diem"] = S.dat_dia_diem(ghi, dia_diem_kenh(kenh), chi_doc=thu)
         if chi_ngon_ngu:
             nn["kenh"], nn["luc"] = kenh, time.strftime("%Y-%m-%d %H:%M:%S")
             if not thu:

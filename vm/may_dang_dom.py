@@ -1232,40 +1232,23 @@ class MayDangDom:
             return ""
 
         lang = doc()
-        sai_hl = bool(lang) and not lang.lower().startswith(dich)
-        # 05/10: ĐỊA ĐIỂM XEM (`gl`, menu avatar → "Địa điểm") = nước của kênh — quyết định trang chủ/xu hướng
-        # YouTube đề xuất (nuôi trang chủ, quét đối thủ). Không đổi chữ giao diện nên không hại máy đăng.
-        gl = dia_diem_kenh(self.kenh)
+        # Chỉ KIỂM (rẻ, không đổi gì khi đúng). Ngôn ngữ/địa điểm là việc MỘT LẦN của skill thiết lập kênh
+        # (thiet_lap_kenh_dom: dat_ngon_ngu / dat_dia_diem) — đây chỉ là chốt an toàn: giao diện lạ = đăng hỏng.
+        if not lang or lang.lower().startswith(dich):
+            return
+        self.nk("Studio {0} đang giao diện {1!r} — máy đăng cần {2}: đặt cookie PREF hl={2}".format(self.kenh, lang, dich))
         try:
             ck = tb.cdp.goi("Network.getCookies", {"urls": ["https://www.youtube.com/", "https://studio.youtube.com/"]},
                             sid=tb.sid, han=15).get("cookies") or []
-        except Exception:  # noqa: BLE001
-            ck = []
-        goc = ([c for c in ck if c.get("name") == "PREF"] or [{}])[0]
-        cap = [c for c in str(goc.get("value") or "").split("&") if c.strip()]
-        gl_cu = next((c.split("=", 1)[1] for c in cap if c.split("=", 1)[0] == "gl" and "=" in c), "")
-        sai_gl = bool(gl) and gl_cu.upper() != gl
-        if not sai_hl and not sai_gl:
-            return
-        if sai_hl:
-            self.nk("Studio {0} đang giao diện {1!r} — máy đăng cần {2}: đặt cookie PREF hl={2}".format(self.kenh, lang, dich))
-        if sai_gl:
-            self.nk("YouTube {0}: địa điểm xem {1!r} → {2} (theo nước của kênh)".format(self.kenh, gl_cu or "mặc định", gl))
-        try:
-            giu = [c for c in cap if c.split("=", 1)[0] not in (("hl",) if sai_hl else ()) + (("gl",) if sai_gl else ())]
-            them = (["hl=" + dich] if sai_hl else []) + (["gl=" + gl] if sai_gl else [])
-            c = {"name": "PREF", "value": "&".join(giu + them), "domain": ".youtube.com", "path": "/",
+            goc = ([c for c in ck if c.get("name") == "PREF"] or [{}])[0]
+            cap = [c for c in str(goc.get("value") or "").split("&") if c.strip() and c.split("=", 1)[0] != "hl"]
+            c = {"name": "PREF", "value": "&".join(cap + ["hl=" + dich]), "domain": ".youtube.com", "path": "/",
                  "secure": True, "sameSite": "None",
                  "expires": goc["expires"] if (goc.get("expires") or -1) > 0 else time.time() + 400 * 86400}
             ok = tb.cdp.goi("Network.setCookie", c, sid=tb.sid, han=15).get("success")
-            if not sai_hl:
-                return                                  # chỉ đổi địa điểm: giao diện vẫn đúng, khỏi mở lại
             tb.mo(self._url("studio"), han=60)
             self.ngu(3)
         except Exception as loi:  # noqa: BLE001
-            if not sai_hl:
-                self._canh_bao("{0}: đặt địa điểm xem gl={1} lỗi: {2}".format(self.kenh, gl, str(loi)[:100]))
-                return
             raise LoiTruoc("Studio giao diện {0!r}, đặt cookie hl={1} lỗi: {2}".format(lang, dich, loi))
         sau = doc()
         if not sau.lower().startswith(dich):
@@ -3471,29 +3454,6 @@ def _tu_dang_bat(kenh: str) -> bool:
     if isinstance(rieng, dict) and "tu_dang" in rieng:
         return bool(rieng["tu_dang"])
     return bool(du.get("tu_dang", False))
-
-
-#: Ngôn ngữ tài khoản đích của kênh → địa điểm xem (`gl`) mặc định.
-GL_THEO_NGON_NGU = {"ja": "JP", "ko": "KR", "vi": "VN", "en": "US", "zh": "TW", "th": "TH", "id": "ID"}
-
-
-def dia_diem_kenh(kenh: str, goc_tool: str = None) -> str:
-    """05/10: ĐỊA ĐIỂM XEM của kênh (mã nước 2 chữ, hoa) — `dia_diem_xem` trong kenh.yaml, không có thì suy từ
-    NGÔN NGỮ NỘI DUNG `ngon_ngu` (ja → JP) — KHÔNG từ ngôn ngữ giao diện (giao diện có thể tạm là vi cho máy đăng).
-    Không xác định được → "" (không đụng). Đọc tay: kenh.yaml KHÔNG bỏ chú thích cuối dòng."""
-    duong = os.path.join(goc_tool or os.path.dirname(GOC), "CHANNEL", str(kenh), "kenh.yaml")
-    gt = {}
-    try:
-        with open(duong, "r", encoding="utf-8") as tep:
-            for dong in tep:
-                m = re.match(r'^(dia_diem_xem|ngon_ngu):\s*["\']?([A-Za-z]{2,3})', dong)
-                if m:
-                    gt.setdefault(m.group(1), m.group(2))
-    except OSError:
-        return ""
-    if gt.get("dia_diem_xem"):
-        return gt["dia_diem_xem"].upper()[:2]
-    return GL_THEO_NGON_NGU.get(str(gt.get("ngon_ngu") or "").lower()[:2], "")
 
 
 def _cai_dat_kenh(kenh: str) -> dict:

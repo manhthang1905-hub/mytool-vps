@@ -753,3 +753,19 @@ def test_pref_dat_hl_giu_cap_khac():
     assert t.pref_dat_hl("", "ja") == "hl=ja"
     assert t.pref_dat_hl("hl=vi&f5=1&hl=en", "ja") == "hl=ja&f5=1"
     assert t.CACH_NGON_NGU_MAC_DINH.index("cookie") > t.CACH_NGON_NGU_MAC_DINH.index("hl")
+
+
+def test_dia_diem_kenh_05_10(tmp_path, monkeypatch):
+    """Địa điểm xem: dia_diem_xem → quoc_gia hồ sơ → ngôn ngữ NỘI DUNG (không theo ngôn ngữ giao diện)."""
+    import thiet_lap_kenh_dom as tl
+    d = tmp_path / "CHANNEL" / "K"
+    (d / "thiet-lap").mkdir(parents=True)
+    y = d / "kenh.yaml"
+    monkeypatch.setattr(tl.nuoi, "duong_kenh_yaml", lambda k, g=None: str(y))
+    y.write_text('ngon_ngu: "ja"   # nội dung\nngon_ngu_tai_khoan_dich: "vi"\n', encoding="utf-8")
+    assert tl.dia_diem_kenh("K", str(tmp_path)) == "JP"
+    (d / "thiet-lap" / "ho-so.json").write_text('{"quoc_gia": "KR"}', encoding="utf-8")
+    assert tl.dia_diem_kenh("K", str(tmp_path)) == "KR"
+    y.write_text('ngon_ngu: "ja"\ndia_diem_xem: "tw"\n', encoding="utf-8")
+    assert tl.dia_diem_kenh("K", str(tmp_path)) == "TW"
+    assert "Nhật Bản" in tl.TEN_NUOC["JP"]

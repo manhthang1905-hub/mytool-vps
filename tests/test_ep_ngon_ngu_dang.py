@@ -62,29 +62,3 @@ def test_khong_doi_duoc_thi_loi_truoc():
 
 def test_trang_gia_khong_co_cdp_bo_qua():
     _may()._ep_ngon_ngu_dang(object())
-
-
-def test_dia_diem_kenh_theo_ngon_ngu_noi_dung(tmp_path):
-    d = tmp_path / "CHANNEL" / "K"
-    d.mkdir(parents=True)
-    (d / "kenh.yaml").write_text('ngon_ngu: "ja"   # nội dung\nngon_ngu_tai_khoan_dich: "vi"\n', encoding="utf-8")
-    assert m.dia_diem_kenh("K", str(tmp_path)) == "JP"
-    (d / "kenh.yaml").write_text('ngon_ngu: "ja"\ndia_diem_xem: "kr"\n', encoding="utf-8")
-    assert m.dia_diem_kenh("K", str(tmp_path)) == "KR"
-    assert m.dia_diem_kenh("KHONG", str(tmp_path)) == ""
-
-
-def test_dat_gl_khong_mo_lai_khi_giao_dien_dung(monkeypatch):
-    monkeypatch.setattr(m, "dia_diem_kenh", lambda k, g=None: "JP")
-    tb = TabGia("vi-VN")
-    _may()._ep_ngon_ngu_dang(tb)
-    assert tb.cdp.dat and "gl=JP" in tb.cdp.dat[0]["value"] and "hl=ja" in tb.cdp.dat[0]["value"]
-    assert tb.mo_ == []
-
-
-def test_dat_ca_hl_va_gl(monkeypatch):
-    monkeypatch.setattr(m, "dia_diem_kenh", lambda k, g=None: "JP")
-    tb = TabGia("ja-JP")
-    _may()._ep_ngon_ngu_dang(tb)
-    v = tb.cdp.dat[0]["value"]
-    assert "hl=vi" in v and "gl=JP" in v and "hl=ja" not in v and tb.lang == "vi-VN"
