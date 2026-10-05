@@ -35,6 +35,16 @@ os.environ.setdefault("SHOPAPI_TRAM_CONG", "0")
 # trả MỘT câu cố định cho đường một lượt. Tắt mặc định; bài kiểm hội đồng tự bật (`monkeypatch.setenv`).
 os.environ.setdefault("SHOPAPI_HOI_DONG", "0")
 
+# Lưới an toàn thứ ba cho `vm/agent.py` (06/10/2026): fixture `_co_lap_vm_agent_goc` bên dưới chỉ đặt
+# `SHOPAPI_VM_GOC` cho từng BÀI — fixture cấp module (vd `tests/test_vm_bao_tri_so_sach.agent_mod`) nạp
+# `vm/agent.py` TRƯỚC nó, nên `agent.GOC` rơi về `vm/` thật và `ghi()` → `nhip_tim()` ghi đè
+# `vm/logs/nhip-tim.json` của agent đang chạy (gác tổng đọc tệp này để phán agent treo). Đặt sẵn một thư
+# mục tạm cho CẢ phiên ngay lúc nạp conftest.
+if not os.environ.get("SHOPAPI_VM_GOC"):
+    import tempfile as _tempfile
+
+    os.environ["SHOPAPI_VM_GOC"] = _tempfile.mkdtemp(prefix="pytest-vm-goc-phien-")
+
 
 
 @pytest.fixture(autouse=True)
@@ -112,4 +122,23 @@ def _ram_du_mac_dinh(monkeypatch):
         monkeypatch.setattr(tu_chay, "_ram_trong_gb", lambda: 99.0)
     except Exception:  # noqa: BLE001 — thiếu module thì không có gì phải giả
         pass
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _so_tien_trinh_con_khong_vao_kho_that(tmp_path_factory, monkeypatch):
+    """Sổ tiến trình con (`workspace/tien-trinh-con.json`) là sổ DÙNG CHUNG của giao diện và `tu_chay.py` đang
+    chạy thật. `core/nghe_ngoai.py` ghi sổ dưới gốc tool suy từ `__file__` — bài kiểm gọi nó (Popen giả) từng
+    ghi thẳng vào sổ của cây mã (đo 06/10/2026 trên bản clone sạch). Chỉ bẻ đúng gốc của CHÍNH kho này sang
+    thư mục tạm; bài kiểm tự truyền `goc` riêng (tmp_path) vẫn ghi đúng chỗ nó chọn."""
+    try:
+        from core import tien_trinh_con as ttc
+    except Exception:  # noqa: BLE001 — thiếu module thì không có gì phải bẻ
+        yield
+        return
+    goc_kho = os.path.normcase(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    cu = ttc._duong_so  # noqa: SLF001
+    tam = str(tmp_path_factory.mktemp("so-tien-trinh-con"))
+    monkeypatch.setattr(ttc, "_duong_so",
+                        lambda goc: cu(tam) if os.path.normcase(os.path.abspath(goc)) == goc_kho else cu(goc))
     yield
