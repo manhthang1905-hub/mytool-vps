@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.168.1** — 2026-10-06 — `vps-jp1` — docs: trung tam chi huy (3 tab), ben bi 365 ngay, keo cheo + tu chua DOM + ngon ngu tam, ban do module moi, README (agent tai lieu)
 - **2.168.0** — 2026-10-06 — `vps-jp1` — test+fix (agent H, phan con lai): bo test xanh tren clone sach; may/ngach khac tieng — font Han/La-tinh, tran chu bia, muc luc theo tieng, kenh thu 2, ho so Studio tu ngach, Whisper ma ngan, captcha/ghim Han; conftest khong ghi nhip tim th…
 - **2.167.0** — 2026-10-06 — `vps-jp1` — test+fix: bo test xanh tren clone sach (28→0 loi); may/ngach khac tieng: font Han/La-tinh, ngon_ngu_video ko+, muc luc theo tieng, kenh thu 2 nhan tep trong, ho so Studio tu ngach, Whisper ma ngan, captcha/ghim tieng Han; conftest khong gh…
 - **2.166.0** — 2026-10-06 — `vps-jp1` — feat(agent): buoc keo cheo 1 lan/ngay 09-20h qua hang doi Chrome (tran 60', khong khi IPv4 mo/con khac); ky nang D08
