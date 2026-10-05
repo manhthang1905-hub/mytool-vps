@@ -1896,6 +1896,17 @@ def _main(argv: Optional[List[str]] = None) -> int:
     if tom_tat_mk and "không có việc" not in tom_tat_mk:
         print("")
         print("Mở kênh: {0}".format(tom_tat_mk))
+    # Báo cáo sức khoẻ hằng ngày (06/10/2026, `core/bao_cao_ngay.py`): sau 06:30 ghi + gửi MỘT lần/ngày. try riêng.
+    if not thu:
+        try:
+            from core import bao_cao_ngay  # noqa: PLC0415
+
+            dong_bc = bao_cao_ngay.chay_hang_ngay(goc)
+            if dong_bc:
+                print("")
+                print(dong_bc)
+        except Exception as loi_bc:  # noqa: BLE001 — báo cáo hỏng không được làm sập gác tổng
+            print("Báo cáo ngày: lỗi ({0})".format(str(loi_bc)[:200]))
     # Kiểm cập nhật (30/09/2026, `core/cap_nhat_git.py`): tự hãm nhịp ~30 phút,
     # `git fetch` + đọc origin/main:VERSION; có bản mới + tự động bật + máy rảnh
     # thì SINH tiến trình `dong_bo_git keo` tách rời (gác tổng không chờ nó).

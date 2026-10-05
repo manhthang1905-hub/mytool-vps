@@ -6,7 +6,8 @@ Mọi bộ chọn nằm ở `vm/studio-selectors.json` (sửa không cần code)
 `chon` (thử lần lượt — `chon#1` là đường CHÍNH, còn lại là DỰ PHÒNG) và `chu`
 (dự phòng cuối: so chữ/aria-label BẰNG của nút). Khớp bằng dự phòng thì ghi
 `DU PHONG` — `--kiem-dom` báo mức cảnh báo để người sửa JSON biết bộ chọn
-chính đã lệch.
+chính đã lệch. Hụt HẲN (chờ thật ≥3s mà không gì khớp) → `tu_chua_dom` hỏi AI
+bộ chọn mới, kiểm trên trang rồi mới nhận (`TU CHUA` trong nhật ký).
 
 Thao tác CÓ XÁC MINH (không bấm mù như đường ảnh):
 
@@ -38,6 +39,7 @@ import time
 import unicodedata
 
 from cdp import CdpLoi, CdpHetHan
+import tu_chua_dom
 
 GOC = os.path.dirname(os.path.abspath(__file__))
 DUONG_BO_CHON = os.path.join(GOC, "studio-selectors.json")
@@ -72,9 +74,21 @@ class LoiThaoTac(Exception):
         self.ly_do = ly_do
 
 
-def doc_bo_chon(duong: str = None) -> dict:
+def doc_bo_chon(duong: str = None, duong_tu_chua: str = None) -> dict:
+    """Nạp bộ chọn + gộp bản TỰ CHỮA (`vm/logs/studio-selectors-tu-chua.json`,
+    ưu tiên cao nhất — xem `tu_chua_dom`). Mặc định chỉ gộp khi đọc tệp chuẩn
+    (`duong` bỏ trống); `duong_tu_chua=""` = không gộp. Tệp tự chữa hỏng/thiếu
+    hay gộp làm `kiem_bo_chon` báo thêm lỗi → trả bộ gốc nguyên vẹn."""
     with open(duong or DUONG_BO_CHON, "r", encoding="utf-8") as tep:
-        return json.load(tep)
+        bo = json.load(tep)
+    if duong_tu_chua is None and duong is None:
+        duong_tu_chua = tu_chua_dom.DUONG_TU_CHUA
+    if duong_tu_chua:
+        try:
+            bo = tu_chua_dom.ap_tu_chua(bo, tu_chua_dom.doc_tu_chua(duong_tu_chua), kiem=kiem_bo_chon)
+        except Exception:  # noqa: BLE001 — bản tự chữa không bao giờ được làm hỏng bộ gốc
+            pass
+    return bo
 
 
 def kiem_bo_chon(bo: dict) -> list:
@@ -414,7 +428,9 @@ class TrangStudio:
     khác của Chrome."""
 
     def __init__(self, cdp, target_id: str, sid: str, bo_chon: dict = None,
-                 nhat_ky=None, thu_muc_dom: str = None, ngu=None, rng=None):
+                 nhat_ky=None, thu_muc_dom: str = None, ngu=None, rng=None, tu_chua=None):
+        """`tu_chua`: bộ chữa `tu_chua_dom.TuChuaDom` (None = tạo mặc định khi
+        cần lần đầu; False = không chữa)."""
         self.cdp = cdp
         self.target_id = target_id
         self.sid = sid
@@ -427,6 +443,8 @@ class TrangStudio:
         self._chuot = (self.rng.uniform(200, 600), self.rng.uniform(150, 400))
         self.du_phong = {}          # khoa -> cách khớp (khác chon#1)
         self.ghi_dom_day_du = False
+        self._tu_chua = tu_chua
+        self._da_bao_tu_chua = set()
 
     # ── tạo / đóng ───────────────────────────────────────────────────────
     @classmethod
@@ -562,6 +580,8 @@ class TrangStudio:
                 kq = None
             if kq and kq.get("khop"):
                 kq["khoa"] = khoa
+                if ghi_du_phong and not trong and spec.get("_tu_chua"):
+                    kq = self._xet_tu_chua_khop(khoa, spec, kq)
                 if ghi_du_phong and kq.get("cach") != "chon#1":
                     if self.du_phong.get(khoa) != kq.get("cach"):
                         self.nhat_ky("DU PHONG {0}: khớp bằng {1} ({2}) — phần tử {3}".format(
@@ -569,9 +589,82 @@ class TrangStudio:
                     self.du_phong[khoa] = kq.get("cach")
                 return kq
             if time.monotonic() >= het:
+                if ghi_du_phong and not trong and float(han) >= tu_chua_dom.NGUONG_HAN and not o["an"]:
+                    return self._thu_tu_chua(khoa, o)
                 return None
             self.cdp.bom(0.1)
             self.ngu(self.rng.uniform(0.5, 1.0))
+
+    # ── tự chữa bộ chọn (tu_chua_dom) ────────────────────────────────────
+    def _lay_tu_chua(self):
+        if self._tu_chua is None:
+            self._tu_chua = tu_chua_dom.TuChuaDom() if tu_chua_dom.bat() else False
+        return self._tu_chua or None
+
+    def _gan_tu_chua(self, khoa: str, moi) -> dict:
+        """Đặt (moi = [bộ chọn]) hoặc gỡ (moi = None) bộ chọn tự chữa của `khoa`
+        trong `self.bo` — thay bản sao, không sửa dict dùng chung của người gọi."""
+        pt = dict(self.bo.get("phan_tu") or {})
+        spec = dict(pt.get(khoa) or {})
+        cu = list(spec.pop("_tu_chua", None) or [])
+        goc = [s for s in (spec.get("chon") or []) if s not in cu]
+        spec["chon"] = (list(moi) + [s for s in goc if s not in moi]) if moi else goc
+        if moi:
+            spec["_tu_chua"] = list(moi)
+        pt[khoa] = spec
+        self.bo = dict(self.bo, phan_tu=pt)
+        return spec
+
+    def _bo_tu_chua(self, khoa: str, ly_do: str) -> None:
+        self._gan_tu_chua(khoa, None)
+        self._da_bao_tu_chua.discard(khoa)
+        h = self._lay_tu_chua()
+        if h:
+            h.bo(khoa, ly_do, self.nhat_ky)
+        else:
+            self.nhat_ky("TU CHUA {0}: bỏ bộ chọn tự chữa (phiên này) — {1}".format(khoa, ly_do))
+
+    def _xet_tu_chua_khop(self, khoa: str, spec: dict, kq: dict) -> dict:
+        """Khoá có bộ chọn tự chữa đứng đầu: khớp bằng nó → báo một lần; khớp bằng
+        bộ chọn GỐC/chữ → tự chữa đã hụt → bỏ, đánh lại số `chon#` theo gốc."""
+        so = len(spec.get("_tu_chua") or [])
+        m = re.match(r"^chon#(\d+)$", str(kq.get("cach") or ""))
+        if m and int(m.group(1)) <= so:
+            if khoa not in self._da_bao_tu_chua:
+                self._da_bao_tu_chua.add(khoa)
+                self.nhat_ky("TU CHUA {0}: khớp bằng bộ chọn tự chữa {1} — nên sửa studio-selectors.json".format(
+                    khoa, kq.get("sel")))
+            return kq
+        self._bo_tu_chua(khoa, "bộ chọn tự chữa hụt, gốc khớp lại ({0})".format(kq.get("cach")))
+        if m:
+            kq["cach"] = "chon#{0}".format(int(m.group(1)) - so)
+        return kq
+
+    def _thu_tu_chua(self, khoa: str, o: dict):
+        """Chốt cuối khi `tim` hụt hẳn: hỏi bộ chữa (chỉ đọc DOM), nhận bộ chọn đã
+        kiểm thì dò lại một lần bằng nó. Lỗi gì cũng trả None như cũ."""
+        try:
+            h = self._lay_tu_chua()
+            if not h:
+                return None
+            spec = self._spec(khoa)
+            if spec.get("_tu_chua"):
+                self._bo_tu_chua(khoa, "bộ chọn tự chữa hụt hẳn")
+                spec = self._spec(khoa)
+            moi = h.chua(self, khoa, spec)
+            if not moi:
+                return None
+            spec = self._gan_tu_chua(khoa, moi)
+            self._da_bao_tu_chua.add(khoa)
+            kq = self._js("tim", {"chon": list(moi), "chu": [], "an": bool(spec.get("an"))}, o)
+        except Exception as loi:  # noqa: BLE001 — bộ chữa không được làm hỏng thêm
+            self.nhat_ky("TU CHUA {0}: lỗi {1}".format(khoa, str(loi)[:120]))
+            return None
+        if kq and kq.get("khop"):
+            kq["khoa"] = khoa
+            kq["cach"] = "tu_chua"
+            return kq
+        return None
 
     def doc_tat_ca(self, khoa: str) -> list:
         """[{chu, value, y}] của mọi phần tử đang hiện khớp `khoa` (theo thứ tự DOM)."""
