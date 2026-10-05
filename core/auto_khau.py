@@ -1070,7 +1070,7 @@ def _anh_thanh_data_url(byte: bytes, kieu: str = "image/jpeg") -> str:
 #: đã chứng minh có người bấm. Rồi tới bố cục thì tool vứt hết và áp một kiểu
 #: tự nghĩ: chữ chiếm 45–55% khung, khối đỏ, nhân vật dồn phải.
 #:
-#: Đối chiếu bìa thật của đối thủ (video -bf2EAeXxOw) thì nó ngược hẳn: chữ
+#: Đối chiếu bìa thật của đối thủ (một video đối thủ) thì nó ngược hẳn: chữ
 #: nằm TRÊN CÙNG kín chiều ngang, hai dòng, nền tối; nhân vật NHỎ, đứng giữa
 #: khung trong quầng đèn; cả ảnh tối và ấm.
 #:
@@ -2532,7 +2532,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
         #
         # Trước đây mục tiêu = số ký tự tư liệu. Nhưng tư liệu có thể là bản DỊCH
         # (YouTube trả phụ đề tiếng Việt cho video Nhật) — mà một ý tiếng Việt
-        # dài gấp đôi tiếng Nhật. Đo thật link GJjYlTjNV8g (16/08/2026): bản dịch
+        # dài gấp đôi tiếng Nhật. Đo thật một link đối thủ (16/08/2026): bản dịch
         # Việt 16.187 ký tự, bản Nhật gốc chỉ ~4.847. Lấy 16.187 làm mục tiêu thì
         # bài Nhật viết ra dài gấp rưỡi — video 16 phút thành 26 phút.
         #
@@ -4887,12 +4887,14 @@ def _chen_muc_luc_seo(bc: BoiCanh, d: str, duong_srt: str) -> None:
         # sẽ đặt lại (`phan_video.muc_luc`), nên hai khâu không cãi nhau.
         if seo and _muc_luc_tu_phan(bc, d, duong_srt, duong_seo):
             return
-        if not seo or "目次" in seo or "Chapters\n" in seo:
+        from .phan_video import co_muc_luc, dau_muc_luc  # noqa: PLC0415
+
+        if not seo or co_muc_luc(seo):
             return
         muc = _muc_luc_tu_srt(_doc_chu(duong_srt))
         if not muc:
             return
-        dau = "📌 目次" if bc.kenh.ngon_ngu == "ja" else "📌 Chapters"
+        dau = dau_muc_luc(bc.kenh.ngon_ngu)
         khoi = ("━━━━━━━━━━━━━━\n{0}\n".format(dau)
                 + "\n".join(muc) + "\n━━━━━━━━━━━━━━")
         dong = seo.split("\n")
@@ -8028,7 +8030,8 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
             _tai_ket_qua(bc, goi, 0, nen)
             _xoa_dau(bc, nen)
             if ma_ve:
-                _btk.ve_chu_len_anh(nen, tep, _btk.bo_tri_chu("khuon", bt["chu_tang"], kc), goc=bc.goc)
+                _btk.ve_chu_len_anh(nen, tep, _btk.bo_tri_chu("khuon", bt["chu_tang"], kc), goc=bc.goc,
+                                    ngon_ngu=bc.kenh.ngon_ngu)
             from PIL import Image  # noqa: PLC0415
             nho = tep[:-4] + "-120.png"
             Image.open(tep).convert("RGB").resize((120, 68)).save(nho)
@@ -8142,7 +8145,8 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
             except Exception as loi:  # noqa: BLE001 — giữ nền cũ, bộ chọn sẽ chấm
                 bc.ghi("    (vẽ lại hỏng: {0})".format(str(loi)[:100]))
         loai = "khuon" if kh.get("nhom") == "khuon" else "chuan_ngach"
-        if not _btk.ve_chu_len_anh(dich, tep, _btk.bo_tri_chu(loai, kh["chu_tang"]), goc=bc.goc):
+        if not _btk.ve_chu_len_anh(dich, tep, _btk.bo_tri_chu(loai, kh["chu_tang"]), goc=bc.goc,
+                                   ngon_ngu=bc.kenh.ngon_ngu):
             bc.ghi("  (ảnh bìa {0}: không vẽ được chữ — không có font Nhật?)".format(so_bia))
             return so_bia, False
     return so_bia, False
