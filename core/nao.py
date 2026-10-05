@@ -750,6 +750,12 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
             ra.append("    lịch đăng tới: {0}".format("; ".join(lich) if lich else (_cat(k.get("video_ke_tiep"), 60) or "chưa có")))
         return ra
 
+    def bat_buoc() -> List[str]:
+        from . import nao_goi_y  # noqa: PLC0415
+
+        return nao_goi_y.dong_bat_buoc(goc, [k["ma"] for k in kenh_ds], bay_gio)
+
+    phan("VIỆC BẮT BUỘC XEM HÔM NAY (máy tính sẵn — xử lý TRƯỚC: chạy lệnh kèm theo hoặc ghi lý do bỏ qua vào nhật ký)", bat_buoc)
     phan("KÊNH", kenh)
 
     def video() -> List[str]:

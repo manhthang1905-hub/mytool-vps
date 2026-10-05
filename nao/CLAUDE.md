@@ -14,7 +14,11 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
 2. **Chấm mình** — mở `hanh-dong.json` (`python -m core.nao xem-hanh-dong`): hành động nào đã tới hạn kiểm,
    so dự đoán với số thật, ghi đúng/sai (`python -m core.nao cham <id> dung|sai "lý do có số"`).
    Sai thì tự hỏi vì sao — sửa trí nhớ/kỹ năng tương ứng.
-3. **Nhìn tình hình** — `python -m core.nao xem` (báo cáo gọn: kênh, video mới, số 48h/7d, bảng điểm tự học,
+3. **Nhìn tình hình** — ĐỌC MỤC "VIỆC BẮT BUỘC XEM HÔM NAY" Ở ĐẦU `xem` TRƯỚC TIÊN: máy đã tính sẵn bài học bị video thắng
+   bác bỏ/xác nhận (`bai-hoc ... tru|cong`) và video THẮNG LỚN kèm nguồn đối thủ để nhân bản (`uu-tien-nguon`), mỗi mục
+   có lệnh chạy được ngay. Với MỖI mục: hoặc chạy lệnh (sửa `--ly-do/--du-doan` cho đúng ý nếu cần), hoặc ghi rõ trong
+   nhật ký "bỏ qua <mục> vì <lý do có số>". Không được lặng lẽ bỏ qua. `bai-hoc cong|tru` không tốn hạn mức ngày.
+   Lệnh: `python -m core.nao xem` (báo cáo gọn: kênh, video mới, số 48h/7d, bảng điểm tự học,
    bài học, đối thủ đang nổ, cảnh báo). Cần sâu hơn thì tự đọc dữ liệu trong `CHANNEL/<kênh>/`
    (chỉ đọc; xem mục "Dữ liệu" bên dưới).
 4. **Suy nghĩ** — viết ra trong nhật ký:

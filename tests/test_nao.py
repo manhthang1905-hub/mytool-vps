@@ -96,8 +96,10 @@ def test_thu_lam_rut_tra_1_va_tru_luot(tmp_path):
     assert nao.tru_luot(goc, "KA", {"cum": "Tình Cảm"}) == 0
 
 
-def test_tranh_tra_0_toi_het_han(tmp_path):
+def test_tranh_tra_0_toi_het_han(tmp_path, monkeypatch):
     goc = _goc(tmp_path)
+    goc_hl = nao.hieu_luc   # `rut` đọc giờ thật — ghim về HOM_NAY để test không phụ thuộc ngày chạy
+    monkeypatch.setattr(nao, "hieu_luc", lambda g, k, t, bay_gio=None: goc_hl(g, k, t, bay_gio or HOM_NAY))
     assert _chay(goc, "tranh", "--kenh", "KA", "--truc", "kieu_tieu_de", "--gia-tri", "canh_bao", "--ngay", "2",
                  "--du-doan", "tiêu đề cảnh báo không còn lọt 2 video tới", "--kiem-ngay", NGAY_KIEM) == 0
     r = tu_hoc.rut(goc, "KA", "kieu_tieu_de", ["canh_bao", "cau_hoi"])
