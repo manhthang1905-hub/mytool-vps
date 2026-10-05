@@ -127,6 +127,22 @@ def k_nhan_vat(goc, kenh):
     return (DAT if anh else THIEU), "{0} ảnh nhân vật".format(len(anh))
 
 
+def k_keo_cheo(goc, kenh):
+    """D08 kéo view chéo: kênh lớn (≥500h/28n) thêm video kênh em vào danh sách phát — 1 lần/ngày qua agent.
+    Đạt = hôm nay/hôm qua đã chạy; chờ = kênh chưa đủ lớn / chưa tới lượt; thiếu = quá 2 ngày không chạy."""
+    import datetime as _d  # noqa: PLC0415
+    ng = _json(_vm(goc, "logs", "keo-cheo-ngay.json")) or {}
+    so = _json(goc, "workspace", "keo-cheo", "da-them.json") or {}
+    muc = [m for m in (so.get("muc") or []) if m.get("kenh_chu") == kenh]
+    hom = _d.date.today()
+    ngay = str(ng.get("ngay") or "")
+    if ngay and (hom - _d.date.fromisoformat(ngay)).days <= 1:
+        return DAT, "chạy {0} · kênh này đã thêm {1} video".format(ngay, len(muc))
+    if not ngay:
+        return CHO, "chưa chạy lần nào (agent chạy 09:00–20:00)"
+    return THIEU, "lần cuối {0} — quá 2 ngày".format(ngay)
+
+
 def k_doi_thu(goc, kenh):
     p = os.path.join(goc, "CHANNEL", kenh, "nghien-cuu", "doi-thu.csv")
     t = _tuoi_gio(p)
@@ -319,6 +335,8 @@ DANH_MUC: List[KyNang] = [
     KyNang("D06", "Bù màn hình kết thúc", "dinh_ky", "Video thiếu MHKT → bù giờ vắng 02:00–05:00.", "agent --bu-mhkt", k_mhkt_thieu, ["K01"]),
     KyNang("D07", "Đường tới YPP", "dinh_ky", "Dự báo ngày đủ 4000 giờ + 1000 đăng ký từ chỉ số Studio hằng ngày (cận dưới theo cửa sổ 28 ngày); cảnh báo khi gần/đạt.",
            "python -m core.ypp · --canh-bao", k_ypp, ["D01"]),
+    KyNang("D08", "Kéo view chéo", "dinh_ky", "Kênh lớn thêm video kênh em vào danh sách phát (playlist tự học từ hộp Lưu, AI chọn theo nghĩa); mỗi lần thêm có dự đoán, đo sau 7 ngày.",
+           "python vm/keo_cheo_dom.py --ke-hoach (agent tự chạy 1 lần/ngày)", k_keo_cheo, ["D01"]),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
 ]

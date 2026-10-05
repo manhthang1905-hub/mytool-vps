@@ -3174,6 +3174,54 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
     return len(con)
 
 
+# ── KÉO VIEW CHÉO (06/10/2026): MỘT lần/ngày mở tiến trình con vm/keo_cheo_dom.py --ke-hoach (kênh lớn thêm video
+#   kênh em vào danh sách phát). Khung 09:00–20:00 (tránh đêm sản xuất, khe đăng 05:00, quét 07:30); không chạy khi
+#   van IPv4 mở hay đang có con nuôi/thiết lập giữ Chrome. Máy DOM tự giữ khoá máy + đóng Chrome; trần 60 phút. ──
+GIO_KEO_CHEO = (9, 20)
+TRAN_KEO_CHEO_GIAY = 60 * 60
+_KEO_CHEO = {"con": {}, "bd": {}, "ngay": ""}
+
+
+def _tep_keo_cheo_ngay() -> str:
+    return os.path.join(GOC, "logs", "keo-cheo-ngay.json")
+
+
+def chay_keo_cheo(bay_gio: float = None, mo_con=None, con_khac: int = 0) -> int:
+    """MỘT bước kéo chéo (gọi mỗi nhịp tim). Trả số tiến trình con đang chạy (0/1)."""
+    luc = time.time() if bay_gio is None else bay_gio
+    con = _KEO_CHEO["con"]
+    for k in [k for k, c in con.items() if c.poll() is not None]:
+        ghi("kéo chéo: tiến trình con xong (mã {0})".format(con.pop(k).returncode))
+        _KEO_CHEO["bd"].pop(k, None)
+    dung_con_qua_tran(con, _KEO_CHEO["bd"], luc, tran_giay=TRAN_KEO_CHEO_GIAY, ten="kéo chéo")
+    if con:
+        return len(con)
+    hom = time.strftime("%Y-%m-%d", time.localtime(luc))
+    if not _KEO_CHEO["ngay"]:
+        try:
+            with open(_tep_keo_cheo_ngay(), "r", encoding="utf-8") as tep:
+                _KEO_CHEO["ngay"] = str(json.load(tep).get("ngay") or "")
+        except (OSError, ValueError, AttributeError):
+            _KEO_CHEO["ngay"] = "-"
+    gio = time.localtime(luc).tm_hour
+    if _KEO_CHEO["ngay"] == hom or not (GIO_KEO_CHEO[0] <= gio < GIO_KEO_CHEO[1]) or con_khac or van_ipv4_mo():
+        return 0
+    ghi("── KÉO CHÉO: mở tiến trình con keo_cheo_dom.py --ke-hoach ──")
+    con["keo-cheo"] = (mo_con or subprocess.Popen)(
+        [sys.executable, "-X", "utf8", os.path.join(GOC, "keo_cheo_dom.py"), "--ke-hoach"], cwd=GOC,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    _KEO_CHEO["bd"]["keo-cheo"] = luc
+    _KEO_CHEO["ngay"] = hom
+    try:
+        os.makedirs(os.path.dirname(_tep_keo_cheo_ngay()), exist_ok=True)
+        with open(_tep_keo_cheo_ngay(), "w", encoding="utf-8") as tep:
+            json.dump({"ngay": hom, "luc": luc}, tep)
+    except OSError:
+        pass
+    return 1
+
+
 # ── THIẾT LẬP KÊNH (03/10/2026): kênh `thiet_lap_kenh: true` chưa `xong` → mở tiến trình con vm/thiet_lap_kenh_dom.py ──
 #   Điền hồ sơ kênh (tên, handle, mô tả, logo, banner, từ khoá, mặc định tải lên, danh sách phát) vào Studio MỘT LẦN.
 #   Cùng khoá `<kênh>.khoa` với nuôi trang chủ nên `_nhuong_kenh_nuoi` ở trên nhường được cho việc đăng; tuần tự từng kênh.
@@ -3963,6 +4011,11 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                     chay_thiet_lap_kenh()
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("thiết lập kênh hỏng: {0}".format(loi))
+                try:
+                    nhip_tim("bước: kéo chéo", ep=True)
+                    chay_keo_cheo(con_khac=len(_NUOI_TRANG_CHU["con"]) + len(_THIET_LAP_KENH["con"]))
+                except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
+                    ghi("kéo chéo hỏng: {0}".format(loi))
         else:
             # Lịch cố định + giữ Chrome chạy cả khi trạm tắt: quét Studio
             # không cần trạm sống (extension tự ghi vào Tải xuống khi không

@@ -39,6 +39,7 @@ Xem theo kênh: `python -m core.ky_nang xem` · skill khởi tạo còn thiếu:
 | D05 | Bộ não | Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ. | `ShopAPI-Nao` | — |
 | D06 | Bù màn hình kết thúc | Video thiếu MHKT → bù giờ vắng 02:00–05:00. | `agent --bu-mhkt` | K01 |
 | D07 | Đường tới YPP | Dự báo ngày đủ 4000 giờ + 1000 đăng ký từ chỉ số Studio hằng ngày (cận dưới theo cửa sổ 28 ngày); cảnh báo khi gần/đạt. | `python -m core.ypp · --canh-bao` | D01 |
+| D08 | Kéo view chéo | Kênh lớn thêm video kênh em vào danh sách phát (playlist tự học từ hộp Lưu, AI chọn theo nghĩa); mỗi lần thêm có dự đoán, đo sau 7 ngày. | `python vm/keo_cheo_dom.py --ke-hoach (agent tự chạy 1 lần/ngày)` | D01 |
 
 ## SỬA CHỮA — khi hỏng
 
