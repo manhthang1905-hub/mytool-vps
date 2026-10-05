@@ -75,6 +75,13 @@
     "ytcp-playlist-dialog [role=checkbox]"
    ]
   },
+  "playlist_ten": {
+   "ghi_chu": "05/10: TÊN danh sách phát nằm ở li/label bao ô tick (div[role=checkbox] không có chữ) — cùng thứ tự với playlist_muc",
+   "chon": [
+    "ytcp-playlist-dialog li",
+    "ytcp-playlist-dialog ytcp-ve[role=none]"
+   ]
+  },
   "playlist_xong": {
    "chon": [
     "ytcp-playlist-dialog .done-button",

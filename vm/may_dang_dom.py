@@ -1404,6 +1404,14 @@ class MayDangDom:
                 if not pt:
                     continue
                 chu_pt = ta.doc_chu(pt)
+                if not str(chu_pt or "").strip():
+                    # 05/10: ô tick không có chữ — tên nằm ở li/label bao nó (cùng thứ tự). Bản cũ đọc rỗng
+                    # nên CHƯA LẦN NÀO khớp tên → mọi video kênh mới vào danh sách phát đầu tiên.
+                    try:
+                        ten_pt = ta.tim("playlist_ten", han=0, thu=i)
+                        chu_pt = ta.doc_chu(ten_pt) if ten_pt else chu_pt
+                    except Exception:  # noqa: BLE001 — bộ chọn cũ chưa có khoá này
+                        pass
                 if ten_dong:   # tên từ kế hoạch: khớp CHÍNH XÁC (cả khối hoặc một dòng)
                     cac = [chuan_hoa_tieu_de(chu_pt)] + [
                         chuan_hoa_tieu_de(x) for x in str(chu_pt).splitlines()]
@@ -1412,6 +1420,7 @@ class MayDangDom:
                     khop = ten in chuan_hoa_tieu_de(chu_pt)
                 if khop:
                     chon = pt
+                    self.nk("danh sách phát «{0}» — khớp tên (mục {1}/{2})".format(ten, i + 1, so))
                     break
             if not chon:
                 self._canh_bao("không thấy danh sách phát tên «{0}» — lấy cái đầu".format(ten))
