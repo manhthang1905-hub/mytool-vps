@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.152.0** — 2026-10-05 — `vps-jp1` — fix(vong hoc): khe nang ban chi doi kho nhac, van hoc tu so lieu (TL1-3 khong hoc tu 03/10); feat: danh muc skill core/ky_nang + docs/KY-NANG.md; token hong -> binh luan DOM; kho bi mat DPAPI
 - **2.151.1** — 2026-10-05 — `vps-jp1` — fix(dang dom): doc ten danh sach phat o li/label (o tick khong co chu) - truoc day video kenh moi luon vao danh sach dau
 - **2.151.0** — 2026-10-05 — `vps-jp1` — feat(dom): ngon ngu hien thi kenh giu dung nuoc kenh; may dang/binh luan TAM dung vi roi TRA lai (logs/hl-tam, ben khi chet giua chung) - chay duoc moi ngon ngu VPS
 - **2.150.6** — 2026-10-05 — `vps-jp1` — feat(thiet lap kenh): dia diem xem la buoc 1 lan cua skill (youtube.com avatar -> Dia diem -> nuoc kenh, doc lai menu); may dang chi kiem giao dien; sua nhan nut avatar vi
