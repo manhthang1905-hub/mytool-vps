@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.158.1** — 2026-10-06 — `vps-jp1` — feat(chien-truong): chia vung AI hang ngay cho video doi thu moi; de bai/ten ngach lay tu ngach.yaml (may khac chu de khac); bao cao ngay gop kenh cung trang thai
 - **2.158.0** — 2026-10-06 — `vps-jp1` — feat: tu chua bo chon DOM Studio bang AI (agent A) + bao cao suc khoe hang ngay qua Telegram (agent E)
 - **2.157.1** — 2026-10-06 — `vps-jp1` — test(nao_goi_y): tieu de gia, khong dung tieu de kenh that
 - **2.157.0** — 2026-10-06 — `vps-jp1` — feat(nao): muc VIEC BAT BUOC XEM — nhan ban video thang, gach bai hoc bi bac bo (agent D); test nao khong phu thuoc ngay
