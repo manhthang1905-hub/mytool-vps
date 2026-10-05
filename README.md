@@ -83,7 +83,8 @@ Việc tay (tool chỉ nhắc, không tự làm):
 - **Ghim bình luận mở đầu** nếu kênh cần. Xem `docs/DANG-VA-BINH-LUAN.md`.
 - **Windows hết hạn dùng thử.** Tool tự rearm khi còn lượt. Hết lượt thì phải nhập khoá.
 - **Hạn thuê VPS.** Điền `"ngay_het_han_vps": "2027-03-15"` vào `workspace/cai-dat.json`.
-- **Ổ đĩa đầy.** Dọn các lượt cũ đã đăng trong `PROJECTS/AUTO/<kênh>/`.
+- **Ổ đĩa đầy.** Máy tự dọn file nặng của video đã lên. Dưới 10 GB thì máy ngừng dựng video mới và báo; khi đó dọn tay `PROJECTS/AUTO/<kênh>/`. Xem `docs/BEN-BI.md`.
+- **Báo động ra điện thoại.** Tạo `bao-dong.json` (Telegram hoặc webhook). Thiếu tệp này thì sự cố chỉ ghi vào `workspace/loi-chay-max.md` và báo cáo ngày.
 
 Nhật ký: `workspace/tu-chay/<ngày>.md`, `workspace/tu-chay/tu-chay.log`, `vm/agent.log`,
 `PROJECTS/AUTO/<k>/<lượt>/trang-thai.json`, `workspace/loi-chay-max.md`.
@@ -106,7 +107,10 @@ Khi cần xem lỗi trên cửa sổ console, chạy `scripts\CHAY-QT.bat`.
 | `CLAUDE.md` | Luật cho mọi phiên Claude trên mọi VPS |
 | `docs/PHAT-TRIEN.md` | Sửa mã, đẩy lên kho, phiên bản, bản đồ module |
 | `docs/KENH-VA-NGACH.md` | Ngách mới bằng AI, thêm kênh, đổi chủ đề/quốc gia, hồ sơ ngách, chia sẻ bài học |
-| `docs/DANG-VA-BINH-LUAN.md` | Máy đăng (DOM/ảnh), bình luận, OAuth dự phòng |
+| `docs/DANG-VA-BINH-LUAN.md` | Máy đăng (DOM/ảnh, tự chữa DOM), bình luận, kéo view chéo, OAuth dự phòng |
+| `docs/TRUNG-TAM-CHI-HUY.md` | Trang chỉ huy cổng 8770: Chiến trường, Hậu cần, Não |
+| `docs/BEN-BI.md` | Chạy 365 ngày: lịch, báo động, báo cáo ngày, dọn đĩa, việc người phải làm |
+| `docs/VONG-HOC.md` · `docs/KY-NANG.md` | Vòng tự học kín · danh mục skill (tự sinh) |
 | `docs/kien-thuc/` | `chien-luoc.md` (bộ máy chọn nguồn), `con-duong-kenh-thang.md`, `nghien-cuu-bia.md` |
 
 `scripts/` chứa công cụ phụ ít dùng: `SETUP.bat` (do `CAI-DAT-VPS.bat` gọi), `CHAY-QT.bat` (mở tool kèm console), `KIEM-TRA.bat` (in chẩn đoán), `KIEM-TRA-PHAT-HANH.bat` (quét bí mật trước khi phát hành).

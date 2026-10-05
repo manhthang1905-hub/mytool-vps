@@ -32,6 +32,8 @@ Thiết lập nằm ở `CHANNEL/<k>/may-ao.json`. Trạm đẩy xuống agent m
   - Mã thoát: 0 xong · 1 hỏng sau khi đã chạm kênh (không lùi, lượt sau tiếp tục nháp) · 3 DOM không dùng được trước khi chạm kênh · 4 bị chặn an toàn.
   - Sổ chống trùng: `vm/logs/so-video-id.json`.
   - Kiểm mà không đăng: `python vm/may_dang_dom.py --kiem-dom --kenh <k>`.
+  - **Ngôn ngữ tạm** (`vm/ngon_ngu_tam.py`): kênh giữ ngôn ngữ hiển thị của nước nó. Máy DOM tạm đặt `hl=vi` (cookie PREF) khi vào Studio, cuối phiên trả `hl` cũ và đọc lại. Gốc ghi trước ở `vm/logs/hl-tam/<k>.json`, nên chết giữa chừng thì lần sau vẫn trả được. Không đụng ngôn ngữ tài khoản Google.
+  - **Tự chữa DOM** (`vm/tu_chua_dom.py`): khi mọi bộ chọn của một khoá hụt hẳn (Studio đổi giao diện), máy hỏi AI tối đa 3 bộ chọn CSS mới, kiểm từng cái ngay trên trang (chỉ đọc: đúng số phần tử, thẻ hợp loại, chữ khớp gợi ý), nhận cái đạt vào `vm/logs/studio-selectors-tu-chua.json`. Không bao giờ sửa `studio-selectors.json`; người sửa khoá đó thì bản tự chữa tự bỏ. Hạn mức hỏi AI mỗi khoá mỗi ngày, hỏi hụt thì chờ 1 giờ. Tắt: `TL_TU_CHUA_DOM=0`.
 - **Ảnh** (`vm/may_dang.py`): dò nút trên màn hình bằng PyAutoGUI và ảnh mẫu `vm/icon/*.PNG`. Đây là đường lùi. Nó cần phiên RDP có màn hình.
 - Nhật ký: `vm/logs/dang-dom.log`, `vm/logs/dang.log`, `vm/agent.log`.
 - Tải hỏng để lại nháp thì lượt sau tải bản mới. Không sửa, không xoá nháp cũ.
@@ -39,12 +41,22 @@ Thiết lập nằm ở `CHANNEL/<k>/may-ao.json`. Trạm đẩy xuống agent m
 ## 4. Bình luận
 - **DOM** (`vm/may_cmt_dom.py`) là đường chính. Nó dùng Chrome kênh đã đăng nhập, không cần OAuth. Việc gồm: đăng bình luận mồi (`1-binh-luan.txt` trong gói), ghim (khi `ghim_dom`), và trả lời bình luận mới.
   - Chỉ chạy cho kênh đang `tu_dang`.
+  - Câu trả lời dựa trên lời thoại thật của đúng video (phụ đề gói `3-phu-de.srt`), giọng văn kênh (`giong_van`), ngôn ngữ kênh (`ngon_ngu` trong `kenh.yaml`; sai ngôn ngữ thì viết lại). 1–2 câu, không emoji, không kaomoji, không hashtag, không link.
   - Spam, link, xúc phạm: để nguyên, không xoá, không trả lời.
   - Sổ: `vm/logs/cmt-dom.json`. Id đã trả lời lưu ở `vm/replied/<k>.txt`, dùng chung với đường API nên không bao giờ trả lời trùng.
   - Kiểm mà không gửi: `python vm/may_cmt_dom.py --kenh <k> --kiem-dom`.
 - Không ghim được thì việc ghim được ghi vào `CHANNEL/<k>/can-ghim.md`, kèm link video. Ghim tay xong thì bấm "Đã ghim" ở Bảng điều khiển.
 
-## 5. OAuth: đường dự phòng qua YouTube Data API
+## 5. Kéo view chéo qua danh sách phát
+Kênh lớn trong nhóm (giờ xem 28 ngày ≥ 500) thêm video hợp chủ đề của kênh em vào danh sách phát công khai của mình. Khán giả cùng ngách của kênh lớn chảy sang kênh em, không tốn tiền. Kế hoạch: `core/keo_cheo.py`. Thực thi trên Chrome của kênh lớn: `vm/keo_cheo_dom.py`.
+- Giới hạn: tối đa 2 lần thêm mỗi kênh lớn mỗi ngày, 1 video mỗi danh sách mỗi ngày; chỉ video đã công khai ≥ 24 giờ; không thêm trùng (`workspace/keo-cheo/da-them.json`). Không khớp chủ đề thì không thêm.
+- Danh sách phát tự tìm: `kenh.yaml` → `thiet-lap/ho-so.json` → sổ học `workspace/keo-cheo/ds-kenh.json` (đọc tên từ hộp «Lưu vào…», không tích). AI chọn danh sách theo nghĩa khi cụm không khớp.
+- Máy DOM chỉ tích đúng một hàng khớp nguyên văn, đọc lại, mở lại hộp xác nhận. Không tạo, không bỏ tích danh sách nào.
+- Đo: mỗi lần thêm ghi dự đoán và mốc của video cùng tối đa 5 video đối chứng; sau 7 ngày so tốc độ tăng (≥ 20% nhanh hơn đối chứng = "kéo được"). So sánh thô, đủ để quyết có mở rộng không.
+- Lệnh: `python vm/keo_cheo_dom.py --in-ke-hoach` (chỉ in) · `--hoc-ds --kenh <k>` · `--ke-hoach [--thu | --doc-hop]`. Đứng ngoài: `keo_cheo_tat: true` trong `kenh.yaml`.
+- Hiện trạng 06/10/2026: đã học danh sách phát thật của 2 kênh lớn. Hai lần thêm thật đầu tiên dừng ở bước đọc lại (bấm rồi nhưng hộp chưa hiện dấu tích); bản 2.164.1 sửa cách tìm nút. Chưa có lượt thêm thành công nào, nên chưa có số đo.
+
+## 6. OAuth: đường dự phòng qua YouTube Data API
 Agent chọn `vm/may_cmt.py` (API) thay cho DOM khi kênh đã có token `vm/tokens/<k>.json`, hoặc khi `binh_luan_dom=false`. Hai đường không bao giờ chạy cùng lúc. API không ghim được bình luận. Chỉ làm phần này khi thật sự cần API.
 
 **A. Chìa khoá phần mềm** (làm một lần, dùng chung cho mọi kênh):
