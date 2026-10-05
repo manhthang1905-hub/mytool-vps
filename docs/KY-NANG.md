@@ -34,7 +34,7 @@ Xem theo kênh: `python -m core.ky_nang xem` · skill khởi tạo còn thiếu:
 |---|---|---|---|---|
 | D01 | Quét ngày | Studio + trang chủ + lời thoại → số liệu học (agent, sau 05:00). | `agent (tự)` | K01 |
 | D02 | Sản xuất + bàn giao video ngày mai | Nghiên cứu → chọn nguồn → 8 khâu → QA → bàn giao lịch 05:00. | `tu_chay.py (điều phối)` | K03, K04, K05 |
-| D03 | Bình luận (mồi + trả lời) | Phiên kênh: đăng mồi, trả lời bình luận mới (DOM; API khi có token). | `agent phiên kênh` | K01 |
+| D03 | Bình luận (mồi + trả lời) | Phiên kênh, DOM: đăng mồi + trả lời bình luận mới — đúng NỘI DUNG video (lời thoại từ phụ đề gói), giọng kênh, đúng ngôn ngữ kênh, gõ như người (không emoji/kaomoji). | `agent phiên kênh · thử không đăng: workspace/cong-cu-dieu-phoi/thu_tra_loi.py` | K01 |
 | D04 | Vòng tự học | Bảng điểm cụm/công thức/bìa/tiêu đề/hook theo số Studio. | `tu_chay.py (bước 0)` | D01 |
 | D05 | Bộ não | Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ. | `ShopAPI-Nao` | — |
 | D06 | Bù màn hình kết thúc | Video thiếu MHKT → bù giờ vắng 02:00–05:00. | `agent --bu-mhkt` | K01 |

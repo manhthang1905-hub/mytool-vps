@@ -179,14 +179,15 @@ def k_nuoi(goc, kenh):
 
 def k_oauth_client(goc, kenh):
     c = [p for p in glob.glob(_vm(goc, "clients", "*.json"))]
-    return (DAT if c else THIEU), ("{0} tệp client".format(len(c)) if c else "chưa có OAuth client (Google Cloud) — nguoi")
+    # 05/10: chủ chọn bình luận DOM (API rắc rối) — không có client là "không dùng", không phải thiếu.
+    return (DAT if c else KHONG), ("{0} tệp client".format(len(c)) if c else "không dùng — bình luận chạy DOM")
 
 
 def k_token(goc, kenh):
     p = _vm(goc, "tokens", kenh + ".json")
     d = _json(p)
     if not d:
-        return THIEU, "chưa có token (bình luận đang chạy DOM)"
+        return KHONG, "không dùng — bình luận chạy DOM"
     if not d.get("refresh_token"):
         return LOI, "token không có refresh_token — phải lấy lại"
     st = _json(_vm(goc, "logs", "oauth", kenh + ".json")) or {}
@@ -295,7 +296,7 @@ DANH_MUC: List[KyNang] = [
     # ĐỊNH KỲ — mỗi ngày
     KyNang("D01", "Quét ngày", "dinh_ky", "Studio + trang chủ + lời thoại → số liệu học (agent, sau 05:00).", "agent (tự)", k_quet_ngay, ["K01"]),
     KyNang("D02", "Sản xuất + bàn giao video ngày mai", "dinh_ky", "Nghiên cứu → chọn nguồn → 8 khâu → QA → bàn giao lịch 05:00.", "tu_chay.py (điều phối)", k_kho_dem, ["K03", "K04", "K05"]),
-    KyNang("D03", "Bình luận (mồi + trả lời)", "dinh_ky", "Phiên kênh: đăng mồi, trả lời bình luận mới (DOM; API khi có token).", "agent phiên kênh", k_binh_luan, ["K01"]),
+    KyNang("D03", "Bình luận (mồi + trả lời)", "dinh_ky", "Phiên kênh, DOM: đăng mồi + trả lời bình luận mới — đúng NỘI DUNG video (lời thoại từ phụ đề gói), giọng kênh, đúng ngôn ngữ kênh, gõ như người (không emoji/kaomoji).", "agent phiên kênh · thử không đăng: workspace/cong-cu-dieu-phoi/thu_tra_loi.py", k_binh_luan, ["K01"]),
     KyNang("D04", "Vòng tự học", "dinh_ky", "Bảng điểm cụm/công thức/bìa/tiêu đề/hook theo số Studio.", "tu_chay.py (bước 0)", k_tu_hoc, ["D01"]),
     KyNang("D05", "Bộ não", "dinh_ky", "Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ.", "ShopAPI-Nao", k_nao, []),
     KyNang("D06", "Bù màn hình kết thúc", "dinh_ky", "Video thiếu MHKT → bù giờ vắng 02:00–05:00.", "agent --bu-mhkt", k_mhkt_thieu, ["K01"]),
