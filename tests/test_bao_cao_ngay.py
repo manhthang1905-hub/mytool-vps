@@ -21,6 +21,7 @@ def _gia(monkeypatch, **hong):
     monkeypatch.setattr(bc, "_muc_skill", mk("skill", ["- không skill nào hỏng/thiếu"]))
     monkeypatch.setattr(bc, "_muc_ypp", mk("ypp", ["- TL1: 100/4000h"]))
     monkeypatch.setattr(bc, "_muc_chien_truong", mk("ct", ["- Thị phần ta 1%"]))
+    monkeypatch.setattr(bc, "_muc_hoc", mk("hoc", ["- Thiếu số 48h: TL1 2"]))
     monkeypatch.setattr(bc, "_muc_loi", mk("loi", ["- không có lỗi"]))
     monkeypatch.setattr(bc, "_muc_may", mk("may", ["- RAM 5/8 GB"]))
 
@@ -28,15 +29,16 @@ def _gia(monkeypatch, **hong):
 def test_tao_du_sau_muc(monkeypatch, tmp_path):
     _gia(monkeypatch)
     t = bc.tao(str(tmp_path), BG)
-    for m in ("Video ngày mai", "Skill hỏng/thiếu", "Đường tới YPP", "Chiến trường", "Lỗi 24 giờ", "Máy"):
+    for m in ("Video ngày mai", "Skill hỏng/thiếu", "Đường tới YPP", "Chiến trường", "Tín hiệu học thiếu/cũ",
+              "Lỗi 24 giờ", "Máy"):
         assert m in t
     assert len(t.splitlines()) <= 40
 
 
 def test_muc_hong_khong_vo_ban_tin(monkeypatch, tmp_path):
-    _gia(monkeypatch, ypp=1, ct=1, may=1)
+    _gia(monkeypatch, ypp=1, ct=1, may=1, hoc=1)
     t = bc.tao(str(tmp_path), BG)
-    assert t.count("không đọc được") == 3
+    assert t.count("không đọc được") == 4
     assert "TL1: có video mai" in t and "Lỗi 24 giờ" in t
 
 

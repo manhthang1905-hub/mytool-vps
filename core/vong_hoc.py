@@ -67,6 +67,23 @@ def _can_hoc_lai(goc: str, kenh: str, co_so_moi: bool, *, bay_gio: _dt.datetime,
     return tuoi_gio > GIO_DEBOUNCE_BAI_HOC
 
 
+def _log_kem_canh_bao(goc: str, ma_kenh: str, log: Callable[[str], None]) -> Callable[[str], None]:
+    """Bọc `log`: dòng báo một bước HỎNG ("… hỏng: <lỗi> — bỏ qua.") còn được ghi thành cảnh báo học
+    (`tu_hoc.canh_bao`) để mục "Tín hiệu học" của báo cáo ngày thấy — trước đây chỉ nằm trong log lượt."""
+    def ghi(dong: str) -> None:
+        log(dong)
+        if "[vòng học]" in dong and " hỏng: " in dong:
+            try:
+                from . import tu_hoc  # noqa: PLC0415
+
+                buoc, _, loi = dong.partition(" hỏng: ")
+                tu_hoc.canh_bao(goc, "vong_hoc:" + buoc.split("]", 1)[-1].strip()[:40],
+                                loi.rsplit(" — bỏ qua", 1)[0], ma_kenh)
+            except Exception:  # noqa: BLE001
+                pass
+    return ghi
+
+
 def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
                log: Callable[[str], None], *,
                bay_gio: Optional[_dt.datetime] = None, bo_kho_nhac: bool = False) -> Dict[str, Any]:
@@ -81,6 +98,7 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
     bay_gio = bay_gio or _dt.datetime.now()
     ket: Dict[str, Any] = {"kho_nhac": None, "bu_ho_so": [], "chi_so": None,
                            "bai_hoc": False, "khuon_bia": None, "chien_luoc": None}
+    log = _log_kem_canh_bao(goc, ma_kenh, log)
 
     # 1) Kho nhạc — chuẩn hoá tăng dần (FFmpeg = việc NẶNG). 05/10: `bo_kho_nhac` khi khe máy nặng đang bận —
     #    CHỈ bước này dời sang lượt sau (xếp lần lượt, không quá tải); các bước học từ số liệu bên dưới

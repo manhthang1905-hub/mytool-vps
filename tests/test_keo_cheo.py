@@ -98,6 +98,10 @@ def nhom(tmp_path):
 
 
 def lap(goc, **kw):
+    # AI thật (ví ShopAPI) KHÔNG BAO GIỜ chạy trong bài kiểm: tắt, trừ khi bài đưa `goi_ai`/`chon_ai` giả.
+    cd = dict(kw.get("cai_dat") or {})
+    cd.setdefault("ai_chon_ds", "goi_ai" in kw)
+    kw["cai_dat"] = cd
     kw.setdefault("thu_muc", str(goc / "trang-thai"))
     kw.setdefault("cum_cua", cum_gia)
     kw.setdefault("bay_gio", BAY_GIO)
@@ -170,12 +174,17 @@ class TestKeHoach:
         dung_kenh(tmp_path, "L", (100, 900), them_yaml='keo_cheo_danh_sach_phat: "推し動画"\n')
         dung_kenh(tmp_path, "E1", (0, 1), video=[(_vid(1), "全然ちがう話", truoc(30), 1)])
         kh = lap(tmp_path)
-        assert [(h["danh_sach_phat"], h["cach_chon"]) for h in kh] == [("推し動画", "rieng")]
+        assert [(h["danh_sach_phat"], h["cach_chon"]) for h in _them(kh)] == [("推し動画", "rieng")]
+        assert [h["viec"] for h in kh] == ["hoc_ds", "them"]   # vẫn đi học danh sách chủ đề, không chặn
 
-    def test_khong_ds_khong_viec(self, tmp_path):
+    def test_khong_ds_thi_bao_lenh_hoc(self, tmp_path):
+        """Không nguồn danh sách nào → KHÔNG im lặng: một việc `hoc_ds` nói rõ lệnh cần chạy."""
         dung_kenh(tmp_path, "L", (100, 900))
         dung_kenh(tmp_path, "E1", (0, 1), video=[(_vid(1), "孤独A", truoc(30), 1)])
-        assert lap(tmp_path) == []
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["hoc_ds"]
+        assert kh[0]["video_id"] == "" and "--hoc-ds --kenh L --video" in kh[0]["lenh"]
+        assert kh[0]["lenh"] in kh[0]["ly_do"]
 
     def test_khong_khop_cum_thi_khong_them(self, tmp_path):
         dung_kenh(tmp_path, "L", (100, 900), ds="孤独を楽しむ人")
@@ -242,6 +251,131 @@ class TestKeHoach:
         assert dd["view_luc_them"] == 20 and dd["kiem_sau_ngay"] == 7
         assert set(dd["doi_chung"]) <= {_vid(1), _vid(3)} and dd["doi_chung"]
         assert "đối" in dd["gia_thuyet"]
+
+
+def _ho_so(k: Path, ds) -> None:
+    (k / "thiet-lap").mkdir(parents=True, exist_ok=True)
+    (k / "thiet-lap" / "ho-so.json").write_text(json.dumps(
+        {"ten": "x", "danh_sach_phat": [{"ten": t, "mo_ta": "mô tả " + t} for t in ds]}, ensure_ascii=False),
+        encoding="utf-8")
+
+
+def _them(kh):
+    return [h for h in kh if h["viec"] == "them"]
+
+
+class TestTimDanhSach:
+    """Danh sách phát tự tìm: kenh.yaml → thiet-lap/ho-so.json → sổ học ds-kenh.json (hộp Lưu)."""
+
+    def _nhom(self, goc, ds_yaml=""):
+        dung_kenh(goc, "L", (100, 900), ds=ds_yaml, video=[(_vid(90), "Lの動画", truoc(100), 50)])
+        dung_kenh(goc, "E1", (0, 1), video=[(_vid(1), "孤独な人の強さ", truoc(30), 1)])
+        return str(goc / "trang-thai")
+
+    def test_nguon_a_ho_so(self, tmp_path):
+        self._nhom(tmp_path)
+        _ho_so(tmp_path / "CHANNEL" / "L", ["孤独を楽しむ人", "頭がいい人の習慣"])
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["them"]
+        assert kh[0]["danh_sach_phat"] == "孤独を楽しむ人" and kh[0]["nguon_ds"] == "ho-so"
+        d = kc.tra_ds(str(tmp_path), "L", dict(kc.CAI_DAT_MAC_DINH))
+        assert d["mo_ta"]["孤独を楽しむ人"] == "mô tả 孤独を楽しむ人" and not d["can_hoc"]
+
+    def test_kenh_yaml_dung_truoc_ho_so(self, tmp_path):
+        self._nhom(tmp_path, ds_yaml="孤独の時間")
+        _ho_so(tmp_path / "CHANNEL" / "L", ["孤独を楽しむ人"])
+        assert kc.tra_ds(str(tmp_path), "L", dict(kc.CAI_DAT_MAC_DINH))["chu_de"] == ["孤独の時間"]
+
+    def test_nguon_b_so_hoc(self, tmp_path):
+        tm = self._nhom(tmp_path)
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["hoc_ds"] and kh[0]["video_id"] == _vid(90)  # video của chính L
+        assert kh[0]["lenh"] == "python vm/keo_cheo_dom.py --hoc-ds --kenh L"
+        muc = kc.ghi_ds_kenh(tm, "L", [{"ten": "Xem sau", "chu_hang": "Xem sau"},
+                                       {"ten": "孤独を楽しむ人", "chu_hang": "孤独を楽しむ人"},
+                                       {"ten": "秘密の箱", "chu_hang": "秘密の箱 非公開"}], luc=BAY_GIO)
+        assert muc["ten"] == ["孤独を楽しむ人"] and muc["rieng_tu"] == ["秘密の箱"]
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["them"]
+        assert kh[0]["danh_sach_phat"] == "孤独を楽しむ人" and kh[0]["nguon_ds"] == "hoc"
+
+    def test_so_hoc_cu_thi_hoc_lai_van_dung_tam(self, tmp_path):
+        tm = self._nhom(tmp_path)
+        kc.ghi_ds_kenh(tm, "L", ["孤独を楽しむ人"], luc=BAY_GIO - dt.timedelta(days=8))
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["hoc_ds", "them"]
+        assert "cũ" in kh[0]["ly_do"]
+        kc.ghi_ds_kenh(tm, "L", ["孤独を楽しむ人"], luc=BAY_GIO - dt.timedelta(days=2))
+        assert [h["viec"] for h in lap(tmp_path)] == ["them"]
+
+    def test_danh_dau_hoc_lai(self, tmp_path):
+        tm = self._nhom(tmp_path)
+        kc.ghi_ds_kenh(tm, "L", ["孤独を楽しむ人"], luc=BAY_GIO)
+        kc.danh_dau_can_hoc(tm, "L", "loi:hop_luu: không thấy hộp")
+        kh = lap(tmp_path)
+        assert kh[0]["viec"] == "hoc_ds" and "hop_luu" in kh[0]["ly_do"]
+
+    def test_hoc_roi_ma_khong_co_ds_cong_khai_thi_bao_nguoi(self, tmp_path):
+        tm = self._nhom(tmp_path)
+        kc.ghi_ds_kenh(tm, "L", [{"ten": "Xem sau", "chu_hang": ""}], luc=BAY_GIO)
+        kh = lap(tmp_path)
+        assert [h["viec"] for h in kh] == ["bao"] and "--hoc-ds --kenh L" in kh[0]["ly_do"]
+
+
+class TestAiChon:
+    def _nhom(self, goc, td="休日は外に出ない人の心理"):
+        dung_kenh(goc, "L", (100, 900), ds="静かに去る人の本音 | 家で過ごす人")
+        dung_kenh(goc, "E1", (0, 1), video=[(_vid(1), td, truoc(30), 1)])
+        return str(goc / "trang-thai")
+
+    def test_ai_theo_nghia_mot_luot_moi_video(self, tmp_path):
+        tm = self._nhom(tmp_path)
+        de = []
+
+        def goi(d):
+            de.append(d)
+            return "家で過ごす人"
+        kh = lap(tmp_path, goi_ai=goi)
+        assert [(h["danh_sach_phat"], h["cach_chon"]) for h in _them(kh)] == [("家で過ごす人", "ai")]
+        assert len(de) == 1 and "休日は外に出ない人の心理" in de[0] and "NONE" in de[0]
+        lap(tmp_path, goi_ai=goi)
+        assert len(de) == 1                                     # nhớ trong ai-chon.json
+        assert json.loads((Path(tm) / kc.TEP_AI_CHON).read_text(encoding="utf-8"))["L/" + _vid(1)]["ten"] == "家で過ごす人"
+
+    def test_ai_noi_none_thi_khong_them(self, tmp_path):
+        self._nhom(tmp_path, td="静かに去る人の特徴")       # gần chữ có, nhưng AI đã nói không hợp
+        assert _them(lap(tmp_path, goi_ai=lambda d: "NONE")) == []
+
+    def test_ai_tra_ten_la_khong_nhan(self, tmp_path):
+        self._nhom(tmp_path)
+        assert _them(lap(tmp_path, goi_ai=lambda d: "Danh sách bịa")) == []
+
+    def test_vi_chan_thi_lui_gan_chu(self, tmp_path, monkeypatch):
+        from core.giam_doc import quan_ly
+        monkeypatch.setattr(quan_ly, "goi_chat_that", lambda goc, ghi=None: None)
+        self._nhom(tmp_path, td="静かに去る人の特徴")
+        kh = lap(tmp_path, cai_dat={"ai_chon_ds": True})
+        assert [(h["danh_sach_phat"], h["cach_chon"]) for h in _them(kh)] == [("静かに去る人の本音", "gan_chu")]
+
+    def test_vi_chan_co_ds_rieng_thi_rieng_truoc(self, tmp_path, monkeypatch):
+        from core.giam_doc import quan_ly
+        monkeypatch.setattr(quan_ly, "goi_chat_that", lambda goc, ghi=None: None)
+        self._nhom(tmp_path, td="静かに去る人の特徴")
+        kh = lap(tmp_path, cai_dat={"ai_chon_ds": True, "ds_rieng": "おすすめ"})
+        assert [(h["danh_sach_phat"], h["cach_chon"]) for h in _them(kh)] == [("おすすめ", "rieng")]
+
+    def test_tran_luot_goi(self, tmp_path):
+        dung_kenh(tmp_path, "L", (100, 900), ds="家で過ごす人")
+        dung_kenh(tmp_path, "E1", (0, 1), video=[(_vid(1), "外に出ない", truoc(30), 1)])
+        dung_kenh(tmp_path, "E2", (0, 2), video=[(_vid(2), "部屋にいたい", truoc(30), 1)])
+        de = []
+        kh = lap(tmp_path, goi_ai=lambda d: de.append(d) or "家で過ごす人",
+                 cai_dat={"toi_da_goi_ai": 1, "toi_da_moi_ds": 5})
+        assert len(de) == 1 and len(_them(kh)) == 1
+
+    def test_gan_nhat_theo_chu(self):
+        assert kc.gan_nhat_theo_chu("【心理学】静かに去る人の特徴", ["家で過ごす人", "静かに去る人の本音"]) == "静かに去る人の本音"
+        assert kc.gan_nhat_theo_chu("全然ちがう話です", ["家で過ごす人"]) == ""
 
 
 class TestDoHieuQua:
@@ -333,7 +467,8 @@ class TrangGia:
     def doc_hop(self):
         if not self.mo:
             return {"hop": False, "hang": []}
-        return {"hop": True, "hang": [{"id": "hang:" + t, "khoa": "kc_hang_ds", "ten": t, "chon": c}
+        return {"hop": True, "hang": [{"id": "hang:" + t, "khoa": "kc_hang_ds", "ten": t, "chon": c,
+                                       "chu_hang": t + (" 非公開" if t in getattr(self, "rieng_tu", ()) else "")}
                                       for t, c in self.hien.items()]}
 
     def phim_esc(self):
@@ -428,6 +563,64 @@ class TestMayDom:
         tr = TrangGia({"おすすめ": None})
         kq = may(tr).them("abcdefghijk", "おすすめ")
         assert kq["ket"].startswith("loi:trang_thai") and all(not b.startswith("hang:") for b in tr.bam_ds)
+
+
+class TestHocDs:
+    def test_hoc_ds_khong_tich(self):
+        tr = TrangGia(DS)
+        tr.rieng_tu = ("おすすめ 2",)
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"] == "hoc_ds:ok" and tr.bam_ds == ["nut_luu", "dong"] and tr.luu == DS
+        assert [h["ten"] for h in kq["hang_hop"]] == list(DS)
+
+    def test_hoc_ds_hop_trong_la_loi(self):
+        tr = TrangGia({})
+        kq = may(tr).hoc_ds("abcdefghijk")
+        assert kq["ket"].startswith("loi:hop_luu")
+
+    def test_chay_viec_hoc_roi_lap_lai_cung_phien(self, tmp_path):
+        tm = str(tmp_path)
+        tr = TrangGia(DS)
+        tr.rieng_tu = ("おすすめ 2",)
+        hoi = []
+
+        def them_sau():
+            hoi.append(1)
+            assert kc.doc_ds_kenh(tm)["L"]["ten"] == ["おすすめ", "孤独を楽しむ人"]   # sổ học đã mới
+            return [{"viec": "them", "kenh_chu": "L", "danh_sach_phat": "おすすめ", "video_id": "abcdefghijk",
+                     "kenh_video": "E1"}]
+        ra = kcd.chay_viec(may(tr), "L", [{"viec": "hoc_ds", "kenh_chu": "L", "video_id": "abcdefghijk"}],
+                           "that", thu_muc=tm, them_sau=them_sau, ngu=lambda _s: None)
+        assert [x["ket"] for x in ra] == ["hoc_ds:ok", "ok"] and hoi == [1]
+        so = kc.doc_ds_kenh(tm)["L"]
+        assert so["rieng_tu"] == ["おすすめ 2"] and "Xem sau" not in so["ten"]
+        assert [m["ket"] for m in kc.doc_da_them(tm)["muc"]] == ["ok"]          # chỉ việc them vào sổ đã thêm
+        assert tr.luu["おすすめ"] is True
+
+    def test_chay_viec_ds_khong_co_thi_so_hoc_cap_nhat(self, tmp_path):
+        tm = str(tmp_path)
+        kc.ghi_ds_kenh(tm, "L", ["Tên cũ đã đổi"])
+        ra = kcd.chay_viec(may(TrangGia(DS)), "L", [{"viec": "them", "kenh_chu": "L", "danh_sach_phat": "Tên cũ đã đổi",
+                                                    "video_id": "abcdefghijk"}], "that", thu_muc=tm,
+                           ngu=lambda _s: None)
+        assert ra[0]["ket"].startswith("loi:tim_ds")
+        assert "Tên cũ đã đổi" not in kc.doc_ds_kenh(tm)["L"]["ten"] and "おすすめ" in kc.doc_ds_kenh(tm)["L"]["ten"]
+
+    def test_chay_viec_hop_khong_doc_duoc_thi_danh_dau(self, tmp_path):
+        tm = str(tmp_path)
+        kc.ghi_ds_kenh(tm, "L", ["おすすめ"])
+        kcd.chay_viec(may(TrangGia({})), "L", [{"viec": "them", "kenh_chu": "L", "danh_sach_phat": "おすすめ",
+                                              "video_id": "abcdefghijk"}], "that", thu_muc=tm, ngu=lambda _s: None)
+        assert kc.doc_ds_kenh(tm)["L"]["can_hoc_lai"] is True
+
+    def test_chay_viec_thu_bo_hoc_va_khong_ghi(self, tmp_path):
+        tm = str(tmp_path)
+        tr = TrangGia(DS)
+        ra = kcd.chay_viec(may(tr), "L", [{"viec": "hoc_ds", "kenh_chu": "L", "video_id": "abcdefghijk"},
+                                          {"viec": "them", "kenh_chu": "L", "danh_sach_phat": "おすすめ",
+                                           "video_id": "abcdefghijk"}], "thu", thu_muc=tm, ngu=lambda _s: None)
+        assert [x["ket"] for x in ra] == ["thu:bo_qua_hoc_ds", "thu:ok"] and tr.bam_ds == []
+        assert not os.path.exists(os.path.join(tm, kc.TEP_DS_KENH)) and kc.doc_da_them(tm)["muc"] == []
 
 
 class TestBoChon:

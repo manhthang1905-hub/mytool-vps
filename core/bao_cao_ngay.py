@@ -1,9 +1,10 @@
 """core/bao_cao_ngay.py — "Báo cáo sức khoẻ hằng ngày": MỘT bản tin tiếng Việt ngắn (≤ ~40 dòng) chủ đọc trên điện thoại buổi sáng.
 
-Sáu mục, mục nào hỏng cũng chỉ in một dòng "không đọc được" — không mục nào làm vỡ cả bản tin:
+Bảy mục, mục nào hỏng cũng chỉ in một dòng "không đọc được" — không mục nào làm vỡ cả bản tin:
   1 Video mai (kênh nào đã có video ngày mai)      4 Chiến trường (thị phần, quy mô ngách, đối thủ số 1, lệnh tác chiến)
-  2 Skill hỏng/thiếu (core.ky_nang)                5 Lỗi 24 giờ (workspace/loi-chay-max.md, bỏ mức nhắc)
-  3 Đường tới YPP (core.ypp.du_bao)                6 Máy (RAM, đĩa, nhịp tim agent)
+  2 Skill hỏng/thiếu (core.ky_nang)                4b Tín hiệu học thiếu/cũ (`_muc_hoc`: vòng tự học đứt ở đâu)
+  3 Đường tới YPP (core.ypp.du_bao)                5 Lỗi 24 giờ (workspace/loi-chay-max.md, bỏ mức nhắc)
+                                                   6 Máy (RAM, đĩa, nhịp tim agent)
 
 Dùng:  python -m core.bao_cao_ngay            in ra
        python -m core.bao_cao_ngay --ghi      ghi workspace/bao-cao-ngay/<ngày>.md
@@ -131,6 +132,52 @@ def _muc_chien_truong() -> List[str]:
     return ra
 
 
+# ── 4b. Tín hiệu học thiếu / cũ ───────────────────────────────────────────────
+
+def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """Vòng tự học có còn KÍN không (06/10/2026): tín hiệu đo → điểm → quyết định bị đứt ở đâu. Chỉ đọc đĩa.
+    Mỗi loại một dòng, gộp mọi kênh (10 kênh vẫn gọn): thiếu số 48h, ván không nhãn cụm, vòng học không chạy,
+    lệnh chiến trường cũ, cảnh báo của các đường học 24h (`tu_hoc.canh_bao`)."""
+    from core import tu_hoc  # noqa: PLC0415
+    ts = bay_gio.timestamp()
+    thieu, khong_cum, cu = [], [], []
+    for k in _cac_kenh(goc):
+        t = tu_hoc.tin_hieu_thieu(goc, k, ts)
+        if not t["van"]:
+            continue
+        if t["thieu_48h"]:
+            thieu.append("{0} {1}".format(k, len(t["thieu_48h"])))
+        if t["khong_cum"] * 2 >= t["van"] and t["khong_cum"]:
+            khong_cum.append("{0} {1}/{2}".format(k, t["khong_cum"], t["van"]))
+        if t["van_cu_gio"] is None or t["van_cu_gio"] > tu_hoc.GIO_VAN_CU:
+            cu.append("{0} {1}".format(k, "chưa chấm" if t["van_cu_gio"] is None else "{0:.0f}h".format(t["van_cu_gio"])))
+    ra = []
+    if thieu:
+        ra.append("- Thiếu số 48h (đăng ≥{0} ngày, chưa có kết quả): {1}".format(tu_hoc.NGAY_CHO_48H, ", ".join(thieu)))
+    if khong_cum:
+        ra.append("- Ván không nhãn cụm (trục cụm không học được): " + ", ".join(khong_cum))
+    if cu:
+        ra.append("- Vòng học không chấm lại (> {0:.0f}h): {1}".format(tu_hoc.GIO_VAN_CU, ", ".join(cu)))
+    try:
+        from core.chien_luoc import tan_cong  # noqa: PLC0415
+        tuoi = tan_cong.tuoi_ngay(goc, bay_gio)
+        if tuoi is None or tuoi > tan_cong.NGAY_TOI_DA:
+            ra.append("- Lệnh chiến trường → chọn content: {0} (không áp)".format(
+                "chưa có tệp" if tuoi is None else "cũ {0} ngày".format(tuoi)))
+    except Exception as loi:  # noqa: BLE001
+        ra.append("- Lệnh chiến trường: không đọc được ({0})".format(str(loi)[:60]))
+    cb = tu_hoc.doc_canh_bao(goc, 24.0, ts)
+    if cb:
+        dem: Dict[str, int] = {}
+        for d in cb:
+            khoa = "{0}{1}".format(d.get("nguon") or "?", " " + d["kenh"] if d.get("kenh") else "")
+            dem[khoa] = dem.get(khoa, 0) + 1
+        top = sorted(dem.items(), key=lambda x: -x[1])[:3]
+        ra.append("- Cảnh báo học 24h: {0} ({1})".format(len(cb), ", ".join(
+            "{0}{1}".format(k, " x{0}".format(n) if n > 1 else "") for k, n in top)))
+    return ra or ["- vòng học kín: mọi kênh có số, có nhãn, chấm đều"]
+
+
 # ── 5. Lỗi 24h ────────────────────────────────────────────────────────────────
 
 _RE_LOI = re.compile(r"^- \[(\d{4}-\d\d-\d\d \d\d:\d\d)\] \*\*(\w+)\*\*\s*(.*)$")
@@ -190,6 +237,7 @@ def tao(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) -> st
         ("Skill hỏng/thiếu", lambda: _muc_skill(goc)),
         ("Đường tới YPP", lambda: _muc_ypp(goc, bay_gio)),
         ("Chiến trường", _muc_chien_truong),
+        ("Tín hiệu học thiếu/cũ", lambda: _muc_hoc(goc, bay_gio)),
         ("Lỗi 24 giờ", lambda: _muc_loi(goc, bay_gio)),
         ("Máy", lambda: _muc_may(goc)),
     ]

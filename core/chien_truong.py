@@ -367,8 +367,25 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
         "vung": ds, "nong": nong[:8], "quan": quan, "dich_top": dich_top,
     }
     ra["de_xuat_tan_cong"] = de_xuat_tan_cong(ds, quan)
+    _ghi_tan_cong(hom, ra)
     ra["lich_su"] = _lich_su_gon(hom, ra)
     return ra
+
+
+def _ghi_tan_cong(hom: _dt.date, du: Dict[str, Any]) -> None:
+    """06/10/2026: lệnh tấn công → `workspace/chien-truong/tan-cong.json` để BỘ CHỌN NGUỒN đọc (trọng số mềm ≤ +30%,
+    `core/chien_luoc/tan_cong.py`) — trước đây lệnh chỉ nằm trên báo cáo. Tắt bằng MYTOOL_CHIEN_TRUONG_GHI=0."""
+    if os.environ.get("MYTOOL_CHIEN_TRUONG_GHI", "1") == "0":
+        return
+    try:
+        from core.chien_luoc import tan_cong  # noqa: PLC0415
+        tan_cong.ghi(GOC, du, hom.isoformat())
+    except Exception as loi:  # noqa: BLE001
+        try:
+            from core import tu_hoc  # noqa: PLC0415
+            tu_hoc.canh_bao(GOC, "ghi_tan_cong", loi)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":

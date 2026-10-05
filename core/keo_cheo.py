@@ -25,10 +25,25 @@ em hợp chủ đề vào danh sách phát công khai của nó; người xem da
   kênh em — để nó tự chạy trước, kéo chéo là cú đẩy thứ hai.
 * Chọn danh sách phát theo CỤM CHỦ ĐỀ (`cong_thuc_v7.cum_cua_tieu_de` — theo nghĩa khi bộ nhớ phân
   cụm AI có, từ khoá là đường lùi) với bộ cụm CỦA KÊNH LỚN: cụm của tiêu đề video ∩ cụm của tên danh
-  sách phát. Không khớp → (nếu nơi gọi đưa `chon_ai`) AI chọn theo nghĩa → danh sách phát RIÊNG
+  sách phát. Không khớp → AI chọn THEO NGHĨA (`core.giam_doc.quan_ly.goi_chat_that`, một lượt gọi mỗi
+  (kênh lớn, video), nhớ trong `ai-chon.json`, tối đa `toi_da_goi_ai` lượt mỗi lần lập; AI được trả
+  NONE = không hợp) → ví chặn/AI hỏng thì gần chữ (≥ 2 cặp chữ chung) → danh sách phát RIÊNG
   (`keo_cheo_danh_sach_phat` trong `kenh.yaml` kênh lớn, hoặc `ds_rieng` chung, vd "おすすめ"). Không
   có gì khớp thì KHÔNG thêm — sai chủ đề là khán giả kênh lớn bấm thoát, hại cả hai kênh.
 * Kênh nào khai `keo_cheo_tat: true` trong `kenh.yaml` thì đứng ngoài cả hai vai.
+
+═══ DANH SÁCH PHÁT TỰ TÌM (06/10/2026 — "máy mới chỉ cần Chrome đã đăng nhập") ═══
+
+Không ai phải khai tên danh sách phát. Thứ tự nguồn của kênh lớn (`tra_ds`):
+1. `danh_sach_phat_kenh` trong `kenh.yaml` (khai tay, nếu có).
+2. `thiet-lap/ho-so.json` → `danh_sach_phat: [{ten, mo_ta}]` — skill thiết lập kênh đã TẠO đúng các
+   danh sách này trên YouTube (kênh mới).
+3. Sổ HỌC `ds-kenh.json` — tên thật đọc từ hộp «Lưu vào…» trên trang xem (kênh cũ dựng tay): máy DOM
+   ghi mỗi lần nó mở hộp (`--hoc-ds`, và mọi lượt thêm thật). Cũ quá `tuoi_ds_hoc_ngay` (7) ngày, hoặc
+   một danh sách đã lên kế hoạch mà không thấy trong hộp, thì kế hoạch kèm việc `hoc_ds`.
+Không nguồn nào có gì → kế hoạch trả việc `hoc_ds` NÓI RÕ lệnh cần chạy, không im lặng bỏ qua.
+Mỗi phần tử kế hoạch mang `viec`: `them` (thêm một video) | `hoc_ds` (mở hộp Lưu, đọc tên, không tích)
+| `bao` (cần người: kênh chưa có danh sách phát công khai nào).
 
 ═══ ĐO THẾ NÀO ═══
 
@@ -39,7 +54,8 @@ video lúc thêm (từ `bang-tom-tat.csv`) và của tối đa 5 video ĐỐI CH
 nhanh hơn trung vị đối chứng ≥ 20% → "kéo được"; không thì "chưa thấy". Đây là so sánh thô (video
 khác nhau, tuổi khác nhau) — đủ để biết có nên tiếp tục/mở rộng, không đủ để kết luận từng video.
 
-Module thuần tuý: không mạng, không Chrome. Máy DOM thực thi từng việc: `vm/keo_cheo_dom.py`.
+Không Chrome. Mạng duy nhất: lượt AI chọn danh sách theo nghĩa (tắt bằng `ai_chon_ds: false`). Máy DOM
+thực thi từng việc: `vm/keo_cheo_dom.py`.
 """
 
 from __future__ import annotations
@@ -60,11 +76,20 @@ __all__ = [
     "thu_muc_mac_dinh", "doc_cai_dat", "gio_xem_trong_ky", "phan_vai_nhom",
     "danh_sach_phat_cua", "video_kenh_em", "chon_danh_sach", "doc_da_them", "ghi_ket_qua",
     "lap_ke_hoach", "du_doan_cho", "do_hieu_qua", "tim_kenh_cua_video",
+    "TEP_DS_KENH", "TEP_AI_CHON", "ds_tu_ho_so", "doc_ds_kenh", "ghi_ds_kenh", "danh_dau_can_hoc",
+    "tra_ds", "video_de_hoc", "gan_nhat_theo_chu", "tao_chon_ai",
 ]
 
 THU_MUC_TRANG_THAI = os.path.join("workspace", "keo-cheo")
 TEP_DA_THEM = "da-them.json"
 TEP_CAI_DAT = "cai-dat.json"
+TEP_DS_KENH = "ds-kenh.json"
+TEP_AI_CHON = "ai-chon.json"
+
+#: Danh sách hệ thống trong hộp Lưu — không phải danh sách phát công khai của kênh.
+DS_HE_THONG = ("Xem sau", "Watch later", "後で見る", "나중에 볼 동영상")
+#: Chữ trong hàng hộp Lưu nghĩa là danh sách RIÊNG TƯ (đời hộp mới ghi dưới tên) — thêm vào đó vô ích.
+CHU_RIENG_TU = ("Riêng tư", "Private", "非公開", "비공개")
 
 CAI_DAT_MAC_DINH: Dict[str, Any] = {
     "bat": True,
@@ -87,6 +112,12 @@ CAI_DAT_MAC_DINH: Dict[str, Any] = {
     "nguong_hon_doi_chung": 0.2,
     #: Video ngắn hơn ngần này giây (Shorts) không kéo — danh sách phát dài, người xem đang ngồi xem.
     "do_dai_toi_thieu_giay": 181,
+    #: Sổ học danh sách phát (hộp Lưu) cũ quá ngần này ngày → kế hoạch kèm việc `hoc_ds`.
+    "tuoi_ds_hoc_ngay": 7,
+    #: AI chọn danh sách theo NGHĨA khi cụm không khớp; mỗi lần lập kế hoạch gọi tối đa ngần này lượt.
+    "ai_chon_ds": True,
+    "toi_da_goi_ai": 12,
+    "han_ai_giay": 60,
 }
 
 #: Trạng thái sổ máy đăng nghĩa là video đã được hẹn/xác nhận lên kênh.
@@ -259,15 +290,109 @@ def phan_vai_nhom(goc: str, thanh_vien: Sequence[str], cai: Dict[str, Any],
     return lon, em
 
 
-def danh_sach_phat_cua(goc: str, kenh: str, cai: Dict[str, Any]) -> Tuple[List[str], str]:
-    """`(danh sách phát theo chủ đề, danh sách phát riêng)` của kênh lớn.
+def ds_tu_ho_so(goc: str, kenh: str) -> List[Tuple[str, str]]:
+    """`[(tên, mô tả)]` từ `thiet-lap/ho-so.json` (skill thiết lập kênh đã tạo đúng các danh sách này)."""
+    hs = _doc_json(os.path.join(duong_kenh(goc, kenh), "thiet-lap", "ho-so.json"))
+    ra: List[Tuple[str, str]] = []
+    ds = hs.get("danh_sach_phat") if isinstance(hs, dict) else None
+    for d in ds if isinstance(ds, list) else []:
+        if isinstance(d, dict) and str(d.get("ten") or "").strip():
+            ra.append((str(d["ten"]).strip(), str(d.get("mo_ta") or "").strip()))
+        elif isinstance(d, str) and d.strip():
+            ra.append((d.strip(), ""))
+    return ra
 
-    Chủ đề: `danh_sach_phat_kenh` trong kenh.yaml ("a | b | c" — đúng chuỗi skill thiết lập kênh dùng
-    để TẠO các danh sách phát). Riêng: `keo_cheo_danh_sach_phat` của kenh.yaml, không có thì `ds_rieng`."""
+
+def doc_ds_kenh(thu_muc: str) -> Dict[str, Dict[str, Any]]:
+    d = _doc_json(os.path.join(thu_muc, TEP_DS_KENH))
+    return {k: v for k, v in d.items() if isinstance(v, dict)} if isinstance(d, dict) else {}
+
+
+def ghi_ds_kenh(thu_muc: str, kenh: str, hang: Sequence[Any], luc: Optional[_dt.datetime] = None,
+                video: str = "") -> Dict[str, Any]:
+    """Ghi tên danh sách phát ĐỌC ĐƯỢC từ hộp Lưu (`hang`: [{ten, chu_hang}] hoặc [tên]) vào sổ học.
+
+    Bỏ danh sách hệ thống (Xem sau…); hàng mang chữ "Riêng tư/非公開/Private" ghi riêng (`rieng_tu`) —
+    thêm video vào danh sách riêng tư thì không ai thấy. Trả mục vừa ghi."""
+    luc = luc or _dt.datetime.now()
+    ten: List[str] = []
+    rieng_tu: List[str] = []
+    he = {_chuan(x) for x in DS_HE_THONG}
+    for h in hang or []:
+        t = _chuan(h.get("ten") if isinstance(h, dict) else h)
+        chu = str(h.get("chu_hang") or "") if isinstance(h, dict) else ""
+        if not t or t in he or t in ten or t in rieng_tu:
+            continue
+        phu = _chuan(chu.replace(t, "", 1)) if chu else ""
+        (rieng_tu if any(w in phu for w in CHU_RIENG_TU) else ten).append(t)
+    so = doc_ds_kenh(thu_muc)
+    so[kenh] = {"ten": ten, "rieng_tu": rieng_tu, "luc": luc.strftime("%Y-%m-%d %H:%M:%S"),
+                "video": video, "can_hoc_lai": False}
+    _ghi_json(os.path.join(thu_muc, TEP_DS_KENH), so)
+    return so[kenh]
+
+
+def danh_dau_can_hoc(thu_muc: str, kenh: str, ly_do: str) -> None:
+    """Lượt sau phải học lại danh sách của `kenh` (hộp không đọc được / danh sách đã lên kế hoạch không có)."""
+    so = doc_ds_kenh(thu_muc)
+    muc = so.setdefault(kenh, {"ten": [], "rieng_tu": [], "luc": ""})
+    muc["can_hoc_lai"] = True
+    muc["ly_do_hoc_lai"] = str(ly_do)[:200]
+    _ghi_json(os.path.join(thu_muc, TEP_DS_KENH), so)
+
+
+def _chuan(s: Any) -> str:
+    import unicodedata  # noqa: PLC0415
+
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(s or ""))).strip()
+
+
+def lenh_hoc_ds(kenh: str) -> str:
+    return "python vm/keo_cheo_dom.py --hoc-ds --kenh {0}".format(kenh)
+
+
+def tra_ds(goc: str, kenh: str, cai: Dict[str, Any], thu_muc: Optional[str] = None,
+           bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Danh sách phát của kênh lớn: `{chu_de, rieng, mo_ta, nguon, can_hoc, ly_do_hoc}`.
+
+    Nguồn theo thứ tự: kenh.yaml → thiet-lap/ho-so.json → sổ học `ds-kenh.json` (xem docstring đầu
+    tệp). `can_hoc`: nên mở hộp Lưu đọc lại (chưa có nguồn, sổ học cũ quá `tuoi_ds_hoc_ngay`, hoặc bị
+    đánh dấu học lại) — danh sách cũ vẫn dùng được trong lúc chờ."""
+    bay_gio = bay_gio or _dt.datetime.now()
     ck = _cai_kenh(goc, kenh)
-    chu_de = [t.strip() for t in str(ck.get("danh_sach_phat_kenh") or "").split("|") if t.strip()]
     rieng = str(ck.get("keo_cheo_danh_sach_phat") or cai.get("ds_rieng") or "").strip()
-    return chu_de, rieng
+    ra: Dict[str, Any] = {"chu_de": [], "rieng": rieng, "mo_ta": {}, "nguon": "", "can_hoc": False,
+                          "ly_do_hoc": ""}
+    tu_yaml = [t.strip() for t in str(ck.get("danh_sach_phat_kenh") or "").split("|") if t.strip()]
+    if tu_yaml:
+        ra.update(chu_de=tu_yaml, nguon="kenh.yaml")
+        return ra
+    hs = ds_tu_ho_so(goc, kenh)
+    if hs:
+        ra.update(chu_de=[t for t, _m in hs], mo_ta={t: m for t, m in hs if m}, nguon="ho-so")
+        return ra
+    muc = doc_ds_kenh(thu_muc or thu_muc_mac_dinh(goc)).get(kenh) or {}
+    ten = [str(t) for t in muc.get("ten") or [] if str(t).strip()]
+    try:
+        luc = _dt.datetime.strptime(str(muc.get("luc") or "")[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        luc = None
+    if ten:
+        ra.update(chu_de=ten, nguon="hoc")
+    if not muc or luc is None:
+        ra.update(can_hoc=True, ly_do_hoc="chưa học danh sách phát của {0}".format(kenh))
+    elif muc.get("can_hoc_lai"):
+        ra.update(can_hoc=True, ly_do_hoc="cần học lại: {0}".format(muc.get("ly_do_hoc_lai") or "?"))
+    elif bay_gio - luc > _dt.timedelta(days=float(cai.get("tuoi_ds_hoc_ngay") or 7)):
+        ra.update(can_hoc=True, ly_do_hoc="sổ học danh sách phát {0} cũ ({1})".format(kenh, muc.get("luc")))
+    return ra
+
+
+def danh_sach_phat_cua(goc: str, kenh: str, cai: Dict[str, Any],
+                       thu_muc: Optional[str] = None) -> Tuple[List[str], str]:
+    """`(danh sách phát theo chủ đề, danh sách phát riêng)` của kênh lớn — xem `tra_ds`."""
+    d = tra_ds(goc, kenh, cai, thu_muc)
+    return d["chu_de"], d["rieng"]
 
 
 # ── video kênh em ───────────────────────────────────────────────────────────
@@ -370,8 +495,10 @@ def chon_danh_sach(tieu_de: str, cum_video: Sequence[str], danh_sach: Sequence[s
     """`(tên danh sách phát, cụm chung, cách chọn)` — `("", [], "")` khi không có chỗ hợp.
 
     1. CỤM: danh sách phát có nhiều cụm chung nhất với video (hoà → thứ tự khai trong kenh.yaml).
-    2. AI (nếu nơi gọi đưa `chon_ai(tiêu đề, [tên])` → tên): chọn theo NGHĨA trong số còn lại.
+    2. AI (nếu nơi gọi đưa `chon_ai(tiêu đề, [tên])` → tên | "" = không hợp | None = AI không dùng
+       được): chọn theo NGHĨA trong số còn lại.
     3. RIÊNG: danh sách phát riêng của kênh lớn (vd "おすすめ").
+    2b. AI không dùng được và không có danh sách riêng → GẦN CHỮ (`gan_nhat_theo_chu`, đường lùi cuối).
     `bo_qua`: danh sách phát đã đủ suất hôm nay."""
     bo = set(bo_qua or ())
     cv = set(cum_video or ())
@@ -386,16 +513,130 @@ def chon_danh_sach(tieu_de: str, cum_video: Sequence[str], danh_sach: Sequence[s
             tot, tot_chung = t, chung
     if tot:
         return tot, tot_chung, "cum"
-    if chon_ai is not None and con:
-        try:
-            ai = str(chon_ai(tieu_de, list(con)) or "").strip()
-        except Exception:  # noqa: BLE001 — AI hỏng thì lùi về danh sách phát riêng
-            ai = ""
-        if ai in con:
+    if con:
+        ai: Optional[str] = None
+        if chon_ai is not None:
+            try:
+                tra = chon_ai(tieu_de, list(con))
+                ai = None if tra is None else str(tra).strip()
+            except Exception:  # noqa: BLE001 — AI hỏng = AI không dùng được
+                ai = None
+        if ai and ai in con:
             return ai, [], "ai"
+        if ai is None and not (ds_rieng and ds_rieng not in bo):   # có danh sách riêng thì riêng trước
+            gan = gan_nhat_theo_chu(tieu_de, con)
+            if gan:
+                return gan, [], "gan_chu"
     if ds_rieng and ds_rieng not in bo:
         return ds_rieng, [], "rieng"
     return "", [], ""
+
+
+_NHAN = re.compile(r"【[^】]*】|\[[^\]]*\]|［[^］]*］|#\S+")
+#: Chữ "có nghĩa" cho cặp chữ: kanji, katakana, chữ Latin/số (hiragana đơn thuần là trợ từ: の, が…).
+_CHU_NGHIA = re.compile(r"[一-鿿゠-ヿA-Za-z0-9À-ỹ]")
+
+
+def _cap_chu(s: str) -> set:
+    s = re.sub(r"\s+", "", _NHAN.sub(" ", _chuan(s)))
+    return {s[i:i + 2] for i in range(len(s) - 1) if _CHU_NGHIA.search(s[i:i + 2])}
+
+
+def gan_nhat_theo_chu(tieu_de: str, danh_sach: Sequence[str], toi_thieu: int = 2) -> str:
+    """ĐƯỜNG LÙI CUỐI (ví AI chặn): danh sách có nhiều cặp chữ chung nhất với tiêu đề, ≥ `toi_thieu`."""
+    a = _cap_chu(tieu_de)
+    tot, diem = "", 0
+    for t in danh_sach:
+        d = len(a & _cap_chu(t))
+        if d > diem:
+            tot, diem = t, d
+    return tot if diem >= toi_thieu else ""
+
+
+def tao_chon_ai(goc: str, thu_muc: str, cai: Dict[str, Any], goi_ai: Optional[Callable[[str], str]] = None,
+                nhat_ky: Optional[Callable[[str], None]] = None):
+    """Bộ chọn danh sách THEO NGHĨA cho một lần lập kế hoạch: `chon(kênh lớn, video, tiêu đề, [tên], {mô tả})`
+    → tên | "" (AI nói không hợp) | None (AI không dùng được: ví chặn, hết lượt, lỗi).
+
+    Một lượt gọi mỗi (kênh lớn, video, bộ tên danh sách) — nhớ trong `ai-chon.json`; tối đa
+    `toi_da_goi_ai` lượt gọi THẬT mỗi lần lập. `goi_ai(đề) → chữ`; None → `goi_chat_that(goc)` lúc cần."""
+    nk = nhat_ky or (lambda _s: None)
+    duong = os.path.join(thu_muc, TEP_AI_CHON)
+    nho = _doc_json(duong)
+    nho = nho if isinstance(nho, dict) else {}
+    hop: Dict[str, Any] = {"goi": goi_ai, "da_tao": goi_ai is not None, "so_lan": 0, "bao_chan": False}
+    toi_da = int(cai.get("toi_da_goi_ai") or 0)
+    han = float(cai.get("han_ai_giay") or 60)
+
+    def lay_goi():
+        if not hop["da_tao"]:
+            hop["da_tao"] = True
+            try:
+                from .giam_doc.quan_ly import goi_chat_that  # noqa: PLC0415
+                hop["goi"] = goi_chat_that(goc, nk)
+            except Exception as loi:  # noqa: BLE001
+                nk("kéo chéo: không dựng được AI chọn danh sách: {0}".format(str(loi)[:120]))
+                hop["goi"] = None
+        return hop["goi"]
+
+    def chon(chu: str, vid: str, tieu_de: str, ds: Sequence[str], mo_ta: Optional[Dict[str, str]] = None):
+        ds = [str(t) for t in ds if str(t).strip()]
+        if not ds:
+            return ""
+        khoa = "{0}/{1}".format(chu, vid)
+        muc = nho.get(khoa)
+        if isinstance(muc, dict) and sorted(muc.get("ds") or []) == sorted(ds):
+            return str(muc.get("ten") or "")
+        goi = lay_goi()
+        if goi is None:
+            if not hop["bao_chan"]:
+                nk("kéo chéo: AI chọn danh sách KHÔNG dùng được (ví chặn/chưa đăng nhập) — lùi danh sách riêng/gần chữ")
+                hop["bao_chan"] = True
+            return None
+        if hop["so_lan"] >= toi_da:
+            if hop["so_lan"] == toi_da:
+                nk("kéo chéo: đã gọi AI {0} lượt lần này (trần toi_da_goi_ai) — phần còn lại lùi".format(toi_da))
+                hop["so_lan"] += 1
+            return None
+        hop["so_lan"] += 1
+        mo_ta = mo_ta or {}
+        de = ("You place a video into ONE playlist of a YouTube channel, judged by MEANING (topic and audience), "
+              "not by shared words.\nPlaylists:\n"
+              + "\n".join("- " + t + ((" — " + mo_ta[t][:160]) if mo_ta.get(t) else "") for t in ds)
+              + "\n\nVideo title: " + str(tieu_de)[:300]
+              + "\n\nIf no playlist fits the video's topic well enough that its viewers would want it, reply NONE."
+              "\nReply with ONLY the exact playlist name, or NONE.")
+        try:
+            from .ban_giao_dang import _goi_co_han  # noqa: PLC0415
+            tra = str(_goi_co_han(goi, de, han) or "").strip().strip("\"'`「」『』- ").strip()
+        except Exception as loi:  # noqa: BLE001
+            nk("kéo chéo: AI chọn danh sách lỗi ({0}) — lùi".format(str(loi)[:120]))
+            return None
+        ten = ""
+        if tra and tra.upper() != "NONE":
+            ten = next((t for t in ds if _chuan(t) == _chuan(tra)), "")
+            if not ten:
+                co = [t for t in ds if t in tra]
+                ten = co[0] if len(co) == 1 else ""
+        nk("kéo chéo: AI chọn cho {0} ({1}) → {2}".format(vid, chu, ten or "không hợp ({0})".format(tra[:40])))
+        nho[khoa] = {"ds": ds, "ten": ten, "tra": tra[:80], "luc": _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
+        try:
+            _ghi_json(duong, nho)
+        except OSError:
+            pass
+        return ten
+
+    return chon
+
+
+def video_de_hoc(goc: str, kenh: str, duong_so: Optional[str] = None,
+                 bay_gio: Optional[_dt.datetime] = None) -> str:
+    """Một video CÔNG KHAI của chính `kenh` (mới nhất đã qua giờ công khai) — để mở hộp Lưu học tên."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    ds = [v for v in video_kenh_em(goc, kenh, duong_so)
+          if v.get("dang_luc") is not None and v["dang_luc"] <= bay_gio - _dt.timedelta(hours=1)]
+    ds.sort(key=lambda v: v["dang_luc"], reverse=True)
+    return ds[0]["video_id"] if ds else ""
 
 
 # ── sổ đã thêm ──────────────────────────────────────────────────────────────
@@ -538,14 +779,22 @@ def _bo_cum_kenh(goc: str, kenh: str) -> Callable[[str], List[str]]:
 def lap_ke_hoach(goc: str, ngay: Any = None, *, thu_muc: Optional[str] = None,
                  cai_dat: Optional[Dict[str, Any]] = None, duong_so: Optional[str] = None,
                  cum_cua: Optional[Callable[[str, str], Sequence[str]]] = None,
-                 chon_ai: Optional[Callable[[str, List[str]], str]] = None,
+                 chon_ai: Optional[Callable[[str, List[str]], Optional[str]]] = None,
+                 goi_ai: Optional[Callable[[str], str]] = None,
                  bay_gio: Optional[_dt.datetime] = None,
                  nhat_ky: Optional[Callable[[str], None]] = None) -> List[Dict[str, Any]]:
-    """Việc kéo chéo hôm `ngay`: `[{kenh_chu, danh_sach_phat, video_id, kenh_video, cum, ly_do, ...}]`.
+    """Việc kéo chéo hôm `ngay`. Mỗi phần tử có `viec`:
+
+    * `them`   — `{kenh_chu, danh_sach_phat, video_id, kenh_video, cum, cach_chon, ly_do, du_doan, ...}`
+    * `hoc_ds` — `{kenh_chu, video_id (video công khai của chính kênh lớn, "" nếu không biết), lenh, ly_do}`:
+      mở hộp Lưu đọc tên danh sách phát (không tích). Đứng TRƯỚC các việc `them` của cùng kênh.
+    * `bao`    — cần người (kênh lớn chưa có danh sách phát công khai nào): `{kenh_chu, ly_do}`.
 
     `cum_cua(kênh lớn, tiêu đề)` → [mã cụm]; mặc định bộ cụm `cong_thuc_v7` CỦA KÊNH LỚN.
-    `duong_so`: sổ máy đăng (mặc định `<goc>/vm/logs/so-video-id.json`). `thu_muc`: chỗ sổ đã thêm.
-    `bay_gio`: mặc định bây giờ (ngày khác hôm nay → 23:59 ngày đó). Không ghi gì lên đĩa."""
+    `chon_ai(tiêu đề, [tên])` đè hẳn bộ chọn AI (bài kiểm); không có thì `ai_chon_ds` bật → `tao_chon_ai`
+    với `goi_ai(đề) → chữ` (None → ví ShopAPI qua `goi_chat_that`).
+    `duong_so`: sổ máy đăng (mặc định `<goc>/vm/logs/so-video-id.json`). `thu_muc`: chỗ các sổ.
+    `bay_gio`: mặc định bây giờ (ngày khác hôm nay → 23:59 ngày đó). Chỉ ghi bộ nhớ AI (`ai-chon.json`)."""
     nk = nhat_ky or (lambda _s: None)
     thu_muc = thu_muc or thu_muc_mac_dinh(goc)
     cai = doc_cai_dat(thu_muc, cai_dat)
@@ -605,6 +854,18 @@ def lap_ke_hoach(goc: str, ngay: Any = None, *, thu_muc: Optional[str] = None,
             bo_cum[chu] = _bo_cum_kenh(goc, chu)
         return bo_cum[chu](td)
 
+    ai_hop: Dict[str, Any] = {}
+
+    def bo_chon_ai(chu: str, vid: str, ds_du: List[str], mo_ta: Dict[str, str]):
+        """`chon_ai(tiêu đề, [còn lại])` cho một video — hỏi AI với ĐỦ bộ tên (nhớ ổn định theo kênh)."""
+        if chon_ai is not None:
+            return chon_ai
+        if not cai.get("ai_chon_ds", True):
+            return None
+        if "chon" not in ai_hop:
+            ai_hop["chon"] = tao_chon_ai(goc, thu_muc, cai, goi_ai, nk)
+        return lambda td, _con: ai_hop["chon"](chu, vid, td, ds_du, mo_ta)
+
     for nhom, thanh_vien in sorted(_cac_nhom(goc).items()):
         lon, em = phan_vai_nhom(goc, thanh_vien, cai, bay_gio)
         if not lon or not em:
@@ -635,10 +896,22 @@ def lap_ke_hoach(goc: str, ngay: Any = None, *, thu_muc: Optional[str] = None,
             if con <= 0:
                 nk("{0}: đã đủ {1} lần thêm hôm nay".format(chu, toi_chu))
                 continue
-            chu_de, rieng = danh_sach_phat_cua(goc, chu, cai)
+            tds = tra_ds(goc, chu, cai, thu_muc, bay_gio)
+            chu_de, rieng, mo_ta = tds["chu_de"], tds["rieng"], tds["mo_ta"]
+            if tds["can_hoc"]:
+                vh = video_de_hoc(goc, chu, duong_so, bay_gio)
+                lenh = lenh_hoc_ds(chu) + ("" if vh else " --video <videoId công khai của {0}>".format(chu))
+                ra.append({"viec": "hoc_ds", "ngay": ngay_s, "nhom": nhom, "kenh_chu": chu, "video_id": vh,
+                           "lenh": lenh, "ly_do": "{0} — chạy: {1}".format(tds["ly_do_hoc"], lenh)})
+                nk("{0}: {1} — chạy: {2}{3}".format(chu, tds["ly_do_hoc"], lenh,
+                                                    " (tạm dùng sổ cũ)" if chu_de else ""))
             if not chu_de and not rieng:
-                nk("{0}: chưa khai danh sách phát (danh_sach_phat_kenh / keo_cheo_danh_sach_phat / ds_rieng)"
-                   " — bỏ qua".format(chu))
+                if not tds["can_hoc"]:
+                    ly = ("{0}: hộp Lưu không có danh sách phát CÔNG KHAI nào — tạo một danh sách công khai "
+                          "trên kênh (hoặc khai ds_rieng/keo_cheo_danh_sach_phat) rồi chạy: {1}").format(
+                              chu, lenh_hoc_ds(chu))
+                    ra.append({"viec": "bao", "ngay": ngay_s, "nhom": nhom, "kenh_chu": chu, "ly_do": ly})
+                    nk(ly)
                 continue
             cum_ds_cache: Dict[str, List[str]] = {}
 
@@ -664,18 +937,21 @@ def lap_ke_hoach(goc: str, ngay: Any = None, *, thu_muc: Optional[str] = None,
                         day = [t for t in chu_de + ([rieng] if rieng else [])
                                if toi_ds and dem_ds.get((chu, t), 0) >= toi_ds]
                         cv = cum_cua_kenh(chu, v["tieu_de"])
-                        ten, chung, cach = chon_danh_sach(v["tieu_de"], cv, chu_de, cum_ds, rieng, day, chon_ai)
+                        ten, chung, cach = chon_danh_sach(
+                            v["tieu_de"], cv, chu_de, cum_ds, rieng, day,
+                            bo_chon_ai(chu, vid, [t for t in chu_de if t != rieng], mo_ta))
                         if not ten:
                             continue
                         ly_do = {
                             "cum": "cụm chung {0} giữa tiêu đề và danh sách phát".format(", ".join(chung)),
                             "ai": "AI chọn theo nghĩa (không có cụm chung)",
-                            "rieng": "danh sách phát riêng (không có danh sách chủ đề hợp cụm)",
+                            "gan_chu": "gần chữ (AI không dùng được, không có danh sách riêng)",
+                            "rieng": "danh sách phát riêng (không có danh sách chủ đề hợp)",
                         }[cach]
                         hd = {
-                            "ngay": ngay_s, "nhom": nhom, "kenh_chu": chu, "danh_sach_phat": ten,
+                            "viec": "them", "ngay": ngay_s, "nhom": nhom, "kenh_chu": chu, "danh_sach_phat": ten,
                             "video_id": vid, "kenh_video": ma_em, "tieu_de": v["tieu_de"],
-                            "cum": ",".join(chung or cv), "cach_chon": cach,
+                            "cum": ",".join(chung or cv), "cach_chon": cach, "nguon_ds": tds["nguon"],
                             "ly_do": "{0} {1:.0f}h/{2}n ≥ {3:.0f}h kéo {4}: {5}; công khai {6}".format(
                                 chu, lon[chu], int(cai.get("so_ngay_gio_xem") or 28),
                                 float(cai.get("nguong_gio_xem") or 0), ma_em, ly_do,

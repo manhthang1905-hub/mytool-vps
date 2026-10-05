@@ -12,6 +12,12 @@ Cách chạy:
     python vm/keo_cheo_dom.py --kenh TL4-T7 --video <id> --ds "おすすめ" [--thu | --doc-hop]
     python vm/keo_cheo_dom.py --ke-hoach [--kenh TL4-T7] [--thu | --doc-hop]   # việc hôm nay, lần lượt từng Chrome
     python vm/keo_cheo_dom.py --in-ke-hoach                                     # chỉ in kế hoạch (không Chrome)
+    python vm/keo_cheo_dom.py --hoc-ds --kenh TL4-T7 [--video <id công khai của kênh>]   # HỌC tên danh sách phát
+
+    --hoc-ds   mở hộp Lưu trên một video công khai của CHÍNH kênh, đọc mọi tên danh sách phát → sổ học
+               `workspace/keo-cheo/ds-kenh.json` (kế hoạch dùng khi kenh.yaml/ho-so không có) — KHÔNG tích.
+               `--ke-hoach` tự chạy việc `hoc_ds` mà kế hoạch đưa ra, rồi lập lại kế hoạch cho kênh đó và
+               thêm luôn trong cùng phiên Chrome. Mọi lượt mở hộp (trừ --thu) cũng ghi lại sổ học.
 
     --thu      tìm nút Lưu trên trang xem, KHÔNG bấm gì (kiểm bộ chọn trang xem + đúng kênh)
     --doc-hop  bấm «Lưu» để MỞ hộp, đọc danh sách phát + trạng thái tích của đích, đóng — KHÔNG tích
@@ -70,6 +76,12 @@ class LoiKeoCheo(Exception):
 def chuan_ten(s) -> str:
     """So tên danh sách phát: NFKC, gộp khoảng trắng, bỏ đầu cuối (không đổi hoa/thường)."""
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(s or ""))).strip()
+
+
+def _hang_hop(hop: dict) -> list:
+    """`[{ten, chu_hang}]` của mọi hàng đọc được — thứ sổ học danh sách phát (`ds-kenh.json`) cần."""
+    return [{"ten": chuan_ten(h.get("ten")), "chu_hang": str(h.get("chu_hang") or "")[:120]}
+            for h in (hop or {}).get("hang") or [] if chuan_ten(h.get("ten"))]
 
 
 def hang_cua(hop: dict, ten: str) -> list:
@@ -286,6 +298,42 @@ class KeoCheo:
             raise LoiKeoCheo("trang_thai", "không đọc được trạng thái tích của «{0}»".format(ten))
         return h
 
+    def hoc_ds(self, vid: str) -> dict:
+        """HỌC tên danh sách phát: mở trang xem `vid` → bấm Lưu → đọc mọi hàng → đóng. KHÔNG tích gì.
+        Trả `{ket: hoc_ds:ok | loi:<bước>: <lý do>, hang_hop: [{ten, chu_hang}]}`."""
+        kq = {"video_id": vid, "che_do": "hoc_ds", "ket": "", "luc": time.strftime("%Y-%m-%d %H:%M:%S")}
+        hop_mo = False
+        try:
+            self.buoc = "mo"
+            self.trang.mo_video(vid)
+            u = str(self.trang.url() or "")
+            if vid not in u:
+                raise LoiKeoCheo("mo", "trang xem không phải video {0} (url {1})".format(vid, u[:100]))
+            hop = self.mo_hop()
+            hop_mo = True
+            kq["hang_hop"] = _hang_hop(hop)
+            if not kq["hang_hop"]:
+                raise LoiKeoCheo("hop_luu", "hộp Lưu mở nhưng không đọc được tên hàng nào")
+            self.dong_hop()
+            hop_mo = False
+            kq["ket"] = "hoc_ds:ok"
+            self.nk("học danh sách phát qua {0}: {1}".format(vid, " | ".join(h["ten"] for h in kq["hang_hop"])))
+        except LoiKeoCheo as loi:
+            kq["ket"] = "loi:{0}: {1}".format(loi.buoc, loi.ly_do)
+            kq["loi_buoc"] = loi.buoc
+        except Exception as loi:  # noqa: BLE001
+            kq["ket"] = "loi:{0}: {1}".format(self.buoc or "?", str(loi)[:200])
+            kq["loi_buoc"] = self.buoc or "?"
+        if kq["ket"].startswith("loi"):
+            self.nk("học danh sách phát qua {0}: {1}".format(vid, kq["ket"]))
+            if hop_mo:
+                self._dong_im()
+            try:
+                kq["anh"] = self.trang.chup("keo-cheo-hoc-loi-{0}".format(vid))
+            except Exception:  # noqa: BLE001
+                pass
+        return kq
+
     def them(self, vid: str, ten_ds: str, che_do: str = "that") -> dict:
         """Thêm `vid` vào danh sách phát `ten_ds`. `che_do`: that | thu (không bấm gì) | doc_hop (mở hộp,
         đọc, đóng — không tích). Trả `{ket: ok|da_co|thu:ok|doc_hop:<tt>|loi:<bước>: <lý do>, ...}`."""
@@ -311,6 +359,7 @@ class KeoCheo:
             hop = self.mo_hop()
             hop_mo = True
             kq["danh_sach_co"] = [h.get("ten") for h in hop.get("hang") or []]
+            kq["hang_hop"] = _hang_hop(hop)
             self.buoc = "tim_ds"
             h = self._mot_hang(hop, ten_ds)
             if che_do == "doc_hop":
@@ -378,20 +427,93 @@ def chuan_bi_bo(bo: dict) -> tuple:
     return bo, loi
 
 
-def _ghi_so(hd: dict, kq: dict, goc_tool: str = GOC_TOOL) -> None:
+def _kc():
+    if GOC_TOOL not in sys.path:
+        sys.path.insert(0, GOC_TOOL)
+    from core import keo_cheo  # noqa: PLC0415
+    return keo_cheo
+
+
+def _thu_muc_so() -> str:
+    return _kc().thu_muc_mac_dinh(GOC_TOOL)
+
+
+#: Lỗi ở các bước này = hộp Lưu không đọc được → lượt sau phải học lại danh sách phát của kênh.
+BUOC_HOC_LAI = ("hop_luu", "trang_thai", "menu_luu")
+
+
+def ghi_sau_viec(kenh: str, hd: dict, kq: dict, che_do: str, thu_muc: str, ghi_so: bool = True) -> None:
+    """Sổ sách sau MỘT việc: tên hàng hộp Lưu đọc được → sổ học `ds-kenh.json` (mọi chế độ trừ `thu`);
+    hộp không đọc được → đánh dấu học lại; việc `them` thật → sổ đã thêm `da-them.json`."""
     try:
-        if goc_tool not in sys.path:
-            sys.path.insert(0, goc_tool)
-        from core import keo_cheo  # noqa: PLC0415
-        keo_cheo.ghi_ket_qua(keo_cheo.thu_muc_mac_dinh(goc_tool), hd, kq["ket"],
-                             chi_tiet={k: v for k, v in kq.items() if k not in ("ket",)})
+        kc = _kc()
+        vid = str(hd.get("video_id") or "")
+        if kq.get("hang_hop"):
+            kc.ghi_ds_kenh(thu_muc, kenh, kq["hang_hop"], video=vid)
+        elif str(kq.get("loi_buoc") or "") in BUOC_HOC_LAI:
+            kc.danh_dau_can_hoc(thu_muc, kenh, kq.get("ket") or "")
+        if (hd.get("viec") or "them") == "them" and che_do == "that" and ghi_so:
+            kc.ghi_ket_qua(thu_muc, hd, kq["ket"], chi_tiet={k: v for k, v in kq.items() if k != "ket"})
     except Exception as loi:  # noqa: BLE001 — không ghi được sổ: báo to, việc trên YouTube đã xong
         log.error("KHÔNG ghi được sổ kéo chéo (%s) — việc %s/%s: %s", loi, hd.get("kenh_chu"),
                   hd.get("video_id"), kq.get("ket"))
 
 
+def chay_viec(may, kenh: str, viec: list, che_do: str = "that", thu_muc: str = None, them_sau=None,
+              ngu=None, ghi_so: bool = True, du_phong=None) -> list:
+    """Chạy lần lượt các việc của MỘT kênh lớn trên một `KeoCheo` đã nối: `hoc_ds` trước, rồi `them`.
+    Có việc học thành công và `them_sau` → gọi `them_sau()` (lập lại kế hoạch cho kênh này, sổ học đã
+    mới) và nối các việc `them` mới vào CÙNG phiên Chrome. Trả [việc + `ket` + `chi_tiet`]."""
+    ngu = ngu or time.sleep
+    thu_muc = thu_muc or _thu_muc_so()
+    loai = lambda hd: hd.get("viec") or "them"  # noqa: E731
+    hang = [hd for hd in viec if loai(hd) == "hoc_ds"] + [hd for hd in viec if loai(hd) == "them"]
+    ra = []
+    da_hoc = False
+    i = 0
+    while i < len(hang):
+        hd = hang[i]
+        i += 1
+        vid = str(hd.get("video_id") or "")
+        if loai(hd) == "hoc_ds":
+            if che_do == "thu":
+                log.info("%s: --thu không mở hộp Lưu — bỏ việc học danh sách phát", kenh)
+                ra.append(dict(hd, ket="thu:bo_qua_hoc_ds"))
+                continue
+            if not vid:
+                ra.append(dict(hd, ket="loi:khong_video: không biết video công khai nào của {0} — chạy {1}".format(
+                    kenh, hd.get("lenh") or "--hoc-ds --video <id>")))
+                continue
+            if ra:
+                ngu(random.uniform(4.0, 9.0))
+            kq = may.hoc_ds(vid)
+            da_hoc = da_hoc or kq["ket"] == "hoc_ds:ok"
+        else:
+            if ra:
+                ngu(random.uniform(4.0, 9.0))
+            kq = may.them(vid, str(hd["danh_sach_phat"]), che_do)
+        if du_phong is not None:
+            kq["du_phong"] = dict(du_phong() or {})
+        log.info("%s: [%s/%s] %s%s: %s", kenh, loai(hd), che_do, vid,
+                 " → «{0}»".format(hd.get("danh_sach_phat")) if loai(hd) == "them" else "", kq["ket"])
+        ghi_sau_viec(kenh, hd, kq, che_do, thu_muc, ghi_so)
+        ra.append(dict(hd, ket=kq["ket"], chi_tiet=kq))
+        if i == len(hang) and da_hoc and them_sau is not None:
+            co = {str(h.get("video_id")) for h in hang if loai(h) == "them"}
+            try:
+                moi = [h for h in (them_sau() or []) if loai(h) == "them" and str(h.get("video_id")) not in co]
+            except Exception as loi:  # noqa: BLE001
+                log.warning("%s: lập lại kế hoạch sau khi học danh sách phát lỗi: %s", kenh, loi)
+                moi = []
+            them_sau = None
+            if moi:
+                log.info("%s: học xong danh sách phát → thêm %d việc mới", kenh, len(moi))
+                hang += moi
+    return ra
+
+
 def chay_kenh(kenh: str, viec: list, che_do: str = "that", tu_giu: bool = True,
-              ghi_so: bool = True, ngu=None) -> tuple:
+              ghi_so: bool = True, ngu=None, them_sau=None) -> tuple:
     """Mọi việc của MỘT kênh lớn trên Chrome của nó. Trả `(mã thoát, [kết quả])`."""
     import agent  # noqa: PLC0415
     import cdp as cdp_mod  # noqa: PLC0415
@@ -438,15 +560,8 @@ def chay_kenh(kenh: str, viec: list, che_do: str = "that", tu_giu: bool = True,
             return MA_LUI, ra
         trang = TrangXem(md.tab_b(), bo)
         may = KeoCheo(trang, nhat_ky=log.info)
-        for i, hd in enumerate(viec):
-            if i:
-                ngu(random.uniform(4.0, 9.0))
-            kq = may.them(str(hd["video_id"]), str(hd["danh_sach_phat"]), che_do)
-            kq["du_phong"] = dict(trang.du_phong or {})
-            log.info("%s: %s → «%s» [%s]: %s", kenh, hd["video_id"], hd["danh_sach_phat"], che_do, kq["ket"])
-            ra.append(dict(hd, ket=kq["ket"], chi_tiet=kq))
-            if che_do == "that" and ghi_so:
-                _ghi_so(hd, kq)
+        ra = chay_viec(may, kenh, viec, che_do, them_sau=them_sau, ngu=ngu, ghi_so=ghi_so,
+                       du_phong=lambda: trang.du_phong)
         return (MA_HONG if any(str(x["ket"]).startswith("loi") for x in ra) else MA_XONG), ra
     except Exception as loi:  # noqa: BLE001 — không chết im lặng
         log.exception("lỗi không lường: %s", loi)
@@ -513,6 +628,9 @@ def _doc_lenh(argv):
     ap.add_argument("--ngay", default="", help="YYYY-MM-DD cho --ke-hoach/--in-ke-hoach (mặc định hôm nay)")
     ap.add_argument("--thu", action="store_true", help="dò nút Lưu, KHÔNG bấm gì")
     ap.add_argument("--doc-hop", action="store_true", help="mở hộp Lưu, đọc trạng thái, đóng — KHÔNG tích")
+    ap.add_argument("--hoc-ds", action="store_true",
+                    help="với --kenh: mở một video công khai của kênh, đọc tên danh sách phát trong hộp Lưu, ghi "
+                         "workspace/keo-cheo/ds-kenh.json — KHÔNG tích (--video để chọn video)")
     ap.add_argument("--trong-phien", action="store_true", help="agent gọi giữa phiên — không tự giữ khoá máy")
     return ap.parse_args(argv)
 
@@ -559,11 +677,39 @@ def main(argv=None) -> int:
         return MA_HONG
     if a.in_ke_hoach:
         for hd in _ke_hoach(a.ngay):
-            log.info("%s → «%s»: %s (%s) — %s", hd["kenh_chu"], hd["danh_sach_phat"], hd["video_id"],
-                     hd["kenh_video"], hd["ly_do"])
+            if (hd.get("viec") or "them") == "them":
+                log.info("[them] %s → «%s»: %s (%s) — %s", hd["kenh_chu"], hd["danh_sach_phat"], hd["video_id"],
+                         hd["kenh_video"], hd["ly_do"])
+            else:
+                log.info("[%s] %s — %s", hd.get("viec"), hd["kenh_chu"], hd["ly_do"])
         return MA_XONG
-    if a.ke_hoach:
-        viec = [hd for hd in _ke_hoach(a.ngay, do=che_do == "that") if not a.kenh or hd["kenh_chu"] == a.kenh]
+    them_sau = {}
+    if a.hoc_ds:
+        if not a.kenh:
+            log.error("--hoc-ds cần --kenh")
+            return MA_HONG
+        vid = a.video or ""
+        if not vid:
+            try:
+                vid = _kc().video_de_hoc(GOC_TOOL, a.kenh, os.path.join(GOC, "logs", "so-video-id.json"))
+            except Exception as loi:  # noqa: BLE001
+                log.warning("không tìm được video công khai của %s: %s", a.kenh, loi)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid or ""):
+            log.error("không biết video công khai nào của %s — chạy lại với --video <videoId công khai của kênh>",
+                      a.kenh)
+            return MA_HONG
+        viec = [{"viec": "hoc_ds", "kenh_chu": a.kenh, "video_id": vid, "ly_do": "lệnh tay --hoc-ds"}]
+        che_do = "doc_hop" if che_do == "that" else che_do
+    elif a.ke_hoach:
+        ke = _ke_hoach(a.ngay, do=che_do == "that")
+        for hd in ke:
+            if hd.get("viec") == "bao":
+                log.warning("CẦN NGƯỜI: %s", hd["ly_do"])
+        viec = [hd for hd in ke if (hd.get("viec") or "them") in ("them", "hoc_ds")
+                and (not a.kenh or hd["kenh_chu"] == a.kenh)]
+        for k in {hd["kenh_chu"] for hd in viec if hd.get("viec") == "hoc_ds"}:
+            # học xong danh sách phát → lập lại kế hoạch cho kênh này, chạy luôn trong CÙNG phiên Chrome
+            them_sau[k] = (lambda kk: lambda: [h for h in _ke_hoach(a.ngay) if h.get("kenh_chu") == kk])(k)
     else:
         if not (a.kenh and a.video and a.ds):
             log.error("cần --kenh, --video, --ds (hoặc --ke-hoach)")
@@ -589,7 +735,7 @@ def main(argv=None) -> int:
     tat_ca = []
     for kenh, ds in theo_kenh.items():          # MỘT Chrome một lúc
         log.info("kênh %s: %d việc kéo chéo (%s)", kenh, len(ds), che_do)
-        ma, ra = chay_kenh(kenh, ds, che_do, tu_giu=not a.trong_phien)
+        ma, ra = chay_kenh(kenh, ds, che_do, tu_giu=not a.trong_phien, them_sau=them_sau.get(kenh))
         tat_ca += ra or [dict(hd, ket="loi:khong_chay: mã {0}".format(ma)) for hd in ds]
         if ma != MA_XONG:
             ma_cuoi = ma if ma_cuoi == MA_XONG else max(ma_cuoi, ma)
@@ -603,7 +749,7 @@ def main(argv=None) -> int:
     try:
         import agent  # noqa: PLC0415
         agent.ghi("kéo chéo DOM [{0}]: {1} việc · ok {2} · lỗi {3} · mã {4}".format(
-            che_do, len(tat_ca), sum(1 for x in tat_ca if str(x.get("ket")) in ("ok", "da_co")),
+            che_do, len(tat_ca), sum(1 for x in tat_ca if str(x.get("ket")) in ("ok", "da_co", "hoc_ds:ok")),
             sum(1 for x in tat_ca if str(x.get("ket")).startswith("loi")), ma_cuoi))
     except Exception:  # noqa: BLE001
         pass

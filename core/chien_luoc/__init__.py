@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 _log = logging.getLogger(__name__)
 
 #: Module trong gói không phải công thức.
-_KHONG_PHAI_CONG_THUC = {"ngu_canh", "bai_hoc", "ket_qua", "__main__"}
+_KHONG_PHAI_CONG_THUC = {"ngu_canh", "bai_hoc", "ket_qua", "tan_cong", "__main__"}
 #: Thứ tự hiển thị các công thức gốc (giữ đúng thứ tự `tu_chay.CONG_THUC_NGUON` cũ).
 _THU_TU_GOC = ("v7", "vph", "mot_nut")
 KHOA_CHIEN_LUOC = "chien_luoc"
@@ -283,6 +283,7 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
                 d["tin_hieu"]["cong_thuc_khac"] = khac
 
     _ap_he_so_cum(nc, bang)
+    _ap_tan_cong(nc, bang)
 
     if kh.tham_do and nc.giai_doan == "moi":
         bang[kh.tham_do] = _uu_tien_cum_chua_thu(nc, bang[kh.tham_do])
@@ -329,8 +330,11 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
                         from .. import nao  # noqa: PLC0415
 
                         he = nao.he_so_cum(nc.goc, nc.ma_kenh, cum, he)
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as loi:  # noqa: BLE001
+                        tu_hoc.canh_bao(nc.goc, "nao.he_so_cum", loi, nc.ma_kenh)
+                # 06/10/2026: ghi NHÃN đã dùng — `tu_hoc.nhan_cum` lúc bàn giao lấy lại đúng nhãn này, nên ván được
+                # tính cho đúng cánh tay đã nhận hệ số (bộ cụm AI có thể đổi nhãn giữa lúc chọn và lúc bàn giao).
+                d["cum_tu_hoc"] = cum
                 d["he_so_cum"] = round(he, 3)
                 try:
                     d["diem_goc"] = d.get("diem", 0)
@@ -343,6 +347,29 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
             ds.sort(key=lambda d: -float(d.get("diem") or 0) if isinstance(d.get("diem"), (int, float)) else 0)
     except Exception as loi:  # noqa: BLE001
         nc.ghi("  (tự học: bỏ qua hệ số cụm — {0})".format(str(loi)[:100]))
+        try:
+            from .. import tu_hoc  # noqa: PLC0415
+
+            tu_hoc.canh_bao(nc.goc, "he_so_cum", loi, nc.ma_kenh)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _ap_tan_cong(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Lệnh tấn công của chiến trường (`core/chien_truong.de_xuat_tan_cong`) → trọng số MỀM ≤ +30% cho ứng viên
+    thuộc vùng được lệnh (xem `tan_cong.py`). Hỏng thì bỏ qua + cảnh báo — không được làm hỏng chọn nguồn."""
+    try:
+        from . import tan_cong  # noqa: PLC0415
+
+        tan_cong.ap_he_so(nc, bang)
+    except Exception as loi:  # noqa: BLE001
+        nc.ghi("  (chiến trường: bỏ qua lệnh tấn công — {0})".format(str(loi)[:100]))
+        try:
+            from .. import tu_hoc  # noqa: PLC0415
+
+            tu_hoc.canh_bao(nc.goc, "tan_cong", loi, nc.ma_kenh)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _uu_tien_cum_chua_thu(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

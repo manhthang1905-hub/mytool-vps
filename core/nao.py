@@ -186,6 +186,26 @@ def _chuan(gia_tri: Any) -> str:
     return str(gia_tri or "").strip().lower()
 
 
+def _chuan_truc(truc: Any, gia_tri: Any) -> str:
+    """Nhãn chuẩn theo trục — CÙNG luật `tu_hoc.chuan_gia_tri` (vd. `khuon_thang_2` → `khuon_thang`), để `thu`/
+    `tranh` khớp đúng cánh tay mà bảng điểm và bộ chọn đang dùng."""
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+
+        return tu_hoc.chuan_gia_tri(str(truc or ""), gia_tri)
+    except Exception:  # noqa: BLE001
+        return _chuan(gia_tri)
+
+
+def _canh_bao(goc: str, nguon: str, loi: Any, kenh: str = "") -> None:
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+
+        tu_hoc.canh_bao(goc, nguon, loi, kenh)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ═══ kiểm tra / tạo hành động ═════════════════════════════════════════════════
 
 def _kenh_ton_tai(goc: str, ma: str) -> bool:
@@ -372,7 +392,7 @@ def _hieu_luc_tu(ds: List[Dict[str, Any]], kenh: str, truc: str, bay_gio: Option
         ts = d.get("tham_so") or {}
         if d.get("trang_thai") != "mo" or ts.get("kenh") != kenh or ts.get("truc") != truc:
             continue
-        gt = _chuan(ts.get("gia_tri"))
+        gt = _chuan_truc(truc, ts.get("gia_tri"))
         if not gt:
             continue
         if d.get("lenh") == "thu" and int(ts.get("da_dung") or 0) < int(ts.get("so_video") or 0):
@@ -386,7 +406,8 @@ def hieu_luc(goc: str, kenh: str, truc: str, bay_gio: Optional[_dt.datetime] = N
     """`{giá trị (chữ thường): điểm}`: `thu` còn lượt → 1,0 (trần), `tranh` còn hạn → 0,0 (sàn). Hỏng → {}."""
     try:
         return _hieu_luc_tu(doc_hanh_dong(goc), kenh, truc, bay_gio)
-    except Exception:  # noqa: BLE001
+    except Exception as loi:  # noqa: BLE001 — sổ hành động hỏng: não mất hiệu lực, phải có cảnh báo
+        _canh_bao(goc, "nao.hieu_luc", loi, kenh)
         return {}
 
 
@@ -395,20 +416,20 @@ def ap_hieu_luc_rut(goc: str, kenh: str, truc: str, ket: Dict[str, float]) -> Di
     try:
         for g, v in hieu_luc(goc, kenh, truc).items():
             for k in list(ket):
-                if _chuan(k) == g:
+                if _chuan_truc(truc, k) == g:
                     ket[k] = v
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.ap_hieu_luc_rut", loi, kenh)
     return ket
 
 
 def he_so_cum(goc: str, kenh: str, cum: str, he: float) -> float:
     """Hệ số xếp hạng của một cụm: `thu` → 1,5 (mạnh hơn trần 1,2 của Thompson); `tranh` → giữ sàn Thompson."""
     try:
-        if hieu_luc(goc, kenh, "cum").get(_chuan(cum)) == 1.0:
+        if hieu_luc(goc, kenh, "cum").get(_chuan_truc("cum", cum)) == 1.0:
             return HE_SO_CUM_THU
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.he_so_cum", loi, kenh)
     return he
 
 
@@ -421,9 +442,10 @@ def tru_luot(goc: str, *a: Any, **kw: Any) -> Any:
         return _tru_luot_g(goc, *a, **kw)
 
 
-def _tru_luot_g(goc: str, kenh: str, nuoc: Dict[str, Any]) -> int:
+def _tru_luot_g(goc: str, kenh: str, nuoc: Dict[str, Any], ma_goi: str = "") -> int:
     """Một ván MỚI vừa ghi (`tu_hoc.ghi_van`) với `nuoc` → trừ 1 lượt mọi `thu` mở khớp. Hết lượt → `xong`.
-    Trả số hành động bị trừ. Hỏng thì 0, không ném."""
+    `ma_goi` được ghi vào `tham_so.goi` — lúc tới hạn kiểm, `xem` in kết quả ĐÚNG các video ấy cho não chấm.
+    Trả số hành động bị trừ. Hỏng thì 0 (có cảnh báo), không ném."""
     try:
         ds = doc_hanh_dong(goc)
         n = 0
@@ -431,17 +453,44 @@ def _tru_luot_g(goc: str, kenh: str, nuoc: Dict[str, Any]) -> int:
             ts = d.get("tham_so") or {}
             if d.get("lenh") != "thu" or d.get("trang_thai") != "mo" or ts.get("kenh") != kenh:
                 continue
-            if _chuan((nuoc or {}).get(ts.get("truc"))) != _chuan(ts.get("gia_tri")):
+            truc = ts.get("truc")
+            if _chuan_truc(truc, (nuoc or {}).get(truc)) != _chuan_truc(truc, ts.get("gia_tri")):
                 continue
             ts["da_dung"] = int(ts.get("da_dung") or 0) + 1
+            if ma_goi and ma_goi not in (ts.get("goi") or []):
+                ts["goi"] = list(ts.get("goi") or []) + [ma_goi]
             n += 1
             if ts["da_dung"] >= int(ts.get("so_video") or 0):
                 d["trang_thai"] = "xong"
         if n:
             ghi_hanh_dong(goc, ds)
         return n
-    except Exception:  # noqa: BLE001
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.tru_luot", loi, kenh)
         return 0
+
+
+def ket_qua_goi(goc: str, kenh: str, goi: Any) -> List[str]:
+    """Kết quả ĐO ĐƯỢC của các video một hành động `thu` đã sinh ra (`tham_so.goi`), từ ván tự học + hồ sơ video:
+    `["<mã gói>: 48h THẮNG/trượt/chờ, 7d …, CTR … — hiển thị @48h …"]`. Không đọc được → []."""
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+        from .chien_luoc import ket_qua  # noqa: PLC0415
+
+        van = tu_hoc.doc_van(goc, kenh)
+        hs_ds = ket_qua.ho_so_theo_goi(goc, kenh)
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.ket_qua_goi", loi, kenh)
+        return []
+    chu = {"thang": "THẮNG", "truot": "trượt"}
+    ra = []
+    for ma in goi or []:
+        v, hs = van.get(ma) or {}, hs_ds.get(ma) or {}
+        m = tu_hoc._moc_do_duoc(hs)  # noqa: SLF001
+        ra.append("{0}: 48h {1}, 7d {2}, CTR-so-kênh {3} — hiển thị @48h {4}, CTR {5}".format(
+            ma, chu.get(v.get("ket48"), "chờ"), chu.get(v.get("ket7"), "chờ"), chu.get(v.get("ket_ctr"), "chờ"),
+            _f(m.get("impressions")), _f(m.get("ctr"), 2, "%")))
+    return ra
 
 
 # ── đề cử nguồn ──────────────────────────────────────────────────────────────
@@ -614,6 +663,13 @@ def bao_cao_hanh_dong(goc: str, bay_gio: Optional[_dt.datetime] = None, chi_can_
         if chi_can_chu_y and not (d.get("trang_thai") == "mo" or toi_han):
             continue
         hien.append(("TỚI HẠN KIỂM " if toi_han else "") + dong_hanh_dong(d))
+        ts = d.get("tham_so") or {}
+        if d.get("lenh") == "thu" and (toi_han or ts.get("goi")):
+            # Vòng kín cho não: in số ĐO ĐƯỢC của đúng các video lần thử này sinh ra — não chấm `dung|sai` theo số,
+            # không phải tự đi tìm video nào thuộc lần thử.
+            kq = ket_qua_goi(goc, str(ts.get("kenh") or ""), ts.get("goi"))
+            hien += ["    ↳ " + x for x in kq] or (["    ↳ chưa ra video nào khớp lần thử — huỷ hoặc chấm `sai` kèm lý do"]
+                                                if toi_han else [])
     if not hien:
         dong.append("  (không có hành động mở / tới hạn kiểm)" if chi_can_chu_y else "  (chưa có hành động nào)")
     return dong + ["  " + h for h in hien[-40:]]
@@ -624,7 +680,7 @@ def _hieu_luc_kenh(goc: str) -> Dict[Tuple[str, str, str], str]:
     for d in doc_hanh_dong(goc):
         ts = d.get("tham_so") or {}
         if d.get("trang_thai") == "mo" and d.get("lenh") in ("thu", "tranh"):
-            ra[(ts.get("kenh"), ts.get("truc"), _chuan(ts.get("gia_tri")))] = (
+            ra[(ts.get("kenh"), ts.get("truc"), _chuan_truc(ts.get("truc"), ts.get("gia_tri")))] = (
                 "THỬ còn {0} lượt".format(int(ts.get("so_video") or 0) - int(ts.get("da_dung") or 0)) if d["lenh"] == "thu"
                 else "TRÁNH tới {0}".format(ts.get("het_han")))
     return ra
@@ -642,9 +698,11 @@ def dong_bang_diem(goc: str, kenh: str, toi_da: int = 0) -> List[str]:
         hang = sorted(bd[truc].items(), key=lambda x: (-x[1]["n"], -x[1]["a"] / (x[1]["a"] + x[1]["b"])))
         ra.append("  {0}:".format(truc))
         for gt, o in (hang[:toi_da] if toi_da else hang):
-            ra.append("    {0}: thắng {1}/{2}, TB Beta {3:.2f}{4}".format(
+            ra.append("    {0}: thắng {1}/{2}{5}{6}, TB Beta {3:.2f}{4}".format(
                 _cat(gt, 40), o["thang"], o["n"], o["a"] / (o["a"] + o["b"]),
-                " [{0}]".format(nao[(kenh, truc, _chuan(gt))]) if (kenh, truc, _chuan(gt)) in nao else ""))
+                " [{0}]".format(nao[(kenh, truc, _chuan(gt))]) if (kenh, truc, _chuan(gt)) in nao else "",
+                ", hiển thị48h≥tv {0}/{1}".format(o["thang_tv"], o["n_tv"]) if o.get("n_tv") else "",
+                ", CTR≥tv {0}/{1}".format(o["thang_ctr"], o["n_ctr"]) if o.get("n_ctr") else ""))
     return ra or ["  (bảng điểm trống — chưa có ván nào có kết luận)"]
 
 

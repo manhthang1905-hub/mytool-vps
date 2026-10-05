@@ -3182,18 +3182,39 @@ def _khoi_khan_gia(bc: "BoiCanh", k: Kenh, d: str) -> Dict[str, str]:
         except Exception:  # noqa: BLE001
             st = ""
     st = st or "(chưa có)"
-    try:  # 01/10/2026: bài học KHÁM NGHIỆM video (n ≥ 3, không bóng) nối cuối — chưa có bài thì y hệt từng byte
-        from .chien_luoc.bai_hoc import khoi_kham_nghiem  # noqa: PLC0415
-
-        ma, goc_bh = str(getattr(k, "ma", "") or ""), str(getattr(bc, "goc", "") or "")
-        bh = (khoi_kham_nghiem(goc_bh, ma, "kich_ban") or khoi_kham_nghiem(
-            goc_bh, re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), "kich_ban")) if ma and goc_bh else ""
-        if bh:
-            st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật; bài ghi \"đang kiểm, chưa chắc\" mới có ít video — chỉ là giả thuyết):\n" + bh
-    except Exception:  # noqa: BLE001
-        pass
+    # 01/10/2026: bài học KHÁM NGHIỆM video (n ≥ 3, không bóng) nối cuối — chưa có bài thì y hệt từng byte
+    bh = _bai_kham_nghiem(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "kich_ban")
+    if bh:
+        st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật; bài ghi \"đang kiểm, chưa chắc\" mới có ít video — chỉ là giả thuyết):\n" + bh
     return {"BINH_LUAN_GOC": bl or "(không có)", "SU_THAT_KENH": st,
             "BAI_HOC": _khoi_bai_hoc_kich_ban(bc, k)}
+
+
+def _canh_bao_hoc(goc: str, nguon: str, loi: Any, ma: str = "") -> None:
+    """Đường học hỏng trong khâu sản xuất → `tu_hoc.canh_bao` (log + mục "Tín hiệu học" báo cáo ngày). Không ném."""
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+
+        tu_hoc.canh_bao(goc, nguon, loi, ma)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _bai_kham_nghiem(goc: str, ma: str, dung_cho: str) -> str:
+    """Khối bài học KHÁM NGHIỆM video (`giam_doc.kham_nghiem.ap_delta` → `chien_luoc.bai_hoc.khoi_kham_nghiem`) cho
+    khâu `dung_cho` ("kich_ban" | "tieu_de" | "bia"); bản thử `…-v2` lùi về số kênh gốc. "" khi chưa có bài — nơi
+    gọi giữ lời nhắc y hệt từng byte. Hỏng → "" + cảnh báo học (06/10/2026: trước đây chỉ kịch bản đọc khối này,
+    bài về tiêu đề/bìa không vào lời nhắc nào)."""
+    if not ma or not goc:
+        return ""
+    try:
+        from .chien_luoc.bai_hoc import khoi_kham_nghiem  # noqa: PLC0415
+
+        return (khoi_kham_nghiem(goc, ma, dung_cho)
+                or khoi_kham_nghiem(goc, re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), dung_cho))
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao_hoc(goc, "bai_kham_nghiem:" + dung_cho, loi, ma)
+        return ""
 
 
 def _khoi_bai_hoc_kich_ban(bc: "BoiCanh", k: Kenh) -> str:
@@ -4279,6 +4300,11 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
     """
     ten_ban: List[str] = ["đối chứng"]
     ban: List[str] = [sach]
+    # 06/10/2026: bài học khám nghiệm về TIÊU ĐỀ (trục `tieu_de` → dung_cho "tieu_de") vào cả lượt VIẾT N bản lẫn
+    # lượt CHẤM — trước đây chỉ kịch bản đọc sổ bài học. Chưa có bài → "" → hai lời nhắc y hệt từng byte.
+    bai_td = _bai_kham_nghiem(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "tieu_de")
+    khoi_bai_td = ("\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH VỀ TIÊU ĐỀ (số thật; bài ghi \"đang kiểm, chưa chắc\" "
+                   "chỉ là giả thuyết):\n" + bai_td) if bai_td else ""
 
     if k.nan_khuon_tieu_de:
         mau = tieu_de_thang_cua_kenh(bc.goc, k.ma)
@@ -4305,7 +4331,7 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         try:
             bc.kiem_dung()
             bc.ghi("  đang viết {0} cách đặt tiêu đề khác…".format(k.so_tieu_de))
-            tra = _goi(bc, _de_bai_n_ban_tieu_de(sach, k.so_tieu_de, k.nhan_tieu_de),
+            tra = _goi(bc, _de_bai_n_ban_tieu_de(sach, k.so_tieu_de, k.nhan_tieu_de) + khoi_bai_td,
                       _khoa_chat(luot, "tieu-de:n-ban"))
             moi_ds = _doc_nhieu_tieu_de(tra, k.so_tieu_de)
             for moi in moi_ds:
@@ -4349,11 +4375,14 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         sau_cham_td, ghi_hoc_td = _th.bo_chon(bc.goc, k.ma, "kieu_tieu_de", ban,
                                               "td|{0}|{1}-{2}".format(k.ma, luot.ma_kenh, luot.ma_luot))
         khuon_cham_td = _KHUON_CHAM_TIEU_DE + _th.yeu_cau_nhan("kieu_tieu_de")
-    except Exception:  # noqa: BLE001
+    except Exception as loi_th:  # noqa: BLE001
         sau_cham_td, ghi_hoc_td = None, {}
+        _canh_bao_hoc(str(getattr(bc, "goc", "") or ""), "bo_chon:kieu_tieu_de", loi_th, str(getattr(k, "ma", "") or ""))
     try:
         chung_cham = dict(_du_lieu_cham_tieu_de(bc.goc, k.ma),
                           THUMB_HIEN_CO=chu_bia_hien_co or "")
+        if khoi_bai_td:  # bài học khám nghiệm về tiêu đề — nối sau bảng CTR (chưa có bài: lời nhắc y hệt)
+            chung_cham["BANG_CTR"] = str(chung_cham.get("BANG_CTR") or "") + khoi_bai_td
         chon, ly_do, diem, bang = cham_va_chon(
             goi_cham, ban, sach, khuon_cham=khuon_cham_td,
             tieu_chi=_TIEU_CHI_CHAM_TIEU_DE, chung=chung_cham, muc_tieu=0,
@@ -4367,8 +4396,9 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         from . import tu_hoc as _th2  # noqa: PLC0415
 
         nhan_tu_hoc = _th2.ket_nhan("kieu_tieu_de", ban, chon, ghi_hoc_td)
-    except Exception:  # noqa: BLE001
+    except Exception as loi_th2:  # noqa: BLE001
         nhan_tu_hoc = {}
+        _canh_bao_hoc(str(getattr(bc, "goc", "") or ""), "ket_nhan:kieu_tieu_de", loi_th2, str(getattr(k, "ma", "") or ""))
     ghi_json(os.path.join(d, "1-tieu-de-cham.json"), {
         "tu_hoc": nhan_tu_hoc,
         "ung_vien": [{"ten": ten_ban[i], "tieu_de": b} for i, b in enumerate(ban)],
@@ -7700,8 +7730,17 @@ def _loi_nhac_bia(bc: BoiCanh, luot: LuotChay, khuon: str, tieu_de: str,
     try:
         from . import khuon_bia  # noqa: PLC0415 — tránh vòng nhập lúc nạp module
         bai_hoc_anh_bia = khuon_bia.doc_bai_hoc_anh_bia(bc.goc, bc.kenh.ma)
-    except Exception:  # noqa: BLE001 — Việc 4 chưa chạy/hỏng thì coi như chưa có bài học
+    except Exception as loi_kb:  # noqa: BLE001 — Việc 4 chưa chạy/hỏng thì coi như chưa có bài học
         bai_hoc_anh_bia = ""
+        _canh_bao_hoc(str(getattr(bc, "goc", "") or ""), "khuon_bia.doc_bai_hoc_anh_bia", loi_kb,
+                      str(getattr(getattr(bc, "kenh", None), "ma", "") or ""))
+    # 06/10/2026: bài học KHÁM NGHIỆM về bìa (trục `bia` → dung_cho "bia") — trước đây không vào lời nhắc nào.
+    bai_kn_bia = _bai_kham_nghiem(str(getattr(bc, "goc", "") or ""),
+                                  str(getattr(getattr(bc, "kenh", None), "ma", "") or ""), "bia")
+    if bai_kn_bia:
+        bai_hoc_anh_bia = ((bai_hoc_anh_bia + "\n\n") if bai_hoc_anh_bia else "") + (
+            "## LESSONS FROM THIS CHANNEL'S VIDEO POST-MORTEMS (measured; lines marked \"đang kiểm, chưa chắc\" "
+            "are hypotheses)\n" + bai_kn_bia)
     loi_nhac = _thay(khuon, {
         "TITLE": tieu_de, "THUMB": chu_bia,
         "SCRIPT_OPENING": mo_dau,

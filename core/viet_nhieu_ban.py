@@ -446,6 +446,17 @@ def hook_dung_duoc(hook: str, than: str, ban_cu: str,
     return True, ""
 
 
+def _canh_bao_hoc(hoc: Any, nguon: str, loi: Any) -> None:
+    """Đường tự học của hook hỏng → `tu_hoc.canh_bao` (log + báo cáo ngày). Không ném."""
+    try:
+        from . import tu_hoc  # noqa: PLC0415
+
+        h = hoc if isinstance(hoc, dict) else {}
+        tu_hoc.canh_bao(str(h.get("goc") or ""), nguon, loi, str(h.get("kenh") or ""))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def thay_hook(goi_viet: Callable[[str], str],
               goi_cham: Optional[Callable[[str], str]],
               ban: str, hook_goc: str, *,
@@ -533,8 +544,9 @@ def thay_hook(goi_viet: Callable[[str], str],
 
                 sau, ghi_hoc = tu_hoc.bo_chon(hoc["goc"], hoc["kenh"], "hook", dung, hoc["hat"])
                 khuon_cham = khuon_cham + tu_hoc.yeu_cau_nhan("hook")
-            except Exception:  # noqa: BLE001
+            except Exception as loi_hoc:  # noqa: BLE001
                 sau, ghi_hoc = None, {}
+                _canh_bao_hoc(hoc, "bo_chon:hook", loi_hoc)
         chon, ly_do, diem, bang = cham_va_chon(
             goi_cham if (goi_cham and khuon_cham.strip()) else None,
             dung, hook_goc or "", khuon_cham=khuon_cham, chung=o,
@@ -545,8 +557,8 @@ def thay_hook(goi_viet: Callable[[str], str],
             from . import tu_hoc  # noqa: PLC0415
 
             hoc["ket"] = tu_hoc.ket_nhan("hook", dung, chon, ghi_hoc if len(dung) > 1 else {})
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as loi_hoc:  # noqa: BLE001
+            _canh_bao_hoc(hoc, "ket_nhan:hook", loi_hoc)
 
     # ═══ VÁ HOOK ĐÃ CHỌN THEO ĐÚNG LỜI CHÊ (thêm 04/09/2026) ═══
     #

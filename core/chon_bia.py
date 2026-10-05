@@ -601,8 +601,14 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
                                  "diem_sau": {str(k_.so): round(k_.tong * he.get(ten_kieu_theo_so.get(k_.so, ""), 1.0), 2)
                                               for k_ in hop_le}}
                     hop_le = sau
-            except Exception:  # noqa: BLE001 — học hỏng không được làm hỏng chọn bìa
+            except Exception as loi_hoc:  # noqa: BLE001 — học hỏng không được làm hỏng chọn bìa (nhưng phải báo)
                 he_tu_hoc = {}
+                try:
+                    from . import tu_hoc as _th  # noqa: PLC0415
+
+                    _th.canh_bao(goc, "he_so_chon:kieu_bia", loi_hoc, kenh)
+                except Exception:  # noqa: BLE001
+                    pass
             thang = hop_le[0]
             chon_boi = "ai"
             ly_do_chon = thang.ly_do or "điểm tổng cao nhất"
