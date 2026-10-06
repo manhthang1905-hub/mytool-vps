@@ -1041,7 +1041,10 @@ def _kiem_qua_nhieu_tu_chay(anh: Dict[str, Any]) -> List[Dict[str, Any]]:
     cho_clip = int(may.get("so_cho_clip") or 0)
     tran_tong = int(may.get("tran_luot_tong") or 0) + 1 if may.get("tran_luot_tong") else None
     dang_lam = so - cho_clip           # 06/10: lượt chờ kho clip không tính làn (core/khe.doc_cho_clip)
-    if dang_lam > tran or (tran_tong is not None and so > tran_tong):
+    # 06/10 tối: lượt chờ clip được vào ngoài làn rồi QUAY LẠI làm khi kho có lại (7 lượt làm cùng lúc là hợp lệ,
+    # điều phối đã cho phép) — có trần tổng thì chỉ báo khi vượt trần tổng; ảnh cũ thiếu trần tổng mới dùng luật làn.
+    vuot = so > tran_tong if tran_tong is not None else dang_lam > tran
+    if vuot:
         return [_su_co(
             "qua_nhieu_tu_chay", bao_dong.MUC_KHAN,
             chuyen_gi="Máy đang có {0} tiến trình tu_chay.py cùng lúc ({1} chờ kho clip), vượt "

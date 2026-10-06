@@ -1247,6 +1247,7 @@ def test_qua_nhieu_tu_chay_tru_luot_cho_clip():
     from core import gac_tong as g
     may = {"so_tien_trinh_tu_chay": 7, "lan_api": 4, "so_cho_clip": 3, "tran_luot_tong": 7}
     assert g._kiem_qua_nhieu_tu_chay({"may": may}) == []
-    assert g._kiem_qua_nhieu_tu_chay({"may": dict(may, so_cho_clip=0)})            # 7 làm thật > 5
+    assert g._kiem_qua_nhieu_tu_chay({"may": dict(may, so_cho_clip=0)}) == []      # 7 làm lại sau chờ clip: hợp lệ
+    assert g._kiem_qua_nhieu_tu_chay({"may": {"so_tien_trinh_tu_chay": 7, "lan_api": 4}})  # ảnh cũ: luật làn
     assert g._kiem_qua_nhieu_tu_chay({"may": dict(may, so_tien_trinh_tu_chay=9, so_cho_clip=5)})  # > trần tổng 8
     assert g._kiem_qua_nhieu_tu_chay({"may": {"so_tien_trinh_tu_chay": 5, "lan_api": 4}}) == []   # ảnh cũ thiếu khoá
