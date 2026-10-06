@@ -73,6 +73,10 @@ _DAI_RIENG = [
 
 #: Bận thì lùi tối đa ngần này cổng (8765 -> 8775) rồi mới chịu thua.
 SO_CONG_LUI = 10
+#: Cổng KHOÁ của các máy khác trong tool (06/10/2026) — trạm lùi cổng KHÔNG được chiếm: 8767 agent, 8768 máy đăng,
+#: 8769 máy bình luận API, 8770 máy đăng DOM, 8771 máy bình luận DOM, 8781 kéo chéo. Chiếm một cổng này = máy đó
+#: tưởng "đã có bản khác chạy" rồi thoát im lặng (ca thật 06/10: trung tâm chỉ huy giữ 8770 → máy đăng thoát mã 4).
+CONG_DANH_RIENG = frozenset({8767, 8768, 8769, 8770, 8771, 8781})
 
 #: Mã lỗi "cổng đang bận" trên Windows và POSIX.
 _CONG_BAN = {10048, 10013, 98, 13}
@@ -687,6 +691,8 @@ class Tram:
             ai = ai_giu_cong(self.cong)
             cu = self.cong
             for buoc in range(1, SO_CONG_LUI + 1):
+                if cu + buoc in CONG_DANH_RIENG:
+                    continue
                 try:
                     self._may = _mo(cu + buoc)
                     break

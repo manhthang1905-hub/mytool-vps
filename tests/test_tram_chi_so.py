@@ -667,3 +667,42 @@ def test_tu_chay_chua_co_so_ngay_nao_thi_tra_danh_sach_rong(tram_dang_chay):
             f"http://127.0.0.1:{tram_dang_chay.cong}/tu-chay", timeout=5) as f:
         du = json.loads(f.read().decode("utf-8"))
     assert du == []
+
+
+def test_lui_cong_bo_qua_cong_khoa_danh_rieng(tmp_path, monkeypatch):
+    """06/10/2026: trạm lùi cổng KHÔNG được chiếm cổng khoá của máy khác (8770 = máy đăng DOM…)."""
+    import socket
+
+    def cong_trong():
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        c = s.getsockname()[1]
+        s.close()
+        return c
+
+    for _ in range(20):                                   # tìm 3 cổng liền nhau còn trống
+        goc_c = cong_trong()
+        thu = []
+        try:
+            for c in (goc_c, goc_c + 1, goc_c + 2):
+                s = socket.socket()
+                s.bind(("127.0.0.1", c))
+                thu.append(s)
+            break
+        except OSError:
+            continue
+        finally:
+            for s in thu:
+                s.close()
+    giu = socket.socket()
+    giu.bind(("127.0.0.1", goc_c))                         # "phần mềm khác" giữ cổng gốc
+    giu.listen(1)
+    monkeypatch.setattr(T, "CONG_DANH_RIENG", frozenset({goc_c + 1}))
+    monkeypatch.setattr(T, "tram_khac_dang_giu", lambda c: False)
+    t = T.Tram(cong=goc_c, goc=str(tmp_path))
+    try:
+        t.bat()
+        assert t._may.server_address[1] == goc_c + 2      # bỏ qua goc+1 (dành riêng), lấy goc+2
+    finally:
+        t.tat()
+        giu.close()
