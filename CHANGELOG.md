@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.171.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): giao dien kieu game chien thuat — ban do chien dich (quan co, vuong mien boss, lua diem nong, mui ten tan cong), thanh tai nguyen, nhiem vu, quan doan, thanh tuu; Hau can kieu xuong; Nao kieu Tong tham muu; font/vendor off…
 - **2.170.1** — 2026-10-06 — `vps-jp1` — feat(dieu-phoi): luot dang cho kho clip khong chiem lan API (dau cho-clip/<kenh>.json, pid song + tuoi <45'); tran tong 7 luot
 - **2.170.0** — 2026-10-06 — `vps-jp1` — feat(clip): kho clip ShopAPI het han muc -> cho engine (20'/lan) toi han chot = gio dang - 6h, roi dung canh thieu tu chinh anh canh (Ken Burns, dung do dai); su_co HET_HAN_MUC; ho so ghi clip_tu_anh
 - **2.169.0** — 2026-10-06 — `vps-jp1` — fix(gop-lai): nen gz raw chi so >7 ngay + moi noi doc raw qua kho_raw (agent P) — ban 2.164.0 da roi mat 9 tep nay; raw da nen tu 06/10 01:40 nay doc lai duoc
