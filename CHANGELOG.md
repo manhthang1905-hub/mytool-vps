@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.174.1** — 2026-10-06 — `vps-jp1` — fix(gac-tong): co tran tong thi chi bao 'qua nhieu tu_chay' khi vuot tran tong — luot cho clip quay lai lam la hop le (het bao khan sai 21:02-21:47)
 - **2.174.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): vong 4 — ho so tuong (chien tich co anh bia, thang/thua 48h, du bao YPP), cay ky nang, dong ho chien dich, kinh te + kho dan anh/clip/giong, loi tien tri, tong ket tran, 32 thanh tuu, cham kenh day du
 - **2.173.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): tab Gioi thieu — trinh chieu 27 trang 5 chuong (bai toan, huong di Domain Translator, cach may lam, kha thi, lo trinh), so that tu JSON, che do nguoi noi, toan man hinh; noi dung rieng may o workspace/gioi-thieu, ban mac d…
 - **2.172.1** — 2026-10-06 — `vps-jp1` — fix(gac-tong): bao 'qua nhieu tu_chay' tru luot cho kho clip + tran tong 7; chi dem luot kenh (bo chinh lenh PowerShell, dieu phoi, vo cmd) — het bao khan sai 11/7
