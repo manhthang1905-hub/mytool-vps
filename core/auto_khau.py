@@ -7141,7 +7141,7 @@ def _khau_anh(bc: BoiCanh):
 
     def lam(luot: LuotChay, tt: TrangThaiKhau):
         from .auto import Cancelled  # noqa: PLC0415
-        from .su_co import NHA_MAY_NGHI, phan_loai as _phan  # noqa: PLC0415
+        from .su_co import HET_HAN_MUC, NHA_MAY_NGHI, phan_loai as _phan  # noqa: PLC0415
 
         canh = _doc_canh(luot)
         thu_muc = os.path.join(luot.thu_muc, "5-anh")
@@ -7227,10 +7227,15 @@ def _khau_anh(bc: BoiCanh):
                 # sau đó sẽ làm nốt, và nếu vẫn hỏng thì nó mới là chỗ báo lỗi.
                 # Ném lên từ đây là đổ tội cho khâu ảnh một việc không phải của
                 # nó, rồi bảng trạng thái chỉ vào sai chỗ.
-                if _phan(loi) == NHA_MAY_NGHI:
+                loai_loi = _phan(loi)
+                if loai_loi in (NHA_MAY_NGHI, HET_HAN_MUC):
+                    # Hết hạn mức (06/10/2026): bắn thêm trăm clip chỉ nhận lại
+                    # trăm câu y hệt — khâu clip lo chờ/thăm dò/hạn chót.
+                    if not clip_tat.is_set():
+                        bc.ghi("  {0} — làm nốt ảnh đã, phần clip để khâu sau.".format(
+                            "nhà máy clip đang tắt" if loai_loi == NHA_MAY_NGHI
+                            else "kho clip của cổng hết hạn mức hôm nay"))
                     clip_tat.set()
-                    bc.ghi("  nhà máy clip đang tắt — làm nốt ảnh đã, phần "
-                           "clip để khâu sau.")
                 else:
                     bc.ghi("    cảnh {0}: chưa ra clip ({1}) — khâu clip sẽ "
                            "làm nốt.".format(so_canh, str(loi)[:80]))
@@ -7470,25 +7475,151 @@ def _khau_clip(bc: BoiCanh):
             # Cùng luật với dây chuyền ở khâu ảnh — hai nhánh lệch nhau đúng
             # một tham số là cờ chết lặng, không ai thấy (bài học 27/08/2026
             # với `khung_dau`, xem `_lam_clip`).
-            anh_cuoi = (_anh_khung_cuoi(bc, luot, c, anh,
-                                        _hop_cho_canh(bc, luot, c, _HopTrong()), so=so)
-                        if _ghim_hai_dau(bc) else "")
-            _lam_clip(bc, luot, c, anh, tep, giay, so=so,
-                      khung_dau=_co_khung_dau(bc) or bool(anh_cuoi),
-                      anh_cuoi=anh_cuoi or None)
+            try:
+                anh_cuoi = (_anh_khung_cuoi(bc, luot, c, anh,
+                                            _hop_cho_canh(bc, luot, c, _HopTrong()), so=so)
+                            if _ghim_hai_dau(bc) else "")
+                _lam_clip(bc, luot, c, anh, tep, giay, so=so,
+                          khung_dau=_co_khung_dau(bc) or bool(anh_cuoi),
+                          anh_cuoi=anh_cuoi or None)
+            except Exception as loi:  # noqa: BLE001 — chỉ ghi nhận loại, ném nguyên
+                if _phan_su_co(loi) == HET_HAN_MUC:
+                    het_han_muc.append(loi)
+                raise
             van_tay_clip.dat(so_canh, c.get("video_prompt") or "")
             so_anh_clip.dat(so_canh, _dau_tep(anh))
             return so_canh, False
 
+        from .auto import Cancelled  # noqa: PLC0415
+        from .su_co import HET_HAN_MUC, phan_loai as _phan_su_co  # noqa: PLC0415
+
+        het_han_muc: List[BaseException] = []
+
+        def thieu_clip() -> List[Dict[str, Any]]:
+            """Cảnh chưa có clip mà ĐÃ có ảnh — thứ engine (hay ảnh) còn làm được."""
+            return [c for c in canh
+                    if not os.path.exists(os.path.join(thu_muc, "{0}.mp4".format(int(c["scene_id"]))))
+                    and os.path.exists(os.path.join(thu_muc_anh, "{0}.png".format(int(c["scene_id"]))))]
+
         try:
-            xong = _chay_song_song(
-                bc, canh, mot_canh, "clip", loai_job="video",
-                nhip=dem_tien_do(bc, luot, tt, "clip", NHIP_GHI_TIEN_DO))
+            while True:
+                del het_han_muc[:]
+                try:
+                    xong = _chay_song_song(
+                        bc, canh, mot_canh, "clip", loai_job="video",
+                        nhip=dem_tien_do(bc, luot, tt, "clip", NHIP_GHI_TIEN_DO))
+                    return {"so_clip": xong}
+                except Cancelled:
+                    raise
+                except Exception as loi:  # noqa: BLE001
+                    if not het_han_muc or not thieu_clip():
+                        raise
+                    loi_me = loi
+                # ═══ ENGINE HẾT HẠN MỨC (06/10/2026) — xem `core/clip_tu_anh.py` ═══
+                # Trước hạn chót: chờ trong lượt, thăm dò MỘT cảnh mỗi 20 phút (không
+                # đốt ba lượt thử khâu, không để lượt bị nhặt lại tới trần phục hồi).
+                # Tới hạn chót: cảnh thiếu dựng từ ảnh. Kênh không có giờ đăng → như cũ.
+                han, gio_dang = _han_clip(bc)
+                if han is None:
+                    raise loi_me
+                if not _cho_engine_clip(bc, han, gio_dang, het_han_muc, thieu_clip, mot_canh):
+                    continue        # engine có lại → bắn cả mẻ phần còn thiếu
+                moi = _bu_clip_tu_anh(bc, luot, canh, han, gio_dang,
+                                      ly_do="engine clip hết hạn mức ({0})".format(
+                                          str(het_han_muc[0])[:80]))
+                con = sum(1 for c in canh if os.path.exists(
+                    os.path.join(thu_muc, "{0}.mp4".format(int(c["scene_id"])))))
+                if con <= 0:
+                    raise loi_me
+                return {"so_clip": con, "clip_tu_anh": len(moi)}
         finally:
             so.dong()
-        return {"so_clip": xong}
 
     return lam
+
+
+def _bay_gio() -> "_dt.datetime":
+    """Bây giờ — tách riêng để bài kiểm đặt được giờ (hạn chót clip)."""
+    import datetime as _dtm  # noqa: PLC0415
+
+    return _dtm.datetime.now()
+
+
+def _han_clip(bc: BoiCanh):
+    """(hạn chót, giờ đăng) của gói đang làm — xem `clip_tu_anh.han_chot`."""
+    from .clip_tu_anh import han_chot  # noqa: PLC0415
+
+    return han_chot(bc.goc, bc.kenh, bay_gio=_bay_gio())
+
+
+def _cho_engine_clip(bc: BoiCanh, han, gio_dang, het_han_muc: List[BaseException],
+                     thieu_clip: Callable[[], List[Dict[str, Any]]], mot_canh) -> bool:
+    """Chờ engine clip tới hạn chót. True = đã tới hạn chót (dựng từ ảnh);
+    False = thăm dò một cảnh thấy engine có lại (bắn tiếp cả mẻ).
+
+    Mỗi nhịp một dòng nhật ký (không chết im lặng), ngủ chia nhỏ (bấm Dừng ăn ngay)."""
+    from .auto import Cancelled  # noqa: PLC0415
+    from .clip_tu_anh import GIAY_THAM_DO  # noqa: PLC0415
+
+    while True:
+        con_giay = (han - _bay_gio()).total_seconds()
+        if con_giay <= 0:
+            return True
+        thieu = thieu_clip()
+        if not thieu:
+            return False
+        cho = min(float(GIAY_THAM_DO), con_giay)
+        bc.ghi("  kho clip của cổng hết hạn mức — còn {0} cảnh chưa có clip; chờ engine, "
+               "thăm dò lại sau {1:.0f} phút. Hạn chót {2}{3}: tới đó chưa có thì dựng "
+               "cảnh thiếu từ ảnh.".format(
+                   len(thieu), cho / 60.0, han.strftime("%d/%m %H:%M"),
+                   " (giờ đăng {0} − {1:g} giờ)".format(
+                       gio_dang.strftime("%d/%m %H:%M"),
+                       (gio_dang - han).total_seconds() / 3600.0) if gio_dang else ""))
+        con = cho
+        while con > 0:
+            bc.kiem_dung()
+            buoc = min(1.0, con)
+            bc.ngu(buoc)
+            con -= buoc
+        if (han - _bay_gio()).total_seconds() <= 0:
+            return True
+        del het_han_muc[:]
+        thu = thieu_clip()
+        if not thu:
+            return False
+        try:
+            mot_canh(thu[0])
+            bc.ghi("  engine clip có lại (cảnh {0} vừa ra) — làm nốt phần còn thiếu.".format(
+                int(thu[0]["scene_id"])))
+            return False
+        except Cancelled:
+            raise
+        except Exception as loi:  # noqa: BLE001
+            if not het_han_muc:
+                # Lỗi khác hạn mức — để cả mẻ chạy lại và báo theo đường thường.
+                bc.ghi("  thăm dò cảnh {0}: {1} — bắn lại cả mẻ.".format(
+                    int(thu[0]["scene_id"]), str(loi)[:100]))
+                return False
+
+
+def _bu_clip_tu_anh(bc: BoiCanh, luot: LuotChay, canh: Sequence[Dict[str, Any]],
+                    han, gio_dang, ly_do: str) -> List[int]:
+    """Đã tới hạn chót: dựng mọi cảnh thiếu clip từ ảnh cảnh (giữ khe máy nặng)."""
+    from . import dieu_phoi  # noqa: PLC0415
+    from .clip_tu_anh import bu_canh_thieu  # noqa: PLC0415
+
+    ffmpeg = _bao_dam_ffmpeg(bc)
+    ma = str(getattr(bc.kenh, "ma", "") or "")
+
+    def giu_khe():
+        return dieu_phoi.giu_nang(bc.goc, "dung", kenh=ma,
+                                  uu_tien=dieu_phoi.uu_tien_khau(bc.goc, ma, "dung"),
+                                  cancel=bc.cancel, ghi=bc.ghi)
+
+    return bu_canh_thieu(luot.thu_muc, canh, ffmpeg, ly_do=ly_do, ghi=bc.ghi,
+                         kiem_dung=bc.kiem_dung, han=han, gio_dang=gio_dang,
+                         giu_khe=giu_khe)
 
 
 # ── Khâu 7: ảnh bìa ──────────────────────────────────────────────────────────
@@ -8276,6 +8407,16 @@ def _khau_dung(bc: BoiCanh):
         con = [c for c in canh
                if os.path.exists(os.path.join(
                    thu_muc_clip, "{0}.mp4".format(int(c["scene_id"]))))]
+        if not con:
+            # Đã tới hạn chót đăng mà vẫn không có clip nào (engine hết hạn mức):
+            # dựng từ ảnh cảnh thay vì bỏ cả video — xem `core/clip_tu_anh.py`.
+            han, gio_dang = _han_clip(bc)
+            if han is not None and _bay_gio() >= han:
+                _bu_clip_tu_anh(bc, luot, canh, han, gio_dang,
+                                ly_do="chưa có clip nào lúc dựng")
+                con = [c for c in canh
+                       if os.path.exists(os.path.join(
+                           thu_muc_clip, "{0}.mp4".format(int(c["scene_id"]))))]
         thieu = len(canh) - len(con)
         if not con:
             raise RuntimeError("chưa có clip nào, không dựng được")

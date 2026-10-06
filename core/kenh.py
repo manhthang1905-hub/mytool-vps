@@ -517,7 +517,7 @@ class Kenh:
     #:
     #: `core/trung_tieu_de.py` so CHỮ (`SequenceMatcher`, ngưỡng 0,80) — bắt tốt ca
     #: chép gần nguyên văn nhưng bỏ lọt ca CÙNG Ý KHÁC DIỄN ĐẠT (ca thật: ứng viên
-    #: 「IQが低い人の頭の中で起きていること」 (SL94HyyuLXs) so với tiêu đề TL3-T7-0001
+    #: một tiêu đề đối thủ cùng cụm IQ so với tiêu đề TL3-T7-0001
     #: đã làm 「考えすぎる人の頭の中はこんな世界」 chỉ đạt điểm chữ 0,485 — đảo trật tự
     #: 「IQが低い」/「低IQ」 khiến so THEO KÝ TỰ chấm thấp dù CÙNG chủ đề "IQ thấp").
     #:
@@ -600,6 +600,10 @@ class Kenh:
     kho_dem_ngay: int = 3
     #: Biên (giờ) giữa lúc xếp lịch và giờ công khai — đủ để tải lên + YouTube xử lý.
     bien_xu_ly_gio: float = 12.0
+    #: Clip engine hết hạn mức/không khả dụng mà đã tới hạn chót (giờ đăng của gói
+    #: trừ ngần này giờ) thì cảnh thiếu clip được dựng từ chính ảnh cảnh bằng
+    #: chuyển động máy nhẹ; trước hạn chót thì chờ engine (`core/clip_tu_anh.py`).
+    han_clip_truoc_gio_dang: float = 6.0
     #: Trần số lượt sản xuất MỖI NGÀY của kênh. 0 = dùng `video_moi_ngay` (cũ).
     video_toi_da_ngay: int = 0
     #: Chủ dự án, 18/09/2026: video đăng xong rồi thì ảnh/clip/mp3 nặng của lượt
@@ -978,6 +982,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         nhip_dang=_nhip_dang(cai.get("nhip_dang")),
         kho_dem_ngay=min(14, max(1, int(_so(cai.get("kho_dem_ngay"), 3)))),
         bien_xu_ly_gio=min(72.0, max(1.0, _so(cai.get("bien_xu_ly_gio"), 12.0))),
+        han_clip_truoc_gio_dang=min(48.0, max(0.0, _so(cai.get("han_clip_truoc_gio_dang"), 6.0))),
         video_toi_da_ngay=min(24, max(0, int(_so(cai.get("video_toi_da_ngay"), 0)))),
         tu_don=_co(cai.get("tu_don")),
         don_sau_gio=max(0, int(_so(cai.get("don_sau_gio"), 24))),

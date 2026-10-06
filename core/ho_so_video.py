@@ -360,6 +360,9 @@ def _khung_ho_so(kenh: str, ma_goi: str, *, luc: Optional[_dt.datetime] = None) 
         "lich_su_sua": [], "thi_nghiem": "",
         # bìa hạng nhì của giám khảo (`anh/<mã gói>-bia-2.jpg`) — đổi bìa không tốn tiền sinh lại.
         "bia_2": None,
+        # 06/10/2026: "<n>/<tổng cảnh>" cảnh dựng TỪ ẢNH (engine clip hết hạn mức tới hạn
+        # chót, `core/clip_tu_anh.py`); None = mọi cảnh là clip engine thật.
+        "clip_tu_anh": None,
     }
 
 
@@ -451,6 +454,9 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
         ho_so["kich_ban"]["hook_nhan"] = hook_nhan
     ho_so["phan"] = _doc_phan(thu_muc_luot)
     ho_so["nhac"] = _doc_json(os.path.join(thu_muc_luot, "8-nhac.json"))
+    tu_anh = _doc_json(os.path.join(thu_muc_luot, "6-clip", "tu-anh.json"))
+    if isinstance(tu_anh, dict) and tu_anh.get("canh"):
+        ho_so["clip_tu_anh"] = "{0}/{1}".format(len(tu_anh["canh"]), tu_anh.get("tong") or "?")
 
     try:
         k = _kenh_mod.doc_kenh(goc, kenh)

@@ -41,7 +41,7 @@ __all__ = [
     "dau_vet",
     "CHO_TIEP",
     "KHOA_DA_DUNG", "KHOA_LECH", "TAM_NGHI", "MAT_MANG", "CHAM_LAI", "NOI_DUNG", "HET_KHO", "HET_TIEN",
-    "CHET", "NHA_MAY_NGHI", "LoiNoiDung", "LoiTaiVe",
+    "CHET", "NHA_MAY_NGHI", "HET_HAN_MUC", "LoiNoiDung", "LoiTaiVe",
     "phan_loai", "nen_thu_lai", "nhip_cho", "mo_ta", "goi_kien_nhan",
     "dat_tran_moi_phut",
 ]
@@ -138,6 +138,25 @@ CHET = "chet"
 #: Câu thật, 14/08/2026: *"Nhà máy ảnh hiện không có chỗ nào nhận việc… Không
 #: máy xử lý nào đang online cho loại image — nhà máy này đang dừng."*
 NHA_MAY_NGHI = "nha-may-nghi"
+
+#: **Kho tài khoản của cổng đã hết hạn mức trong ngày** (credit quota). Chưa trừ
+#: tiền, nhưng cũng KHÔNG tự hết sau vài phút — có lại khi kho được nạp/qua ngày.
+#:
+#: Câu thật, 06/10/2026 08:08, kèm `503 code=engine_unavailable`: *"Kho tài khoản
+#: video đã dùng hết hạn mức credit hôm nay, dự kiến có lại từ khoảng 20:54 giờ
+#: Việt Nam. Bạn không bị trừ tiền. Vui lòng thử lại sau."*
+#:
+#: Xếp vào `TAM_NGHI` (như mã `engine_unavailable` nói) thì MỖI cảnh tự ngồi đợi
+#: thang ~14 phút rồi mới bỏ, ba lượt thử khâu × trăm cảnh đều vô ích, và lượt bị
+#: nhặt lại tới trần phục hồi. Nhịp rỗng: lời gọi lẻ ném lên NGAY; việc chờ engine
+#: (thăm dò thưa, hạn chót rồi dựng cảnh thiếu từ ảnh) là của khâu clip —
+#: `core/auto_khau._khau_clip`, `core/clip_tu_anh.py`.
+HET_HAN_MUC = "het-han-muc"
+
+#: Dấu hiệu `HET_HAN_MUC` — dò TRƯỚC `_MA_CODE` (mã `engine_unavailable` của câu
+#: này nói "tạm nghỉ", câu chữ mới nói đúng nguyên nhân).
+_DAU_HET_HAN_MUC = ("hết hạn mức credit", "đã dùng hết hạn mức", "credit quota",
+                    "used up today")
 
 
 class LoiNoiDung(RuntimeError):
@@ -237,6 +256,8 @@ _NHIP = {
     TAM_NGHI: (15, 30, 60, 60, 90, 120, 120, 180, 180),
     CHAM_LAI: (30, 60, 120, 180, 240, 300),
     NHA_MAY_NGHI: (60, 120, 180, 300, 300),
+    # Rỗng: đợi từng lời gọi không giúp gì — khâu clip tự thăm dò thưa (xem trên).
+    HET_HAN_MUC: (),
     HET_KHO: (60, 120, 300, 600),
     NOI_DUNG: (0, 0, 0),
     HET_TIEN: (),
@@ -264,6 +285,7 @@ _MO_TA = {
     NOI_DUNG: "máy chủ trả về nội dung không dùng được",
     NHA_MAY_NGHI: ("cổng ShopAPI đang không có máy chạy việc này — "
                    "chờ bên vận hành bật lại"),
+    HET_HAN_MUC: "kho tài khoản của cổng đã hết hạn mức hôm nay — chưa bị trừ tiền",
     HET_KHO: "kho tệp tạm đã đầy",
     HET_TIEN: "ví hết tiền",
     CHET: "hỏng thật, thử lại không đổi gì",
@@ -293,10 +315,12 @@ def phan_loai(loi: BaseException) -> str:
         return NOI_DUNG
     if _la_loi_mang(loi):
         return MAT_MANG
+    chu = str(loi).lower()
+    if any(d in chu for d in _DAU_HET_HAN_MUC):
+        return HET_HAN_MUC
     ma_code = str(getattr(loi, "code", "") or "").strip().lower()
     if ma_code in _MA_CODE:
         return _MA_CODE[ma_code]
-    chu = str(loi).lower()
     for loai, dau_hieu in _BANG:
         if any(d.lower() in chu for d in dau_hieu):
             return loai
