@@ -655,7 +655,10 @@ def _dem_tien_trinh_tu_chay(chay_lenh: ChayLenh) -> Optional[int]:
     """
     lenh = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
             "(Get-CimInstance Win32_Process | Where-Object "
-            "{ $_.CommandLine -like '*tu_chay.py*' }).ProcessId"]
+            "{ $_.Name -like 'python*' -and $_.CommandLine -like '*tu_chay.py*--kenh*' "
+            "-and $_.CommandLine -notlike '*--dieu-phoi*' }).ProcessId"]
+    # 06/10/2026: chỉ đếm LƯỢT kênh (python … tu_chay.py --kenh …). Bản cũ đếm cả chính lệnh PowerShell này
+    # (dòng lệnh chứa chữ tu_chay.py), tiến trình điều phối và vỏ cmd của lịch → 11 thay vì 7, báo khẩn sai.
     try:
         ma, ra = chay_lenh(lenh)
     except Exception:  # noqa: BLE001
@@ -729,6 +732,8 @@ def chup_trang_thai(
         "khoa_may": _tuoi_khoa_may_giay(goc, bay_gio),
         "khe": khe_trang_thai,
         "lan_api": khe.so_lan_api(goc),
+        "so_cho_clip": len(khe.doc_cho_clip(goc)),     # 06/10: lượt chờ kho clip KHÔNG chiếm làn API
+        "tran_luot_tong": khe.tran_luot_tong(goc),
         "so_tien_trinh_tu_chay": _dem_tien_trinh_tu_chay(chay_lenh),
         "chi_tieu_hom_qua_vnd": _chi_tieu_ngay_gan_nhat_vnd(goc),
     }
@@ -1033,11 +1038,14 @@ def _kiem_qua_nhieu_tu_chay(anh: Dict[str, Any]) -> List[Dict[str, Any]]:
     if so is None or lan_api is None:
         return []
     tran = int(lan_api) + 1
-    if so > tran:
+    cho_clip = int(may.get("so_cho_clip") or 0)
+    tran_tong = int(may.get("tran_luot_tong") or 0) + 1 if may.get("tran_luot_tong") else None
+    dang_lam = so - cho_clip           # 06/10: lượt chờ kho clip không tính làn (core/khe.doc_cho_clip)
+    if dang_lam > tran or (tran_tong is not None and so > tran_tong):
         return [_su_co(
             "qua_nhieu_tu_chay", bao_dong.MUC_KHAN,
-            chuyen_gi="Máy đang có {0} tiến trình tu_chay.py cùng lúc, vượt "
-                     "trần cho phép ({1} làn API + 1).".format(so, lan_api),
+            chuyen_gi="Máy đang có {0} tiến trình tu_chay.py cùng lúc ({1} chờ kho clip), vượt "
+                     "trần cho phép ({2} làn API + 1).".format(so, cho_clip, lan_api),
             can_lam_gi="Mở Task Manager xem tiến trình tu_chay.py nào treo, "
                        "đóng bớt hoặc khởi động lại máy.",
             neu_khong_lam="Các tiến trình chồng nhau có thể tranh khoá lẫn "
