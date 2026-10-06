@@ -6,7 +6,7 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan            # mở http://127.0.0.1:8790  (trang: ui_web/truc-quan.html)
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
-Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`)
+Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
 """
 from __future__ import annotations
@@ -257,6 +257,20 @@ def tep_tinh(duong_url: str, goc: Optional[str] = None) -> Optional[str]:
     return p
 
 
+def noi_dung_gioi_thieu(goc: Optional[str] = None) -> Dict[str, Any]:
+    """Nội dung bài trình chiếu «Giới thiệu»: tệp RIÊNG của máy `workspace/gioi-thieu/noi-dung.json` (không lên kho
+    chung — có số liệu, câu chuyện của máy này); thiếu/hỏng thì bản MẶC ĐỊNH trung tính trong kho
+    `ui_web/vendor/gioi-thieu-mac-dinh.json`. Trả kèm `_nguon` = "may" | "mac_dinh"."""
+    goc = goc or GOC
+    for nguon, p in (("may", os.path.join(goc, "workspace", "gioi-thieu", "noi-dung.json")),
+                     ("mac_dinh", os.path.join(VENDOR, "gioi-thieu-mac-dinh.json"))):
+        d = _json(p)
+        if isinstance(d.get("slides"), list) and d["slides"]:
+            d["_nguon"] = nguon
+            return d
+    return {"_nguon": "trong", "slides": []}
+
+
 class _Xu(BaseHTTPRequestHandler):
     def log_message(self, *a):  # im lặng
         pass
@@ -297,6 +311,9 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(nao_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/gioi-thieu.json"):      # nội dung trình chiếu (riêng máy → mặc định)
+            return self._gui(200, "application/json; charset=utf-8",
+                             json.dumps(noi_dung_gioi_thieu(), ensure_ascii=False).encode("utf-8"))
         if self.path.startswith("/su-kien.json"):      # chiến báo: video ta lên sóng, lệnh não, sự cố, kho clip (5 phút)
             try:
                 from core import su_kien_truc_quan  # noqa: PLC0415
@@ -311,7 +328,8 @@ class _Xu(BaseHTTPRequestHandler):
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         ten = ("truc-quan.html" if self.path.startswith("/hau-can") else
-               "nao.html" if self.path.startswith("/nao") else "chien-truong.html")
+               "nao.html" if self.path.startswith("/nao") else
+               "gioi-thieu.html" if self.path.startswith("/gioi-thieu") else "chien-truong.html")
         p = os.path.join(GOC, "ui_web", ten)
         try:
             with open(p, "rb") as tep:

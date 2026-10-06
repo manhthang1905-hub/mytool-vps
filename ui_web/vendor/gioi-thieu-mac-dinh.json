@@ -1,0 +1,897 @@
+{
+ "tieu_de": "MYTOOL — Agent AI tự vận hành kênh YouTube",
+ "chan_trang": "MYTOOL · Agent AI tự vận hành YouTube",
+ "chuong": [
+  {
+   "ten": "Bài toán",
+   "mo_ta": "Vì sao cần một agent làm YouTube"
+  },
+  {
+   "ten": "Hướng đi",
+   "mo_ta": "Domain Translator, mô hình vận hành, ranh giới duyệt"
+  },
+  {
+   "ten": "Cách máy làm",
+   "mo_ta": "Vòng lặp 6 bước, từ nghiên cứu tới tự học"
+  },
+  {
+   "ten": "Khả thi",
+   "mo_ta": "Số thật, chi phí, tín hiệu, điều kiện, rủi ro"
+  },
+  {
+   "ten": "Lộ trình",
+   "mo_ta": "Đã xong, đang chứng minh, chưa làm, nhân rộng"
+  }
+ ],
+ "slides": [
+  {
+   "loai": "bia",
+   "tieu": "MYTOOL",
+   "phu": "Agent AI tự vận hành kênh YouTube [[từ A tới Z]]",
+   "the": [
+    "Nghiên cứu",
+    "Chọn nội dung",
+    "Sản xuất",
+    "Đăng",
+    "Chăm kênh",
+    "Tự học",
+    "Tự sửa"
+   ],
+   "cuoi": "Mỗi ngày, không cần người trông.",
+   "ghi_chu": "Chào mọi người. Hôm nay giới thiệu MYTOOL — một máy chủ thuê (VPS) tự vận hành các kênh YouTube.\nKhông phải công cụ hỗ trợ một khâu: nó nghiên cứu, chọn đề tài, làm video, đăng, chăm kênh, đo kết quả, tự học và tự sửa lỗi — mỗi ngày. Con người không làm video."
+  },
+  {
+   "loai": "muc_luc",
+   "tieu": "Nội dung trình bày",
+   "ghi_chu": "Bài này đi qua năm chương: bài toán, hướng đi của dự án, cách máy làm việc, tính khả thi bằng số thật, và lộ trình nhân rộng."
+  },
+  {
+   "loai": "the",
+   "chuong": "Bài toán",
+   "kicker": "Bài toán",
+   "ic": "alert",
+   "tieu": "Làm YouTube thủ công là lặp [[4 việc]] mỗi ngày",
+   "chuoi_ngang": true,
+   "cot": 4,
+   "the": [
+    {
+     "ic": "search",
+     "mau": "xanh",
+     "tieu": "Nghiên cứu"
+    },
+    {
+     "ic": "film",
+     "mau": "vang",
+     "tieu": "Làm video"
+    },
+    {
+     "ic": "upload",
+     "mau": "ta",
+     "tieu": "Đăng"
+    },
+    {
+     "ic": "message",
+     "mau": "tim",
+     "tieu": "Chăm kênh"
+    }
+   ],
+   "so": [
+    {
+     "gt": "1–2 kênh",
+     "nhan": "một người làm là kiệt sức",
+     "mau": "do"
+    },
+    {
+     "gt": "hàng chục kênh",
+     "nhan": "cần để phủ một thị trường",
+     "mau": "vang"
+    }
+   ],
+   "ghi_chu": "Ai từng làm YouTube đều biết: mỗi ngày lặp 4 việc — tìm đề tài, làm video, đăng, rồi trả lời bình luận và theo dõi số.\nMột người làm tốt 1–2 kênh đã hết sức. Muốn chiếm một thị trường cần hàng chục kênh cùng lúc."
+  },
+  {
+   "loai": "cau_noi",
+   "chuong": "Bài toán",
+   "kicker": "Ý tưởng gốc",
+   "ic": "sparkles",
+   "cau": "“AI đã thay được [[lập trình viên]], thì cũng thay được [[người làm nội dung]].”",
+   "sau": "Con người chỉ **định hướng**. Máy **làm, đo, học** — và tự giỏi lên sau mỗi video.",
+   "ghi_chu": "Nếu AI viết được phần mềm, nó cũng làm được nội dung — miễn là có số liệu để đo đúng sai.\nVai trò của người: chọn hướng đi. Phần còn lại máy làm và tự cải thiện."
+  },
+  {
+   "loai": "bac_thang",
+   "chuong": "Hướng đi",
+   "kicker": "Tầm nhìn",
+   "ic": "target",
+   "tieu": "Domain Translator: [[người hiểu nghề]] điều khiển một đội agent",
+   "lead": "Người có chuyên môn sâu một lĩnh vực và biết dùng agent làm thay phần việc máy tính. MYTOOL là phép thử trong lĩnh vực YouTube.",
+   "bac": [
+    {
+     "tieu": "Tự viết từng dòng code",
+     "phu": "người ngồi bàn phím"
+    },
+    {
+     "tieu": "Code lỗi thì gửi AI sửa",
+     "phu": "rồi chạy lại"
+    },
+    {
+     "tieu": "Máy tự chạy, tự sửa lỗi",
+     "phu": "người theo dõi"
+    },
+    {
+     "tieu": "Chỉ đưa mục tiêu",
+     "phu": "agent tự xây, thử, sửa, vận hành"
+    }
+   ],
+   "ket": "4 nấc — mỗi nấc người lùi xa bàn phím hơn",
+   "ghi_chu": "Cược của dự án: ở giai đoạn trung hạn của AI, vị trí còn đứng vững là Domain Translator — người hiểu sâu một lĩnh vực và biết dùng agent.\nHành trình làm việc với AI đi qua bốn nấc. Nấc cuối: chỉ đưa mục tiêu, agent tự xây dựng, thử, sửa và vận hành."
+  },
+  {
+   "loai": "cau_noi",
+   "chuong": "Hướng đi",
+   "kicker": "Hướng đi",
+   "ic": "layers",
+   "nhan": "GIẢ THUYẾT · ĐO BẰNG SỐ THẬT TRÊN KÊNH",
+   "cau": "Không thay [[một nhân sự]] — mà thay [[cả dây chuyền]] làm kênh.",
+   "sau": "Nghiên cứu, viết, dựng, đăng, chăm khán giả, đọc số, rút kinh nghiệm. Một người hiểu chủ đề + agent có thể vận hành một mảng ở **nhiều quốc gia** cùng lúc — sức làm bằng vài chục người.",
+   "ghi_chu": "Bài học từ đội nhân sự trước: mỗi lần tự động hoá một việc đơn giản là một vị trí không còn cần. Vì vậy hệ thống thay cả dây chuyền.\nPhần không thay được vẫn là con người: hiểu khán giả, hiểu chủ đề, duyệt thay đổi quan trọng.\nĐây là giả thuyết — có thể đúng hoặc sai. Dự án cược vào phía đúng và đo bằng số thật trên kênh."
+  },
+  {
+   "loai": "bang",
+   "chuong": "Hướng đi",
+   "kicker": "Mô hình vận hành",
+   "ic": "users",
+   "tieu": "Người đặt hướng, [[agent làm và tự sửa]]",
+   "cot": [
+    "Ai",
+    "Làm gì"
+   ],
+   "dong": [
+    [
+     "Chủ dự án (Domain Translator)",
+     "Chọn mảng và quốc gia · đăng nhập Chrome từng kênh, xác minh 2FA · nạp tiền ví AI · thuê VPS · duyệt việc lớn"
+    ],
+    [
+     "Điều phối viên AI",
+     "Xây và sửa hệ thống theo mục tiêu · kiểm định kỳ mỗi giờ · giao việc nhỏ cho agent rẻ hơn"
+    ],
+    [
+     "Bộ não (04:10 hằng ngày)",
+     "Đọc số mọi kênh · chấm dự đoán cũ · ra tối đa 3 quyết định có dự đoán đo được · ghi nhớ"
+    ],
+    [
+     "Dây chuyền tự động",
+     "Nghiên cứu · sản xuất · đăng · bình luận · nuôi trang chủ · thiết lập kênh · tự học · tự cứu"
+    ]
+   ],
+   "ghi_chu": "Bốn vai trong hệ thống. Người chỉ làm những việc máy không được hoặc không nên làm: chọn hướng, đăng nhập, nạp tiền, duyệt việc lớn.\nMọi việc lặp lại hằng ngày do agent làm, có kiểm lại kết quả và tự sửa khi hỏng."
+  },
+  {
+   "loai": "hai_cot",
+   "chuong": "Hướng đi",
+   "kicker": "Ranh giới duyệt",
+   "ic": "shield",
+   "tieu": "Máy tự làm việc nhỏ, [[người duyệt việc lớn]]",
+   "trai": {
+    "tieu": "Máy tự làm",
+    "ic": "cpu",
+    "mau": "ta",
+    "dong": [
+     "Việc nhỏ, quay lui được: đổi bìa, thử một cụm nội dung cho 2 video",
+     "Quyền tự quyết tăng theo tỉ lệ dự đoán đúng mà não tự chấm"
+    ]
+   },
+   "phai": {
+    "tieu": "Máy đề xuất — chủ duyệt",
+    "ic": "users",
+    "mau": "vang",
+    "dong": [
+     "Mở kênh mới",
+     "Đổi nhịp đăng",
+     "Đổi giọng đọc",
+     "Đổi chiến lược"
+    ]
+   },
+   "duoi": "Mục tiêu vận hành: **chạy 1 năm không cần người sửa** — hỏng thì tự sửa, không sửa được thì báo rõ, **không bao giờ chết im lặng**.",
+   "ghi_chu": "Ranh giới rõ ràng: việc nhỏ và quay lui được thì máy tự làm. Việc lớn như mở kênh, đổi nhịp đăng, đổi giọng đọc thì máy chỉ đề xuất, chủ duyệt.\nMục tiêu: chạy một năm không cần người sửa, và không bao giờ chết im lặng."
+  },
+  {
+   "loai": "so_do_vong",
+   "chuong": "Cách máy làm",
+   "kicker": "Toàn cảnh",
+   "ic": "layers",
+   "tieu": "Một vòng lặp [[6 bước]], chạy mỗi ngày",
+   "buoc": [
+    {
+     "ic": "search",
+     "tieu": "Nghiên cứu",
+     "phu": "thị trường, đối thủ"
+    },
+    {
+     "ic": "target",
+     "tieu": "Chọn nội dung",
+     "phu": "theo số, theo vùng"
+    },
+    {
+     "ic": "factory",
+     "tieu": "Sản xuất",
+     "phu": "dây chuyền 8 khâu"
+    },
+    {
+     "ic": "upload",
+     "tieu": "Đăng & chăm kênh",
+     "phu": "05:00, bình luận"
+    },
+    {
+     "ic": "trend",
+     "tieu": "Đo kết quả",
+     "phu": "số Studio sau 48h"
+    },
+    {
+     "ic": "brain",
+     "tieu": "Học",
+     "phu": "cập nhật điểm"
+    }
+   ],
+   "tam": {
+    "so": "1 video",
+    "nhan": "mỗi kênh · mỗi ngày",
+    "phu": "Càng chạy càng chọn đúng."
+   },
+   "ghi_chu": "Bức tranh toàn cảnh: sáu bước nối thành vòng — nghiên cứu, chọn nội dung, sản xuất, đăng và chăm kênh, đo kết quả sau 48 giờ, rồi học.\nNgày M1 máy làm video cho 05:00 ngày M2 bằng số liệu mới nhất. Vì có bước đo và học, vòng sau chọn đúng hơn vòng trước."
+  },
+  {
+   "loai": "the",
+   "chuong": "Cách máy làm",
+   "kicker": "Bước 1 · Nghiên cứu",
+   "ic": "radar",
+   "tieu": "Ba nguồn để [[biết đối thủ]] là ai",
+   "so_that": true,
+   "cot": 3,
+   "the": [
+    {
+     "ic": "eye",
+     "mau": "ta",
+     "tieu": "Trang chủ YouTube của kênh",
+     "noi": "Được “nuôi” tới hơn 90% đúng chủ đề → lộ ra đối thủ mới."
+    },
+    {
+     "ic": "trend",
+     "mau": "xanh",
+     "tieu": "YouTube Studio",
+     "noi": "“Khán giả cũng xem”, nguồn “video đề xuất” → ai đang giành cùng khán giả."
+    },
+    {
+     "ic": "castle",
+     "mau": "do",
+     "tieu": "Kênh đối thủ",
+     "noi": "AI xác nhận đúng ngách, đo lượt xem nhiều lần → tốc độ tăng mỗi ngày."
+    }
+   ],
+   "so": [
+    {
+     "gt": "{{ct.tong.so_kenh_dt|so}}",
+     "nhan": "kênh đối thủ đang theo dõi"
+    },
+    {
+     "gt": "{{ct.tong.so_video_dt|so}}",
+     "nhan": "video đối thủ đang đo"
+    }
+   ],
+   "ghi_chu": "Bước đầu là biết mình đang đánh với ai. Ba nguồn: trang chủ của chính kênh sau khi nuôi đúng chủ đề; số liệu Studio cho biết khán giả mình còn xem ai; và chính các kênh đối thủ được đo đi đo lại.\nAI đọc nghĩa tiêu đề chứ không lọc từ khoá. Hai con số dưới là số thật lúc trình chiếu."
+  },
+  {
+   "loai": "ban_do",
+   "chuong": "Cách máy làm",
+   "kicker": "Bản đồ chiến trường",
+   "ic": "map",
+   "tieu": "YouTube là cuộc chiến [[thị phần]]",
+   "so_that": true,
+   "lead": "Ngách chia thành **vùng đề tài**. Thị phần ta = lượt xem của ta / tổng lượt xem trong vùng. Mỗi vùng có **điểm cơ hội 0–100**: cầu, đà, địch yếu, thế chân của ta.",
+   "so": [
+    {
+     "gt": "{{tinh.quy_mo}}",
+     "nhan": "lượt xem/tháng cả ngách"
+    },
+    {
+     "gt": "{{ct.tong.so_vung|so}}",
+     "nhan": "vùng đề tài"
+    },
+    {
+     "gt": "{{ct.tong.thi_phan|pc}}",
+     "nhan": "thị phần ta",
+     "mau": "ta"
+    },
+    {
+     "gt": "{{tinh.top1}}",
+     "nhan": "đối thủ số 1 giữ",
+     "mau": "do"
+    }
+   ],
+   "ghi_chu": "Một ngách là một trận chiếm thị phần: khán giả có hạn, kênh nào có video đúng đề trước thì được xem.\nMáy vẽ ngách thành bản đồ vùng, đo phần của ta và ra lệnh cho từng kênh đánh vùng nào. Đây là ước lượng từ dữ liệu ta tự cào, không phải số toàn YouTube."
+  },
+  {
+   "loai": "the",
+   "chuong": "Cách máy làm",
+   "kicker": "Bước 2 · Chọn nội dung",
+   "ic": "target",
+   "tieu": "Chọn đề tài [[bằng số]], không bằng cảm tính",
+   "cot": 2,
+   "the": [
+    {
+     "ic": "zap",
+     "mau": "vang",
+     "tieu": "Kênh mới",
+     "noi": "Theo video đối thủ đang **tăng view đột biến** (công thức VPH)."
+    },
+    {
+     "ic": "trophy",
+     "mau": "ta",
+     "tieu": "Kênh đã có số",
+     "noi": "Video nằm **cùng nhóm đề xuất** với video thắng của chính kênh (V7)."
+    }
+   ],
+   "gach": [
+    {
+     "ic": "swords",
+     "noi": "**Lệnh tác chiến** rải các kênh ra vùng khác nhau để phủ ngách — nắn điểm tối đa +30%, không loại ứng viên nào."
+    },
+    {
+     "ic": "shield",
+     "noi": "Nguồn phải qua **“cổng” chất lượng**; hai kênh anh em không làm trùng một nguồn."
+    },
+    {
+     "ic": "yen",
+     "noi": "**Ước chi phí trước** khi tiêu; ví thiếu thì không mở lượt."
+    }
+   ],
+   "ghi_chu": "Mô hình nội dung là remake: nội dung thắng đã có sẵn ở đối thủ, việc của máy là chọn đúng và làm tốt hơn — kịch bản, giọng, hình, bìa đều là của kênh mình.\nKênh mới đi theo video đang tăng đột biến; kênh đã có video thắng thì tìm tiếp video cùng nhóm đề xuất."
+  },
+  {
+   "loai": "day_chuyen",
+   "chuong": "Cách máy làm",
+   "kicker": "Bước 3 · Sản xuất",
+   "ic": "factory",
+   "tieu": "Dây chuyền [[8 khâu]], từ kịch bản tới video",
+   "tram": [
+    {
+     "ic": "file",
+     "tieu": "Kịch bản",
+     "phu": "nhiều bản, chấm, ghép"
+    },
+    {
+     "ic": "mic",
+     "tieu": "Giọng đọc",
+     "phu": "giọng riêng của kênh"
+    },
+    {
+     "ic": "captions",
+     "tieu": "Phụ đề",
+     "phu": "khớp từng câu"
+    },
+    {
+     "ic": "grid",
+     "tieu": "Bảng cảnh",
+     "phu": "chia cảnh theo lời"
+    },
+    {
+     "ic": "image",
+     "tieu": "Ảnh cảnh",
+     "phu": "đúng nhân vật kênh"
+    },
+    {
+     "ic": "film",
+     "tieu": "Clip cảnh",
+     "phu": "chuyển động từng cảnh"
+    },
+    {
+     "ic": "frame",
+     "tieu": "Ảnh bìa",
+     "phu": "7 ứng viên, AI chọn"
+    },
+    {
+     "ic": "scissors",
+     "tieu": "Dựng video",
+     "phu": "1080p"
+    }
+   ],
+   "qa": {
+    "tieu": "QA trước khi giao",
+    "phu": "Soát video, độ dài, độ phân giải — chưa đạt thì làm lại, không đăng."
+   },
+   "ghi_chu": "Tám khâu. Kịch bản quan trọng nhất: AI viết nhiều bản, tự chấm và ghép. Mỗi kênh có nhân vật tham chiếu riêng, mọi ảnh vẽ đúng nhân vật đó.\nCuối dây chuyền có QA. Video không đạt thì làm lại chứ không đưa lịch."
+  },
+  {
+   "loai": "the",
+   "chuong": "Cách máy làm",
+   "kicker": "Bước 4 · Đăng & chăm kênh",
+   "ic": "upload",
+   "tieu": "Đăng và chăm kênh [[như người thật]]",
+   "cot": 2,
+   "the": [
+    {
+     "ic": "calendar",
+     "mau": "ta",
+     "tieu": "Tự tải lên, hẹn 05:00",
+     "noi": "Điều khiển Chrome của từng kênh trên YouTube Studio, đọc lại sau mỗi bước."
+    },
+    {
+     "ic": "message",
+     "mau": "vang",
+     "tieu": "Bình luận mồi + trả lời",
+     "noi": "Dựa trên lời thoại thật của video, đúng ngôn ngữ kênh, 1–2 câu như người."
+    },
+    {
+     "ic": "eye",
+     "mau": "tim",
+     "tieu": "Nuôi trang chủ",
+     "noi": "Xem video đúng ngách, bấm “Không quan tâm” với nội dung lạc đề."
+    },
+    {
+     "ic": "layers",
+     "mau": "xanh",
+     "tieu": "Kéo view chéo",
+     "noi": "Kênh lớn đưa video hợp chủ đề của kênh nhỏ vào danh sách phát — AI chọn theo nghĩa."
+    }
+   ],
+   "ghi_chu": "Máy không dùng API mà thao tác giao diện như người thật trong Chrome đã đăng nhập của từng kênh, và đọc lại sau mỗi bước để chắc đã đạt.\nKéo view chéo: kênh lớn đưa video của kênh em vào danh sách phát, có đo đối chứng sau 7 ngày."
+  },
+  {
+   "loai": "chuoi",
+   "chuong": "Cách máy làm",
+   "kicker": "Bước 5–6 · Đo & học",
+   "ic": "trophy",
+   "tieu": "Mỗi video là [[một ván cờ]]",
+   "buoc": [
+    {
+     "so": "1",
+     "tieu": "Ghi nước đi",
+     "noi": "Cụm, kiểu tiêu đề, kiểu bìa, hook…"
+    },
+    {
+     "so": "2",
+     "tieu": "Dự đoán",
+     "noi": "Ghi trước khi đăng."
+    },
+    {
+     "so": "48h",
+     "tieu": "Lấy số thật",
+     "noi": "Hiển thị, CTR, so trung vị kênh."
+    },
+    {
+     "so": "±",
+     "tieu": "Thắng / thua",
+     "noi": "Cập nhật điểm từng lựa chọn."
+    },
+    {
+     "so": "↻",
+     "tieu": "Chọn theo điểm",
+     "noi": "Vẫn chừa phần khám phá."
+    }
+   ],
+   "diem": [
+    {
+     "nhan": "Kiểu tiêu đề A",
+     "gt": 0.72
+    },
+    {
+     "nhan": "Bìa chữ to",
+     "gt": 0.64
+    },
+    {
+     "nhan": "Kiểu tiêu đề B",
+     "gt": 0.41
+    },
+    {
+     "nhan": "Cụm mới (thử)",
+     "gt": 0.5,
+     "thu": true
+    }
+   ],
+   "chu_thich": "Minh hoạ điểm xác suất (lấy mẫu Thompson). Bài học được xác nhận 3 lần mới thành “thật”, bị số mới bác bỏ thì trừ.",
+   "ghi_chu": "Phần làm hệ thống tự giỏi lên. Mỗi video ghi nước đi và dự đoán, rồi chấm bằng số Studio thật ở mốc 48 giờ và 7 ngày, so với trung vị của chính kênh — kênh nhỏ không bị so với kênh lớn.\nLần sau chọn nghiêng về cái thắng nhưng vẫn dành chỗ thử cái ít thử. Kênh mới mượn kinh nghiệm kênh anh em."
+  },
+  {
+   "loai": "nao",
+   "chuong": "Cách máy làm",
+   "kicker": "Bộ não",
+   "ic": "brain",
+   "tieu": "“Tổng tham mưu” họp [[04:10]] mỗi ngày",
+   "so_that": true,
+   "buoc": [
+    "**Nhớ lại** sổ ký ức, bài học đã có",
+    "**Tự chấm** các dự đoán cũ đúng hay sai",
+    "**Suy nghĩ** với ít nhất hai giả thuyết cạnh tranh",
+    "Ra **tối đa 3 hành động**, mỗi cái có dự đoán đo được + ngày kiểm",
+    "**Ghi nhớ** — không được sửa mã, không đăng/xoá video"
+   ],
+   "so": [
+    {
+     "gt": "{{nao.diem.tong|so}}",
+     "nhan": "quyết định đã ghi"
+    },
+    {
+     "gt": "{{nao.diem.dang_mo|so}}",
+     "nhan": "đang chờ chấm",
+     "mau": "tim"
+    }
+   ],
+   "ghi_chu": "Trên các vòng lặp là bộ não chiến lược. 4 giờ 10 sáng mỗi ngày nó họp: nhớ lại, tự chấm dự đoán cũ, suy nghĩ với ít nhất hai giả thuyết, ra tối đa ba hành động có dự đoán đo được.\nTỉ lệ đúng càng cao, quyền tự quyết càng rộng. Dưới 50% sau 10 lần chấm thì quyền co lại còn 1 hành động mỗi ngày."
+  },
+  {
+   "loai": "the",
+   "chuong": "Cách máy làm",
+   "kicker": "Bền bỉ",
+   "ic": "shield",
+   "tieu": "Tự chạy [[365 ngày]] — tự phát hiện, tự sửa",
+   "cot": 3,
+   "the": [
+    {
+     "ic": "radar",
+     "mau": "ta",
+     "tieu": "Gác tổng 15 phút/lần",
+     "noi": "Dọn khoá chết, hồi sinh agent, nhặt lại lượt dở."
+    },
+    {
+     "ic": "search",
+     "mau": "xanh",
+     "tieu": "Studio đổi giao diện",
+     "noi": "AI đề xuất bộ chọn mới, máy kiểm trên trang trước khi dùng."
+    },
+    {
+     "ic": "image",
+     "mau": "vang",
+     "tieu": "Hết hạn mức clip",
+     "noi": "Dựng cảnh từ ảnh để vẫn kịp giờ lên sóng."
+    },
+    {
+     "ic": "drive",
+     "mau": "tim",
+     "tieu": "Ổ đĩa cho cả năm",
+     "noi": "Xoá file nặng đã đăng, nén số liệu thô cũ."
+    },
+    {
+     "ic": "pulse",
+     "mau": "ta",
+     "tieu": "Báo cáo sức khoẻ 06:30",
+     "noi": "Video ngày mai, skill hỏng, đường tới YPP, lỗi 24 giờ."
+    },
+    {
+     "ic": "alert",
+     "mau": "do",
+     "tieu": "Báo động khi mất tiền",
+     "noi": "Kênh 48 giờ không video, hoặc máy 36 giờ không sản xuất."
+    }
+   ],
+   "ghi_chu": "Mục tiêu là chạy cả năm không cần người. Gác tổng chạy 15 phút một lần, dọn khoá chết, khởi động lại phần treo; lượt chết giữa chừng được nhặt lại, không trả tiền hai lần."
+  },
+  {
+   "loai": "trung_tam",
+   "chuong": "Cách máy làm",
+   "kicker": "Theo dõi",
+   "ic": "grid",
+   "tieu": "Trung tâm chỉ huy [[kiểu game chiến thuật]]",
+   "tab": [
+    {
+     "ic": "map",
+     "tieu": "Chiến trường",
+     "noi": "ngách lớn cỡ nào, ta giữ bao nhiêu, nên đánh đâu"
+    },
+    {
+     "ic": "factory",
+     "tieu": "Hậu cần",
+     "noi": "video ngày mai của từng kênh đang ở trạm nào"
+    },
+    {
+     "ic": "brain",
+     "tieu": "Não",
+     "noi": "bộ não đoán gì, đúng bao nhiêu phần trăm"
+    },
+    {
+     "ic": "play",
+     "tieu": "Giới thiệu",
+     "noi": "bài trình chiếu này"
+    }
+   ],
+   "ghi_chu": "Trang chỉ huy chỉ đọc, chạy ngay trên máy. Không bấm, không sửa, không tốn tiền; một khối hỏng chỉ hiện lỗi ở khối đó.\nHình bên trái là minh hoạ, không phải ảnh chụp kênh thật."
+  },
+  {
+   "loai": "so_lon",
+   "chuong": "Khả thi",
+   "kicker": "Hiện trạng",
+   "ic": "pulse",
+   "tieu": "Hiện trạng [[bằng số]]",
+   "so_that": true,
+   "so": [
+    {
+     "gt": "{{tinh.so_kenh}}",
+     "nhan": "kênh đang chạy",
+     "mau": "ta"
+    },
+    {
+     "gt": "1 video",
+     "nhan": "mỗi kênh mỗi ngày, lên sóng 05:00"
+    },
+    {
+     "gt": "{{tinh.gio_xem}}",
+     "nhan": "giờ xem 28 ngày (cộng các kênh)",
+     "mau": "vang"
+    },
+    {
+     "gt": "{{tinh.dang_ky}}",
+     "nhan": "người đăng ký",
+     "mau": "tim"
+    },
+    {
+     "gt": "{{ct.tong.thi_phan|pc}}",
+     "nhan": "thị phần ngách",
+     "mau": "ta"
+    },
+    {
+     "gt": "{{tinh.quy_mo}}",
+     "nhan": "quy mô ngách / tháng",
+     "mau": "xanh"
+    }
+   ],
+   "chip": [
+    "{{tinh.video_14}} video đã lên sóng trong 14 ngày"
+   ],
+   "ghi_chu": "Số thật, đọc từ hệ thống ngay lúc trình chiếu: số kênh, giờ xem, đăng ký, thị phần và quy mô ngách."
+  },
+  {
+   "loai": "the",
+   "chuong": "Khả thi",
+   "kicker": "Tính khả thi",
+   "ic": "yen",
+   "tieu": "Kỹ thuật chạy thật — [[doanh thu phải đo]]",
+   "cot": 3,
+   "the": [
+    {
+     "ic": "yen",
+     "mau": "vang",
+     "tieu": "Chi phí AI mỗi video",
+     "noi": "Ước trước mỗi lượt; ví thiếu thì không mở lượt. Xem trên báo cáo ngày của máy."
+    },
+    {
+     "ic": "users",
+     "mau": "ta",
+     "tieu": "Không nhân sự làm video",
+     "noi": "Toàn bộ dây chuyền do agent làm."
+    },
+    {
+     "ic": "trend",
+     "mau": "xanh",
+     "tieu": "Doanh thu",
+     "noi": "Chỉ đo được sau khi kênh bật kiếm tiền (YPP)."
+    }
+   ],
+   "ghi_chu": "Phần kỹ thuật được chứng minh bằng vận hành thật. Phần kinh tế đo bằng doanh thu mỗi video so với chi phí AI mỗi video, sau khi kênh bật kiếm tiền."
+  },
+  {
+   "loai": "the",
+   "chuong": "Khả thi",
+   "kicker": "Điều kiện thành công",
+   "ic": "flag",
+   "tieu": "Ba điều kiện để [[mô hình thành công]]",
+   "cot": 3,
+   "the": [
+    {
+     "ic": "medal",
+     "mau": "vang",
+     "tieu": "1 · Kênh đạt YPP",
+     "noi": "1.000 người đăng ký + 4.000 giờ xem."
+    },
+    {
+     "ic": "yen",
+     "mau": "xanh",
+     "tieu": "2 · Doanh thu > chi phí",
+     "noi": "Doanh thu mỗi video lớn hơn chi phí AI mỗi video. Đo được sau khi bật kiếm tiền."
+    },
+    {
+     "ic": "cpu",
+     "mau": "ta",
+     "tieu": "3 · Tự chủ đủ cao",
+     "noi": "Đủ để một người quản nhiều VPS."
+    }
+   ],
+   "ghi_chu": "Ba điều kiện: kênh đạt YPP; doanh thu mỗi video lớn hơn chi phí AI mỗi video; và mức tự chủ đủ cao để một người quản nhiều máy.\nĐiều kiện thứ ba là nơi câu chuyện Domain Translator thành số."
+  },
+  {
+   "loai": "bang",
+   "chuong": "Khả thi",
+   "kicker": "Rủi ro",
+   "ic": "alert",
+   "tieu": "Rủi ro và [[cách chặn]]",
+   "cot": [
+    "Rủi ro",
+    "Cách hệ thống chặn"
+   ],
+   "dong": [
+    [
+     "YouTube đổi giao diện, máy đăng bấm sai",
+     "Đọc lại sau mỗi bước; sai thì dừng trước khi chạm kênh. AI đề xuất bộ chọn mới, kiểm trước khi dùng"
+    ],
+    [
+     "Chính sách về nội dung lặp/tự động",
+     "Remake có biên tập: kịch bản, giọng, nhân vật, bìa riêng; chống trùng nguồn giữa kênh anh em"
+    ],
+    [
+     "Dịch vụ AI sập",
+     "Chờ và thử lại, không mất công đã làm"
+    ],
+    [
+     "Chi phí vượt kiểm soát",
+     "Ước chi phí trước mỗi lượt, trần ngân sách ngày, ví thiếu thì không mở lượt"
+    ],
+    [
+     "Tài khoản Google bị hỏi xác minh",
+     "Người tự xác minh — cố ý để lại cho người, máy không tự vượt bảo mật"
+    ],
+    [
+     "Máy treo, đĩa đầy mà không ai biết",
+     "Gác tổng 15 phút, hồi sinh agent, dọn đĩa, báo khi 48 giờ không video"
+    ]
+   ],
+   "ghi_chu": "Sáu rủi ro chính và cách hệ thống chặn. Lưu ý việc xác minh tài khoản được cố ý để lại cho người — máy không tự vượt bước bảo mật."
+  },
+  {
+   "loai": "lan",
+   "chuong": "Lộ trình",
+   "kicker": "Lộ trình",
+   "ic": "map",
+   "tieu": "Đã xong, đang chứng minh, [[chưa làm]]",
+   "lan": [
+    {
+     "ten": "Đã xong",
+     "mau": "ta",
+     "viec": [
+      {
+       "tieu": "Máy chạy 1 năm không chết im lặng",
+       "phu": "gác tổng, báo cáo ngày, ổ đĩa"
+      },
+      {
+       "tieu": "Dự báo ngày đạt YPP",
+       "phu": "Studio là nguồn quyết định cuối"
+      },
+      {
+       "tieu": "Não nhân bản video thắng khi còn nóng",
+       "phu": "cần thấy tác dụng qua vài phiên"
+      }
+     ]
+    },
+    {
+     "ten": "Đang chứng minh",
+     "mau": "vang",
+     "viec": [
+      {
+       "tieu": "Tự sửa khi Studio đổi giao diện",
+       "phu": "chưa gặp lần đổi thật"
+      },
+      {
+       "tieu": "Kéo view chéo",
+       "phu": "2 lần thêm thành công"
+      },
+      {
+       "tieu": "Mở kênh tự động trọn vẹn",
+       "phu": "có skill, chưa chạy trọn một lần"
+      }
+     ]
+    },
+    {
+     "ten": "Chưa làm",
+     "mau": "do",
+     "viec": [
+      {
+       "tieu": "Thử A/B bìa và tiêu đề",
+       "phu": "đưa thẳng tới CTR và doanh thu"
+      },
+      {
+       "tieu": "Giờ đăng thành trục tự học",
+       "phu": "đang cố định 05:00"
+      },
+      {
+       "tieu": "Dọn rác trên kênh",
+       "phu": "bản nháp hỏng, danh sách trùng"
+      }
+     ]
+    }
+   ],
+   "ghi_chu": "Giới hạn lớn nhất là thay đổi bên ngoài: YouTube đổi giao diện hoặc dịch vụ AI sập.\nBa làn: đã xong, đang chứng minh, chưa làm."
+  },
+  {
+   "loai": "the",
+   "chuong": "Lộ trình",
+   "kicker": "Nhân rộng",
+   "ic": "layers",
+   "tieu": "Một bộ mã — [[mỗi VPS một quốc gia + một mảng]]",
+   "cot": 3,
+   "the": [
+    {
+     "ic": "upload",
+     "mau": "ta",
+     "tieu": "Một bộ mã chung",
+     "noi": "Phân phối qua GitHub; dữ liệu riêng của máy không bao giờ lên kho chung."
+    },
+    {
+     "ic": "lock",
+     "mau": "vang",
+     "tieu": "Máy mới cần 1 việc",
+     "noi": "Chrome từng kênh đã đăng nhập + mẫu dữ liệu ban đầu. Còn lại skill tự làm."
+    },
+    {
+     "ic": "message",
+     "mau": "xanh",
+     "tieu": "Mọi thị trường",
+     "noi": "AI đọc nghĩa, không cần từ khoá theo ngôn ngữ — chạy cho thị trường bất kỳ."
+    }
+   ],
+   "so": [
+    {
+     "gt": "5–10",
+     "nhan": "kênh mỗi VPS",
+     "mau": "ta"
+    },
+    {
+     "gt": "1 → N",
+     "nhan": "một người điều phối nhiều VPS",
+     "mau": "vang"
+    }
+   ],
+   "chu_thich": "Đây là nơi câu chuyện Domain Translator thành số: mỗi VPS là một “đội” kênh tự chạy.",
+   "ghi_chu": "Cùng một bộ mã, mỗi VPS chạy 5 đến 10 kênh của một mảng ở một quốc gia. Máy mới chỉ cần Chrome đã đăng nhập và mẫu dữ liệu ban đầu.\nMột người hiểu chủ đề điều phối nhiều VPS — đây là nơi câu chuyện Domain Translator thành số."
+  },
+  {
+   "loai": "hai_cot",
+   "chuong": "Lộ trình",
+   "kicker": "Phân công",
+   "ic": "users",
+   "tieu": "Người làm gì, [[máy làm gì]]",
+   "trai": {
+    "tieu": "Người",
+    "ic": "users",
+    "mau": "vang",
+    "dong": [
+     "Định hướng chủ đề, quốc gia",
+     "Tạo tài khoản, đăng nhập Chrome",
+     "Nạp tiền dịch vụ AI",
+     "Chọn giọng đọc",
+     "Duyệt việc lớn, xem báo cáo"
+    ]
+   },
+   "phai": {
+    "tieu": "Máy",
+    "ic": "cpu",
+    "mau": "ta",
+    "noi": "Nghiên cứu · chọn đề tài · viết kịch bản · làm video · đăng · trả lời bình luận · đo · học · tự sửa · báo cáo…",
+    "lon": "Mọi việc còn lại. [[24/7.]]"
+   },
+   "ghi_chu": "Người chỉ làm vài việc: chọn hướng, tạo tài khoản, nạp tiền dịch vụ AI, chọn giọng đọc, duyệt việc lớn và xem báo cáo. Mọi việc còn lại máy làm, cả ngày lẫn đêm."
+  },
+  {
+   "loai": "ket",
+   "kicker": "Kết",
+   "ic": "flag",
+   "cau": "Một nhân viên AI làm YouTube: [[không nghỉ]], [[đo mọi thứ]], tự giỏi lên sau mỗi video.",
+   "buoc": [
+    {
+     "ic": "map",
+     "tieu": "Phủ kín một chủ đề"
+    },
+    {
+     "ic": "trophy",
+     "tieu": "Leo top"
+    },
+    {
+     "ic": "layers",
+     "tieu": "Nhân sang quốc gia, chủ đề khác"
+    }
+   ],
+   "can_chung_minh": [
+    "Kênh đạt YPP (1.000 đăng ký + 4.000 giờ xem)",
+    "Doanh thu mỗi video lớn hơn chi phí AI mỗi video"
+   ],
+   "ghi_chu": "Kết lại: một nhân viên AI làm YouTube — không nghỉ, đo mọi thứ, tự giỏi lên sau mỗi video. Mục tiêu: phủ kín một chủ đề, leo top, rồi nhân sang quốc gia và chủ đề khác.\nHai điều cần chứng minh tiếp: kênh đầu tiên đạt YPP, và doanh thu mỗi video lớn hơn chi phí. Cảm ơn mọi người — mời đặt câu hỏi."
+  }
+ ],
+ "_ghi_chu": "Bản mặc định trung tính, đi theo kho mã. Nội dung riêng của máy (số liệu, câu chuyện) đặt ở workspace/gioi-thieu/noi-dung.json."
+}
