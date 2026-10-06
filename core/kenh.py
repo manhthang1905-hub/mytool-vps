@@ -600,9 +600,17 @@ class Kenh:
     kho_dem_ngay: int = 3
     #: Biên (giờ) giữa lúc xếp lịch và giờ công khai — đủ để tải lên + YouTube xử lý.
     bien_xu_ly_gio: float = 12.0
-    #: Clip engine hết hạn mức/không khả dụng mà đã tới hạn chót (giờ đăng của gói
-    #: trừ ngần này giờ) thì cảnh thiếu clip được dựng từ chính ảnh cảnh bằng
-    #: chuyển động máy nhẹ; trước hạn chót thì chờ engine (`core/clip_tu_anh.py`).
+    #: ═══ LUẬT 07/10/2026: KHÔNG ĐĂNG SẢN PHẨM KÉM ═══
+    #: Chủ dự án: *"Chỗ ShopAPI lỗi thì retry thôi — không nên dùng các phương án
+    #: mà sản phẩm cuối kém — thà không đăng còn hơn là sản phẩm cuối không ổn."*
+    #: Mặc định `False`: kho clip hết hạn mức thì khâu clip CHỜ engine (thử lại
+    #: tới khi có, không hạn chót), không bao giờ dựng cảnh từ ảnh tĩnh.
+    #: `True` (phải khai tay trong kenh.yaml) mới bật lại đường lùi Ken Burns của
+    #: `core/clip_tu_anh.py` — khi đó `han_clip_truoc_gio_dang` là hạn chót.
+    clip_tu_anh: bool = False
+    #: CHỈ có nghĩa khi `clip_tu_anh: true`: tới (giờ đăng − ngần này giờ) mà
+    #: engine chưa có lại thì cảnh thiếu clip dựng từ ảnh. `clip_tu_anh: false`
+    #: (mặc định) → khoá này bị bỏ qua (không có hạn chót nào).
     han_clip_truoc_gio_dang: float = 6.0
     #: Trần số lượt sản xuất MỖI NGÀY của kênh. 0 = dùng `video_moi_ngay` (cũ).
     video_toi_da_ngay: int = 0
@@ -982,6 +990,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         nhip_dang=_nhip_dang(cai.get("nhip_dang")),
         kho_dem_ngay=min(14, max(1, int(_so(cai.get("kho_dem_ngay"), 3)))),
         bien_xu_ly_gio=min(72.0, max(1.0, _so(cai.get("bien_xu_ly_gio"), 12.0))),
+        clip_tu_anh=_co(cai.get("clip_tu_anh")),
         han_clip_truoc_gio_dang=min(48.0, max(0.0, _so(cai.get("han_clip_truoc_gio_dang"), 6.0))),
         video_toi_da_ngay=min(24, max(0, int(_so(cai.get("video_toi_da_ngay"), 0)))),
         tu_don=_co(cai.get("tu_don")),

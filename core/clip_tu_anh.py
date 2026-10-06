@@ -1,6 +1,15 @@
 """Clip TỪ ẢNH cảnh (Ken Burns) — đường lùi khi engine clip hết hạn mức.
 
-═══ LUẬT (06/10/2026) ═══
+═══ 07/10/2026: CHỈ CÒN LÀ THƯ VIỆN — MẶC ĐỊNH KHÔNG DÙNG ═══
+
+Chủ dự án: *"Chỗ ShopAPI lỗi thì retry thôi — không nên dùng các phương án mà sản
+phẩm cuối kém — thà không đăng còn hơn là sản phẩm cuối không ổn."* Đêm 06/10 bảy
+gói bị bù 22–129 cảnh bằng ảnh tĩnh rồi bàn giao. Từ nay đường sản xuất KHÔNG gọi
+tệp này, trừ khi kênh tự khai `clip_tu_anh: true` trong kenh.yaml (mặc định false):
+khâu clip chờ engine không hạn chót (`auto_khau._khau_clip`), khâu dựng / bàn giao /
+máy đăng từ chối video có cảnh dựng từ ảnh. Gói cũ: `python -m core.lam_lai_clip_that`.
+
+═══ LUẬT CŨ (06/10/2026) — chỉ áp khi kênh bật `clip_tu_anh` ═══
 
 Clip engine báo hết hạn mức/không khả dụng mà đã tới hạn chót (giờ đăng của gói
 trừ `han_clip_truoc_gio_dang` giờ, mặc định 6) thì cảnh nào thiếu clip được dựng

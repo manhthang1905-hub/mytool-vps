@@ -69,7 +69,9 @@ gio_dang: "20:00"
 chu_ky_dang_ngay: 1
 # 03/10: san xuat dung han - ngay M1 chon content (so lieu moi nhat) + san xuat cho khe dang M2
 san_xuat_truoc_gio: 24
-# 06/10: engine clip het han muc ma da toi (gio dang - N gio) thi canh thieu clip dung tu anh canh (Ken Burns); truoc do thi cho engine
+# 07/10: KHONG dang san pham kem — kho clip het han muc thi CHO engine (thu lai toi khi co), khong dung canh tu anh.
+# clip_tu_anh: true moi bat lai duong lui Ken Burns; khi do han_clip_truoc_gio_dang = han chot (gio dang - N gio). false thi khoa han bi bo qua.
+clip_tu_anh: false
 han_clip_truoc_gio_dang: 6
 dung_mot_lan: true
 tu_chay: false

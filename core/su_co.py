@@ -149,8 +149,8 @@ NHA_MAY_NGHI = "nha-may-nghi"
 #: Xếp vào `TAM_NGHI` (như mã `engine_unavailable` nói) thì MỖI cảnh tự ngồi đợi
 #: thang ~14 phút rồi mới bỏ, ba lượt thử khâu × trăm cảnh đều vô ích, và lượt bị
 #: nhặt lại tới trần phục hồi. Nhịp rỗng: lời gọi lẻ ném lên NGAY; việc chờ engine
-#: (thăm dò thưa, hạn chót rồi dựng cảnh thiếu từ ảnh) là của khâu clip —
-#: `core/auto_khau._khau_clip`, `core/clip_tu_anh.py`.
+#: (thăm dò thưa; từ 07/10/2026 KHÔNG hạn chót, không dựng cảnh từ ảnh — trừ kênh
+#: tự bật `clip_tu_anh`) là của khâu clip — `core/auto_khau._khau_clip`.
 HET_HAN_MUC = "het-han-muc"
 
 #: Dấu hiệu `HET_HAN_MUC` — dò TRƯỚC `_MA_CODE` (mã `engine_unavailable` của câu

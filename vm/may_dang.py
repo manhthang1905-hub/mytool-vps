@@ -811,6 +811,23 @@ def _ma_co_video_id(channel_code, code):
     return bool(isinstance(muc, dict) and muc.get("video_id"))
 
 
+def _ma_co_clip_tu_anh(channel_code, code, goc_tool=None):
+    """Luật 07/10/2026 (thà không đăng còn hơn sản phẩm kém): lượt sinh ra gói
+    `<kênh>-<lượt>` còn `6-clip/tu-anh.json` liệt kê cảnh dựng từ ảnh thì đường
+    ảnh KHÔNG tải gói ấy. Đọc hỏng/không có lượt → False (không chặn)."""
+    tien_to = str(channel_code or "") + "-"
+    if not channel_code or not str(code or "").startswith(tien_to):
+        return False
+    goc_tool = goc_tool or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    duong = os.path.join(goc_tool, "PROJECTS", "AUTO", channel_code, str(code)[len(tien_to):],
+                         "6-clip", "tu-anh.json")
+    try:
+        with open(duong, "r", encoding="utf-8") as tep:
+            return bool((json.load(tep) or {}).get("canh"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def get_all_ready_codes(rows, channel_code=None):
     """Lấy tất cả code cùng kênh, trạng thái OK, lịch hôm nay và giờ > hiện tại.
 
@@ -830,6 +847,10 @@ def get_all_ready_codes(rows, channel_code=None):
             target_dt = datetime.combine(d, t)
             if d == now.date() and target_dt > now:
                 code = norm(row[0])
+                if code and _ma_co_clip_tu_anh(channel_code, code):
+                    print("  {0}: KHÔNG tải — còn cảnh dựng từ ảnh (luật 07/10/2026: thà không "
+                          "đăng còn hơn sản phẩm kém)".format(code))
+                    continue
                 if code and not _ma_co_video_id(channel_code, code):
                     out.append(code)
     return out

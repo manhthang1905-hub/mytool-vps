@@ -31,7 +31,7 @@ from . import qa_truoc_dang
 
 __all__ = ["ma_goi", "doc_gioi_thieu", "kiem_du_bo", "xuat_goi", "ban_giao",
            "ghi_nhan_dang_tay", "danh_dau_dang_tay", "TRANG_THAI_DANG_TAY",
-           "TEP_VIDEO", "TEP_SRT", "TEP_BINH_LUAN"]
+           "TEP_VIDEO", "TEP_SRT", "TEP_BINH_LUAN", "kiem_clip_that", "TEP_NGUON_CLIP"]
 
 #: Trạng thái ghi khi chủ kênh đăng TAY. Khác chuỗi "ĐÃ ĐĂNG" của máy một
 #: chút là cố ý: nhìn sổ biết ngay video nào máy đăng, video nào người đăng —
@@ -171,6 +171,82 @@ def kiem_du_bo(thu_muc_luot: str) -> List[str]:
     return thieu
 
 
+#: Dấu NGUỒN CLIP đi kèm gói (luật 07/10/2026) — máy đăng đọc để từ chối gói
+#: có cảnh không phải clip thật (`vm/may_dang_dom.kiem_clip_that_goi`).
+TEP_NGUON_CLIP = "nguon-clip.json"
+
+
+def kiem_clip_that(thu_muc_luot: str, *, kiem_thieu: bool = True) -> Dict[str, object]:
+    """Lượt này có ĐỦ clip THẬT cho mọi cảnh không — luật 07/10/2026.
+
+    Chủ dự án: *"thà không đăng còn hơn là sản phẩm cuối không ổn."* Trả
+    `{"tong", "that", "tu_anh": [số cảnh], "thieu": [số cảnh], "loi": [câu]}`;
+    `loi` rỗng = đủ clip thật. Cảnh dựng từ ảnh (`6-clip/tu-anh.json`) KHÔNG phải
+    clip thật. `kiem_thieu=False` (kênh timelapse — mạch khối chủ ý không có clip
+    mọi cảnh) thì chỉ kiểm clip từ ảnh. Không có `4-canh.json`/`6-clip/` (lượt
+    tay, lượt cũ) thì không kiểm được số thiếu — chỉ kiểm clip từ ảnh."""
+    import json  # noqa: PLC0415
+
+    thu_muc_clip = os.path.join(thu_muc_luot, "6-clip")
+    ra: Dict[str, object] = {"tong": 0, "that": 0, "tu_anh": [], "thieu": [], "loi": []}
+    try:
+        with open(os.path.join(thu_muc_clip, "tu-anh.json"), "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+        tu_anh = sorted({int(x) for x in ((du or {}).get("canh") or [])})
+    except (OSError, ValueError, TypeError, AttributeError):
+        tu_anh = []
+    canh: List[int] = []
+    try:
+        with open(os.path.join(thu_muc_luot, "4-canh.json"), "r", encoding="utf-8") as tep:
+            canh = [int(c["scene_id"]) for c in json.load(tep) if isinstance(c, dict)]
+    except (OSError, ValueError, TypeError, KeyError):
+        canh = []
+    thieu: List[int] = []
+    if kiem_thieu and canh and os.path.isdir(thu_muc_clip):
+        thieu = [n for n in canh
+                 if not os.path.isfile(os.path.join(thu_muc_clip, "{0}.mp4".format(n)))]
+    tong = len(canh)
+    ra.update(tong=tong, tu_anh=tu_anh, thieu=thieu,
+              that=max(0, tong - len(set(thieu) | set(tu_anh))) if tong else 0)
+    loi: List[str] = []
+    if tu_anh:
+        loi.append("{0}{1} cảnh là clip DỰNG TỪ ẢNH (6-clip/tu-anh.json), không phải clip "
+                   "thật".format(len(tu_anh), "/{0}".format(tong) if tong else ""))
+    if thieu:
+        loi.append("thiếu clip thật cho {0}/{1} cảnh ({2})".format(
+            len(thieu), tong, ", ".join(str(x) for x in thieu[:12])
+            + ("…" if len(thieu) > 12 else "")))
+    ra["loi"] = loi
+    return ra
+
+
+def _ghi_nguon_clip(thu_muc_goi: str, kq: Dict[str, object]) -> None:
+    """Ghi `nguon-clip.json` cạnh mp4 của gói — hỏng thì bỏ qua (máy đăng vẫn tự
+    kiểm thư mục lượt)."""
+    import json  # noqa: PLC0415
+
+    du = {"tong": kq.get("tong"), "that": kq.get("that"),
+          "tu_anh": list(kq.get("tu_anh") or []), "thieu": list(kq.get("thieu") or []),
+          "dat": not kq.get("loi"), "cho_phep_tu_anh": bool(kq.get("cho_phep_tu_anh")),
+          "luc": _dt.datetime.now().replace(microsecond=0).isoformat()}
+    try:
+        duong = os.path.join(thu_muc_goi, TEP_NGUON_CLIP)
+        with open(duong + ".tam", "w", encoding="utf-8") as tep:
+            json.dump(du, tep, ensure_ascii=False, indent=1)
+        os.replace(duong + ".tam", duong)
+    except OSError:
+        pass
+
+
+def _la_timelapse(k) -> bool:
+    try:
+        from .timelapse import la_timelapse  # noqa: PLC0415
+
+        return bool(la_timelapse(k))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def xuat_goi(thu_muc_luot: str, thu_muc_done: str, ma: str) -> str:
     """Chép bộ mp4 + srt + ảnh bìa vào `<done>/<mã>`. Trả về đường thư mục gói.
 
@@ -258,16 +334,27 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
     """
     from .auto import duong_luot  # noqa: PLC0415 — tránh vòng nhập
 
-    thu_muc_luot = duong_luot(goc, kenh, luot)
-    ma = ma_goi(kenh, luot)
-    xuat_goi(thu_muc_luot, thu_muc_done, ma)
-    thu_muc_goi = os.path.join(thu_muc_done, ma)
-    gt = doc_gioi_thieu(thu_muc_luot)
-
     from .dung_video import tim_ffmpeg  # noqa: PLC0415 — tránh nạp khi không cần
     from .kenh import doc_kenh  # noqa: PLC0415
 
+    thu_muc_luot = duong_luot(goc, kenh, luot)
+    ma = ma_goi(kenh, luot)
     k = doc_kenh(goc, kenh)
+    # ═══ LUẬT 07/10/2026: KHÔNG BÀN GIAO VIDEO THIẾU CLIP THẬT ═══
+    # Đêm 06/10 bảy gói bị bù cảnh bằng ảnh tĩnh rồi bàn giao 01:00, một gói
+    # đã lên YouTube. Chặn ở đây (trước khi chép gói, trước khi có dòng kế
+    # hoạch) — lượt còn `da_ban_giao: false`, lượt sau khâu clip làm lại.
+    clip = kiem_clip_that(thu_muc_luot, kiem_thieu=not _la_timelapse(k))
+    cho_phep_tu_anh = bool(getattr(k, "clip_tu_anh", False))
+    loi_clip = [x for x in clip["loi"] if not (cho_phep_tu_anh and "DỰNG TỪ ẢNH" in x)]
+    if loi_clip:
+        raise RuntimeError("KHÔNG bàn giao {0}: {1} — luật 07/10/2026: thà không đăng còn hơn "
+                           "sản phẩm kém; khâu clip làm lại bằng clip thật rồi mới bàn giao."
+                           .format(ma, "; ".join(loi_clip)))
+    xuat_goi(thu_muc_luot, thu_muc_done, ma)
+    thu_muc_goi = os.path.join(thu_muc_done, ma)
+    _ghi_nguon_clip(thu_muc_goi, dict(clip, loi=loi_clip, cho_phep_tu_anh=cho_phep_tu_anh))
+    gt = doc_gioi_thieu(thu_muc_luot)
     ket_qua_qa = qa_truoc_dang.kiem_thu_muc_goi(
         thu_muc_goi, tieu_de=gt["tieu_de"], mo_ta=gt["mo_ta"],
         phut_muc_tieu=k.phut_muc_tieu, chenh_cho_phep=k.chenh_cho_phep,
@@ -305,6 +392,8 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
                      "Thẻ SEO": gt["the"], "Sẵn sàng": "x" if ket_qua_qa.dat else ""})
         hang.append([dong.get(ten, "") for ten in cot])
         ke_hoach_dang.luu_bang(goc, kenh, hang, cot)
+    elif ngay and gio and ket_qua_qa.dat:
+        _lam_tuoi_lich_cu(goc, kenh, ma, cot, hang, ngay, gio)
 
     # ═══ HỒ SƠ VIDEO (Việc 3, 28/09/2026) ═══
     #
@@ -322,6 +411,43 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
         pass
 
     return ma, not da_co_dong
+
+
+def _lam_tuoi_lich_cu(goc: str, kenh: str, ma: str, cot: List[str], hang: List[List[str]],
+                      ngay: str, gio: str, bay_gio: Optional[_dt.datetime] = None) -> bool:
+    """Dòng kế hoạch CÓ SẴN của gói mà lịch đã TRÔI QUA, chưa tải lên (Trạng thái
+    đăng trống, không Video ID) → đổi sang khe mới (`ngay`, `gio`) vừa tính.
+
+    Ca 07/10/2026: gói chờ clip thật (kho clip hết hạn mức) quá giờ đăng cũ —
+    bàn giao lại phải lấy khe trống KẾ TIẾP, không giữ một giờ đã qua (máy đăng
+    bỏ qua giờ đã qua → gói nằm chết). Dòng người đã duyệt mà lịch còn ở tương
+    lai thì KHÔNG đụng (luật "chạy hai lần" của `ban_giao`). Trả True nếu đổi."""
+    luc = bay_gio or _dt.datetime.now()
+    if "Ngày đăng" not in cot or "Giờ đăng" not in cot:
+        return False
+    o = {t: cot.index(t) for t in ("Mã gói", "Ngày đăng", "Giờ đăng")}
+    o_tt = cot.index("Trạng thái đăng") if "Trạng thái đăng" in cot else -1
+    o_id = cot.index("Video ID") if "Video ID" in cot else -1
+    doi = False
+    for d in hang:
+        if d[o["Mã gói"]].strip() != ma:
+            continue
+        if (o_tt >= 0 and o_tt < len(d) and d[o_tt].strip()) or \
+                (o_id >= 0 and o_id < len(d) and d[o_id].strip()):
+            continue
+        try:
+            cu = _dt.datetime.strptime("{0} {1}".format(d[o["Ngày đăng"]].strip(),
+                                                         d[o["Giờ đăng"]].strip()),
+                                       "%d/%m/%Y %H:%M")
+        except ValueError:
+            cu = None
+        if cu is None or cu > luc:
+            continue    # chưa có lịch (chờ duyệt/QA) hoặc lịch còn ở tương lai: để nguyên
+        d[o["Ngày đăng"]], d[o["Giờ đăng"]] = ngay, gio
+        doi = True
+    if doi:
+        ke_hoach_dang.luu_bang(goc, kenh, hang, cot)
+    return doi
 
 
 def danh_dau_dang_tay(goc: str, kenh: str, ma: str, *, ghi_chu: str = "",
@@ -409,6 +535,22 @@ def ghi_nhan_dang_tay(goc: str, kenh: str, luot: str,
 # gọi định kỳ — "video đã xong thì cứ đăng", không cần người bấm.
 
 
+def _loi_clip_cua_goi(goc: str, ma_kenh: str, ma: str, k=None) -> List[str]:
+    """Lỗi clip thật của lượt sinh ra gói `ma` (`<kênh>-<lượt>`) — [] nếu ổn hoặc
+    không tìm được thư mục lượt."""
+    from .auto import duong_luot  # noqa: PLC0415
+
+    tien_to = str(ma_kenh) + "-"
+    if not str(ma).startswith(tien_to):
+        return []
+    thu_muc_luot = duong_luot(goc, ma_kenh, str(ma)[len(tien_to):])
+    if not os.path.isdir(thu_muc_luot):
+        return []
+    kq = kiem_clip_that(thu_muc_luot, kiem_thieu=not _la_timelapse(k))
+    cho_phep = bool(getattr(k, "clip_tu_anh", False))
+    return [x for x in kq["loi"] if not (cho_phep and "DỰNG TỪ ẢNH" in x)]
+
+
 def liet_ke_goi_ket(goc: str, kenh: str) -> List[str]:
     """Mã các gói trong `thu_muc_done` của kênh còn `qa-loi.txt` (chỉ đọc đĩa)."""
     from .kenh import doc_kenh  # noqa: PLC0415
@@ -457,6 +599,10 @@ def kiem_lai_goi_ket(goc: str, ma_kenh: str, *, kiem=None, toi_da: int = 0) -> L
             ra.append({"ma": ma, "ket_qua": "bo_qua", "loi": []})
             continue
         if toi_da and da_kiem >= toi_da:
+            continue
+        loi_clip = _loi_clip_cua_goi(goc, ma_kenh, ma, k)
+        if loi_clip:    # luật 07/10/2026: gói thiếu clip thật không bao giờ được mở khoá
+            ra.append({"ma": ma, "ket_qua": "chua_dat", "loi": loi_clip})
             continue
         da_kiem += 1
         kq = kiem(goc, ma_kenh, ma)

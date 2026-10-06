@@ -403,8 +403,10 @@ class TestBanGiaoDang:
         ma, moi = bg.ban_giao(goc, "TL4-T7", "0004", done)
         assert ma == "TL4-T7-0004" and moi
         goi = os.path.join(done, ma)
+        # + `nguon-clip.json`: dấu nguồn clip (luật 07/10/2026) máy đăng đọc.
         assert sorted(os.listdir(goi)) == ["1-binh-luan.txt", "3-phu-de.srt",
-                                           "8-video.mp4", "CHON-thumb_001.jpg"], \
+                                           "8-video.mp4", "CHON-thumb_001.jpg",
+                                           "nguon-clip.json"], \
             "đúng bộ mp4+srt+ảnh(+bình luận tuỳ chọn) mà tool đăng kiểm (has_required_files)"
         assert not os.path.exists(os.path.join(goi, qa.TEN_TEP_KET_QUA)), \
             "gói lành (video/ảnh THẬT, qua được QA) không được để lại qa-loi.txt"

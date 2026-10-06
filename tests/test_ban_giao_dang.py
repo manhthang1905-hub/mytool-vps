@@ -113,3 +113,128 @@ def test_chon_danh_sach_phat_qua_han_tra_rong():
 def test_chon_danh_sach_phat_trong_han_van_chon():
     from core.ban_giao_dang import chon_danh_sach_phat as _chon
     assert _chon("A | B", "t", "m", lambda de: "B", han_giay=5) == "B"
+
+
+# ═══ LUẬT 07/10/2026: KHÔNG BÀN GIAO VIDEO THIẾU CLIP THẬT (1c) + KHE MỚI KHI LỠ GIỜ (1d) ═══
+
+import datetime as _dt  # noqa: E402
+import json  # noqa: E402
+
+import pytest  # noqa: E402
+
+from core import ke_hoach_dang, qa_truoc_dang  # noqa: E402
+
+
+def _goc_co_luot(tmp_path, *, tu_anh=None, thieu=(), so_canh=3, kenh_them=""):
+    """Gốc giả: CHANNEL/K1/kenh.yaml + PROJECTS/AUTO/K1/0001 đủ bộ bàn giao."""
+    goc = tmp_path / "goc"
+    (goc / "CHANNEL" / "K1").mkdir(parents=True)
+    (goc / "CHANNEL" / "K1" / "kenh.yaml").write_text(
+        "ma: K1\nthu_muc_done: DONE/K1\n" + kenh_them, encoding="utf-8")
+    d = goc / "PROJECTS" / "AUTO" / "K1" / "0001"
+    (d / "7-thumbnail").mkdir(parents=True)
+    (d / "6-clip").mkdir()
+    (d / ban_giao_dang.TEP_VIDEO).write_bytes(b"video")
+    (d / ban_giao_dang.TEP_SRT).write_text("1\n", encoding="utf-8")
+    (d / "7-thumbnail" / "CHON-a.jpg").write_bytes(b"jpg")
+    (d / "1-tieu-de.txt").write_text("TITLE: tieu de thu\n", encoding="utf-8")
+    (d / "4-canh.json").write_text(json.dumps([{"scene_id": i} for i in range(1, so_canh + 1)]),
+                                   encoding="utf-8")
+    for i in range(1, so_canh + 1):
+        if i not in thieu:
+            (d / "6-clip" / "{0}.mp4".format(i)).write_bytes(b"clip")
+    if tu_anh:
+        (d / "6-clip" / "tu-anh.json").write_text(json.dumps({"canh": list(tu_anh), "tong": so_canh}),
+                                                  encoding="utf-8")
+    return str(goc), str(d)
+
+
+@pytest.fixture()
+def qa_dat(monkeypatch):
+    monkeypatch.setattr(qa_truoc_dang, "kiem_thu_muc_goi", lambda *a, **k: qa_truoc_dang.KetQuaQA())
+
+
+def test_kiem_clip_that(tmp_path):
+    _g, d = _goc_co_luot(tmp_path)
+    assert ban_giao_dang.kiem_clip_that(d)["loi"] == []
+    _g, d = _goc_co_luot(tmp_path / "b", tu_anh=[2])
+    kq = ban_giao_dang.kiem_clip_that(d)
+    assert kq["tu_anh"] == [2] and kq["that"] == 2 and "DỰNG TỪ ẢNH" in kq["loi"][0]
+    _g, d = _goc_co_luot(tmp_path / "c", thieu=(3,))
+    assert "thiếu clip thật cho 1/3 cảnh (3)" in ban_giao_dang.kiem_clip_that(d)["loi"][0]
+    assert ban_giao_dang.kiem_clip_that(d, kiem_thieu=False)["loi"] == []
+
+
+@pytest.mark.parametrize("cach", ["tu_anh", "thieu"])
+def test_ban_giao_tu_choi_goi_khong_du_clip_that(tmp_path, qa_dat, cach):
+    goc, _d = _goc_co_luot(tmp_path, **({"tu_anh": [1, 3]} if cach == "tu_anh" else {"thieu": (2,)}))
+    with pytest.raises(RuntimeError, match="KHÔNG bàn giao K1-0001"):
+        ban_giao_dang.ban_giao(goc, "K1", "0001", os.path.join(goc, "DONE", "K1"),
+                               ngay="08/10/2026", gio="05:00")
+    assert not os.path.exists(os.path.join(goc, "DONE", "K1", "K1-0001")), "không chép gói"
+    assert ke_hoach_dang.doc_bang(goc, "K1")[1] == [], "không mọc dòng kế hoạch"
+
+
+def test_ban_giao_du_clip_that_ghi_dau_nguon_clip(tmp_path, qa_dat):
+    goc, _d = _goc_co_luot(tmp_path)
+    ma, moi = ban_giao_dang.ban_giao(goc, "K1", "0001", os.path.join(goc, "DONE", "K1"),
+                                     ngay="08/10/2026", gio="05:00")
+    assert (ma, moi) == ("K1-0001", True)
+    du = json.loads(open(os.path.join(goc, "DONE", "K1", ma, ban_giao_dang.TEP_NGUON_CLIP),
+                         encoding="utf-8").read())
+    assert du["dat"] is True and du["that"] == 3 and du["tong"] == 3 and du["tu_anh"] == []
+
+
+def test_kenh_tu_bat_clip_tu_anh_thi_ban_giao_duoc(tmp_path, qa_dat):
+    goc, _d = _goc_co_luot(tmp_path, tu_anh=[2], kenh_them="clip_tu_anh: true\n")
+    ma, _m = ban_giao_dang.ban_giao(goc, "K1", "0001", os.path.join(goc, "DONE", "K1"))
+    du = json.loads(open(os.path.join(goc, "DONE", "K1", ma, ban_giao_dang.TEP_NGUON_CLIP),
+                         encoding="utf-8").read())
+    assert du["dat"] is True and du["cho_phep_tu_anh"] is True and du["tu_anh"] == [2]
+
+
+def test_mo_khoa_qa_khong_mo_goi_clip_tu_anh(tmp_path):
+    goc, _d = _goc_co_luot(tmp_path, tu_anh=[1])
+    goi = os.path.join(goc, "DONE", "K1", "K1-0001")
+    os.makedirs(goi)
+    with open(os.path.join(goi, qa_truoc_dang.TEN_TEP_KET_QUA), "w", encoding="utf-8") as tep:
+        tep.write("x")
+    ke_hoach_dang.luu_bang(goc, "K1", [_dong_ke_hoach(**{"Mã gói": "K1-0001"})])
+    goi_kiem = []
+    ra = ban_giao_dang.kiem_lai_goi_ket(goc, "K1", kiem=lambda *a: goi_kiem.append(a))
+    assert ra[0]["ket_qua"] == "chua_dat" and "DỰNG TỪ ẢNH" in ra[0]["loi"][0]
+    assert goi_kiem == []
+
+
+def _dong_ke_hoach(**gia_tri):
+    dong = {t: "" for t in ke_hoach_dang.COT}
+    dong.update(gia_tri)
+    return [dong[t] for t in ke_hoach_dang.COT]
+
+
+def test_ban_giao_lai_goi_lo_gio_lay_khe_moi(tmp_path, qa_dat):
+    """1d — dòng kế hoạch cũ đã QUA giờ, chưa tải (vd gói chờ clip quá giờ đăng) →
+    bàn giao lại đổi sang khe mới vừa tính, không giữ giờ đã trôi."""
+    goc, _d = _goc_co_luot(tmp_path)
+    ke_hoach_dang.luu_bang(goc, "K1", [_dong_ke_hoach(**{
+        "Mã gói": "K1-0001", "Ngày đăng": "07/10/2020", "Giờ đăng": "05:00", "Sẵn sàng": "x"})])
+    ban_giao_dang.ban_giao(goc, "K1", "0001", os.path.join(goc, "DONE", "K1"),
+                           ngay="08/10/2026", gio="05:00")
+    cot, hang = ke_hoach_dang.doc_bang(goc, "K1")
+    assert len(hang) == 1
+    assert (hang[0][cot.index("Ngày đăng")], hang[0][cot.index("Giờ đăng")]) == ("08/10/2026", "05:00")
+
+
+def test_lam_tuoi_lich_cu_khong_dung_dong_tuong_lai_hay_da_tai(tmp_path):
+    goc = str(tmp_path)
+    cot = list(ke_hoach_dang.COT)
+    hang = [_dong_ke_hoach(**{"Mã gói": "A", "Ngày đăng": "09/10/2026", "Giờ đăng": "05:00"}),
+            _dong_ke_hoach(**{"Mã gói": "B", "Ngày đăng": "06/10/2026", "Giờ đăng": "05:00",
+                              "Video ID": "VIDxxxxxxxx"}),
+            _dong_ke_hoach(**{"Mã gói": "C", "Ngày đăng": "06/10/2026", "Giờ đăng": "05:00",
+                              "Trạng thái đăng": "ĐÃ ĐĂNG"}),
+            _dong_ke_hoach(**{"Mã gói": "D"})]
+    luc = _dt.datetime(2026, 10, 7, 9, 0)
+    for ma in ("A", "B", "C", "D"):
+        assert not ban_giao_dang._lam_tuoi_lich_cu(goc, "K1", ma, cot, hang, "08/10/2026", "05:00",
+                                                   bay_gio=luc), ma

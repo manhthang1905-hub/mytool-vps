@@ -426,7 +426,7 @@ def _nguon_trung_kenh_anh_em(goc: str, ma_kenh: str, link: str) -> str:
     liệu bước chọn nguồn đang dùng, không luật thứ hai: kho giữ nguồn của nhóm (`giu-nguon/`),
     `da_lam` của từng anh em (lượt AUTO + da-lam.txt), và sổ `tu-chay/*.json` của anh em
     (lượt chưa bỏ). Đọc hỏng thì coi như không trùng (cùng nếp fail-open của bước chọn nguồn).
-    Ca gốc: TL6-T7/0001 mồ côi nhận nuôi cùng nguồn TL6-T7-K2/0001 (cPh2ow-Mi_8)."""
+    Ca gốc: TL6-T7/0001 mồ côi nhận nuôi cùng nguồn TL6-T7-K2/0001."""
     ma = so.ma_video(link)
     if not ma:
         return ""
@@ -2639,7 +2639,7 @@ def _chay_mot_ngay_trong_khoa(
         # ═══ VÁ 28/09/2026 (LỖI 2) — chống làm trùng theo TIÊU ĐỀ ═══
         # `loai_tru` ở trên chỉ chặn theo MÃ VIDEO NGUỒN: hai đối thủ khác kênh
         # chép cùng chủ đề (mã khác nhau) lọt qua được — đúng ca TL1-T7-0006
-        # (nguồn 8nPciHbf194) và TL1-T7-0007 (nguồn OmuR0oP6CYc) CÙNG một tiêu
+        # (một nguồn) và TL1-T7-0007 (nguồn khác) CÙNG một tiêu
         # đề tiếng Nhật, 27→28/09/2026. Gộp tiêu đề đã làm của CHÍNH kênh này
         # (mọi lượt AUTO + kế hoạch đăng + video đã công khai) và của CẢ NHÓM
         # (đối thủ khác kênh trong nhóm remake cùng chủ đề) — xem
@@ -2737,6 +2737,14 @@ def _chay_mot_ngay_trong_khoa(
         auto.ghi_luot(luot)
     elif luot.dau_vao.pop("che_do", None) == "thu":
         auto.ghi_luot(luot)  # lượt thử nay chạy thật: gỡ cờ "thu"
+
+    # ═══ LUẬT 07/10/2026 — "XONG" MÀ CÒN CẢNH KHÔNG PHẢI CLIP THẬT THÌ CHƯA XONG ═══
+    # Lượt dựng xong trên clip dựng từ ảnh (hoặc thiếu clip) bị `ban_giao_dang` từ
+    # chối; không mở lại khâu clip ở đây thì cổng `luot.xong_het` dưới bỏ qua sản
+    # xuất, lượt kẹt mãi ở bàn giao. Xem `core/lam_lai_clip_that.mo_lai_khau_clip`.
+    from . import lam_lai_clip_that  # noqa: PLC0415
+
+    lam_lai_clip_that.mo_lai_khau_clip(luot, kenh, log)  # sửa `luot` tại chỗ + ghi đĩa
 
     if not luot.xong_het:
         # ── 3a) Kênh đủ điều kiện sản xuất chưa — kiểm TRƯỚC van ngân sách:

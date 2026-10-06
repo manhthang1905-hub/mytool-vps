@@ -1032,6 +1032,48 @@ def chon_video_the(view_48h: dict, view_tong: dict, loai_tru=(), co_san=(), toi_
     return ra[:toi_da]
 
 
+def kiem_clip_that_goi(thu_muc_goi: str, kenh: str, ma: str, goc_tool: str = None) -> str:
+    """Luật 07/10/2026 (chủ dự án: *"thà không đăng còn hơn là sản phẩm cuối không
+    ổn"*) — lớp chặn THỨ HAI sau `core/ban_giao_dang`. Trả LÝ DO không được tải
+    (chuỗi rỗng = được tải). Hàm thuần đọc đĩa, không ném lỗi.
+
+    1. Dấu `nguon-clip.json` trong gói (bàn giao đời mới ghi): `dat` false, hoặc
+       có cảnh dựng từ ảnh mà kênh không bật `clip_tu_anh` → chặn.
+    2. Thư mục lượt sinh ra gói (`PROJECTS/AUTO/<kênh>/<lượt>`, mã gói =
+       `<kênh>-<lượt>`) còn `6-clip/tu-anh.json` liệt kê cảnh → chặn (gói đời cũ
+       không có dấu, như bảy gói đêm 06/10). Gói có dấu mà dấu cho phép clip từ
+       ảnh (kênh tự bật) thì không xét bước này."""
+    du = {}
+    try:
+        with open(os.path.join(thu_muc_goi, "nguon-clip.json"), "r", encoding="utf-8") as tep:
+            du = json.load(tep) or {}
+    except (OSError, ValueError):
+        du = {}
+    if isinstance(du, dict) and du:
+        if du.get("dat") is False:
+            return "gói ghi thiếu clip thật (nguon-clip.json: {0}/{1} cảnh là clip thật)".format(
+                du.get("that"), du.get("tong"))
+        if du.get("tu_anh") and not du.get("cho_phep_tu_anh"):
+            return "gói có {0} cảnh dựng từ ảnh (nguon-clip.json)".format(len(du.get("tu_anh") or []))
+        if du.get("cho_phep_tu_anh"):
+            return ""
+    goc_tool = goc_tool or os.path.dirname(GOC)
+    tien_to = str(kenh or "") + "-"
+    if not kenh or not str(ma or "").startswith(tien_to):
+        return ""
+    duong = os.path.join(goc_tool, "PROJECTS", "AUTO", kenh, str(ma)[len(tien_to):], "6-clip",
+                         "tu-anh.json")
+    try:
+        with open(duong, "r", encoding="utf-8") as tep:
+            tu_anh = (json.load(tep) or {}).get("canh") or []
+    except (OSError, ValueError, AttributeError):
+        return ""
+    if tu_anh:
+        return "lượt sinh ra gói còn {0} cảnh là clip dựng từ ảnh ({1})".format(
+            len(tu_anh), os.path.relpath(duong, goc_tool))
+    return ""
+
+
 def tep_goi(thu_muc: str) -> dict:
     """{mp4, anh, srt} của gói. Ảnh: ưu tiên CHON-*.jpg rồi .jpg/.png/.webp đầu."""
     try:
@@ -1103,6 +1145,9 @@ class MayDangDom:
         self.so = so
         self.bao = bao
         self.thu_muc_done = thu_muc_done
+        #: Gốc tool (thư mục cha của `vm/`) — nơi tra thư mục lượt của gói khi kiểm
+        #: clip thật (`kiem_clip_that_goi`); bài kiểm đặt sang thư mục tạm.
+        self.goc_tool = os.path.dirname(GOC)
         self.nk = nhat_ky or log.info
         self.bay_gio = bay_gio or datetime.now
         self.ngu = ngu or time.sleep
@@ -2917,6 +2962,13 @@ class MayDangDom:
         loi = kiem_du_lieu_dong(d)
         if not tep["mp4"]:
             loi.append("gói không có .mp4 ({0})".format(os.path.join(self.thu_muc_done, ma)))
+        # Luật 07/10/2026: không bao giờ tải video có cảnh không phải clip thật.
+        ly_do_clip = kiem_clip_that_goi(os.path.join(self.thu_muc_done, ma), self.kenh, ma,
+                                        self.goc_tool)
+        if ly_do_clip:
+            self.nk("{0}: KHÔNG TẢI — {1} (luật 07/10/2026: thà không đăng còn hơn sản phẩm "
+                    "kém; tool làm lại bằng clip thật rồi bàn giao lại)".format(ma, ly_do_clip))
+            return {"ket_qua": "loi_du_lieu", "ly_do": "không phải clip thật: " + ly_do_clip}
         lich, ghi_chu = gio_hen_hieu_luc(d.get("ngay"), d.get("gio"), self.bay_gio())
         if lich is None:
             loi.append(ghi_chu)

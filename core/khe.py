@@ -472,8 +472,8 @@ def _duong_khe_lop(goc: str, lop: str) -> List[str]:
 #
 # Sự cố 06/10/2026: kho clip của cổng hết hạn mức ngày (503 engine_unavailable).
 # Từ v2.170.0 lượt sản xuất ĐỨNG CHỜ engine trong tiến trình (`auto_khau.
-# _cho_engine_clip`, thăm dò mỗi 20 phút) tới hạn chót (giờ đăng − 6 giờ) — có
-# khi ~15 giờ. Mỗi lượt giữ một tệp làn `api-<i>.json` suốt lượt, nên 4 lượt chờ
+# _cho_engine_clip`, thăm dò mỗi 20 phút) — từ 07/10/2026 KHÔNG hạn chót (chờ tới
+# khi engine có lại), có khi cả chục giờ. Mỗi lượt giữ một tệp làn `api-<i>.json` suốt lượt, nên 4 lượt chờ
 # clip ăn hết 4 làn: kênh khác (cần 2–3 giờ kịch bản/giọng/ảnh) không vào được.
 #
 # Luật: "Lượt đang CHỜ KHO CLIP không chiếm làn API." Lượt chờ ghi dấu

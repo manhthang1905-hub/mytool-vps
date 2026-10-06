@@ -194,6 +194,28 @@ def test_cho_engine_clip_go_dau_khi_engine_co_lai(tmp_path, monkeypatch):
     assert not os.path.exists(khe.duong_cho_clip(goc, "K1"))
 
 
+def test_cho_engine_clip_khong_han_chot_giu_dau_toi_khi_engine_co_lai(tmp_path, monkeypatch):
+    """Luật 07/10/2026: `han` None (mặc định) = chờ KHÔNG hạn chót — qua cả mốc
+    giờ đăng vẫn chờ, dấu chờ clip (không chiếm làn) giữ suốt, gỡ khi engine có lại."""
+    goc = str(tmp_path)
+    dong = {"luc": _dt.datetime(2026, 10, 6, 22, 0)}
+    monkeypatch.setattr(ak, "_bay_gio", lambda: dong["luc"])
+    thay = []
+    bc = _bc_gia(goc, dong, khi_ngu=lambda: thay.append(dict(khe.doc_cho_clip(goc))))
+    het = []
+
+    def mot_canh(_c):
+        if dong["luc"] < _dt.datetime(2026, 10, 7, 8, 0):
+            het.append(_LoiHetHanMuc("hết hạn mức"))
+            raise het[-1]
+
+    xong = ak._cho_engine_clip(bc, None, None, het, lambda: [{"scene_id": 1}], mot_canh)
+    assert xong is False, "không có hạn chót thì không bao giờ trả 'tới hạn' (dựng từ ảnh)"
+    assert dong["luc"] == _dt.datetime(2026, 10, 7, 8, 0)
+    assert thay and all(t.get("K1", {}).get("han") == "" for t in thay)
+    assert not os.path.exists(khe.duong_cho_clip(goc, "K1"))
+
+
 def test_cho_engine_clip_go_dau_khi_bam_dung(tmp_path, monkeypatch):
     goc = str(tmp_path)
     dong = {"luc": _dt.datetime(2026, 10, 6, 10, 0)}

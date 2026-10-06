@@ -811,6 +811,7 @@ def _may(tmp_path, kenh_gia, bao, **kw):
                        han_mhkt=1, cai_dat_kenh={"ngon_ngu": "ja"},
                        thu_muc_chi_so=kw.pop("thu_muc_chi_so", str(tmp_path / "chi-so-rong")), **kw)
     m._tabs_gia = tabs
+    m.goc_tool = str(tmp_path / "goc-tool")     # không tra PROJECTS/ thật của máy
     return m
 
 
@@ -1206,3 +1207,74 @@ def test_kiem_dom_video_co_the_van_kiem_binh_thuong(tmp_path):
                       duong_uc=str(tmp_path / "uc.json"), ngu=lambda s: None, nhat_ky=lambda s: None)
     assert "the_da_co" not in kq["hong"]
     assert kq["chi_tiet"]["the_da_co"]["khop"] is True
+
+
+# ═══ LUẬT 07/10/2026: KHÔNG TẢI GÓI CÓ CẢNH KHÔNG PHẢI CLIP THẬT (1c) ══════
+
+
+class TestClipThat:
+    def _goi(self, tmp_path, dau=None):
+        goi = tmp_path / "DONE" / "TL1-T7-0007"
+        goi.mkdir(parents=True, exist_ok=True)
+        if dau is not None:
+            (goi / "nguon-clip.json").write_text(json.dumps(dau), encoding="utf-8")
+        return str(goi)
+
+    def _tu_anh(self, tmp_path, canh):
+        d = tmp_path / "goc-tool" / "PROJECTS" / "AUTO" / "TL1-T7" / "0007" / "6-clip"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "tu-anh.json").write_text(json.dumps({"canh": canh, "tong": 9}), encoding="utf-8")
+
+    def test_ham_thuan(self, tmp_path):
+        g = str(tmp_path / "goc-tool")
+        assert mdd.kiem_clip_that_goi(self._goi(tmp_path), "TL1-T7", "TL1-T7-0007", g) == ""
+        assert "dựng từ ảnh" in mdd.kiem_clip_that_goi(
+            self._goi(tmp_path / "a", {"dat": True, "tu_anh": [3], "tong": 9, "that": 8}),
+            "TL1-T7", "TL1-T7-0007", g)
+        assert "thiếu clip thật" in mdd.kiem_clip_that_goi(
+            self._goi(tmp_path / "b", {"dat": False, "tong": 9, "that": 7}), "TL1-T7", "TL1-T7-0007", g)
+        self._tu_anh(tmp_path, [2, 5])
+        assert "2 cảnh là clip dựng từ ảnh" in mdd.kiem_clip_that_goi(
+            self._goi(tmp_path / "c"), "TL1-T7", "TL1-T7-0007", g)
+        # Kênh tự bật clip_tu_anh (dấu cho phép) → không chặn.
+        assert mdd.kiem_clip_that_goi(
+            self._goi(tmp_path / "d", {"dat": True, "tu_anh": [2], "cho_phep_tu_anh": True}),
+            "TL1-T7", "TL1-T7-0007", g) == ""
+
+    def test_goi_doi_cu_co_clip_tu_anh_khong_tai(self, moi):
+        """Gói bàn giao trước luật (không có dấu) mà lượt còn tu-anh.json → không tải."""
+        self._tu_anh(moi, [4])
+        k, bao = KenhGia(), Bao()
+        nhat = []
+        m = _may(moi, k, bao)
+        m.nk = nhat.append
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        assert k.video == [] and k.lan_dat_tep_video == 0 and bao.ds == []
+        assert any("KHÔNG TẢI" in x and "dựng từ ảnh" in x for x in nhat)
+
+    def test_goi_dau_khong_dat_khong_tai(self, moi):
+        (moi / "DONE" / "TL1-T7-0007" / "nguon-clip.json").write_text(
+            json.dumps({"dat": False, "tong": 9, "that": 8}), encoding="utf-8")
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        assert k.video == []
+
+    def test_goi_dau_dat_van_tai(self, moi):
+        (moi / "DONE" / "TL1-T7-0007" / "nguon-clip.json").write_text(
+            json.dumps({"dat": True, "tong": 9, "that": 9, "tu_anh": []}), encoding="utf-8")
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_XONG
+        assert len(k.video) == 1
+
+
+def test_may_dang_duong_anh_bo_ma_co_clip_tu_anh(tmp_path):
+    """Đường lùi PyAutoGUI (`vm/may_dang.py`) cũng không nhặt gói còn clip từ ảnh."""
+    import may_dang as md
+
+    d = tmp_path / "PROJECTS" / "AUTO" / "TL1-T7" / "0007" / "6-clip"
+    d.mkdir(parents=True)
+    (d / "tu-anh.json").write_text(json.dumps({"canh": [1]}), encoding="utf-8")
+    assert md._ma_co_clip_tu_anh("TL1-T7", "TL1-T7-0007", str(tmp_path)) is True
+    assert md._ma_co_clip_tu_anh("TL1-T7", "TL1-T7-0008", str(tmp_path)) is False
