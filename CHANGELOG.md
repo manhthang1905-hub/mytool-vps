@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.168.3** — 2026-10-06 — `vps-jp1` — fix(trung-tam): doi cong 8770 -> 8790 — 8770 la cong khoa may dang DOM, trung tam chiem lam may dang thoat ma 4
 - **2.168.2** — 2026-10-06 — `vps-jp1` — fix(selectors): ngon_ngu_video them ko/th/id/es/pt/fr/de (phan bi mat khi hop H)
 - **2.168.1** — 2026-10-06 — `vps-jp1` — docs: trung tam chi huy (3 tab), ben bi 365 ngay, keo cheo + tu chua DOM + ngon ngu tam, ban do module moi, README (agent tai lieu)
 - **2.168.0** — 2026-10-06 — `vps-jp1` — test+fix (agent H, phan con lai): bo test xanh tren clone sach; may/ngach khac tieng — font Han/La-tinh, tran chu bia, muc luc theo tieng, kenh thu 2, ho so Studio tu ngach, Whisper ma ngan, captcha/ghim Han; conftest khong ghi nhip tim th…
