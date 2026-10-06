@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.169.0** — 2026-10-06 — `vps-jp1` — fix(gop-lai): nen gz raw chi so >7 ngay + moi noi doc raw qua kho_raw (agent P) — ban 2.164.0 da roi mat 9 tep nay; raw da nen tu 06/10 01:40 nay doc lai duoc
 - **2.168.5** — 2026-10-06 — `vps-jp1` — fix(chi-so): doc so tong tu goi join (moc >=24h Studio khong con the overview), khung rong khong de + danh dau chup lai, lui moc xap xi >=22h, chot khong do duoc sau 7 ngay; bao cao tach Studio rong / cho moc
 - **2.168.4** — 2026-10-06 — `vps-jp1` — fix(tram): lui cong bo qua cong khoa danh rieng (8767-8771, 8781) — tranh chiem cong may dang/binh luan lam chung thoat im lang
 - **2.168.3** — 2026-10-06 — `vps-jp1` — fix(trung-tam): doi cong 8770 -> 8790 — 8770 la cong khoa may dang DOM, trung tam chiem lam may dang thoat ma 4
