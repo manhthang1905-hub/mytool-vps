@@ -732,6 +732,11 @@ def doc_view_48h_kem_luc(thu_muc_chi_so: str) -> tuple:
     bản chụp kênh của QUÉT NGÀY. ({}, None) nếu chưa có. Chỉ đọc."""
     import glob  # noqa: PLC0415
 
+    # 07/10: máy đăng chạy từ vm/ — gốc repo phải có trong sys.path (thêm CUỐI, không che module vm/) thì mới
+    # nhập được `core`; thiếu dòng này máy đăng HỎNG SAU khi chạm kênh ("No module named 'core'").
+    goc_tool = os.path.dirname(GOC)
+    if goc_tool not in sys.path:
+        sys.path.append(goc_tool)
     from core.chi_so_ytb import kho_raw  # noqa: PLC0415 — gói cũ đã nén .json.gz
     tep = sorted((f for raw in glob.glob(os.path.join(thu_muc_chi_so, "kenh", "kenh-*", "raw"))
                   for f in kho_raw.liet_ke(raw, "*get_cards*.json")),
