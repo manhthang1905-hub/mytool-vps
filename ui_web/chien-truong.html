@@ -6,7 +6,7 @@
 <title>Chiến trường · MYTOOL</title>
 <link rel="preload" href="/vendor/fonts/chakra-petch-latin-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/vendor/fonts/be-vietnam-pro-latin-400.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/vendor/he-thong.css?v=6">
+<link rel="stylesheet" href="/vendor/he-thong.css?v=7">
 <style>
 /* ---- đầu trang ---- */
 .anh-hung{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;margin-bottom:16px}
@@ -55,6 +55,18 @@
 .bao .tieu{font-size:12.5px;line-height:1.4} .bao .tieu b{font-weight:700}
 .bao .phu-b{font-size:11.5px;color:var(--mo);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .bao .gio{font:600 10.5px var(--f-hud);color:var(--mo2);margin-left:6px}
+/* ---- tổng kết ---- */
+.tk-luoi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tk-luoi div{padding:9px 10px;border-radius:11px;background:rgba(5,9,18,.5);border:1px solid var(--vien);min-width:0}
+.tk-luoi small{display:block;font:600 9.5px var(--f-hud);letter-spacing:.12em;text-transform:uppercase;color:var(--mo)}
+.tk-luoi b{display:block;font:700 24px/1.2 var(--f-hud);margin-top:3px} .tk-luoi b i{font-size:14px;font-style:normal}
+.tk-luoi span{display:block;font-size:11px;color:var(--mo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-tot{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;align-items:center;margin-top:10px;padding:8px;border-radius:12px;color:var(--chu);text-decoration:none!important;
+  background:linear-gradient(90deg,rgba(251,191,36,.12),rgba(5,9,18,.3));border:1px solid rgba(251,191,36,.35)}
+.tk-anh{aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#0b1220;display:grid;place-items:center;color:var(--mo2)} .tk-anh img{width:100%;height:100%;object-fit:cover}
+.tk-tot small{display:flex;align-items:center;gap:5px;font:700 10px var(--f-hud);letter-spacing:.1em;color:var(--vang)} .tk-tot small svg{width:13px;height:13px}
+.tk-tot b{display:block;font-size:12.5px;line-height:1.35;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tk-tot em{display:block;font:600 11.5px var(--f-hud);font-style:normal;color:var(--mo);margin-top:3px}
 /* ---- mùa giải ---- */
 .mua{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mua .o-mua{padding:10px 12px;border-radius:11px;background:rgba(5,9,18,.5);border:1px solid var(--vien)}
@@ -343,6 +355,10 @@
       <div class="nong-ds" id="nong"></div>
     </section>
     <div class="thanh-tuu" style="display:grid;gap:16px;align-content:start">
+      <section class="panel goc vang" aria-label="Tổng kết trận">
+        <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="swords"></svg>Tổng kết trận</h2><span class="phu" style="margin-left:auto">hôm nay</span></div>
+        <div class="panel-than" id="tong-ket"></div>
+      </section>
       <section class="panel goc tim" aria-label="Mùa giải">
         <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="trophy"></svg>Mùa giải</h2><span class="phu" id="mua-phu" style="margin-left:auto"></span></div>
         <div class="panel-than" id="mua-giai"></div>
@@ -361,8 +377,9 @@
   </div>
 </main>
 
-<script src="/vendor/chung.js?v=6"></script>
-<script src="/vendor/ban-do.js?v=2"></script>
+<script src="/vendor/chung.js?v=7"></script>
+<script src="/vendor/ban-do.js?v=4"></script>
+<script src="/vendor/tuong.js?v=1"></script>
 <script>
 "use strict";
 const {esc, fmt, pc, so, ic} = MT;
@@ -505,7 +522,7 @@ function banDo() {
     biDanh: new Set((DU.quan || []).map(q => q.tan_cong).filter(Boolean)),
     cb: {
       tipVung: (ma, e) => { const z = DU.vung.find(x => x.ma === ma); if (z) MT.tip(tipVung(z), e); },
-      moVung, chonQuan, moTrum,
+      moVung, moTrum, chonQuan: moTuongKenh,
       tipQuan: (ma, e) => { const q = (DU.quan || []).find(x => x.ma === ma); if (q) MT.tip(tipQuan(q), e); },
     },
   });
@@ -645,7 +662,7 @@ function doiHinh() {
       <div class="di">${ic("swords")}<span>Đánh tiếp:</span><b>${esc(x.tan_cong_ten || "—")}</b>${x.ngay_mai ? `<span class="mo">${esc(x.ngay_mai)}</span>` : ""}</div>
     </article>`;
   }).join("");
-  document.querySelectorAll(".linh").forEach(e => e.addEventListener("click", () => { chonQuan(e.dataset.ma); document.getElementById("ban-do").scrollIntoView({behavior: MT.giamChuyenDong ? "auto" : "smooth", block: "center"}); }));
+  document.querySelectorAll(".linh").forEach(e => e.addEventListener("click", () => moTuongKenh(e.dataset.ma)));
 }
 
 /* ---------- xếp hạng, điểm nóng, thành tựu, lịch sử ---------- */
@@ -674,33 +691,103 @@ function diemNong() {
   const no = DU.nong || [];
   document.getElementById("nong").innerHTML = no.map(theNo).join("") || '<div class="trong">Không có video địch nào đang nổ.</div>';
 }
+let DD = null, NAO = null;       // /day-du.json, /nao.json (thêm cho thành tựu, tổng kết)
 function dsThanhTuu() {
   const v = DU.vung || [], q = DU.quan || [], t = DU.tong || {}, top = DU.dich_top || [];
   const mxTP = Math.max(0, ...v.map(z => Number(z.thi_phan) || 0)), mxG = Math.max(0, ...q.map(x => x.gio_xem || 0)), mxS = Math.max(0, ...q.map(x => x.dang_ky || 0));
   const coTa = v.filter(z => z.ta > 0).length, coMat = v.filter(z => (z.ta_kenh || []).length).length, cuoi = (top[top.length - 1] || {}).view || 0;
+  const tr = Object.values((DD && DD.tran) || {}), tt = tr.map(x => x.thanh_tich || {});
+  const thang = tt.reduce((s, x) => s + (x.thang || 0), 0), soTran = tt.reduce((s, x) => s + (x.so_tran || 0) + (x.cho || 0), 0);
+  const chuoiMax = Math.max(0, ...tt.map(x => x.chuoi_thang_dai_nhat || 0)), hienMax = Math.max(0, ...tr.map(x => x.max_hien_thi || 0));
+  const yppMax = Math.max(0, ...q.map(x => Math.min((x.gio_xem || 0) / 4000, (x.dang_ky || 0) / 1000)));
+  const d = (NAO && NAO.diem) || {}, keo = (DD && DD.keo_cheo) || [], nuoi = Object.values((DD && DD.nuoi) || {}).filter(x => x && x.trang_thai);
+  const bl = Object.values((DD && DD.binh_luan) || {}).reduce((s, x) => s + (x.tra_loi || 0), 0);
+  const khan = ((SK && SK.su_kien) || []).filter(e => e.loai === "su_co" && e.muc === "khan").map(e => e.luc).sort().pop();
+  const ngayYen = khan ? Math.max(0, Math.floor((Date.now() - new Date(khan.replace(" ", "T"))) / 864e5)) : 14;
+  const pct = x => so(x * 100, 0) + "%";
   return [
     ["dat-chan", "flag", "Đặt chân lên bản đồ", "có lượt xem ở 1 vùng", coTa, 1],
     ["phu-10", "map", "Phủ sóng 10 vùng", "quân ta có mặt ở 10 vùng", coMat, 10],
     ["dau-cau", "target", "Đầu cầu 1%", "giữ 1% một vùng", mxTP, 1, pc],
     ["phao-dai", "castle", "Pháo đài 10%", "giữ 10% một vùng", mxTP, 10, pc],
     ["ba-chu", "crown", "Bá chủ một vùng", "dẫn đầu 1 vùng", t.vung_ta_dan || 0, 1],
+    ["tp-1", "trend", "Thị phần 1%", "1% toàn ngách", Number(t.thi_phan) || 0, 1, pc],
+    ["top-bang", "trophy", "Lọt top bảng", `vượt hạng ${top.length || 10}`, Number(t.ta) || 0, cuoi || 1, fmt],
+    ["doi-hinh-5", "users", "Quân đoàn 5 kênh", "5 kênh cùng ra trận", q.length, 5],
     ["tram-gio", "hourglass", "Trăm giờ đầu", "1 kênh đạt 100 giờ xem", mxG, 100],
     ["nghin-gio", "zap", "Nghìn giờ", "1 kênh đạt 1.000 giờ", mxG, 1000],
     ["du-gio", "star", "Đủ giờ YPP", "1 kênh đạt 4.000 giờ", mxG, 4000],
     ["nghin-quan", "users", "Nghìn quân", "1 kênh đạt 1.000 đăng ký", mxS, 1000],
-    ["ypp", "medal", "Đối tác YPP", "1 kênh đủ cả giờ và đăng ký", q.filter(x => x.gio_xem >= 4000 && x.dang_ky >= 1000).length, 1],
-    ["tp-1", "trend", "Thị phần 1%", "1% toàn ngách", Number(t.thi_phan) || 0, 1, pc],
-    ["top-bang", "trophy", "Lọt top bảng", `vượt hạng ${top.length || 10}`, Number(t.ta) || 0, cuoi || 1, fmt],
+    ["ypp-25", "medal", "Đường tới YPP 25%", "1 kênh đi được 25% cả giờ lẫn đăng ký", yppMax, .25, pct],
+    ["ypp-50", "medal", "Đường tới YPP 50%", "nửa chặng đường YPP", yppMax, .5, pct],
+    ["ypp-75", "medal", "Đường tới YPP 75%", "ba phần tư chặng đường", yppMax, .75, pct],
+    ["ypp", "crown", "Đối tác YPP", "1 kênh đủ cả giờ và đăng ký", q.filter(x => x.gio_xem >= 4000 && x.dang_ky >= 1000).length, 1],
+    ["thang-dau", "trophy", "Chiến thắng đầu tiên", "1 video thắng mốc 48 giờ", thang, 1],
+    ["thang-10", "trophy", "Mười chiến thắng", "10 video thắng mốc 48 giờ", thang, 10],
+    ["chuoi-3", "flame", "Chuỗi 3 thắng", "1 kênh thắng 3 trận liền", chuoiMax, 3],
+    ["chuoi-5", "flame", "Chuỗi 5 thắng", "1 kênh thắng 5 trận liền", chuoiMax, 5],
+    ["tran-50", "swords", "Lão làng 50 trận", "50 video đã ra trận", soTran, 50],
+    ["hien-1k", "eye", "Nghìn mắt nhìn", "1 video đạt 1.000 hiển thị", hienMax, 1000, fmt],
+    ["hien-10k", "eye", "Mười nghìn mắt nhìn", "1 video đạt 10.000 hiển thị", hienMax, 10000, fmt],
+    ["hien-100k", "sparkles", "Trăm nghìn mắt nhìn", "1 video đạt 100.000 hiển thị", hienMax, 100000, fmt],
+    ["nao-dung", "brain", "Lời tiên tri ứng nghiệm", "bộ não đoán đúng lần đầu", d.dung || 0, 1],
+    ["nao-10", "brain", "Mười lần phán xử", "bộ não đã chấm 10 dự đoán", d.da_cham || 0, 10],
+    ["binh-yen-7", "shield", "Bảy ngày bình yên", "7 ngày không sự cố khẩn", ngayYen, 7],
+    ["keo-dau", "layers", "Kéo quân đầu tiên", "lần đầu thêm video kênh em vào danh sách phát", keo.filter(x => x.ket === "ok").length, 1],
+    ["keo-do", "layers", "Kéo quân có hiệu quả", "kéo chéo đo được tác dụng sau 7 ngày", keo.filter(x => x.do && x.do.ket === "keo_duoc").length, 1],
+    ["nuoi-dat", "eye", "Trang chủ sạch", "1 kênh có trang chủ > 90% đúng chủ đề", nuoi.filter(x => (x.pct_chu_de || 0) > 90).length, 1],
+    ["nuoi-tat", "eye", "Toàn quân trang chủ sạch", "mọi kênh đang nuôi đều > 90%", nuoi.filter(x => (x.pct_chu_de || 0) > 90).length, Math.max(1, nuoi.length)],
+    ["binh-luan-10", "message", "Mười lời đáp", "trả lời 10 bình luận trong một ngày", bl, 10],
   ].map(([id, i, n, m, x, can, f]) => ({id, i, n, m, x, can, f: f || so, ok: x >= can}));
 }
+const theTT = d => { const p = MT.kep(d.x / d.can, 0, 1);
+  return `<div class="hc ${d.ok ? "mo-khoa" : ""}" title="${esc(d.m)}"><span class="bieu">${ic(d.ok ? d.i : "lock")}</span><div style="min-width:0"><b>${esc(d.n)}</b>
+    <small>${d.ok ? esc(d.m) : `${d.f(d.x)} / ${d.f(d.can)}`}</small>${d.ok ? "" : `<div class="thanh-tien vang"><b style="width:${(p * 100).toFixed(1)}%"></b></div>`}</div></div>`; };
 function thanhTuu() {
-  const ds = dsThanhTuu(), mo = ds.filter(d => d.ok).length;
-  document.getElementById("tt-phu").textContent = `${mo}/${ds.length} mở khoá`;
-  document.getElementById("thanh-tuu").innerHTML = ds.sort((a, b) => b.ok - a.ok || b.x / b.can - a.x / a.can).map(d => {
-    const p = MT.kep(d.x / d.can, 0, 1);
-    return `<div class="hc ${d.ok ? "mo-khoa" : ""}" title="${esc(d.m)}"><span class="bieu">${ic(d.ok ? d.i : "lock")}</span><div style="min-width:0"><b>${esc(d.n)}</b>
-      <small>${d.ok ? "Đã đạt" : `${d.f(d.x)} / ${d.f(d.can)}`}</small>${d.ok ? "" : `<div class="thanh-tien vang"><b style="width:${(p * 100).toFixed(1)}%"></b></div>`}</div></div>`;
-  }).join("");
+  const ds = dsThanhTuu().sort((a, b) => b.ok - a.ok || b.x / b.can - a.x / a.can), mo = ds.filter(d => d.ok).length;
+  document.getElementById("tt-phu").innerHTML = `${mo}/${ds.length} mở khoá <button class="nut" id="xem-tt" style="margin-left:8px;padding:3px 9px">Xem tất cả</button>`;
+  document.getElementById("thanh-tuu").innerHTML = ds.slice(0, 10).map(theTT).join("");
+  document.getElementById("xem-tt").addEventListener("click", () => {
+    MT.am("mo");
+    MT.moHop(`${ic("medal")} Phòng trưng bày thành tựu · ${mo}/${ds.length}`, `<div class="thanh-tien vang" style="height:10px;margin-bottom:16px"><b style="width:${(mo / ds.length * 100).toFixed(1)}%"></b></div>
+      <div class="huy-chuong" style="padding:0;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))">${ds.map(theTT).join("")}</div>`);
+  });
+}
+
+/* ---------- tổng kết trận hôm nay ---------- */
+function tongKet() {
+  const h = homNay(), truoc3 = new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10), truoc7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const len = ((SK && SK.su_kien) || []).filter(e => e.loai === "tan_cong" && e.luc.slice(0, 10) === h);
+  const tran = Object.entries((DD && DD.tran) || {}).flatMap(([k, x]) => (x.tran || []).map(t => ({...t, kenh: k})));
+  const ket = tran.filter(t => t.ngay >= truoc3 && (t.ket === "thang" || t.ket === "thua"));
+  const thang = ket.filter(t => t.ket === "thang").length;
+  const tot = tran.filter(t => t.ngay >= truoc7 && (t.hien_thi || 0) > 0).sort((a, b) => (b.hien_thi || 0) - (a.hien_thi || 0))[0];
+  const ng = cacNgay(); let chiem = 0;
+  if (ng.length >= 2) { const a = ng[ng.length - 2], b = ng[ng.length - 1]; DU.vung.forEach(z => { const x = a.vung[z.ma], y = b.vung[z.ma]; if (x && y && (y.thi_phan || 0) - (x.thi_phan || 0) >= 0.005) chiem++; }); }
+  document.getElementById("tong-ket").innerHTML = `
+    <div class="tk-luoi">
+      <div><small>Lên sóng hôm nay</small><b class="ta-c">${so(len.length)}</b><span>${len.map(e => esc(NGAN(e.kenh))).join(" · ") || "chưa có"}</span></div>
+      <div><small>Kết quả 48h · 3 ngày</small><b>${so(thang)}<i class="mo"> / ${so(ket.length)}</i></b><span>${ket.length ? `thắng ${so(thang / ket.length * 100, 0)}%` : "chờ số Studio"}</span></div>
+      <div><small>Đất chiếm thêm</small><b class="vang-c">${ng.length >= 2 ? so(chiem) : "—"}</b><span>${ng.length >= 2 ? "vùng tăng thị phần" : "cần 2 ngày dữ liệu"}</span></div>
+    </div>
+    ${tot ? `<a class="tk-tot" data-kenh="${esc(tot.kenh)}" href="#"><span class="tk-anh">${tot.anh ? `<img loading="lazy" src="/anh-bia/${encodeURIComponent(tot.kenh)}/${encodeURIComponent(tot.ma)}.jpg" alt="">` : ic("image")}</span>
+      <span style="min-width:0"><small>${ic("star")} TRẬN HAY NHẤT 7 NGÀY · ${esc(NGAN(tot.kenh))}</small><b>${esc(tot.tieu_de)}</b><em>${fmt(tot.hien_thi)} hiển thị${tot.ctr != null ? " · CTR " + so(tot.ctr, 2) + "%" : ""}${tot.moc ? " @" + esc(tot.moc) : ""}</em></span></a>` : ""}`;
+  const a = document.querySelector("#tong-ket .tk-tot");
+  if (a) a.addEventListener("click", e => { e.preventDefault(); moTuongKenh(a.dataset.kenh); });
+}
+const moTuongKenh = ma => MT.moTuong(ma, {banDo: m => { QUAN_CHON = m; banDo(); nhiemVu(); doiHinh(); document.getElementById("ban-do").scrollIntoView({behavior: MT.giamChuyenDong ? "auto" : "smooth", block: "center"}); }});
+
+/* ---------- hiệu ứng lúc mở trang: tấn công + chiếm đất ---------- */
+let MOI_TC = [];
+function hieuUng() {
+  const vung = new Set(DU.vung.map(z => z.ma)), dsTc = [...new Set(MOI_TC.map(e => e.cum).filter(c => vung.has(c)))];
+  dsTc.slice(0, 6).forEach((c, i) => setTimeout(() => MT.banDo.nhay(c, "tan-cong"), 900 + i * 650));
+  const ng = cacNgay();
+  if (ng.length >= 2) {
+    const a = ng[ng.length - 2], b = ng[ng.length - 1];
+    DU.vung.filter(z => { const x = a.vung[z.ma], y = b.vung[z.ma]; return x && y && (y.thi_phan || 0) - (x.thi_phan || 0) >= 0.005; })
+      .slice(0, 6).forEach((z, i) => setTimeout(() => MT.banDo.nhay(z.ma, "chiem"), 900 + (dsTc.length + i) * 650));
+  }
 }
 const LS_MUC_DS = {
   thi_phan: ["Thị phần", p => tongLS(p).thi_phan, () => DU.tong.thi_phan, v => pc(v), "var(--ta)", "pp"],
@@ -782,7 +869,7 @@ function cacSuKien() {
   const tenV = Object.fromEntries(DU.vung.map(z => [z.ma, z.ten])), ra = [];
   ((SK && SK.su_kien) || []).forEach(e => {
     const k = e.kenh ? `<b>${esc(NGAN(e.kenh))}</b>` : "";
-    if (e.loai === "tan_cong") ra.push({luc: e.luc, lop: "ta", ic: "swords", tieu: `${k} tấn công${e.cum && tenV[e.cum] ? ` vùng <b>${esc(tenV[e.cum])}</b>` : ""}`, phu: e.tieu_de, link: e.link});
+    if (e.loai === "tan_cong") ra.push({luc: e.luc, lop: "ta", ic: "swords", tieu: `${k} tấn công${e.cum && tenV[e.cum] ? ` vùng <b>${esc(tenV[e.cum])}</b>` : ""}`, phu: e.tieu_de, link: e.link, cum: e.cum, tc: true});
     else if (e.loai === "lenh_nao") ra.push({luc: e.luc, lop: "nao", ic: "brain", tieu: `Tổng tham mưu ra lệnh <b>${esc(TEN_LENH[e.lenh] || e.lenh)}</b>${k ? " cho " + k : ""}`, phu: e.chi_tiet || e.tieu_de});
     else if (e.loai === "cham_nao") ra.push({luc: e.luc, lop: e.ket === "dung" ? "thang" : "thua", ic: e.ket === "dung" ? "check" : "x", tieu: `Trận ${esc(e.ma)}: <b>${e.ket === "dung" ? "THẮNG" : "THUA"}</b>${k ? " · " + k : ""}`, phu: e.chi_tiet || e.tieu_de});
     else if (e.loai === "su_co") ra.push({luc: e.luc, lop: "loi", ic: "alert", tieu: `${k ? "Xưởng " + k : "Căn cứ"} báo động${e.muc ? ` <span class="mo">(${esc({khan: "khẩn", thuong: "thường"}[e.muc] || e.muc)})</span>` : ""}`, phu: e.tieu_de});
@@ -830,6 +917,7 @@ function chienBao() {
   }).join("") || '<div class="trong">Chưa có chiến báo.</div>';
   if (!TOAST_XONG) {
     TOAST_XONG = true;
+    MOI_TC = moi.filter(e => e.tc);
     moi.slice(0, 3).forEach((e, i) => setTimeout(() => MT.toast(`<span class="bieu-toast ${e.lop}">${ic(e.ic)}</span><div><div>${e.tieu}</div>${e.phu ? `<div class="mo rat-nho">${esc(e.phu.slice(0, 90))}</div>` : ""}</div>`), 700 + i * 900));
     if (moi.length > 3) setTimeout(() => MT.toast(`<span class="bieu-toast">${ic("radar")}</span><div>+${moi.length - 3} chiến báo mới khác</div>`), 700 + 3 * 900);
     if (ds[0]) ghiLS("mt-bao-xem", ds[0].luc);
@@ -878,14 +966,14 @@ async function tai() {
     DU = await MT.taiJSON("/chien-truong.json");
     if (DU.loi) throw new Error(DU.loi);
     DU.vung = DU.vung || []; DU.tong = DU.tong || {};
-    const [h, s] = await Promise.all([MT.taiJSON("/chien-truong-lich-su.json").catch(() => null), MT.taiJSON("/su-kien.json").catch(() => null)]);
-    LS = Array.isArray(h) ? h : (DU.lich_su || []); SK = s;
+    const [h, s, dd, nao] = await Promise.all(["/chien-truong-lich-su.json", "/su-kien.json", "/day-du.json", "/nao.json"].map(u => MT.taiJSON(u).catch(() => null)));
+    LS = Array.isArray(h) ? h : (DU.lich_su || []); SK = s; DD = dd; NAO = nao;
     NGAN = MT.boMaNgan((DU.quan || []).map(q => q.ma).concat((DU.de_xuat_tan_cong || []).map(c => c.kenh)));
     MT.song(DU.luc);
     const ve = (ten, ham) => { try { ham(); } catch (e) { console.error(ten, e); } };
     ve("đầu", dauTrang); ve("hud", hud); ve("tin", tin); ve("bản đồ", banDo); ve("tua", tua); ve("chiến báo", chienBao); ve("nhiệm vụ", nhiemVu); ve("quân", doiHinh);
-    ve("bxh", bxh); ve("nóng", diemNong); ve("thành tựu", thanhTuu); ve("mùa", muaGiai); ve("lịch sử", lichSu);
-    if (LAN_DAU) { LAN_DAU = false; ve("khoe", khoeThanhTich); }
+    ve("bxh", bxh); ve("nóng", diemNong); ve("thành tựu", thanhTuu); ve("tổng kết", tongKet); ve("mùa", muaGiai); ve("lịch sử", lichSu);
+    if (LAN_DAU) { LAN_DAU = false; ve("khoe", khoeThanhTich); ve("hiệu ứng", hieuUng); }
   } catch (e) { MT.song(null, e.message); }
 }
 document.querySelectorAll("#cot-chon button").forEach(b => b.addEventListener("click", () => {
@@ -896,6 +984,7 @@ document.querySelectorAll("#cot-chon button").forEach(b => b.addEventListener("c
 }));
 window.addEventListener("resize", MT.doiCo(() => { if (DU) { MT.banDo.fit(); lichSu(); } }, 180));
 tai(); MT.lamMoi(tai, 120000);
+try { new IntersectionObserver(es => es.forEach(e => e.target.classList.toggle("dang-xem", e.isIntersecting))).observe(document.getElementById("ban-do")); } catch (e) { /* trình duyệt cũ */ }
 </script>
 </body>
 </html>

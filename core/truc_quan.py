@@ -311,6 +311,31 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(nao_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith(("/anh-bia/", "/logo/")):     # ảnh bìa đã chọn / logo kênh — chỉ tệp trên máy, đường kiểm chặt
+            from core import tuong_truc_quan as tq4  # noqa: PLC0415
+            from urllib.parse import unquote  # noqa: PLC0415
+            phan = unquote(self.path.split("?", 1)[0]).strip("/").split("/")
+            p = None
+            if phan[0] == "anh-bia" and len(phan) == 3 and phan[2].endswith(".jpg"):
+                p = tq4.duong_anh(tq4.GOC, "bia", phan[1], phan[2][:-4])
+            elif phan[0] == "logo" and len(phan) == 2 and phan[1].endswith(".png"):
+                p = tq4.duong_anh(tq4.GOC, "logo", phan[1][:-4])
+            if not p:
+                return self._gui(404, "text/plain; charset=utf-8", b"khong co")
+            with open(p, "rb") as tep:
+                return self._gui(200, "image/jpeg" if p.endswith(".jpg") else "image/png", tep.read(), "max-age=3600")
+        for duong, ten_ham in (("/tuong.json", "ho_so_tuong"), ("/kinh-te.json", "kinh_te"), ("/dong-ho.json", "dong_ho"),
+                               ("/day-du.json", "day_du")):
+            if self.path.startswith(duong):        # dữ liệu vòng 4 (nhớ đệm 5 phút, mỗi nguồn bọc riêng)
+                try:
+                    from core import tuong_truc_quan as tq4  # noqa: PLC0415
+                    from urllib.parse import parse_qs, urlsplit  # noqa: PLC0415
+                    kenh = (parse_qs(urlsplit(self.path).query).get("kenh") or [""])[0]
+                    ham = getattr(tq4, ten_ham)
+                    du = tq4.nho(ten_ham + ":" + kenh, (lambda: ham(tq4.GOC, kenh)) if ten_ham == "ho_so_tuong" else (lambda: ham(tq4.GOC)))
+                    return self._gui(200, "application/json; charset=utf-8", json.dumps(du, ensure_ascii=False).encode("utf-8"))
+                except Exception as loi:  # noqa: BLE001
+                    return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/gioi-thieu.json"):      # nội dung trình chiếu (riêng máy → mặc định)
             return self._gui(200, "application/json; charset=utf-8",
                              json.dumps(noi_dung_gioi_thieu(), ensure_ascii=False).encode("utf-8"))

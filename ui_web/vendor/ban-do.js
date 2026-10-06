@@ -213,9 +213,9 @@
     (mo.quan || []).forEach(q => {
       const t = toaQuan[q.ma]; if (!t) return;
       const [x, y, w] = t;
-      s += `<g class="bd-quan ${q.chon ? "chon" : ""}" data-quan="${MT.esc(q.ma)}" transform="translate(${f1(x - w / 2)},${f1(y - 11)})" tabindex="0" role="button" aria-label="Quân ${MT.esc(q.ma)}">
+      s += `<g class="bd-quan ${q.chon ? "chon" : ""}" data-quan="${MT.esc(q.ma)}" transform="translate(${f1(x - w / 2)},${f1(y - 11)})" tabindex="0" role="button" aria-label="Quân ${MT.esc(q.ma)}"><g class="bd-nhun" style="animation-delay:-${(MT.bam(q.ma) % 34) / 10}s">
         <rect width="${f1(w)}" height="22" rx="11" class="bd-quan-than"/><circle cx="11" cy="11" r="10" class="bd-quan-cap"/><text x="11" y="15" text-anchor="middle" class="bd-quan-so">${q.cap}</text>
-        <text x="${f1(24 + (w - 28) / 2)}" y="15" text-anchor="middle" class="bd-quan-chu">${MT.esc(q.nhan)}</text></g>`;
+        <text x="${f1(24 + (w - 28) / 2)}" y="15" text-anchor="middle" class="bd-quan-chu">${MT.esc(q.nhan)}</text></g></g>`;
     });
     g.innerHTML = s;
     g.querySelectorAll(".bd-quan").forEach(e => {
@@ -348,5 +348,10 @@
     else if (ev.key === "-" || ev.key === "_") zoomTai(1 / 1.4);
   });
 
-  MT.banDo = {ve, fit, zoomTai, toMau, boCuc, veGhim: () => apDung(), BD};
+  /* chớp một vùng (tấn công / chiếm đất) — vài nhịp rồi tự gỡ */
+  function nhay(ma, lop) {
+    const svg = BD.hop && BD.hop.querySelector(".bd-svg"); if (!svg || MT.giamChuyenDong) return;
+    svg.querySelectorAll(`.bd-o[data-ma="${CSS.escape(ma)}"]`).forEach(e => { e.classList.remove(lop); void e.getBBox(); e.classList.add(lop); setTimeout(() => e.classList.remove(lop), 2400); });
+  }
+  MT.banDo = {ve, fit, zoomTai, toMau, boCuc, nhay, veGhim: () => apDung(), BD};
 })();

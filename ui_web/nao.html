@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Não · MYTOOL</title>
 <link rel="preload" href="/vendor/fonts/chakra-petch-latin-700.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/vendor/he-thong.css?v=6">
+<link rel="stylesheet" href="/vendor/he-thong.css?v=7">
 <style>
 :root{--ai:#a78bfa;--ai2:#7c3aed}
 nav.tabs a.tab.on:after{background:var(--ai);box-shadow:0 0 12px var(--ai)} nav.tabs a.tab.on svg{color:var(--ai)}
@@ -51,6 +51,23 @@ nav.tabs a.tab.on:after{background:var(--ai);box-shadow:0 0 12px var(--ai)} nav.
 @media (max-width:1150px){.luoi,.luoi2{grid-template-columns:minmax(0,1fr)}}
 .bd-vung svg.vong{width:auto}
 .loc-hang{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 0}
+/* ---- lời tiên tri ---- */
+.tien-tri{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;padding:12px 16px 16px}
+.tt{position:relative;padding:14px 14px 12px;border-radius:14px;overflow:hidden;background:radial-gradient(260px 140px at 100% 0%,rgba(167,139,250,.18),transparent 70%),rgba(15,23,38,.85);border:1px solid rgba(167,139,250,.3)}
+.tt .cau-cau{display:flex;align-items:center;gap:10px}
+.tt .cau{width:44px;height:48px;flex:none;display:grid;place-items:center;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,#c4b5fd,#6d28d9);color:#f5f3ff}
+.tt .cau svg{width:22px;height:22px}
+.tt .dem{font:700 26px/1 var(--f-hud);color:#ddd6fe} .tt .dem small{display:block;font:600 10px var(--f-hud);letter-spacing:.14em;color:var(--mo);margin-top:3px}
+.tt p{margin:10px 0 8px;font-size:13px;line-height:1.45;color:#d3dcec;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tt .meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:11px;color:var(--mo)}
+.tt .thanh-tien{height:5px;margin-top:8px}
+.tt.toi{border-color:rgba(251,191,36,.6)} .tt.toi .dem{color:var(--vang)}
+.tt.dung{border-color:rgba(52,211,153,.55);background:radial-gradient(260px 140px at 100% 0%,rgba(52,211,153,.16),transparent 70%),rgba(15,23,38,.85)}
+.tt.sai{border-color:rgba(248,113,113,.5);background:radial-gradient(260px 140px at 100% 0%,rgba(248,113,113,.14),transparent 70%),rgba(15,23,38,.85)}
+.tt .an-dau{position:absolute;top:14px;right:12px;padding:4px 10px;border:2px solid currentColor;border-radius:7px;font:700 13px/1 var(--f-hud);letter-spacing:.14em;
+  transform:rotate(-8deg);background:rgba(5,9,18,.55);animation:dong-dau .5s cubic-bezier(.2,1.6,.4,1) both}
+.tt.dung .an-dau{color:var(--tot)} .tt.sai .an-dau{color:var(--hong)}
+@keyframes dong-dau{from{transform:rotate(-8deg) scale(2.2);opacity:0}to{transform:rotate(-8deg) scale(1);opacity:1}}
 
 /* ---- nhật ký trận ---- */
 .tran-ds{position:relative;padding:12px 16px 16px 16px}
@@ -154,6 +171,10 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
 <main class="trang">
   <section class="panel co-van goc tim vao" id="co-van" aria-label="Cố vấn chiến lược"></section>
   <section class="o-ds" id="o-ds" aria-label="Chỉ số"></section>
+  <section class="panel goc tim" aria-label="Lời tiên tri" style="margin-bottom:16px">
+    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="sparkles" style="color:var(--ai)"></svg>Lời tiên tri — dự đoán chờ ngày phán xử</h2><span class="phu" id="tt-phu" style="margin-left:auto"></span></div>
+    <div class="tien-tri" id="tien-tri"></div>
+  </section>
 
   <div class="luoi">
     <section class="panel goc tim" aria-label="Nhật ký chiến dịch">
@@ -191,7 +212,7 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
   </section>
 </main>
 
-<script src="/vendor/chung.js?v=6"></script>
+<script src="/vendor/chung.js?v=7"></script>
 <script>
 "use strict";
 const {esc, so, ic} = MT;
@@ -251,6 +272,25 @@ function coVan() {
     </div>
     <div class="dong-ho">${dongHo}</div>`;
 }
+function tienTri() {
+  const ds = Array.isArray(DU.hanh_dong) ? DU.hanh_dong.filter(d => d.du_doan && !d.khong_tinh) : [], hom = DU.hom_nay || (DU.luc || "").slice(0, 10);
+  const ngay = s => Math.round((new Date(s + "T12:00:00") - new Date(hom + "T12:00:00")) / 864e5);
+  const mo = ds.filter(d => d.trang_thai === "mo" && !d.cham && d.kiem_ngay).sort((a, b) => a.kiem_ngay < b.kiem_ngay ? -1 : 1);
+  const xong = ds.filter(d => d.cham === "dung" || d.cham === "sai").sort((a, b) => (a.cham_luc || "") < (b.cham_luc || "") ? 1 : -1);
+  document.getElementById("tt-phu").textContent = `${mo.length} đang chờ · ${xong.length} đã phán xử`;
+  document.getElementById("tien-tri").innerHTML = [...mo.slice(0, 6), ...xong.slice(0, 3)].map(d => {
+    const con = d.kiem_ngay ? ngay(d.kiem_ngay) : null, tong = d.kiem_ngay ? Math.max(1, ngay(d.kiem_ngay) - ngay(String(d.luc).slice(0, 10))) : 1;
+    const da = d.cham === "dung" || d.cham === "sai", toi = !da && con != null && con <= 0;
+    const p = MT.kep(1 - (con || 0) / tong, 0, 1);
+    return `<div class="tt ${da ? d.cham : toi ? "toi" : ""}">${da ? `<span class="an-dau">${d.cham === "dung" ? "ỨNG NGHIỆM" : "SAI LỆCH"}</span>` : ""}
+      <div class="cau-cau"><span class="cau">${ic(da ? (d.cham === "dung" ? "check" : "x") : "sparkles")}</span>
+        <div class="dem">${da ? "Đã phán" : con == null ? "—" : con > 0 ? con + " ngày" : con === 0 ? "Hôm nay" : "Quá hạn"}<small>${da ? "kết quả " + esc(String(d.cham_luc || "").slice(0, 10)) : "tới ngày phán xử " + esc(ngay2(d.kiem_ngay))}</small></div></div>
+      <p>${esc(d.du_doan)}</p>
+      <div class="meta"><span class="chip tim">${esc((TEN_LENH[d.lenh] || [d.lenh])[0])}</span>${d.kenh ? `<span class="chip">${esc(d.kenh)}</span>` : ""}<span>${esc(d.id)}</span></div>
+      ${da ? (d.ghi_chu_cham ? `<div class="mo rat-nho" style="margin-top:6px">${esc(d.ghi_chu_cham)}</div>` : "") : `<div class="thanh-tien tim"><b style="width:${(p * 100).toFixed(0)}%"></b></div>`}</div>`;
+  }).join("") || '<div class="trong">Chưa có dự đoán nào chờ phán xử.</div>';
+}
+const ngay2 = s => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "—";
 function oChiSo() {
   const d = DU.diem || {}, l = DU.lan_cuoi || {}, dem = d.bai_hoc_dem || {};
   if (d.loi) { document.getElementById("o-ds").innerHTML = ""; return; }
@@ -391,7 +431,7 @@ async function tai() {
     if (DU.loi && !DU.diem) throw new Error(DU.loi);
     MT.song(DU.luc);
     const ve = (ten, ham) => { try { ham(); } catch (e) { console.error(ten, e); } };
-    ve("cố vấn", coVan); ve("ô", oChiSo); ve("suy nghĩ", suyNghi); ve("hành động", hanhDong); ve("biểu đồ", bieuDo); ve("trí nhớ", triNho); ve("bài học", baiHoc);
+    ve("cố vấn", coVan); ve("ô", oChiSo); ve("tiên tri", tienTri); ve("suy nghĩ", suyNghi); ve("hành động", hanhDong); ve("biểu đồ", bieuDo); ve("trí nhớ", triNho); ve("bài học", baiHoc);
   } catch (e) { MT.song(null, e.message); }
 }
 document.querySelectorAll("#che-do button").forEach(b => b.addEventListener("click", () => {

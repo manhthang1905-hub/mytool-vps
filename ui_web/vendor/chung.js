@@ -279,6 +279,72 @@
     requestAnimationFrame(khung);
   };
 
+  /* ---------- hộp lớn giữa màn (modal) ---------- */
+  let hop = null;
+  MT.moHop = (tieuDe, than, lop) => {
+    MT.dongHop();
+    hop = document.createElement("div"); hop.className = "hop-lon-lop";
+    hop.innerHTML = `<div class="hop-lon ${lop || ""}" role="dialog" aria-modal="true" aria-label="${MT.esc(String(tieuDe).replace(/<[^>]+>/g, ""))}">
+      <div class="hop-lon-dau"><div class="hop-lon-tieu">${tieuDe}</div><button class="dong-x" aria-label="Đóng">${MT.ic("x")}</button></div><div class="hop-lon-than">${than}</div></div>`;
+    document.body.appendChild(hop);
+    hop.addEventListener("click", e => { if (e.target === hop) MT.dongHop(); });
+    hop.querySelector(".dong-x").addEventListener("click", MT.dongHop);
+    requestAnimationFrame(() => hop && hop.classList.add("hien"));
+    MT.am("mo");
+    return hop.querySelector(".hop-lon");
+  };
+  MT.dongHop = () => { if (hop) { const h = hop; hop = null; h.classList.remove("hien"); setTimeout(() => h.remove(), 200); } };
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && hop) MT.dongHop(); });
+
+  /* ---------- âm thanh (tổng hợp bằng WebAudio, 0 KB; mặc định TẮT; chỉ khi người bấm) ---------- */
+  let ac = null;
+  MT.amBat = () => { try { return localStorage.getItem("mt-am") === "1"; } catch (e) { return false; } };
+  MT.am = ten => {
+    if (!MT.amBat()) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const NOT = {bam: [[660, .05]], mo: [[440, .06], [660, .08]], ting: [[880, .08]], thang: [[523, .1], [659, .1], [784, .1], [1047, .22]], loi: [[220, .18]]}[ten] || [[600, .05]];
+      let t = ac.currentTime;
+      NOT.forEach(([f, d]) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = ten === "loi" ? "sawtooth" : "triangle"; o.frequency.value = f;
+        g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.12, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+        o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + .02); t += d * .9;
+      });
+    } catch (e) { /* không có âm thanh */ }
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const song = document.querySelector(".thanh-tren .song");
+    if (!song) return;
+    const b = document.createElement("button");
+    b.className = "nut-am"; b.title = "Âm thanh hiệu ứng (mặc định tắt)";
+    const ve = () => { b.innerHTML = MT.amBat() ? `<svg class="ic" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>`
+      : `<svg class="ic" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg>`; b.setAttribute("aria-pressed", MT.amBat()); };
+    b.addEventListener("click", () => { try { localStorage.setItem("mt-am", MT.amBat() ? "0" : "1"); } catch (e) { /* bỏ qua */ } ve(); MT.am("ting"); });
+    ve(); song.parentNode.insertBefore(b, song);
+  });
+
+  /* ---------- markdown gọn (báo cáo ngày): tiêu đề, gạch đầu dòng, **đậm**, `mã`, bảng ---------- */
+  MT.md = s => {
+    const dong = String(s || "").split(/\r?\n/), ra = [];
+    const nd = x => MT.esc(x).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+    let bang = null, ds = false;
+    const dongBang = () => { if (bang) { ra.push(`<table class="md-bang">${bang.join("")}</table>`); bang = null; } };
+    const dongDs = () => { if (ds) { ra.push("</ul>"); ds = false; } };
+    dong.forEach(x => {
+      if (/^\s*\|/.test(x)) { dongDs(); if (/^\s*\|[\s|:-]+\|\s*$/.test(x)) return; bang = bang || []; bang.push("<tr>" + x.trim().replace(/^\||\|$/g, "").split("|").map(c => `<td>${nd(c.trim())}</td>`).join("") + "</tr>"); return; }
+      dongBang();
+      const h = /^(#{1,4})\s+(.*)$/.exec(x);
+      if (h) { dongDs(); ra.push(`<h${Math.min(5, h[1].length + 2)}>${nd(h[2])}</h${Math.min(5, h[1].length + 2)}>`); return; }
+      const g = /^\s*[-*•]\s+(.*)$/.exec(x);
+      if (g) { if (!ds) { ra.push("<ul>"); ds = true; } ra.push(`<li>${nd(g[1])}</li>`); return; }
+      dongDs();
+      if (x.trim()) ra.push(`<p>${nd(x)}</p>`);
+    });
+    dongBang(); dongDs();
+    return `<div class="md">${ra.join("")}</div>`;
+  };
+
   /* ---------- phím tắt toàn trang: 1/2/3/4 chuyển trang ---------- */
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test((e.target || {}).tagName || "") || (e.target || {}).isContentEditable) return;
