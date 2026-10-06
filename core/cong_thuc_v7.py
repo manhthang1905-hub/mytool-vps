@@ -41,6 +41,7 @@ from . import danh_ba_doi_thu as db
 from . import doi_thu_kenh as so
 from . import phan_cum_ai as _pca
 from .chi_so_ytb import gom as _gom
+from .chi_so_ytb import kho_raw as _kho
 from .chi_so_ytb import loc_video as _loc
 from .da_lam import doc_ma_da_lam
 from .ho_so_ngach import doc_ngach
@@ -563,11 +564,17 @@ def con_hieu_luc(ket: Optional[Dict], video_minh: Sequence[str], la_video_minh: 
 
 # ── Bảng video đề xuất (YT_RELATED) ──────────────────────────────────────────
 
+def _raw_join(mau_moc: str) -> List[str]:
+    """Gói `*join*.json` (hay `.json.gz` đã nén, xem `chi_so_ytb.kho_raw`) trong `<mau_moc>/raw/`.
+    `mau_moc` được phép có `*` (mọi mốc của một video)."""
+    return [f for raw in sorted(glob.glob(os.path.join(mau_moc, "raw")))
+            for f in _kho.liet_ke(raw, "*join*.json")]
+
+
 def _bang_raw(f: str) -> Optional[Dict]:
     """Raw `*reach_viewers*join*.json` → bảng. Mỗi chỉ số có HAI cột: "% trên tổng" và số thật;
     chỉ cột số thật mang `total`. Chọn nhầm cột đầu là CTR sai cả chục lần, AVD rỗng."""
-    with io.open(f, encoding="utf-8") as tep:
-        d = json.load(tep)
+    d = _kho.doc_json(f)
     h = d.get("href", "")
     if "ddr_value=YT_RELATED" not in h or "dimension=TRAFFIC_SOURCE_DETAIL" not in h:
         return None
@@ -612,7 +619,7 @@ def _bang_raw(f: str) -> Optional[Dict]:
                      "kenh_id": kenh_id.get(ma, "")})
     return {"hien_thi": tong.get("VIDEO_THUMBNAIL_IMPRESSIONS") or 0,
             "bam": tong.get("VIDEO_THUMBNAIL_IMPRESSIONS_VTR"), "xem": tong.get("EXTERNAL_VIEWS") or 0,
-            "avd": (tong.get("AVERAGE_WATCH_TIME") or 0) / 1000.0, "dong": dong, "tep": f}
+            "avd": (tong.get("AVERAGE_WATCH_TIME") or 0) / 1000.0, "dong": dong, "tep": _kho.ten_goc(f)}
 
 
 def _bang_csv(f: str) -> Optional[Dict]:
@@ -641,7 +648,7 @@ def doc_bang_de_xuat(thu_muc_chi_so: str, video_id: str) -> Optional[Dict]:
     nhiều dòng hơn (bản CSV đủ dòng thắng bản raw chỉ có top 50)."""
     ung = []
     goc = os.path.join(thu_muc_chi_so, video_id)
-    for f in glob.glob(os.path.join(goc, "*", "raw", "*join*.json")):
+    for f in _raw_join(os.path.join(goc, "*")):
         try:
             b = _bang_raw(f)
         except (OSError, ValueError, KeyError, TypeError):
@@ -936,8 +943,7 @@ def _danh_dau_thang(ds: List[VideoMinh], ch: Dict) -> None:
 
 def _href_join(f: str) -> str:
     try:
-        with io.open(f, encoding="utf-8") as tep:
-            return str((json.load(tep) or {}).get("href") or "")
+        return str((_kho.doc_json(f) or {}).get("href") or "")
     except (OSError, ValueError):
         return ""
 
@@ -1013,7 +1019,7 @@ def da_co_video_thang(goc: str, kenh: str, *, ch: Optional[Dict] = None) -> bool
             if not dat:
                 continue
             co_pool = any("ddr_value=YT_RELATED" in _href_join(f)
-                          for f in glob.glob(os.path.join(duong_moc, "raw", "*join*.json")))
+                          for f in _raw_join(duong_moc))
             if co_pool:
                 return True
     return False
@@ -1771,7 +1777,7 @@ def kenh_con_thieu(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = Non
     for v in videos:
         if not v.thang:
             continue
-        for f in glob.glob(os.path.join(thu_muc, v.ma, "*", "raw", "*join*.json")):
+        for f in _raw_join(os.path.join(thu_muc, v.ma, "*")):
             try:
                 b = _bang_raw(f)
             except (OSError, ValueError, KeyError, TypeError):

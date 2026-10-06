@@ -225,8 +225,9 @@ def _giai_ma_con_thieu(kenh_dir: str) -> int:
             # gói kênh 292KB lúc 17:22 nằm chết cạnh tong-quan rỗng của
             # đợt 16:07). Gói raw nào MỚI HƠN bản giải mã thì giải lại.
             try:
+                # `.tam` = kho_raw đang nén dở (mtime giờ nén, không phải gói mới về)
                 moi_nhat = max((os.path.getmtime(os.path.join(raw, t))
-                                for t in os.listdir(raw)), default=0.0)
+                                for t in os.listdir(raw) if not t.endswith(".tam")), default=0.0)
             except OSError:
                 moi_nhat = 0.0
             if moi_nhat <= os.path.getmtime(tq) and not _can_giai_lai_phien_cu(tq, raw):

@@ -19,7 +19,6 @@ do extension bắt được → đầu vào của phan_tich.py: tong-quan.json +
     python giai_ma.py <thư mục raw> --dump
 """
 import argparse
-import glob
 import io
 import json
 import os
@@ -30,6 +29,11 @@ if sys.stdout is not None:
     # Chạy dưới `pythonw.exe` (không cửa sổ đen) thì sys.stdout là None — xem
     # ghi chú cùng chỗ trong core/chi_so_ytb/gom.py.
     sys.stdout.reconfigure(encoding="utf-8")
+
+try:
+    from . import kho_raw
+except ImportError:  # chạy thẳng `python giai_ma.py` — tiến trình con, không có gói cha
+    import kho_raw
 
 # Gói CẤP KÊNH chứa BA thẻ key-metric chồng nhau, cùng tên chỉ số nhưng khác cửa sổ thời gian
 # (đo 05/09/2026 trên kenh-20260905: EXTERNAL_VIEWS = 2359 · 1290 · 1290; SUBSCRIBERS_NET_CHANGE
@@ -156,14 +160,14 @@ def tong_tu_join(res, req=None):
 
 
 def nap(thu_muc):
-    fs = sorted(glob.glob(os.path.join(thu_muc, "*.json")))
+    fs = kho_raw.liet_ke(thu_muc, "*.json")     # gói cũ đã nén `.json.gz` — đọc như thường
     if not fs:
         sys.exit(f"Không có file .json trong {thu_muc}")
     for f in fs:
         if "yta_web" not in f and "creator_videos" not in f:
             continue
         try:
-            g = json.load(io.open(f, encoding="utf-8"))
+            g = kho_raw.doc_json(f)
         except Exception as e:
             print(f"bỏ qua {f}: {e}")
             continue

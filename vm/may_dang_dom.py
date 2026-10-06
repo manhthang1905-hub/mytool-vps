@@ -731,12 +731,14 @@ def doc_view_48h_kem_luc(thu_muc_chi_so: str) -> tuple:
     khối thời gian thực (Studio chỉ trả top video của kênh có view trong 48h) —
     bản chụp kênh của QUÉT NGÀY. ({}, None) nếu chưa có. Chỉ đọc."""
     import glob  # noqa: PLC0415
-    tep = sorted(glob.glob(os.path.join(thu_muc_chi_so, "kenh", "kenh-*", "raw", "*get_cards*.json")),
-                 key=os.path.basename, reverse=True)
+
+    from core.chi_so_ytb import kho_raw  # noqa: PLC0415 — gói cũ đã nén .json.gz
+    tep = sorted((f for raw in glob.glob(os.path.join(thu_muc_chi_so, "kenh", "kenh-*", "raw"))
+                  for f in kho_raw.liet_ke(raw, "*get_cards*.json")),
+                 key=lambda f: os.path.basename(kho_raw.ten_goc(f)), reverse=True)
     for duong in tep[:40]:
         try:
-            with open(duong, "r", encoding="utf-8") as f:
-                goi = json.load(f)
+            goi = kho_raw.doc_json(duong)
         except (OSError, ValueError):
             continue
         v = view_48h_tu_goi(goi)

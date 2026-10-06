@@ -6,7 +6,8 @@ Video đã lên YouTube (sổ `vm/logs/so-video-id.json` xác nhận) quá
 `don_dep.NGAY_SAU_CONG_KHAI` ngày thì xoá file nặng của nó, giữ srt/json/bìa đã chọn;
 ổ trống dưới `don_dep_mo_rong.NGUONG_O_GB` GB thì không bắt đầu dựng video mới và
 báo động. Thêm: tệp `*.log` nào vượt `GIOI_HAN_LOG_BYTE` thì xoay vòng, giữ
-`SO_BAN_LOG_GIU` bản nén.
+`SO_BAN_LOG_GIU` bản nén; raw chỉ số cũ hơn 7 ngày thì nén gz (`chi_so_ytb.kho_raw`,
+không mất byte nào — tự học vẫn đọc được).
 
 ═══ TỆP NÀY KHÔNG VIẾT LẠI LUẬT NÀO ═══
 
@@ -16,6 +17,7 @@ báo động. Thêm: tệp `*.log` nào vượt `GIOI_HAN_LOG_BYTE` thì xoay v�
   phụ thuộc sản xuất.
 * Van ổ: `core/dieu_phoi` → `don_dep_mo_rong.van_o` (không mở lượt mới). Báo
   động: `core/gac_tong._kiem_dia_day` (cùng ngưỡng, nhắc lại mỗi 24h).
+* Nén raw chỉ số: `core/chi_so_ytb/kho_raw.nen_cu` (mọi nơi đọc raw đi qua `kho_raw`).
 * Mới ở đây chỉ có xoay `*.log`.
 
 ═══ XOAY LOG ═══
@@ -41,6 +43,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from . import don_dep, don_dep_mo_rong, ghi_dia
+from .chi_so_ytb import kho_raw
 from .kenh import doc_kenh, liet_ke_kenh
 
 __all__ = ["GIOI_HAN_LOG_BYTE", "SO_BAN_LOG_GIU", "NHIP_GIO",
@@ -145,6 +148,10 @@ def chay(goc: str, *, thu: bool = True,
 
     logs = ung_vien_xoay_log(goc)
     da_xoay = [] if thu else [u["duong"] for u in logs if xoay_log(u["duong"])]
+    try:
+        raw = kho_raw.nen_cu(goc, thu=thu)
+    except Exception as loi:  # noqa: BLE001 — nén hỏng không chặn phần dọn còn lại
+        raw = {"so_tep": 0, "bytes_truoc": 0, "bytes_sau": 0, "theo_kenh": {}, "loi": str(loi)[:150]}
     return {
         "thu": thu,
         "con_trong_gb": con_gb,
@@ -156,6 +163,7 @@ def chay(goc: str, *, thu: bool = True,
         "log": logs,
         "log_bytes": sum(u["bytes"] for u in logs),
         "log_da_xoay": da_xoay,
+        "raw": raw,
     }
 
 
@@ -169,6 +177,11 @@ def tom_tat(kq: Dict[str, Any]) -> str:
                                               _gb(kq["video_bytes"])),
             "{0} log cần xoay ({1})".format(len(kq["log"]), _gb(kq["log_bytes"]))
             if kq.get("thu") else "{0} log đã xoay".format(len(kq["log_da_xoay"]))]
+    raw = kq.get("raw") or {}
+    if raw.get("so_tep") or raw.get("loi"):
+        phan.append("{0} raw {1} nén {2} → {3}{4}".format(
+            raw.get("so_tep") or 0, "sẽ" if kq.get("thu") else "đã", _gb(raw.get("bytes_truoc") or 0),
+            _gb(raw.get("bytes_sau") or 0), " (lỗi: {0})".format(raw["loi"]) if raw.get("loi") else ""))
     if not kq["van_o"].get("duoc_mo_moi", True):
         phan.append("VAN Ổ ĐANG ĐÓNG — không mở video mới")
     return dau + " · " + " · ".join(phan)
@@ -212,13 +225,16 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     kq = chay(goc, thu="--thu" in a)
     print("Luật: video đã lên YouTube ≥ {0} ngày → xoá file nặng; ổ < {1:g} GB → không dựng "
-          "video mới + báo động; *.log > {2} MB → xoay, giữ {3} bản nén.".format(
-              kq["ngay_sau_cong_khai"], kq["nguong_o_gb"], GIOI_HAN_LOG_BYTE // 1024 ** 2, SO_BAN_LOG_GIU))
+          "video mới + báo động; *.log > {2} MB → xoay, giữ {3} bản nén; raw chỉ số > {4} ngày "
+          "→ nén gz.".format(kq["ngay_sau_cong_khai"], kq["nguong_o_gb"], GIOI_HAN_LOG_BYTE // 1024 ** 2,
+                             SO_BAN_LOG_GIU, kho_raw.NGAY_CU))
     for ma, v in sorted(kq["video"].items()):
         print("  {0}: {1} gói, {2}{3}".format(ma, v.get("so_goi") or 0, _gb(v.get("bytes") or 0),
                                              " ({0})".format(v["ly_do"]) if v.get("ly_do") else ""))
     for u in kq["log"]:
         print("  log: {0} ({1:.1f} MB)".format(os.path.relpath(u["duong"], goc), u["bytes"] / 1024 ** 2))
+    for ma, r in sorted((kq["raw"].get("theo_kenh") or {}).items()):
+        print("  raw {0}: {1} tệp {2} → {3}".format(ma, r["so_tep"], _gb(r["bytes_truoc"]), _gb(r["bytes_sau"])))
     print(tom_tat(kq))
     return 0
 

@@ -25,6 +25,11 @@ if sys.stdout is not None:
     sys.stdout.reconfigure(encoding="utf-8")
 GOC = os.path.dirname(os.path.abspath(__file__))
 
+try:
+    from . import kho_raw
+except ImportError:  # chạy thẳng `python gom.py` — tiến trình con, không có gói cha
+    import kho_raw
+
 
 def doc_csv(p):
     if not os.path.exists(p):
@@ -68,9 +73,9 @@ def luc_chup(tm):
     97 MB raw chỉ để lấy một dấu thời gian là phí.
     """
     moc = []
-    for p in glob.glob(os.path.join(tm, "raw", "*")):
+    for p in kho_raw.liet_ke(os.path.join(tm, "raw")):     # `.json` hay `.json.gz` (kho_raw)
         try:
-            with io.open(p, "r", encoding="utf-8", errors="ignore") as f:
+            with kho_raw.mo_doc(p, errors="ignore") as f:
                 m = re.search(r'"captured_at"\s*:\s*"([^"]+)"', f.read(400))
             if m:
                 t = datetime.datetime.strptime(m.group(1)[:19], "%Y-%m-%dT%H:%M:%S")
@@ -97,9 +102,9 @@ def _captured_at_that(thu_muc_moc):
     `None` nếu không gói raw nào mang `captured_at` đọc được.
     """
     moc = []
-    for p in glob.glob(os.path.join(thu_muc_moc, "raw", "*")):
+    for p in kho_raw.liet_ke(os.path.join(thu_muc_moc, "raw")):
         try:
-            with io.open(p, "r", encoding="utf-8", errors="ignore") as f:
+            with kho_raw.mo_doc(p, errors="ignore") as f:
                 m = re.search(r'"captured_at"\s*:\s*"([^"]+)"', f.read(400))
             if m:
                 t = datetime.datetime.strptime(m.group(1)[:19], "%Y-%m-%dT%H:%M:%S")

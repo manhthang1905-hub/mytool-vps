@@ -56,8 +56,6 @@ ghi `ke-hoach.csv`. `thuc_hien=False` chỉ TÍNH, không ghi gì — dùng đ�
 from __future__ import annotations
 
 import datetime as _dt
-import glob
-import json
 import os
 import re
 import unicodedata
@@ -65,6 +63,7 @@ from difflib import SequenceMatcher
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import ban_giao_dang, ke_hoach_dang
+from .chi_so_ytb import kho_raw as _kho_raw
 
 __all__ = ["NGUONG_GIONG_MAC_DINH", "chuan_hoa_tieu_de",
            "doc_video_cong_khai_tren_kenh", "tu_nhan_video_da_dang"]
@@ -152,13 +151,12 @@ def doc_video_cong_khai_tren_kenh(goc: str, ma_kenh: str) -> Dict[str, Dict[str,
         ngay_quet = khoa_ngay if khoa_ngay.isdigit() else ten
         duong_raw = os.path.join(goc_quet, ten, "raw")
         try:
-            danh_sach_tep = sorted(glob.glob(os.path.join(duong_raw, "*get_creator_videos*.json")))
+            danh_sach_tep = _kho_raw.liet_ke(duong_raw, "*get_creator_videos*.json")  # cả bản .gz
         except OSError:
             continue
         for duong_json in danh_sach_tep:
             try:
-                with open(duong_json, "r", encoding="utf-8") as tep:
-                    du = json.load(tep)
+                du = _kho_raw.doc_json(duong_json)
             except (OSError, ValueError):
                 continue
             if not isinstance(du, dict):
