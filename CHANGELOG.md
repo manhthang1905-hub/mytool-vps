@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.172.1** — 2026-10-06 — `vps-jp1` — fix(gac-tong): bao 'qua nhieu tu_chay' tru luot cho kho clip + tran tong 7; chi dem luot kenh (bo chinh lenh PowerShell, dieu phoi, vo cmd) — het bao khan sai 11/7
 - **2.172.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): vong 2 kieu game — ban do luc giac co suong mu, ban do nho, phong/keo, ho so dich + diem yeu, chien bao (/su-kien.json), len cap/thanh tuu/mua giai, tua dien bien, xe hang tren bang chuyen + kho dan clip, hoi dong chien lu…
 - **2.171.0** — 2026-10-06 — `vps-jp1` — feat(trung-tam): giao dien kieu game chien thuat — ban do chien dich (quan co, vuong mien boss, lua diem nong, mui ten tan cong), thanh tai nguyen, nhiem vu, quan doan, thanh tuu; Hau can kieu xuong; Nao kieu Tong tham muu; font/vendor off…
 - **2.170.1** — 2026-10-06 — `vps-jp1` — feat(dieu-phoi): luot dang cho kho clip khong chiem lan API (dau cho-clip/<kenh>.json, pid song + tuoi <45'); tran tong 7 luot
