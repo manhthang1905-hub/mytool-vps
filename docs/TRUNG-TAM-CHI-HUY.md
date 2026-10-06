@@ -1,4 +1,4 @@
-# Trung tâm chỉ huy (cổng 8770)
+# Trung tâm chỉ huy (cổng 8790)
 
 Trang web **chỉ đọc** cho chủ dự án thấy cả VPS trong một chỗ: chiếm được bao nhiêu thị phần ngách, dây
 chuyền hôm nay tới đâu, bộ não đang nghĩ gì. Trang không bấm, không sửa, không gọi AI, không tiêu tiền.
@@ -6,7 +6,7 @@ Cập nhật 06/10/2026.
 
 ## Mở trang
 
-- Bấm đúp `MO-TRUNG-TAM.bat` ở gốc MyTool. Tệp bật máy chủ nhỏ nếu chưa chạy rồi mở `http://127.0.0.1:8770/`.
+- Bấm đúp `MO-TRUNG-TAM.bat` ở gốc MyTool. Tệp bật máy chủ nhỏ nếu chưa chạy rồi mở `http://127.0.0.1:8790/`.
 - Hoặc dòng lệnh: `python -X utf8 -m core.truc_quan` (`--cong 8771` đổi cổng, `--json` chỉ in dữ liệu để kiểm).
 - Máy chủ chỉ nghe `127.0.0.1` và tách hẳn khỏi trạm 8765 của MyTool. Tắt nó không ảnh hưởng sản xuất hay đăng.
 

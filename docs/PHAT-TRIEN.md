@@ -84,7 +84,7 @@ Dùng `--chi <tệp…>` khi máy còn tệp dở của người khác: chỉ nh
 | Kéo view chéo | `core/keo_cheo.py` (kế hoạch, giới hạn, đo), `vm/keo_cheo_dom.py` (thêm vào danh sách phát trên Chrome kênh lớn) |
 | Đăng: bền với Studio | `vm/tu_chua_dom.py` (AI đề xuất bộ chọn, kiểm trên trang, `TL_TU_CHUA_DOM=0` tắt), `vm/ngon_ngu_tam.py` (tạm `hl=vi` rồi trả), `vm/thiet_lap_kenh_dom.py` (thiết lập kênh một lần) |
 | Dọn và canh | `core/don_dep.py`, `core/don_dia.py` (nhịp dọn từ gác tổng + xoay log), `core/gac_tong.py`, `core/ben_bi.py` (khoá chết, nhịp tim, hồi sinh agent, 36h không sản xuất), `core/chot_an_toan.py` (ví, Windows, hạn VPS, giọng trùng), `core/bao_dong.py`, `core/bao_cao_ngay.py` (06:30), `core/su_co.py`, `core/kiem_may.py`. Xem `docs/BEN-BI.md` |
-| Trung tâm chỉ huy (chỉ đọc, cổng 8770) | `core/truc_quan.py`, `core/nao_truc_quan.py`, `ui_web/*.html`, `MO-TRUNG-TAM.bat`. Xem `docs/TRUNG-TAM-CHI-HUY.md` |
+| Trung tâm chỉ huy (chỉ đọc, cổng 8790) | `core/truc_quan.py`, `core/nao_truc_quan.py`, `ui_web/*.html`, `MO-TRUNG-TAM.bat`. Xem `docs/TRUNG-TAM-CHI-HUY.md` |
 | Danh mục skill | `core/ky_nang.py` → `docs/KY-NANG.md` (`python -m core.ky_nang md`) |
 | Hạ tầng VPS | `core/giam_sat_vm.py` (trông tiến trình con `vm/`), `core/lich_tu_chay.py` (5 lịch Windows), `core/nhuong_phien_kenh.py`, `core/an_toan_khoi_dong.py`, `vm/cai_dat_tu_kho.py` (bộ cài) |
 | Đồng bộ kho | `core/dong_bo_git.py`, `core/cap_nhat_git.py`, `core/kiem_phat_hanh.py` |

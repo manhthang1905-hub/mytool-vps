@@ -3,9 +3,9 @@
 Chỉ ĐỌC trạng thái tool đang ghi (kế hoạch đăng, lượt sản xuất, điều phối, quét ngày, danh mục skill, nhật ký) —
 không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8765 đang chạy trong MyTool):
 
-    python -m core.truc_quan            # mở http://127.0.0.1:8770  (trang: ui_web/truc-quan.html)
+    python -m core.truc_quan            # mở http://127.0.0.1:8790  (trang: ui_web/truc-quan.html)
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
-    python -m core.truc_quan --cong 8771   # cổng khác (mặc định 8770)
+    python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
 Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`)
 """
 from __future__ import annotations
@@ -23,7 +23,9 @@ from typing import Any, Dict, List, Optional
 
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VM = os.path.join(GOC, "vm")
-CONG = 8770
+# 8790 (06/10/2026): 8765–8781 là cổng trạm/agent/KHOÁ máy DOM (8770 = khoá máy đăng DOM — từng bị trung tâm
+# chiếm làm máy đăng thoát mã 4). Không dùng cổng trong dải đó.
+CONG = 8790
 KHAU = ("kich-ban", "giong-doc", "phu-de", "bang-canh", "anh", "clip", "thumbnail", "dung")
 TEN_KHAU = {"kich-ban": "Kịch bản", "giong-doc": "Giọng đọc", "phu-de": "Phụ đề", "bang-canh": "Bảng cảnh",
             "anh": "Ảnh cảnh", "clip": "Clip", "thumbnail": "Ảnh bìa", "dung": "Dựng video"}
@@ -280,7 +282,7 @@ def main(argv=None) -> int:
         print(json.dumps(chup(), ensure_ascii=False, indent=1)[:6000])
         return 0
     cong = CONG
-    if "--cong" in a:      # cổng khác (kiểm thử song song máy chủ thật); mặc định vẫn 8770
+    if "--cong" in a:      # cổng khác (kiểm thử song song máy chủ thật); mặc định vẫn 8790
         cong = int(a[a.index("--cong") + 1])
     sv = ThreadingHTTPServer(("127.0.0.1", cong), _Xu)
     print("Trung tâm trực quan: http://127.0.0.1:{0}".format(cong), flush=True)
