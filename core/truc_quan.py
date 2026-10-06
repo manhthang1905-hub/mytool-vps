@@ -7,6 +7,7 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
 Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`)
+Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
 """
 from __future__ import annotations
 
@@ -228,18 +229,54 @@ def chien_truong_nho(han: float = 600.0) -> Dict[str, Any]:
         return _NHO_CT["du"]
 
 
+# Tệp tĩnh giao diện (phông, CSS/JS dùng chung) — chỉ thư mục ui_web/vendor, chỉ đuôi trong danh sách trắng.
+VENDOR = os.path.join(GOC, "ui_web", "vendor")
+_LOAI_TINH = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2",
+              ".ttf": "font/ttf", ".svg": "image/svg+xml"}
+
+
+def tep_tinh(duong_url: str, goc: Optional[str] = None) -> Optional[str]:
+    """`/vendor/a/b.css?v=1` → đường tuyệt đối trong ui_web/vendor, hoặc None (sai đuôi, lách thư mục, không có)."""
+    goc = os.path.realpath(goc or VENDOR)
+    con = duong_url.split("?", 1)[0].split("#", 1)[0]
+    if not con.startswith("/vendor/"):
+        return None
+    try:
+        from urllib.parse import unquote  # noqa: PLC0415
+        con = unquote(con[len("/vendor/"):])
+    except Exception:  # noqa: BLE001
+        return None
+    phan = con.split("/")
+    if not con or "\\" in con or ":" in con or "\x00" in con or any(p in ("", ".", "..") for p in phan):
+        return None
+    if os.path.splitext(con)[1].lower() not in _LOAI_TINH:
+        return None
+    p = os.path.realpath(os.path.join(goc, *phan))
+    if os.path.commonpath([goc, p]) != goc or not os.path.isfile(p):
+        return None
+    return p
+
+
 class _Xu(BaseHTTPRequestHandler):
     def log_message(self, *a):  # im lặng
         pass
 
-    def _gui(self, ma: int, loai: str, du: bytes) -> None:
+    def _gui(self, ma: int, loai: str, du: bytes, luu: str = "no-store") -> None:
         self.send_response(ma)
         self.send_header("Content-Type", loai)
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", luu)
         self.end_headers()
         self.wfile.write(du)
 
     def do_GET(self):  # noqa: N802
+        if self.path.startswith("/vendor/"):
+            p = tep_tinh(self.path)
+            if not p:
+                return self._gui(404, "text/plain; charset=utf-8", b"khong co")
+            duoi = os.path.splitext(p)[1].lower()
+            with open(p, "rb") as tep:      # phông để lâu; CSS/JS nhỏ thì luôn hỏi lại (đổi giao diện là thấy ngay)
+                return self._gui(200, _LOAI_TINH[duoi], tep.read(),
+                                 "max-age=604800" if duoi in (".woff2", ".ttf") else "no-cache")
         if self.path.startswith("/chien-truong.json"):
             try:
                 return self._gui(200, "application/json; charset=utf-8",
