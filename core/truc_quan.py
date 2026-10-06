@@ -297,6 +297,13 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(nao_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/su-kien.json"):      # chiến báo: video ta lên sóng, lệnh não, sự cố, kho clip (5 phút)
+            try:
+                from core import su_kien_truc_quan  # noqa: PLC0415
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(su_kien_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/du-lieu.json"):
             try:
                 return self._gui(200, "application/json; charset=utf-8",

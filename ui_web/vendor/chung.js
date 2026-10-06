@@ -92,6 +92,9 @@
     heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
     sparkles: '<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
     yen: '<circle cx="12" cy="12" r="10"/><path d="m8 7 4 5 4-5M12 12v6M9 13h6M9 16h6"/>',
+    play: '<path d="M6 4v16l14-8z"/>',
+    truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    message: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
     hourglass: '<path d="M5 22h14M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>',
   };
   MT.ic = (ten, lop) => `<svg class="ic ${lop || ""}" viewBox="0 0 24 24" aria-hidden="true">${IC[ten] || ""}</svg>`;
@@ -234,6 +237,54 @@
     hen = setTimeout(chay, ms);
   };
   MT.doiCo = (ham, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(ham, ms || 150); }; };
+
+  /* ---------- thông báo nhỏ (toast) ---------- */
+  let khayToast = null;
+  MT.toast = (html, ms) => {
+    if (!khayToast) { khayToast = document.createElement("div"); khayToast.className = "khay-toast"; khayToast.setAttribute("aria-live", "polite"); document.body.appendChild(khayToast); }
+    const t = document.createElement("div"); t.className = "toast"; t.innerHTML = html;
+    t.addEventListener("click", () => t.remove());
+    khayToast.appendChild(t);
+    while (khayToast.children.length > 4) khayToast.firstChild.remove();
+    setTimeout(() => { t.classList.add("di"); setTimeout(() => t.remove(), 400); }, ms || 6500);
+  };
+
+  /* ---------- khoe: lên cấp / thành tựu (một lần, bỏ qua được) ---------- */
+  MT.khoe = ds => {
+    if (!ds || !ds.length) return;
+    const lop = document.createElement("div"); lop.className = "khoe"; lop.setAttribute("role", "dialog"); lop.setAttribute("aria-label", "Thành tích mới");
+    const d = ds[0];
+    lop.innerHTML = `<canvas class="phao-giay" aria-hidden="true"></canvas><div class="the-khoe"><div class="khoe-nhan">${MT.esc(d.nhan)}</div>
+      <div class="khoe-huy">${MT.ic(d.ic)}</div><div class="khoe-tieu">${MT.esc(d.tieu)}</div><div class="khoe-phu">${MT.esc(d.phu || "")}</div>
+      ${ds.length > 1 ? `<div class="khoe-them">${ds.slice(1, 5).map(x => `<span class="chip vang">${MT.ic(x.ic)}${MT.esc(x.tieu)}</span>`).join("")}${ds.length > 5 ? ` <span class="chip">+${ds.length - 5}</span>` : ""}</div>` : ""}
+      <button class="nut on">Tiếp tục</button></div>`;
+    document.body.appendChild(lop);
+    const dong = () => { lop.classList.add("di"); document.removeEventListener("keydown", phim); setTimeout(() => lop.remove(), 300); };
+    const phim = e => { if (e.key === "Escape" || e.key === "Enter" || e.key === " ") { e.preventDefault(); dong(); } };
+    lop.addEventListener("click", dong); document.addEventListener("keydown", phim);
+    lop.querySelector("button").focus();
+    if (GIAM) return;
+    const cv = lop.querySelector("canvas"), cx = cv.getContext("2d"), W = cv.width = innerWidth, H = cv.height = innerHeight;
+    const MAU = ["#2ee6c5", "#fbbf24", "#a78bfa", "#f472b6", "#60a5fa", "#fde68a"];
+    const hat = Array.from({length: 140}, (_, i) => ({x: W / 2 + (Math.random() - .5) * 120, y: H * .42, vx: (Math.random() - .5) * 13, vy: -Math.random() * 13 - 4,
+      r: 3 + Math.random() * 4, a: Math.random() * 6.28, va: (Math.random() - .5) * .3, m: MAU[i % MAU.length]}));
+    const bd = performance.now();
+    const khung = t => {
+      const tg = t - bd; if (tg > 2200 || !lop.isConnected) { cx.clearRect(0, 0, W, H); return; }
+      cx.clearRect(0, 0, W, H); cx.globalAlpha = Math.max(0, 1 - Math.max(0, tg - 1500) / 700);
+      for (const p of hat) { p.vy += .32; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va;
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.a); cx.fillStyle = p.m; cx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); cx.restore(); }
+      requestAnimationFrame(khung);
+    };
+    requestAnimationFrame(khung);
+  };
+
+  /* ---------- phím tắt toàn trang: 1/2/3 chuyển trang ---------- */
+  document.addEventListener("keydown", e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test((e.target || {}).tagName || "") || (e.target || {}).isContentEditable) return;
+    const di = {"1": "/", "2": "/hau-can", "3": "/nao"}[e.key];
+    if (di && location.pathname !== di) location.href = di;
+  });
 
   window.MT = MT;
 })();

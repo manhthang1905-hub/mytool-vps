@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Não · MYTOOL</title>
 <link rel="preload" href="/vendor/fonts/chakra-petch-latin-700.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/vendor/he-thong.css?v=3">
+<link rel="stylesheet" href="/vendor/he-thong.css?v=5">
 <style>
 :root{--ai:#a78bfa;--ai2:#7c3aed}
 nav.tabs a.tab.on:after{background:var(--ai);box-shadow:0 0 12px var(--ai)} nav.tabs a.tab.on svg{color:var(--ai)}
@@ -78,6 +78,30 @@ nav.tabs a.tab.on:after{background:var(--ai);box-shadow:0 0 12px var(--ai)} nav.
 
 /* ---- dòng suy nghĩ ---- */
 .chon-phien{display:flex;align-items:center;gap:8px;margin-left:auto}
+.phan-doan{display:inline-flex;padding:3px;border-radius:10px;background:rgba(5,9,18,.6);border:1px solid var(--vien)}
+.phan-doan button{border:0;background:none;padding:4px 10px;border-radius:7px;font:600 11.5px var(--f-chu);color:var(--mo);cursor:pointer}
+.phan-doan button.on{background:var(--the3);color:var(--chu);box-shadow:0 0 0 1px var(--vien2)}
+.hoi-dong{max-height:820px;overflow:auto;padding:4px 2px 4px 0;display:flex;flex-direction:column;gap:10px}
+.hd-tin{display:grid;grid-template-columns:38px minmax(0,1fr);gap:10px;align-items:start}
+.hd-mat{width:38px;height:42px;display:grid;place-items:center;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:linear-gradient(160deg,#c4b5fd,#6d28d9);color:#f5f3ff}
+.hd-mat svg{width:20px;height:20px}
+.hd-bong{position:relative;padding:10px 13px;border-radius:4px 14px 14px 14px;background:linear-gradient(160deg,rgba(124,58,237,.16),rgba(22,33,54,.85));border:1px solid rgba(167,139,250,.28);font-size:13px;line-height:1.55}
+.hd-bong .ai-ten{display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font:700 11.5px var(--f-hud);letter-spacing:.08em;color:#ddd6fe}
+.hd-bong .ai-ten span{font-weight:500;color:var(--mo2)}
+.hd-bong p{margin:0 0 3px} .hd-bong .tde{font-weight:700;margin-top:5px} .hd-bong .gach{padding-left:14px;text-indent:-10px} .hd-bong b{color:#e9d5ff}
+.hd-bong.cuoi{border-color:rgba(46,230,197,.45);background:linear-gradient(160deg,rgba(46,230,197,.12),rgba(22,33,54,.85))}
+.hd-bong.tom{border-color:rgba(96,165,250,.4)}
+.hd-he{align-self:center;max-width:92%;font:12px/1.5 var(--f-ma);color:var(--mo);text-align:center}
+.hd-he details summary{cursor:pointer;list-style:none;padding:3px 10px;border-radius:99px;border:1px dashed var(--vien2);display:inline-block}
+.hd-he details summary::-webkit-details-marker{display:none}
+.hd-he .cong-cu{margin-top:6px;text-align:left;padding:8px 10px;border-radius:8px;background:#03060c;color:#8ea0bd;white-space:pre-wrap;word-break:break-word}
+.hd-vach{display:flex;align-items:center;gap:10px;color:var(--ai);font:600 11px var(--f-hud);letter-spacing:.14em}
+.hd-vach:before,.hd-vach:after{content:"";flex:1;height:1px;background:rgba(167,139,250,.3)}
+.hd-ket{align-self:center;padding:8px 16px;border:2px solid currentColor;border-radius:8px;transform:rotate(-2deg);font:700 13px var(--f-hud);letter-spacing:.12em}
+.thang-ham{display:flex;gap:3px;margin:8px 0 2px;max-width:420px}
+.thang-ham i{flex:1;height:6px;border-radius:2px;background:rgba(125,160,215,.14)}
+.thang-ham i.qua{background:var(--vang)} .thang-ham i.nay{background:#fde68a;box-shadow:0 0 8px var(--vang)}
+.thang-ham-chu{display:flex;justify-content:space-between;max-width:420px;font:600 9.5px var(--f-hud);letter-spacing:.06em;color:var(--mo2)}
 select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);border-radius:8px;padding:4px 8px;font:500 12.5px var(--f-chu)}
 .terminal.nghi-ds{max-height:820px;padding:12px 14px;font-family:var(--f-chu);font-size:13px;line-height:1.55}
 .tk{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;padding:6px 0}
@@ -137,11 +161,13 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
       <div class="tran-ds" id="hanh-dong"></div>
     </section>
     <section class="panel goc tim" aria-label="Dòng suy nghĩ">
-      <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="terminal" style="color:var(--ai)"></svg>Dòng suy nghĩ</h2>
+      <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="message" style="color:var(--ai)"></svg>Hội đồng chiến lược</h2>
+        <span class="phan-doan" id="che-do"><button class="on" data-cd="hoi">Hội đồng</button><button data-cd="tm">Terminal</button></span>
         <span class="chon-phien"><label class="mo nho" for="chon-phien">phiên</label><select id="chon-phien"></select></span></div>
       <div class="panel-than">
         <div class="mo nho" id="phien-tom" style="margin-bottom:8px"></div>
-        <div class="terminal nghi-ds"><div class="terminal-dau"><i></i><i></i><i></i><span class="mo rat-nho" style="margin-left:8px;font-family:var(--f-ma)" id="phien-ten">nao/nhat-ky</span></div><div id="suy-nghi"><div class="trong">đang tải…</div></div></div>
+        <div class="hoi-dong" id="hoi-dong"></div>
+        <div class="terminal nghi-ds an" id="khung-tm"><div class="terminal-dau"><i></i><i></i><i></i><span class="mo rat-nho" style="margin-left:8px;font-family:var(--f-ma)" id="phien-ten">nao/nhat-ky</span></div><div id="suy-nghi"><div class="trong">đang tải…</div></div></div>
       </div>
     </section>
   </div>
@@ -164,7 +190,7 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
   </section>
 </main>
 
-<script src="/vendor/chung.js?v=3"></script>
+<script src="/vendor/chung.js?v=5"></script>
 <script>
 "use strict";
 const {esc, so, ic} = MT;
@@ -209,7 +235,9 @@ function coVan() {
       <div class="tren">Cố vấn chiến lược · bộ não AI</div>
       <h1>Tổng tham mưu</h1>
       <div class="phu-hieu"><span class="cap-bac">${h.ten}</span>${kq}</div>
-      <div class="len-ham">${chuaDu
+      <div class="thang-ham" title="Thang quân hàm">${HAM.map((x, j) => `<i class="${j < h.i ? "qua" : j === h.i ? "nay" : ""}" title="${x[1]}${x[0] ? " · ≥ " + x[0] + "%" : ""}"></i>`).join("")}</div>
+      <div class="thang-ham-chu"><span>${HAM[0][1]}</span><span>${h.ke ? "kế: " + h.ke[1] : ""}</span><span>${HAM[HAM.length - 1][1]}</span></div>
+      <div class="len-ham" style="margin-top:8px">${chuaDu
         ? `Đã chấm <b style="color:var(--chu)">${so(d.da_cham)}/${so(d.nguong_cham)}</b> trận — đủ ${so(d.nguong_cham)} trận mới được phong quân hàm theo tỉ lệ đúng.<div class="thanh-tien tim"><b style="width:${MT.kep((d.da_cham || 0) / Math.max(1, d.nguong_cham) * 100, 0, 100)}%"></b></div>`
         : h.ke ? `Lên <b style="color:var(--vang)">${h.ke[1]}</b> khi tỉ lệ đúng ≥ ${h.ke[0]}%.<div class="thanh-tien vang"><b style="width:${MT.kep(tl / h.ke[0] * 100, 0, 100)}%"></b></div>` : "Quân hàm cao nhất."}
         ${d.han_muc < d.han_muc_day ? `<div style="color:var(--hong);margin-top:4px">${ic("alert")} Quyền bị co: đúng &lt; 50% → chỉ ${d.han_muc}/${d.han_muc_day} lệnh/ngày.</div>` : ""}</div>
@@ -268,6 +296,18 @@ function suyNghi() {
     if (b.loai === "ket") return `<div class="tk ket"><div class="gio">${esc(b.luc)}</div><div class="chu" style="color:${b.thanh_cong ? "var(--tot)" : "var(--hong)"}">${b.thanh_cong ? "✔" : "✘"} ${esc(b.chu)}</div></div>`;
     return `<div class="tk cu"><div class="gio">${esc(b.luc)}</div><div class="chu">${esc(b.chu)}</div></div>`;
   }).join("") + (PHIEN === 0 && DU.lan_cuoi && DU.lan_cuoi.dang_chay ? '<div class="tk"><div></div><div><span class="con-tro"></span></div></div>' : "");
+  hoiDong(p, khoi, cuoi);
+}
+function hoiDong(p, khoi, cuoi) {
+  const mat = `<span class="hd-mat">${ic("brain")}</span>`;
+  document.getElementById("hoi-dong").innerHTML = (p.loi ? `<div class="trong">${esc(p.loi)}</div>` : "") + khoi.map((b, i) => {
+    if (b.loai === "bat_dau") return `<div class="hd-vach">HỘI ĐỒNG HỌP · ${esc(b.luc)}</div>`;
+    if (b.loai === "nghi" || b.loai === "tom_tat") return `<div class="hd-tin">${mat}<div class="hd-bong ${i === cuoi ? "cuoi" : ""} ${b.loai === "tom_tat" ? "tom" : ""}">
+      <div class="ai-ten">TỔNG THAM MƯU<span>${esc(b.luc)}${b.loai === "tom_tat" ? " · tóm tắt" : i === cuoi ? " · kết luận" : ""}</span></div>${dongChu(b.dong || [])}</div></div>`;
+    if (b.loai === "cong_cu") return `<div class="hd-he"><details><summary>⚙ tham mưu tra ${b.so} lệnh: ${esc(b.tom || "")}${b.loi ? ` · <span style="color:var(--hong)">${b.loi} lỗi</span>` : ""}</summary><div class="cong-cu">${(b.dong || []).map(esc).join("\n")}</div></details></div>`;
+    if (b.loai === "ket") return `<div class="hd-ket" style="color:${b.thanh_cong ? "var(--tot)" : "var(--hong)"}">${b.thanh_cong ? "PHIÊN HỌP THÀNH CÔNG" : "PHIÊN HỌP THẤT BẠI"}</div>`;
+    return `<div class="hd-he">${esc(b.chu)}</div>`;
+  }).join("") + (PHIEN === 0 && DU.lan_cuoi && DU.lan_cuoi.dang_chay ? `<div class="hd-tin">${mat}<div class="hd-bong"><span class="con-tro"></span></div></div>` : "");
 }
 
 function hanhDong() {
@@ -353,6 +393,11 @@ async function tai() {
     ve("cố vấn", coVan); ve("ô", oChiSo); ve("suy nghĩ", suyNghi); ve("hành động", hanhDong); ve("biểu đồ", bieuDo); ve("trí nhớ", triNho); ve("bài học", baiHoc);
   } catch (e) { MT.song(null, e.message); }
 }
+document.querySelectorAll("#che-do button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#che-do button").forEach(x => x.classList.toggle("on", x === b));
+  document.getElementById("hoi-dong").classList.toggle("an", b.dataset.cd !== "hoi");
+  document.getElementById("khung-tm").classList.toggle("an", b.dataset.cd !== "tm");
+}));
 document.getElementById("chon-phien").addEventListener("change", e => { PHIEN = Number(e.target.value) || 0; suyNghi(); });
 window.addEventListener("resize", MT.doiCo(() => { if (DU) bieuDo(); }, 200));
 tai(); MT.lamMoi(tai, 300000);

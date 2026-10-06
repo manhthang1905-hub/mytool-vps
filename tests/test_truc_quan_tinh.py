@@ -67,6 +67,12 @@ def test_ba_trang_dung_chung_he_giao_dien_khong_cdn():
         assert "/vendor/he-thong.css" in s and "/vendor/chung.js" in s, ten
         assert not re.search(r"""(src|href)=["']https?://""", s), ten           # không tải gì từ mạng ngoài
         assert 'href="/"' in s and 'href="/hau-can"' in s and 'href="/nao"' in s, ten
+    for ten, js in (("chien-truong.html", "ban-do.js"),):        # bản đồ lục giác + mọi tệp vendor trang gọi đều có thật
+        with open(os.path.join(tq.GOC, "ui_web", ten), encoding="utf-8") as tep:
+            s = tep.read()
+        assert "/vendor/" + js in s
+        for duong in re.findall(r"""(?:src|href)=["']/vendor/([^"'?]+)""", s):
+            assert os.path.isfile(os.path.join(tq.VENDOR, duong)), duong
     with open(os.path.join(tq.VENDOR, "he-thong.css"), encoding="utf-8") as tep:
         css = tep.read()
     for url in re.findall(r"url\((fonts/[^)]+)\)", css):          # mọi phông khai báo đều có thật
