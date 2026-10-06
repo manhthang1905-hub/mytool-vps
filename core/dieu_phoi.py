@@ -66,6 +66,10 @@ MA_THOAT_HET_GIO = 3
 RAM_TOI_THIEU_GB = 3.0
 #: Máy NGHẸT: RAM trống dưới ngần này lúc đang có lượt chạy → tự hạ `lan_api` về 1.
 RAM_NGHET_GB = 2.0
+#: Van nghẹt hạ `lan_api` về 1 thì NHỚ số cũ (`lan_api_truoc_ha`); RAM trống ≥ ngưỡng này liên tục
+#: `PHUT_ON_DINH_NANG_LAN` phút thì tự trả lại (07/10/2026: trước đây hạ một lần là kẹt 1 làn mãi).
+RAM_TRA_LAN_GB = 4.0
+PHUT_ON_DINH_NANG_LAN = 30
 #: Không sinh lại CÙNG kênh sớm hơn ngần này phút, trừ khi lượt trước đã bàn
 #: giao được video — lượt hỏng/thiếu nguồn không được đốt ví nghiên cứu mỗi 10'.
 PHUT_GIAN_CACH_SINH_LAI = 55
@@ -656,8 +660,25 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
                           "sinh_moi": []}
 
     # van máy nghẹt → hạ làn API về 1 (ghi rõ)
+    cai_hien = doc_cai(goc)
+    if cai_hien.get("lan_api_truoc_ha") and ram_trong is not None:
+        # Van đã hạ trước đó: RAM hồi đủ lâu thì trả lại số làn cũ; tụt lại thì đếm lại từ đầu.
+        if ram_trong >= RAM_TRA_LAN_GB:
+            tu = float(cai_hien.get("ram_on_tu") or 0) or time.time()
+            if time.time() - tu >= PHUT_ON_DINH_NANG_LAN * 60:
+                cu = int(cai_hien["lan_api_truoc_ha"])
+                ghi_cai(goc, lan_api=cu, lan_api_truoc_ha=None, ram_on_tu=None)
+                ghi("RAM đã ổn {0} phút (trống {1:.1f} GB) — trả lan_api 1 → {2}.".format(
+                    PHUT_ON_DINH_NANG_LAN, ram_trong, cu))
+                lan = khe.so_lan_api(goc)
+                ra["lan_api"] = lan
+                ra["tra_lan"] = True
+            elif not cai_hien.get("ram_on_tu"):
+                ghi_cai(goc, ram_on_tu=tu)
+        elif cai_hien.get("ram_on_tu"):
+            ghi_cai(goc, ram_on_tu=None)
     if ram_trong is not None and ram_trong < RAM_NGHET_GB and so_dang >= 1 and lan > 1:
-        ghi_cai(goc, lan_api=1)
+        ghi_cai(goc, lan_api=1, lan_api_truoc_ha=lan, ram_on_tu=None)
         ghi("⚠ MÁY NGHẸT: RAM trống {0:.1f} GB < {1:.0f} GB khi đang có {2} lượt — tự hạ lan_api {3} → 1."
             .format(ram_trong, RAM_NGHET_GB, so_dang, lan))
         try:

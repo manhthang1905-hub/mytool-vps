@@ -410,3 +410,30 @@ def test_luot_cu_giu_ca_may_khong_tu_khoa_chet(tmp_path):
     assert time.time() - bat_dau < 2
     assert os.path.exists(khe.duong_khoa_nang(goc))  # vẫn là khoá của lượt cũ
     tu_chay.nha_khoa_may(goc)
+
+def test_nhip_tra_lan_api_khi_ram_on_dinh(tmp_path, monkeypatch):
+    """07/10/2026: van nghẹt hạ 2 → 1 rồi NHỚ số cũ; RAM trống ≥ 4 GB liên tục 30 phút thì tự trả lại 2."""
+    goc = str(tmp_path)
+    _vps(goc, lan_api=2)
+    _kenh(goc, "K1")
+    kh = os.path.join(goc, "CHANNEL", "K1", "tu-chay", ".khoa")
+    os.makedirs(os.path.dirname(kh), exist_ok=True)
+    with open(kh, "w", encoding="utf-8") as tep:
+        json.dump({"pid": os.getpid(), "bat_dau": time.time()}, tep)
+    bg = _dt.datetime(2026, 9, 29, 14, 0)
+    dieu_phoi.nhip(goc, bay_gio=bg, ram=1.5, dia_gb=30.0, sinh=lambda g, ma: 1, log=lambda d: None)
+    cai = dieu_phoi.doc_cai(goc)
+    assert cai["lan_api"] == 1 and cai["lan_api_truoc_ha"] == 2
+    t0 = time.time()
+    monkeypatch.setattr(dieu_phoi.time, "time", lambda: t0)
+    dieu_phoi.nhip(goc, bay_gio=bg, ram=6.0, dia_gb=30.0, sinh=lambda g, ma: 1, log=lambda d: None)
+    assert dieu_phoi.doc_cai(goc)["lan_api"] == 1                     # mới ổn 0 phút — chưa trả
+    monkeypatch.setattr(dieu_phoi.time, "time", lambda: t0 + 10 * 60)
+    dieu_phoi.nhip(goc, bay_gio=bg, ram=3.0, dia_gb=30.0, sinh=lambda g, ma: 1, log=lambda d: None)
+    assert not dieu_phoi.doc_cai(goc).get("ram_on_tu")                # tụt dưới ngưỡng → đếm lại
+    monkeypatch.setattr(dieu_phoi.time, "time", lambda: t0 + 20 * 60)
+    dieu_phoi.nhip(goc, bay_gio=bg, ram=6.0, dia_gb=30.0, sinh=lambda g, ma: 1, log=lambda d: None)
+    monkeypatch.setattr(dieu_phoi.time, "time", lambda: t0 + 51 * 60)
+    ra = dieu_phoi.nhip(goc, bay_gio=bg, ram=6.0, dia_gb=30.0, sinh=lambda g, ma: 1, log=lambda d: None)
+    cai = dieu_phoi.doc_cai(goc)
+    assert ra.get("tra_lan") is True and cai["lan_api"] == 2 and not cai.get("lan_api_truoc_ha")
