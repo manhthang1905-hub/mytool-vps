@@ -7557,7 +7557,35 @@ def _cho_engine_clip(bc: BoiCanh, han, gio_dang, het_han_muc: List[BaseException
     """Chờ engine clip tới hạn chót. True = đã tới hạn chót (dựng từ ảnh);
     False = thăm dò một cảnh thấy engine có lại (bắn tiếp cả mẻ).
 
-    Mỗi nhịp một dòng nhật ký (không chết im lặng), ngủ chia nhỏ (bấm Dừng ăn ngay)."""
+    Mỗi nhịp một dòng nhật ký (không chết im lặng), ngủ chia nhỏ (bấm Dừng ăn ngay).
+
+    Suốt lúc chờ giữ dấu `workspace/tu-chay/cho-clip/<kênh>.json` (`core.khe.
+    ghi_cho_clip`, làm tươi ≤ 5 phút/lần) — luật 06/10/2026 "lượt đang CHỜ KHO
+    CLIP không chiếm làn API": bộ điều phối không tính lượt này vào `lan_api`,
+    kênh khác được vào làm. Thôi chờ (engine có lại, tới hạn chót, Dừng, lỗi) →
+    gỡ dấu (try/finally) → lượt lại tính làn như thường."""
+    from . import khe  # noqa: PLC0415
+
+    ma = str(getattr(bc.kenh, "ma", "") or "")
+    tu = _bay_gio().isoformat(timespec="seconds")
+    han_iso = han.isoformat(timespec="seconds")
+    try:
+        return _cho_engine_clip_vong(bc, han, gio_dang, het_han_muc, thieu_clip, mot_canh,
+                                     lam_tuoi=lambda: khe.ghi_cho_clip(bc.goc, ma, han=han_iso,
+                                                                       tu=tu))
+    finally:
+        khe.xoa_cho_clip(bc.goc, ma)
+
+
+#: Làm tươi dấu chờ clip ít nhất mỗi ngần này giây (dấu cũ quá 45' là bị coi
+#: như lượt thường — `khe.TUOI_CHO_CLIP_GIAY`).
+GIAY_LAM_TUOI_CHO_CLIP = 5 * 60
+
+
+def _cho_engine_clip_vong(bc: BoiCanh, han, gio_dang, het_han_muc: List[BaseException],
+                          thieu_clip: Callable[[], List[Dict[str, Any]]], mot_canh,
+                          lam_tuoi: Callable[[], None]) -> bool:
+    """Thân vòng chờ của `_cho_engine_clip` (dấu chờ clip do hàm đó dựng/gỡ)."""
     from .auto import Cancelled  # noqa: PLC0415
     from .clip_tu_anh import GIAY_THAM_DO  # noqa: PLC0415
 
@@ -7568,6 +7596,7 @@ def _cho_engine_clip(bc: BoiCanh, han, gio_dang, het_han_muc: List[BaseException
         thieu = thieu_clip()
         if not thieu:
             return False
+        lam_tuoi()
         cho = min(float(GIAY_THAM_DO), con_giay)
         bc.ghi("  kho clip của cổng hết hạn mức — còn {0} cảnh chưa có clip; chờ engine, "
                "thăm dò lại sau {1:.0f} phút. Hạn chót {2}{3}: tới đó chưa có thì dựng "
@@ -7577,11 +7606,16 @@ def _cho_engine_clip(bc: BoiCanh, han, gio_dang, het_han_muc: List[BaseException
                        gio_dang.strftime("%d/%m %H:%M"),
                        (gio_dang - han).total_seconds() / 3600.0) if gio_dang else ""))
         con = cho
+        tu_lan_tuoi = 0.0
         while con > 0:
             bc.kiem_dung()
             buoc = min(1.0, con)
             bc.ngu(buoc)
             con -= buoc
+            tu_lan_tuoi += buoc
+            if tu_lan_tuoi >= GIAY_LAM_TUOI_CHO_CLIP:
+                lam_tuoi()
+                tu_lan_tuoi = 0.0
         if (han - _bay_gio()).total_seconds() <= 0:
             return True
         del het_han_muc[:]

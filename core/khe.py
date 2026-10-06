@@ -76,6 +76,8 @@ __all__ = [
     "giu", "thu_giu", "trang_thai", "xoa_tep_ben_vung", "mo_ta_nguoi_giu",
     "TRAN_API_TONG_MAC_DINH", "tran_api_tong", "duong_thu_muc_job", "giu_job",
     "so_job_dang_giu", "dat_co_cho_tai_len", "co_cho_tai_len",
+    "TUOI_CHO_CLIP_GIAY", "TRAN_LUOT_TONG_MAC_DINH", "duong_cho_clip", "ghi_cho_clip",
+    "xoa_cho_clip", "doc_cho_clip", "dang_cho_clip", "tran_luot_tong", "dem_lan_api",
 ]
 
 LOP_NANG = "nang"
@@ -466,12 +468,184 @@ def _duong_khe_lop(goc: str, lop: str) -> List[str]:
     raise ValueError("lop phai la 'nang' hoac 'api', nhan: {0!r}".format(lop))
 
 
+# ── Lượt đang CHỜ KHO CLIP không chiếm làn API (06/10/2026) ─────────────────
+#
+# Sự cố 06/10/2026: kho clip của cổng hết hạn mức ngày (503 engine_unavailable).
+# Từ v2.170.0 lượt sản xuất ĐỨNG CHỜ engine trong tiến trình (`auto_khau.
+# _cho_engine_clip`, thăm dò mỗi 20 phút) tới hạn chót (giờ đăng − 6 giờ) — có
+# khi ~15 giờ. Mỗi lượt giữ một tệp làn `api-<i>.json` suốt lượt, nên 4 lượt chờ
+# clip ăn hết 4 làn: kênh khác (cần 2–3 giờ kịch bản/giọng/ảnh) không vào được.
+#
+# Luật: "Lượt đang CHỜ KHO CLIP không chiếm làn API." Lượt chờ ghi dấu
+# `workspace/tu-chay/cho-clip/<kênh>.json` = {pid, kenh, han, tu, luc}, làm tươi
+# `luc` mỗi vòng chờ, gỡ khi thôi chờ. Tệp làn của lượt có dấu CÒN SỐNG + TƯƠI
+# (PID sống, `luc` < 45 phút, đúng kênh) không tính vào `so_lan_api`; lượt mới
+# lấy tệp làn chỉ số kế tiếp (api-4, api-5…). Lượt chờ VẪN giữ tệp làn của nó
+# (không ai xoá hộ tệp của người khác — tránh lẫn chủ khi nhả). Trần tổng số tệp
+# làn đang giữ = `tran_luot_tong` (mặc định 7 = số kênh sản xuất). Khe "nang"
+# (FFmpeg/whisper) KHÔNG đổi: lượt hết chờ dựng từ ảnh vẫn xếp hàng từng cái.
+
+#: Dấu chờ clip cũ hơn ngần này (giây, kể từ lần làm tươi cuối) → coi như lượt
+#: thường (tính làn). Vòng chờ làm tươi ≤ 5 phút một lần.
+TUOI_CHO_CLIP_GIAY = 45 * 60.0
+#: Trần tổng số lượt sản xuất (giữ tệp làn) cả máy, kể cả lượt chờ clip.
+TRAN_LUOT_TONG_MAC_DINH = 7
+_TRAN_LUOT_TONG_MIN, _TRAN_LUOT_TONG_MAX = 1, 16
+
+
+def _ten_kenh_an_toan(kenh: str) -> str:
+    ten = "".join(ch for ch in str(kenh or "") if ch.isalnum() or ch in "-_")
+    return ten or "khac"
+
+
+def duong_cho_clip(goc: str, kenh: str = "") -> str:
+    """`workspace/tu-chay/cho-clip/<kenh>.json` (không truyền kênh → thư mục)."""
+    thu_muc = os.path.join(goc, "workspace", "tu-chay", "cho-clip")
+    if not kenh:
+        return thu_muc
+    return os.path.join(thu_muc, _ten_kenh_an_toan(kenh) + ".json")
+
+
+def ghi_cho_clip(goc: str, kenh: str, *, han: str = "", tu: str = "") -> None:
+    """Dựng/làm tươi dấu "lượt kênh này đang chờ kho clip". Không bao giờ ném lỗi."""
+    try:
+        _ghi_json_nguyen_tu(duong_cho_clip(goc, kenh), {
+            "pid": os.getpid(), "kenh": str(kenh or ""), "han": han, "tu": tu,
+            "luc": time.time()})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def xoa_cho_clip(goc: str, kenh: str) -> None:
+    """Gỡ dấu chờ clip — CHỈ khi dấu thuộc chính tiến trình này. Không ném lỗi."""
+    try:
+        duong = duong_cho_clip(goc, kenh)
+        du = _doc_json(duong)
+        if du is not None and int(du.get("pid") or 0) == os.getpid():
+            _xoa_tep(duong)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def doc_cho_clip(goc: str, *, bay_gio: Optional[float] = None) -> Dict[str, Dict[str, Any]]:
+    """`{kenh: dấu}` của các lượt ĐANG chờ kho clip: PID sống + `luc` tươi
+    (< `TUOI_CHO_CLIP_GIAY`). Dấu của PID chết bị dọn luôn; dấu cũ mà PID còn
+    sống thì bỏ qua (lượt đó tính làn như thường) nhưng không xoá."""
+    thu_muc = duong_cho_clip(goc)
+    try:
+        ten_tep = os.listdir(thu_muc)
+    except OSError:
+        return {}
+    bay_gio = time.time() if bay_gio is None else bay_gio
+    ra: Dict[str, Dict[str, Any]] = {}
+    for ten in ten_tep:
+        if not ten.endswith(".json"):
+            continue
+        duong = os.path.join(thu_muc, ten)
+        du = _doc_json(duong)
+        if du is None:
+            continue
+        try:
+            pid = int(du.get("pid") or 0)
+            luc = float(du.get("luc") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if not pid_con_song(pid):
+            _xoa_tep(duong)
+            continue
+        if bay_gio - luc >= TUOI_CHO_CLIP_GIAY:
+            continue
+        kenh = str(du.get("kenh") or ten[:-5])
+        ra[kenh] = dict(du, pid=pid)
+    return ra
+
+
+def dang_cho_clip(cho: Dict[str, Dict[str, Any]], pid: Any, kenh: Any) -> bool:
+    """Người giữ (pid, kenh) có dấu chờ clip sống trong `cho` (từ `doc_cho_clip`)."""
+    du = cho.get(str(kenh or ""))
+    if not du:
+        return False
+    try:
+        return int(du.get("pid") or 0) == int(pid or 0)
+    except (TypeError, ValueError):
+        return False
+
+
+def tran_luot_tong(goc: str) -> int:
+    """`cai-dat.json: tran_luot_tong` (mặc định 7, kẹp 1..16) — trần tổng lượt."""
+    try:
+        with open(os.path.join(goc, "workspace", "cai-dat.json"), "r",
+                  encoding="utf-8") as tep:
+            du = json.load(tep)
+        return max(_TRAN_LUOT_TONG_MIN, min(_TRAN_LUOT_TONG_MAX, int(du["tran_luot_tong"])))
+    except (OSError, ValueError, TypeError, KeyError):
+        return TRAN_LUOT_TONG_MAC_DINH
+
+
+def _cac_tep_lan_api(goc: str) -> List[Tuple[int, str]]:
+    """Mọi tệp `api-<i>.json` đang có trên đĩa (kể cả chỉ số ≥ `so_lan_api`)."""
+    try:
+        ten_tep = os.listdir(duong_thu_muc_khe(goc))
+    except OSError:
+        return []
+    ra: List[Tuple[int, str]] = []
+    for ten in ten_tep:
+        if ten.startswith("api-") and ten.endswith(".json"):
+            try:
+                i = int(ten[4:-5])
+            except ValueError:
+                continue
+            if i >= 0:
+                ra.append((i, duong_khoa_api(goc, i)))
+    return sorted(ra)
+
+
+def dem_lan_api(goc: str) -> Dict[str, Any]:
+    """Đếm làn API: `{"lan", "tran", "dang_lam", "dang_cho_clip", "giu": {đường: tệp}}`.
+
+    `dang_lam` = tệp làn người SỐNG giữ mà KHÔNG có dấu chờ clip sống (cái này
+    so với `lan`); `dang_cho_clip` = tệp làn của lượt đang chờ kho clip. Tệp
+    của PID chết bị dọn (như `_khe_trong`)."""
+    cho = doc_cho_clip(goc)
+    giu: Dict[str, Dict[str, Any]] = {}
+    so_cho = 0
+    for _i, duong in _cac_tep_lan_api(goc):
+        if _khe_trong(duong):
+            continue
+        du = _doc_json(duong) or {}
+        giu[duong] = du
+        if dang_cho_clip(cho, du.get("pid"), du.get("kenh")):
+            so_cho += 1
+    lan = so_lan_api(goc)
+    return {"lan": lan, "tran": max(lan, tran_luot_tong(goc)), "dang_lam": len(giu) - so_cho,
+            "dang_cho_clip": so_cho, "giu": giu, "cho": cho}
+
+
+def _khe_api_trong(goc: str) -> Tuple[List[str], int]:
+    """(đường tệp làn có thể tạo, số làn còn được phép giành) cho lớp "api".
+
+    Không có lượt chờ clip → y như cũ: đúng `so_lan_api` tệp `api-0..N-1`, cạnh
+    tranh bằng `O_EXCL` (trần cứng). Có lượt chờ clip → mở thêm đúng ngần ấy chỉ
+    số, nhưng số được giành = `lan − đang_làm` (và không vượt trần tổng)."""
+    dem = dem_lan_api(goc)
+    so_duoc = min(dem["lan"] - dem["dang_lam"], dem["tran"] - len(dem["giu"]))
+    so_tep = min(dem["tran"], dem["lan"] + dem["dang_cho_clip"])
+    trong = [duong_khoa_api(goc, i) for i in range(so_tep)
+             if duong_khoa_api(goc, i) not in dem["giu"]]
+    return trong, max(0, so_duoc)
+
+
 def _thu_mot_lan(goc: str, lop: str, viec: str, kenh: str, uu_tien: float,
                  han: Optional[float], han_giay: Optional[float],
                  luc_xin: float) -> Optional[str]:
     """Một lượt thử giành khe. Trả đường dẫn khe vừa giữ được, hay `None`."""
-    duong_list = _duong_khe_lop(goc, lop)
-    trong = [d for d in duong_list if _khe_trong(d)]
+    if lop == LOP_API:
+        trong, so_duoc = _khe_api_trong(goc)
+        trong = trong if so_duoc > 0 else []
+    else:
+        duong_list = _duong_khe_lop(goc, lop)
+        trong = [d for d in duong_list if _khe_trong(d)]
+        so_duoc = len(trong)
     if not trong:
         return None
     if lop == LOP_NANG and viec not in VIEC_DANG_UU_TIEN and co_cho_tai_len(goc):
@@ -481,7 +655,7 @@ def _thu_mot_lan(goc: str, lop: str, viec: str, kenh: str, uu_tien: float,
                 float(luc_xin))
     dung_truoc = sum(1 for v in _liet_ke_ve(goc)
                      if v.get("loai") == lop and _khoa_sap_xep(v) < khoa_minh)
-    if dung_truoc >= len(trong):
+    if dung_truoc >= min(len(trong), so_duoc):
         return None
     noi_dung = {"pid": os.getpid(), "tid": threading.get_ident(), "nguon": "khe",
                 "loai": lop, "viec": viec,
@@ -724,7 +898,11 @@ def trang_thai(goc: str) -> Dict[str, Any]:
         if not con:
             giu_nang = None
     api_slots: List[Optional[Dict[str, Any]]] = []
-    for i in range(so_lan_api(goc)):
+    lan = so_lan_api(goc)
+    # Chỉ số ≥ `lan` chỉ có khi lượt chờ kho clip nhường làn (06/10/2026) — chỉ
+    # liệt kê tệp đang có, để danh sách không phình bằng ô trống.
+    chi_so = list(range(lan)) + [i for i, _d in _cac_tep_lan_api(goc) if i >= lan]
+    for i in chi_so:
         d = _doc_json(duong_khoa_api(goc, i))
         if d is not None:
             try:
@@ -733,6 +911,8 @@ def trang_thai(goc: str) -> Dict[str, Any]:
                 con = False
             if not con:
                 d = None
+        if d is None and i >= lan:
+            continue
         api_slots.append(d)
     cho = sorted(_liet_ke_ve(goc), key=_khoa_sap_xep)
     return {"nang": giu_nang, "api": api_slots, "cho": cho}

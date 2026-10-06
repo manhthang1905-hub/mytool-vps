@@ -566,8 +566,20 @@ def _khoa_nhip(goc: str) -> Optional[str]:
     return None
 
 
-def _dang_giu_api(goc: str) -> int:
-    return sum(1 for x in (khe.trang_thai(goc).get("api") or []) if x)
+def _dang_giu_api(goc: str, cho: Optional[Dict[str, Dict[str, Any]]] = None) -> int:
+    """Số làn API đang giữ bởi lượt ĐANG LÀM — làn của lượt chờ kho clip (dấu
+    `khe.doc_cho_clip` sống + tươi) không tính (06/10/2026)."""
+    cho = khe.doc_cho_clip(goc) if cho is None else cho
+    return sum(1 for x in (khe.trang_thai(goc).get("api") or [])
+               if x and not khe.dang_cho_clip(cho, x.get("pid"), x.get("kenh")))
+
+
+def _gio_han(du: Dict[str, Any]) -> str:
+    """'23:00' từ `han` ISO của dấu chờ clip ('?' nếu hỏng)."""
+    try:
+        return _dt.datetime.fromisoformat(str(du.get("han") or "")).strftime("%H:%M")
+    except ValueError:
+        return "?"
 
 
 def _ghi_log(goc: str, dong: str) -> None:
@@ -615,7 +627,17 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
     lan = khe.so_lan_api(goc)
     danh_sach = tu_chay.kenh_tu_chay(goc)
     cac = [trang_thai_kenh(goc, ma, bay_gio=bay_gio) for ma in danh_sach]
-    so_dang = sum(1 for c in cac if c.get("dang_chay"))
+    # Luật 06/10/2026: "Lượt đang CHỜ KHO CLIP không chiếm làn API" — lượt có dấu
+    # `workspace/tu-chay/cho-clip/<kênh>.json` sống (PID sống, làm tươi < 45') chỉ
+    # ngồi thăm dò engine mỗi 20', không tính vào `lan`; vẫn tính vào trần TỔNG.
+    cho_clip = khe.doc_cho_clip(goc)
+    so_cho_clip = 0
+    for c in cac:
+        if c.get("dang_chay") and khe.dang_cho_clip(cho_clip, c.get("pid"), c["ma"]):
+            so_cho_clip += 1
+            c.update(cho_clip=True, ly_do="chờ kho clip tới {0} (không tính làn)".format(
+                _gio_han(cho_clip[c["ma"]])))
+    so_dang = sum(1 for c in cac if c.get("dang_chay") and not c.get("cho_clip"))
     # lượt vừa sinh nhưng chưa kịp giữ khoá kênh (khởi động Python mất vài giây)
     for ma, m in sinh_cu.items():
         if not any(c["ma"] == ma and c.get("dang_chay") for c in cac):
@@ -624,9 +646,14 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
                 for c in cac:
                     if c["ma"] == ma:
                         c.update(chay=False, ly_do="vừa sinh, đang khởi động")
+    # Trần TỔNG số lượt (đang làm + chờ clip) = số kênh sản xuất, kẹp `tran_luot_tong`
+    # (mặc định 7) — không bao giờ dưới `lan` (giữ y hành vi cũ khi không ai chờ clip).
+    tran_tong = max(lan, min(khe.tran_luot_tong(goc), len(danh_sach)))
     ra: Dict[str, Any] = {"bat": True, "luc": bay_gio.isoformat(timespec="seconds"),
                           "ram_trong_gb": ram_trong, "lan_api": lan, "so_dang": so_dang,
-                          "dang_giu_api": _dang_giu_api(goc), "kenh": cac, "sinh_moi": []}
+                          "so_cho_clip": so_cho_clip, "tran_tong": tran_tong,
+                          "dang_giu_api": _dang_giu_api(goc, cho_clip), "kenh": cac,
+                          "sinh_moi": []}
 
     # van máy nghẹt → hạ làn API về 1 (ghi rõ)
     if ram_trong is not None and ram_trong < RAM_NGHET_GB and so_dang >= 1 and lan > 1:
@@ -645,11 +672,16 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
         ra["lan_api"] = 1
         ra["ha_lan"] = True
 
-    trong = max(0, lan - max(so_dang, ra["dang_giu_api"]))
+    so_tong = so_dang + so_cho_clip
+    trong = max(0, min(lan - max(so_dang, ra["dang_giu_api"]), tran_tong - so_tong))
     ra["lan_trong"] = trong
+    them_cho = ", +{0} chờ kho clip".format(so_cho_clip) if so_cho_clip else ""
     chan = ""
-    if trong <= 0:
-        chan = "hết làn API ({0}/{1} đang chạy)".format(so_dang, lan)
+    if trong <= 0 and so_tong >= tran_tong and lan - max(so_dang, ra["dang_giu_api"]) > 0:
+        chan = "trần tổng {0}/{1} lượt ({2} đang chạy{3})".format(
+            so_tong, tran_tong, so_dang, them_cho)
+    elif trong <= 0:
+        chan = "hết làn API ({0}/{1} đang chạy{2})".format(so_dang, lan, them_cho)
     elif ram_trong is not None and ram_trong < RAM_TOI_THIEU_GB:
         chan = "RAM trống {0:.1f} GB < {1:.0f} GB".format(ram_trong, RAM_TOI_THIEU_GB)
     else:
@@ -732,8 +764,8 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
             sinh_cu[c["ma"]] = {"pid": pid, "luc": time.time(),
                                 "ban_giao": _dem_ban_giao_hom_nay(goc, c["ma"], ngay_str)}
             ra["sinh_moi"].append({"kenh": c["ma"], "pid": pid, "ly_do": c["ly_do"]})
-            ghi("sinh lượt {0} (PID {1}) — {2}; làn {3}/{4}, RAM trống {5}.".format(
-                c["ma"], pid, c["ly_do"], so_dang + len(ra["sinh_moi"]), lan,
+            ghi("sinh lượt {0} (PID {1}) — {2}; làn {3}/{4}{5}, RAM trống {6}.".format(
+                c["ma"], pid, c["ly_do"], so_dang + len(ra["sinh_moi"]), lan, them_cho,
                 "?" if ram_trong is None else "{0:.1f} GB".format(ram_trong)))
     if not ra["sinh_moi"]:
         tom = "; ".join("{0}: {1}".format(c["ma"], c.get("ly_do") or "-") for c in cac)
