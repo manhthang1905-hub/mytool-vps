@@ -61,6 +61,7 @@ import io
 import json
 import os
 import re
+import statistics
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 __all__ = [
@@ -324,7 +325,7 @@ def _tieu_de_nhom_da_co(goc: str, ma_kenh: str) -> List[Tuple[str, str]]:
     """`[(tiêu đề, nơi)]` mọi video cả nhóm ĐÃ LÀM/ĐÃ ĐĂNG — để cắm cờ "gần giống" cho ứng viên.
 
     Hai nguồn, vì mỗi nguồn sót một kiểu: `tieu_de_da_lam_ca_nhom` (lượt AUTO, kế hoạch) không
-    thấy video làm TAY / ở dự án khác (V13 TL4 remake `GXNctv0oVSM` qua `TL4-T7-v2`), còn
+    thấy video làm TAY / ở dự án khác (một video remake làm tay qua kênh mẫu), còn
     `bang-nhom.csv` (Studio) thấy mọi video đã đăng của nhóm."""
     ra: List[Tuple[str, str]] = []
     try:
@@ -599,11 +600,39 @@ def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
     return ra
 
 
+#: Video của kênh được gắn ★ (THẮNG CỦA KÊNH theo số MUỘN) khi hiển thị muộn ≥ ngần này × trung vị hiển thị muộn
+#: của kênh (cần ≥ `N_TOI_THIEU_SAO` video có số muộn) VÀ ≥ `SAO_SAN` hiển thị (vài trăm hiển thị chưa là bằng chứng),
+#: tối đa `SAO_TOI_DA` video.
+HE_SO_SAO, N_TOI_THIEU_SAO, SAO_TOI_DA, SAO_SAN = 2.0, 4, 3, 1000.0
+
+
+def _so_muon(hs: Dict[str, Any]) -> Dict[str, Any]:
+    """Số MUỘN của hồ sơ (`tu_hoc.moc_muon`: mốc ≥ 96h) — chẩn đoán 07/10/2026: kênh non được thả muộn, số 48h chỉ
+    ~28% số cuối, nên biên tập viên đọc 48h thì thấy chính video thắng lớn nhất của kênh như video trượt."""
+    try:
+        from .tu_hoc import moc_muon  # noqa: PLC0415
+
+        return moc_muon(hs)
+    except Exception:  # noqa: BLE001 — bối cảnh phụ
+        return {}
+
+
 def _video_cua_minh(goc: str, ma_kenh: str) -> str:
     nguon = _nguon_cua_goi(goc, ma_kenh)
     sub = _sub_theo_video(goc, ma_kenh)
-    dong = []
+    hang = []
     for hs in _ho_so_video(goc, ma_kenh):
+        muon = _so_muon(hs)
+        hang.append((hs, muon, _so(muon.get("impressions")) if muon else None))
+    # Xếp theo số MUỘN (video chưa có số muộn đứng sau, giữ thứ tự cũ) — video thắng thật của kênh lên đầu.
+    hang.sort(key=lambda x: -(x[2] if x[2] is not None else -1.0))
+    muon_ds = [x[2] for x in hang if x[2] is not None]
+    sao: set = set()
+    if len(muon_ds) >= N_TOI_THIEU_SAO:
+        nguong_sao = max(SAO_SAN, HE_SO_SAO * statistics.median(muon_ds))
+        sao = {id(x[0]) for x in hang[:SAO_TOI_DA] if x[2] is not None and x[2] >= nguong_sao}
+    dong = []
+    for hs, muon, imp_muon in hang:
         moc, s = _so_moc(hs)
         vid = str(hs.get("video_id") or "")
         ng = nguon.get(str(hs.get("ma_goi") or ""), {})
@@ -612,19 +641,33 @@ def _video_cua_minh(goc: str, ma_kenh: str) -> str:
                 _gon(hs.get("tieu_de"), 90) or "?",
                 " · nguồn: " + (_gon(ng.get("tieu_de"), 60) or ng.get("ma", "")) if ng else ""))
             continue
+        moc_goc = moc
         if moc not in ("48h", "72h") and s.get("moc_gio_that"):
             moc = "mới {0}h tuổi".format(s.get("moc_gio_that"))
         br = _ctr_browse(goc, ma_kenh, vid)
         su, vw = sub.get(vid, (0.0, 0.0))
-        dong.append("- {0} · bìa “{1}” · {2}: {3} hiển thị · CTR {4}%{5} · {6} view · AVD {7}s ({8}%)"
-                    " · sub/1k view {9}{10}".format(
+        them_muon = ""
+        if muon and muon.get("moc") != moc_goc:
+            them_muon = " → MUỘN {0}h: {1} hiển thị · CTR {2}% · {3} view".format(
+                muon.get("moc_gio_that", "?"), _ngan_so(imp_muon or 0.0), muon.get("ctr", "?"),
+                _ngan_so(_so(muon.get("views"))))
+        dong.append("- {11}{0} · bìa “{1}” · {2}: {3} hiển thị · CTR {4}%{5} · {6} view · AVD {7}s ({8}%)"
+                    " · sub/1k view {9}{12}{10}".format(
                         _gon(hs.get("tieu_de"), 90) or "?", _gon(hs.get("chu_bia"), 30) or "—",
                         moc or "mốc ?", _ngan_so(_so(s.get("impressions"))), s.get("ctr", "?"),
                         " · CTR TRANG CHỦ {0:.2f}%".format(br) if br is not None else "",
                         _ngan_so(_so(s.get("views"))), s.get("avd_giay", "?"), s.get("avd_pct", "?"),
                         "{0:.1f}".format(1000.0 * su / vw) if vw else "?",
-                        " · nguồn: " + (_gon(ng.get("tieu_de"), 60) or ng.get("ma", "")) if ng else ""))
-    return "\n".join(dong) if dong else "(kênh chưa có video nào có số Studio)"
+                        " · nguồn: " + (_gon(ng.get("tieu_de"), 60) or ng.get("ma", "")) if ng else "",
+                        "★ " if id(hs) in sao else "", them_muon))
+    if not dong:
+        return "(kênh chưa có video nào có số Studio)"
+    if sao:
+        dong.insert(0, "(Xếp theo hiển thị MUỘN ≥96h — kênh non thường chỉ có ~1/3 số cuối ở mốc 48h, ĐỪNG coi video "
+                       "48h thấp là trượt khi số muộn cao. ★ = THẮNG CỦA CHÍNH KÊNH (≥ ×{0:g} trung vị số muộn): ứng "
+                       "viên là 'anh em theo NGHĨA' của một video ★ — cùng tệp người + cùng lời hứa, khác luận điểm — "
+                       "là hướng có bằng chứng mạnh nhất; ứng viên khác hẳn mọi ★ cần lý do rõ.)".format(HE_SO_SAO))
+    return "\n".join(dong)
 
 
 def _video_ca_nhom(goc: str, ma_kenh: str) -> str:

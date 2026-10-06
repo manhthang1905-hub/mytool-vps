@@ -30,16 +30,26 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _log = logging.getLogger(__name__)
 
-#: Trục nhãn. Đợt 2 (03/10/2026) thêm "kieu_tieu_de", "hook".
-TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook")
+#: Trục nhãn. Đợt 2 (03/10/2026) thêm "kieu_tieu_de", "hook". 07/10/2026 (`workspace/chan-doan/2026-10-07.md`)
+#: thêm hai trục ĐO (chưa trục nào bẻ lựa chọn — chỉ bảng điểm/bộ não đọc): "chu_bia_dai" (số ký tự chữ bìa:
+#: 15–20 ký tự CTR trung vị 4,84% n=12, ≤14 ký tự 1,9–2,8% n=10) và "mo_dau" (giây của phần mở đầu trước ý 1:
+#: TL4 trung vị ~59s, kênh mình có bài 110–265s).
+TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook", "chu_bia_dai", "mo_dau")
 #: Trục "bao bì" (06/10/2026): ngoài kết quả chung (hiển thị 48h / giờ xem 7d) còn được chấm thêm bằng CTR 48h
 #: so trung vị CTR của chính kênh (`ket_ctr`) — bìa và tiêu đề tác động thẳng vào CTR, hiển thị chỉ gián tiếp.
-TRUC_BAO_BI = ("kieu_bia", "kieu_tieu_de")
+TRUC_BAO_BI = ("kieu_bia", "kieu_tieu_de", "chu_bia_dai")
 #: Kết quả TƯƠNG ĐỐI 48h (`ket_tv`, 06/10/2026): hiển thị 48h ≥ trung vị hiển thị 48h của chính kênh. `ket48` đo
 #: "cú nổ" (≥ max(sàn tuyệt đối, 3 × trung vị)) — kênh nhỏ ~9/10 ván "trượt", nên mọi cánh tay cùng tụt và Thompson
 #: gần như không phân biệt được; `ket_tv` cho tín hiệu ở MỌI video đủ 48h. Chỉ góp khi ván chưa có 7d.
 TRONG_SO_TV = 0.5
 N_TOI_THIEU_TV = 4
+#: Kết quả MUỘN (`ket_muon`, 07/10/2026 — `workspace/chan-doan/2026-10-07.md`): hiển thị ở mốc MUỘN NHẤT trong
+#: [`GIO_MUON_TU`, `GIO_MUON_DEN`] giờ so trung vị cùng đại lượng của chính kênh. Kênh non được YouTube "thả" muộn:
+#: trung vị chỉ ~28% hiển thị cuối có ở 48h (n=27, Spearman 48h↔cuối 0,48), nhiều video nổ sau giờ 72 (30.283 hiển
+#: thị @119h mà 48h chỉ 338) — chấm ở 48h gắn "trượt" cho chính các video thắng lớn nhất. Có `ket_muon` mà chưa có
+#: 7d thì nó là kết quả CHÍNH (nặng `TRONG_SO_MUON`) và thay chỗ `ket48`/`ket_tv` (cùng đại lượng, đo quá sớm).
+GIO_MUON_TU, GIO_MUON_DEN = 96.0, 240.0
+TRONG_SO_MUON = 0.75
 TRONG_SO_CTR = 0.5
 HIEN_THI_TOI_THIEU_CTR = 100   # mốc 48h ít hơn ngần này lượt hiển thị thì CTR còn nhiễu — không chấm `ket_ctr`
 N_TOI_THIEU_CTR = 4            # kênh cần ngần này video đủ hiển thị mới có trung vị CTR để so
@@ -180,6 +190,27 @@ def nhom_do_dai(giay: Any) -> str:
     return "<10" if phut < 10 else "10-15" if phut < 15 else "15-20" if phut < 20 else ">20"
 
 
+def so_ky_tu_bia(chu: Any) -> int:
+    """Số ký tự ĐỌC ĐƯỢC của chữ bìa — cùng cách đếm `chon_bia._chuan_hoa_chu` (bỏ khoảng trắng, dấu câu)."""
+    return len(re.sub(r"[\s\W_]+", "", str(chu or "")))
+
+
+def nhom_chu_bia(chu: Any) -> str:
+    n = so_ky_tu_bia(chu)
+    if n <= 0:
+        return ""
+    return "<10" if n < 10 else "10-14" if n <= 14 else "15-20" if n <= 20 else ">20"
+
+
+def nhom_mo_dau(hs: Dict[str, Any]) -> str:
+    """Nhóm độ dài phần MỞ ĐẦU (phần 1 của `8-phan.json` trong hồ sơ) — trước ý chính đầu tiên."""
+    ds = ((hs.get("phan") or {}).get("danh_sach") or []) if isinstance(hs.get("phan"), dict) else []
+    giay = _so((ds[0] or {}).get("giay")) if ds and isinstance(ds[0], dict) else None
+    if giay is None or giay <= 0:
+        return ""
+    return "<60" if giay < 60 else "60-90" if giay < 90 else ">90"
+
+
 def nhan_cum(d: Dict[str, Any], cum_cua: Any = None) -> str:
     """Nhãn cụm của một nguồn. Thứ tự: nhãn ĐÃ DÙNG lúc chọn (`cum_tu_hoc`, do `chien_luoc._ap_he_so_cum` ghi —
     ván được tính cho đúng cánh tay đã nhận hệ số), cụm đã gắn trong dòng, không có thì phân theo tiêu đề
@@ -238,7 +269,14 @@ def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any) -> Dict[st
     if kieu_tho and kieu_tho != ra["kieu_bia"]:
         ra["kieu_bia_tho"] = kieu_tho   # biến thể thật (`khuon_thang_2`) — để đọc, không phải trục
     ra.update(_nhan_dot2(hs))
+    ra.update(_nhan_do(hs))
     return ra
+
+
+def _nhan_do(hs: Dict[str, Any]) -> Dict[str, str]:
+    """Hai trục ĐO 07/10/2026 (`chu_bia_dai`, `mo_dau`) — tính thẳng từ hồ sơ, thiếu số thì không ghi."""
+    ra = {"chu_bia_dai": nhom_chu_bia(hs.get("chu_bia")), "mo_dau": nhom_mo_dau(hs)}
+    return {k: v for k, v in ra.items() if v}
 
 
 def _nhan_dot2(hs: Dict[str, Any]) -> Dict[str, Any]:
@@ -493,6 +531,11 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
             if them:
                 v["nuoc"] = dict(v.get("nuoc") or {}, **them)
                 bu += 1
+        if hs:  # bù hai trục đo 07/10/2026 cho ván cũ — chỉ thêm khoá còn thiếu, không đè nhãn đã ghi
+            them = {k: x for k, x in _nhan_do(hs).items() if k not in (v.get("nuoc") or {})}
+            if them:
+                v["nuoc"] = dict(v.get("nuoc") or {}, **them)
+                bu += 1
     moi += bu
     vm_theo_id: Optional[Dict[str, Any]] = None
     nguong: Optional[float] = None
@@ -537,10 +580,12 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
     so_tv = _cham_tuong_doi(van, {ma: _hien_thi_48h((vm_theo_id or {}), ho_so.get(ma) or {}) for ma in van},
                             "ket_tv", N_TOI_THIEU_TV)
     soctr = _cham_tuong_doi(van, {ma: _ctr_48h(ho_so.get(ma) or {}) for ma in van}, "ket_ctr", N_TOI_THIEU_CTR)
-    if moi or so48 or so7 or soctr or so_tv or so_kd:
+    so_muon = _cham_tuong_doi(van, {ma: _hien_thi_muon(ho_so.get(ma) or {}) for ma in van}, "ket_muon",
+                              N_TOI_THIEU_TV)
+    if moi or so48 or so7 or soctr or so_tv or so_kd or so_muon:
         _luu_van(goc, ma_kenh, van)
     return {"van": len(van), "moi": moi, "ket48": so48, "ket7": so7, "ket_tv": so_tv, "ket_ctr": soctr,
-            "khong_do": so_kd}
+            "ket_muon": so_muon, "khong_do": so_kd}
 
 
 GIO_XAP_XI_TOI_THIEU = 22.0   # mốc muộn nhất có số mà ≥ ngần này giờ thì dùng XẤP XỈ khi 48h/72h trống
@@ -604,6 +649,25 @@ def _hien_thi_48h(vm_theo_id: Dict[str, Any], hs: Dict[str, Any]) -> Optional[fl
     return _so(m.get("impressions")) if isinstance(m, dict) else None
 
 
+def moc_muon(hs: Dict[str, Any]) -> Dict[str, Any]:
+    """Bản số MUỘN NHẤT của hồ sơ có hiển thị, tuổi thật (`moc_gio_that`) trong [`GIO_MUON_TU`, `GIO_MUON_DEN`] —
+    bản sao kèm `moc` (tên khung: `ngay4`, `7d`, …). Không có thì `{}`. Chỉ đọc, không đoán tuổi."""
+    tot: Optional[Tuple[float, str, Dict[str, Any]]] = None
+    for ten, gt in (hs.get("chi_so") or {}).items():
+        if not isinstance(gt, dict) or _so(gt.get("impressions")) is None:
+            continue
+        g = _so(gt.get("moc_gio_that"))
+        if g is None or not GIO_MUON_TU <= g <= GIO_MUON_DEN:
+            continue
+        if tot is None or g > tot[0]:
+            tot = (g, str(ten), gt)
+    return dict(tot[2], moc=tot[1]) if tot else {}
+
+
+def _hien_thi_muon(hs: Dict[str, Any]) -> Optional[float]:
+    return _so(moc_muon(hs).get("impressions"))
+
+
 def _ctr_48h(hs: Dict[str, Any]) -> Optional[float]:
     m = _moc_do_duoc(hs)
     if not m or (_so(m.get("impressions")) or 0) < HIEN_THI_TOI_THIEU_CTR:
@@ -641,13 +705,20 @@ def _dem(van: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, float]
     """`{trục: {giá trị CHUẨN: {a, b (thắng/trượt có trọng số), n, thang (kết quả chính), n_tv, thang_tv,
     n_ctr, thang_ctr}}}`. Mỗi ván góp:
 
-    * kết quả chính: 7d (giờ xem so trung vị, nặng 1) nếu có, không thì 48h (ngưỡng thắng kênh, nặng 0,5);
-    * chưa có 7d: thêm `ket_tv` (hiển thị 48h so trung vị kênh, nặng `TRONG_SO_TV`) — tín hiệu có ở MỌI video;
+    * kết quả chính: 7d (giờ xem so trung vị, nặng 1) nếu có, không thì MUỘN (`ket_muon`, hiển thị ≥ 96h so trung
+      vị kênh, nặng `TRONG_SO_MUON`), không thì 48h (ngưỡng thắng kênh, nặng 0,5);
+    * chưa có 7d lẫn kết quả muộn: thêm `ket_tv` (hiển thị 48h so trung vị kênh, nặng `TRONG_SO_TV`);
     * trục bao bì (`TRUC_BAO_BI`): thêm `ket_ctr` (CTR 48h so trung vị kênh, nặng `TRONG_SO_CTR`)."""
     ra: Dict[str, Dict[str, Dict[str, float]]] = {}
     for v in van.values():
-        kl, w = (v.get("ket7"), TRONG_SO_7D) if v.get("ket7") else (v.get("ket48"), TRONG_SO_48H)
-        kt = v.get("ket_tv") if not v.get("ket7") else None
+        km = v.get("ket_muon") if v.get("ket_muon") in ("thang", "truot") else None
+        if v.get("ket7"):
+            kl, w = v.get("ket7"), TRONG_SO_7D
+        elif km:
+            kl, w = km, TRONG_SO_MUON
+        else:
+            kl, w = v.get("ket48"), TRONG_SO_48H
+        kt = v.get("ket_tv") if not (v.get("ket7") or km) else None
         kc = v.get("ket_ctr")
         for truc in TRUC:
             gt = chuan_gia_tri(truc, (v.get("nuoc") or {}).get(truc))
@@ -776,11 +847,12 @@ def ghi_bang_diem_md(goc: str, ma_kenh: str) -> str:
     van = doc_van(goc, ma_kenh)
     bd = bang_diem(goc, ma_kenh)
     d = ["# Bảng điểm tự học — {0}".format(ma_kenh), "",
-         "{0} ván; {1} có kết quả 48h, {2} có kết quả 7 ngày. Thắng/n = số ván thắng / số ván đã có kết luận "
-         "(ván 7d nặng 1, chỉ 48h nặng 0,5; chưa có 7d thì thêm hiển thị 48h so trung vị kênh nặng 0,5; bìa/tiêu "
-         "đề thêm CTR 48h so trung vị kênh nặng 0,5; số kênh cùng nhóm chỉ làm tiên nghiệm × {3}).".format(
+         "{0} ván; {1} có kết quả 48h, {4} có kết quả muộn (≥{5:g}h), {2} có kết quả 7 ngày. Thắng/n = số ván "
+         "thắng / số ván đã có kết luận (ván 7d nặng 1; chưa có 7d thì hiển thị muộn so trung vị kênh nặng {6:g}; "
+         "chỉ có 48h thì nặng 0,5 + hiển thị 48h so trung vị kênh nặng 0,5; bìa/tiêu đề thêm CTR 48h so trung vị "
+         "kênh nặng 0,5; số kênh cùng nhóm chỉ làm tiên nghiệm × {3}).".format(
              len(van), sum(1 for v in van.values() if v.get("ket48")), sum(1 for v in van.values() if v.get("ket7")),
-             HE_SO_NHOM), ""]
+             HE_SO_NHOM, sum(1 for v in van.values() if v.get("ket_muon")), GIO_MUON_TU, TRONG_SO_MUON), ""]
     for truc in TRUC:
         if truc not in bd:
             continue

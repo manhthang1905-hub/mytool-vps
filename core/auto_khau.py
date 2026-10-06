@@ -2697,6 +2697,9 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                     _t, b = _doc_tieu_de(tra)
                     if b and not _chu_bia_trung_luot_truoc(d, b):
                         chu_bia = b
+                # Khung ký tự (07/10/2026): mảnh OCR 「実は」 hay nguyên tiêu đề lùi về → viết lại một lượt.
+                chu_bia = _sua_khung_chu_bia(bc, luot, k, d, _thay(khuon_tieu_de, dict(
+                    chung, COMPETITOR_TITLE=tieu_de_doi_thu)), chu_bia)
                 # Bố cục để riêng: khâu ảnh bìa chạy sau, và chạy tiếp một lượt
                 # đứt giữa chừng thì bước đọc ảnh này bị bỏ qua.
                 if bo_cuc:
@@ -2746,6 +2749,10 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 _khoa_chat(luot, "tieu-de"))
             t, b = _doc_tieu_de(tra)
             tieu_de = tieu_de or t
+            if not chu_bia and b:
+                # Khung ký tự (07/10/2026) — chỉ chữ bìa AI viết; chữ người đưa thì giữ nguyên.
+                b = _sua_khung_chu_bia(bc, luot, k, d, _thay(khuon_tieu_de, dict(
+                    chung, COMPETITOR_TITLE=tieu_de_doi_thu)), b)
             chu_bia = chu_bia or b
         _ghi_chu(os.path.join(d, "1-tieu-de.txt"),
                  "TITLE: {0}\nTHUMB: {1}\n".format(tieu_de, chu_bia))
@@ -3372,6 +3379,79 @@ def _kiem_ban_doc(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any],
         return sau
     bc.ghi("  gác bản đọc: có sửa ({0} → {1} ký tự).".format(len(sau), len(moi)))
     return moi
+
+
+#: ═══ KHUNG SỐ KÝ TỰ CHỮ BÌA (07/10/2026, `workspace/chan-doan/2026-10-07.md`) ═══
+#:
+#: Số thật của các kênh (video ≥ 100 hiển thị): chữ bìa 15–20 ký tự CTR trung vị 4,84% (n=12); ≤ 14 ký tự 1,9–2,8%
+#: (n=10); > 20 ký tự 2,5–4% (n=7, có bìa dán nguyên tiêu đề 0,72%). Bìa thắng của ngách ~17–18 ký tự / 2 tầng
+#: (`workspace/nghien-cuu-bia/BAO-CAO-BIA.md`). Đọc chữ bìa đối thủ (OCR) hay trả một MẢNH (「実は」, 「自分から」)
+#: hoặc lùi về nguyên tiêu đề — hai đuôi thua. Trần 20 = `chon_bia.NGUONG_KY_TU_BIA_MAC_DINH` (bộ chọn loại thẳng
+#: bìa có chữ dài hơn). Chỉ áp cho chữ viết KHÔNG cách (ja/zh/ko) — đếm ký tự tiếng Âu không cùng nghĩa.
+CHU_BIA_TOI_THIEU = 10
+CHU_BIA_TOI_DA = 20
+_NGON_NGU_DEM_KY_TU = ("ja", "zh", "ko", "japan", "chinese", "korean", "日本")
+
+_LUAT_KHUNG_CHU_BIA = (
+    "\n\n═══ THUMB TEXT LENGTH — overrides every other length rule above ═══\n"
+    "Measured on this channel's own videos: thumbnail text of {0}–{1} characters (spaces and punctuation not "
+    "counted) gets the clicks; a lone fragment under {0} characters, or the whole title pasted on the image, "
+    "loses. Write THUMB as TWO short lines separated by one space, {0}–{1} characters in total, carrying the "
+    "curiosity hook of the title — never a single word, never the full title.\n"
+    "Rejected candidate ({2} characters): {3}\n")
+
+
+def _dem_chu_bia(chu: str) -> int:
+    return len(re.sub(r"[\s\W_]+", "", chu or ""))
+
+
+def _dem_theo_ky_tu(ngon_ngu: str) -> bool:
+    nn = str(ngon_ngu or "ja").strip().lower()
+    return any(nn.startswith(x) or x in nn for x in _NGON_NGU_DEM_KY_TU)
+
+
+def chu_bia_lech_khung(chu_bia: str, ngon_ngu: str = "ja") -> str:
+    """`"ngan"` / `"dai"` khi chữ bìa ngoài khung [`CHU_BIA_TOI_THIEU`, `CHU_BIA_TOI_DA`] ký tự đọc được; `""` khi
+    trong khung, rỗng, hoặc ngôn ngữ không đếm theo ký tự."""
+    if not _dem_theo_ky_tu(ngon_ngu):
+        return ""
+    n = _dem_chu_bia(chu_bia)
+    if n == 0:
+        return ""
+    return "ngan" if n < CHU_BIA_TOI_THIEU else "dai" if n > CHU_BIA_TOI_DA else ""
+
+
+def chu_bia_trong_khung(chu_bia: str, ngon_ngu: str = "ja") -> bool:
+    """True chỉ khi ngôn ngữ đếm theo ký tự VÀ chữ bìa nằm trong khung."""
+    return (_dem_theo_ky_tu(ngon_ngu) and _dem_chu_bia(chu_bia) > 0
+            and not chu_bia_lech_khung(chu_bia, ngon_ngu))
+
+
+def _sua_khung_chu_bia(bc: "BoiCanh", luot: LuotChay, k: Kenh, d: str, loi_nhac_goc: str,
+                       chu_bia: str) -> str:
+    """Chữ bìa ngoài khung → MỘT lượt AI viết lại theo `1-tieu-de.md` + luật khung. Bản mới chỉ được nhận khi
+    TRONG khung và không trùng bìa video trước; không thì giữ bản cũ (không bao giờ làm vỡ lượt chạy)."""
+    lech = chu_bia_lech_khung(chu_bia, k.ngon_ngu)
+    if not lech or not loi_nhac_goc.strip():
+        return chu_bia
+    bc.ghi("  chữ bìa 「{0}」 {1} ({2} ký tự, khung {3}–{4}) — nhờ AI viết lại chữ bìa.".format(
+        chu_bia[:40], "quá ngắn" if lech == "ngan" else "quá dài", _dem_chu_bia(chu_bia),
+        CHU_BIA_TOI_THIEU, CHU_BIA_TOI_DA))
+    try:
+        bc.kiem_dung()
+        tra = _goi(bc, loi_nhac_goc + _LUAT_KHUNG_CHU_BIA.format(
+            CHU_BIA_TOI_THIEU, CHU_BIA_TOI_DA, _dem_chu_bia(chu_bia), chu_bia),
+            _khoa_chat(luot, "tieu-de:bia-khung"))
+        _t, moi = _doc_tieu_de(tra)
+    except Exception as loi:  # noqa: BLE001 — hỏng thì giữ chữ bìa cũ
+        bc.ghi("  (viết lại chữ bìa không xong, giữ bản cũ: {0})".format(str(loi)[:70]))
+        return chu_bia
+    moi = " ".join(str(moi or "").split())
+    if moi and chu_bia_trong_khung(moi, k.ngon_ngu) and not _chu_bia_trung_luot_truoc(d, moi):
+        bc.ghi("  chữ bìa mới: 「{0}」 ({1} ký tự)".format(moi[:40], _dem_chu_bia(moi)))
+        return moi
+    bc.ghi("  (bản viết lại vẫn ngoài khung hoặc trùng — giữ chữ bìa cũ)")
+    return chu_bia
 
 
 def _chu_bia_trung_luot_truoc(d: str, chu_bia: str, nguong: float = 0.8) -> str:
@@ -7943,9 +8023,13 @@ def _loi_nhac_bia(bc: BoiCanh, luot: LuotChay, khuon: str, tieu_de: str,
                                  for i, (t, m) in enumerate(kieu, start=1)))
     # Kênh lấy nguyên chữ bìa đối thủ thì chữ ấy là **cố định** — chốt lại, kẻo
     # `8-thumbnail.md` mời AI tự nghĩ một câu hook mới (xem `_LUAT_CHU_BIA_NGUYEN`).
-    if bc.kenh.che_do_tieu_de == "nguyen_goc" and chu_bia.strip():
+    # 07/10/2026: chữ bìa đã qua khung ký tự (`chu_bia_trong_khung`, 10–20 ký tự) cũng là chữ CỐ ĐỊNH ở kênh
+    # "faithful" — `8-thumbnail.md` bảo "dài hơn 14 ký tự thì cắt chữ", chính đường ấy đẻ ra bìa 「実は」.
+    nguyen_goc = bc.kenh.che_do_tieu_de == "nguyen_goc"
+    if chu_bia.strip() and (nguyen_goc or chu_bia_trong_khung(chu_bia, bc.kenh.ngon_ngu)):
         loi_nhac += _LUAT_CHU_BIA_NGUYEN.format(chu_bia.strip(),
                                                 len(chu_bia.strip()))
+    if nguyen_goc and chu_bia.strip():
         # Bám nốt BỐ CỤC của đối thủ, nếu đọc được — xem `_LUAT_BO_CUC_DOI_THU`.
         bo_cuc = _doc_chu(os.path.join(luot.thu_muc, TEP_BIA_DOI_THU)).strip()
         if bo_cuc:

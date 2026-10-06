@@ -15,11 +15,14 @@ còn hở. Cập nhật 06/10/2026.
                 ┌──────────────────────────── CHẤM ───────────────────────────┐│
   tu_hoc.cham_van  (vong_hoc bước 6, MỖI lượt, trước khi chọn video mới)      ││
     ván = một video, nhãn = `nuoc` {cum, cong_thuc, kieu_bia, do_dai,          ││
-                                   kieu_tieu_de, hook} (nhãn CHUẨN)            ││
+                                   kieu_tieu_de, hook, chu_bia_dai, mo_dau}    ││
+                                   (nhãn CHUẨN; 2 trục cuối chỉ ĐO, 07/10)    ││
     ket48   hiển thị 48h ≥ ngưỡng thắng kênh = "cú nổ"        nặng 0,5         ││
     ket7    giờ xem 7d ≥ trung vị kênh (thiếu thì nhóm)        nặng 1           ││
-    ket_tv  hiển thị 48h ≥ trung vị kênh (chưa có 7d)          nặng 0,5         ││
-    ket_ctr CTR 48h ≥ trung vị kênh — chỉ bìa + tiêu đề        nặng 0,5         ││
+    ket_muon hiển thị mốc 96–240h ≥ trung vị kênh (chưa có 7d) nặng 0,75 —     ││
+            thay ket48 + ket_tv (07/10: kênh non nổ muộn, 48h ≈ 28% số cuối)   ││
+    ket_tv  hiển thị 48h ≥ trung vị kênh (chưa có 7d/muộn)     nặng 0,5         ││
+    ket_ctr CTR 48h ≥ trung vị kênh — bìa, tiêu đề, chu_bia_dai nặng 0,5        ││
     → tu_hoc.bang_diem: Beta(a, b) mỗi (trục, giá trị) + tiên nghiệm nhóm ×0,3 ││
     → CHANNEL/<k>/tu-hoc/{van.json, bang-diem.md}                              ││
                                                                                ││
