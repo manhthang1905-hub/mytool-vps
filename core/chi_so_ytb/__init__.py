@@ -194,6 +194,19 @@ def _gio_tu_ten_moc(ten: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
+def _can_giai_lai_phien_cu(tq: str, raw: str) -> bool:
+    """`tong-quan.json` do bộ giải mã CŨ (chưa có `phien_giai_ma`) mà RỖNG hiển thị/lượt xem, trong khi raw có gói
+    `join` — bộ giải mã mới (`giai_ma.tong_tu_join`) đọc được số tổng ở đó. Giải lại đúng những bản này một lần;
+    bản đã có phiên (kể cả vẫn rỗng) thì thôi, không lặp mỗi lượt đọc."""
+    try:
+        q = json.load(io.open(tq, encoding="utf-8"))
+        if q.get("phien_giai_ma") or q.get("impressions") is not None or q.get("views") is not None:
+            return False
+        return any("yta_web-join" in t for t in os.listdir(raw))
+    except (OSError, ValueError):
+        return False
+
+
 def _giai_ma_con_thieu(kenh_dir: str) -> int:
     """Giải mã những lần chụp chưa có `tong-quan.json`. Trả về số lần vừa giải mã.
 
@@ -216,7 +229,7 @@ def _giai_ma_con_thieu(kenh_dir: str) -> int:
                                 for t in os.listdir(raw)), default=0.0)
             except OSError:
                 moi_nhat = 0.0
-            if moi_nhat <= os.path.getmtime(tq):
+            if moi_nhat <= os.path.getmtime(tq) and not _can_giai_lai_phien_cu(tq, raw):
                 continue
         lenh = [sys.executable, gm, raw, "--out", snap]
         gio = _gio_tu_ten_moc(os.path.basename(snap))

@@ -49,6 +49,10 @@ DEVICE = {"MOBILE": "mobile", "DESKTOP": "pc", "TABLET": "tablet", "TV": "tv"}
 # LECH_VPS_GIO = 7: máy VPS đặt múi giờ Việt Nam (xác nhận ở `vm/may_dang.py`, dòng có
 # chú thích "máy đặt múi giờ VN" cạnh `datetime.now()`), tức UTC+7.
 LECH_JST_GIO = 9
+
+# Phiên bộ giải mã — ghi vào `tong-quan.json`. `chi_so_ytb._giai_ma_con_thieu` giải LẠI bản chưa có phiên này
+# mà thiếu hiển thị/lượt xem (bản rỗng do bộ giải mã cũ chưa đọc số tổng của gói join, 06/10/2026).
+PHIEN_GIAI_MA = 2
 LECH_VPS_GIO = 7
 
 
@@ -106,6 +110,51 @@ def cot_tuyet_doi(rt, loai_chi_so):
     return None
 
 
+def _chi_loc_video(req, khoa):
+    """Nút `khoa` của yêu cầu join chỉ bị giới hạn theo VIDEO (không lọc nguồn/vùng/thiết bị…)?
+
+    Trang "pool đề xuất" gọi cùng `0__TOTALS_SUMS_QUERY_KEY` nhưng kèm `restricts` TRAFFIC_SOURCE_TYPE=YT_RELATED
+    — tổng của nó chỉ là phần Đề xuất (đo TL3-T7-0005 @36h: 5 so với 40 thật). Lấy nhầm là hiển thị thấp vài lần.
+    """
+    for n in (req or {}).get("nodes") or []:
+        if isinstance(n, dict) and n.get("key") == khoa:
+            rs = ((n.get("value") or {}).get("query") or {}).get("restricts") or []
+            return all((r.get("dimension") or {}).get("type") == "VIDEO" for r in rs if isinstance(r, dict))
+    return True        # không có yêu cầu để đối chiếu (gói cũ) → như trước, không chặn
+
+
+def tong_tu_join(res, req=None):
+    """Số TỔNG cấp video từ gói `yta_web/join` (tab Reach) → `{metric: số}`; không có thì `{}`.
+
+    ═══ VÌ SAO CÓ HÀM NÀY (06/10/2026) ═══
+
+    Mốc ≥ ~24h Studio không còn trả thẻ `keyMetricCardData` của tab-overview cho video cũ — tiện ích
+    chỉ về được các gói Reach (`join`/`get_creator_videos`). Gói `join` vẫn mang ĐỦ số tổng nằm ở
+    `results[key="0__TOTALS_SUMS_QUERY_KEY"].value.resultTable.metricColumns[]` (counts/percentages
+    /milliseconds `.values[0]`, kèm `.total`) — một resultTable KHÔNG có `dimensionColumns`, nên vòng
+    đọc bảng (`"dimensionColumns" in d`) bỏ qua nó. Hậu quả: 8 video, mọi mốc ≥ 23h, `tong-quan.json`
+    chỉ có {video_id, tiêu đề, ngày đăng} dù raw có impressions/CTR/views (TL2-T7-0010 @115h: 1.890
+    hiển thị · 6,77% · 606 lượt). Chỉ nhận khoá TOTALS_SUMS — các khoá TOP_ENTITIES là bảng theo chiều.
+    """
+    ra = {}
+    if not isinstance(res, dict):
+        return ra
+    for x in res.get("results") or []:
+        if not isinstance(x, dict) or "TOTALS_SUMS" not in str(x.get("key") or ""):
+            continue
+        if not _chi_loc_video(req, x.get("key")):
+            continue
+        rt = (x.get("value") or {}).get("resultTable") or {}
+        if rt.get("dimensionColumns"):
+            continue
+        for c in rt.get("metricColumns") or []:
+            t = (c.get("metric") or {}).get("type")
+            v = cot_gia_tri(c)[0]
+            if t and v and isinstance(v[0], (int, float)) and not (c.get("undefinedValueIndices") or []):
+                ra[t] = v[0]
+    return ra
+
+
 def nap(thu_muc):
     fs = sorted(glob.glob(os.path.join(thu_muc, "*.json")))
     if not fs:
@@ -154,11 +203,15 @@ def sinh(thu_muc, out, thoi_luong=None, gio=None):
     chot = {}         # metricTotals của thẻ giữ chân (cửa sổ đã chốt sổ) — có cả khi thiếu đường cong
     pool_rows, ten_video = {}, {}
     top_related_pct = {}
+    tong_join = {}    # số TỔNG của gói join tốt nhất (nhiều hiển thị nhất) — chỉ dùng khi thiếu thẻ key-metric
 
     for f, res, g in nap(thu_muc):
         m = re.search(r"/video/([\w-]{11})/", g.get("href", ""))
         if m:
             tq["video_id"] = m.group(1)
+        tj = tong_tu_join(res, g.get("request"))
+        if tj and (tj.get("VIDEO_THUMBNAIL_IMPRESSIONS") or 0) >= (tong_join.get("VIDEO_THUMBNAIL_IMPRESSIONS") or 0):
+            tong_join = tj
         # tiêu đề video (get_creator_videos / getCreatorVideos)
         for d in duyet(res):
             if isinstance(d.get("videoId"), str) and isinstance(d.get("title"), str):
@@ -317,6 +370,14 @@ def sinh(thu_muc, out, thoi_luong=None, gio=None):
                                 top_related_pct[k] = v
 
     # ---- tổng hợp số
+    # Thẻ key-metric (tab-overview) luôn thắng; gói join chỉ BÙ chỗ thiếu. Toàn số 0 = Studio chưa tính xong
+    # (không phải "đo được bằng không") nên không nhận — để rỗng, vòng thu thập còn chụp lại.
+    if any(tong_join.get(m) for m in ("VIDEO_THUMBNAIL_IMPRESSIONS", "EXTERNAL_VIEWS")):
+        bu = [m for m, v in tong_join.items() if m not in key]
+        for m in bu:
+            key[m] = tong_join[m]
+        if "VIDEO_THUMBNAIL_IMPRESSIONS" in bu or "EXTERNAL_VIEWS" in bu:
+            tq["nguon_tong"] = "join"
     if "VIDEO_THUMBNAIL_IMPRESSIONS" in key:
         tq["impressions"] = key["VIDEO_THUMBNAIL_IMPRESSIONS"]
     if "VIDEO_THUMBNAIL_IMPRESSIONS_VTR" in key:
@@ -379,6 +440,7 @@ def sinh(thu_muc, out, thoi_luong=None, gio=None):
     for k, v in list(tq.items()):
         if isinstance(v, float) and v.is_integer():
             tq[k] = int(v)
+    tq["phien_giai_ma"] = PHIEN_GIAI_MA
     io.open(os.path.join(out, "tong-quan.json"), "w", encoding="utf-8").write(json.dumps(tq, ensure_ascii=False, indent=2))
 
     # ---- retention.xlsx

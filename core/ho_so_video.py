@@ -669,6 +669,40 @@ def ghi_video_id(goc: str, kenh: str, ma_goi: str, video_id: str,
     return True
 
 
+def _khung_co_so(gt: Any) -> bool:
+    """Khung chỉ số có SỐ ĐO thật (hiển thị hoặc lượt xem) — không phải khung rỗng `can_chup_lai`."""
+    return isinstance(gt, dict) and (gt.get("impressions") is not None or gt.get("views") is not None)
+
+
+def moc_can_chup_lai(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> List[Tuple[str, str]]:
+    """`[(mã gói, khung)]` — khung đang đánh dấu `can_chup_lai` mà CỬA SỔ khung còn mở (tuổi video hôm nay chưa
+    tới giờ cao của khung: 48h = tới 60h, 72h = tới 96h…). Tuổi hôm nay = `moc_gio_that` lúc chụp + thời gian
+    đã trôi từ `luc_chup`. Cho bộ thu thập biết mốc nào còn kịp chụp lại; chỉ đọc đĩa."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    cao = {ten: c for ten, _t, c in _KHUNG_MOC}
+    thu_muc = duong_thu_muc_ho_so(goc, kenh)
+    ra: List[Tuple[str, str]] = []
+    try:
+        ten_tep = sorted(t for t in os.listdir(thu_muc) if t.endswith(".json"))
+    except OSError:
+        return ra
+    for ten in ten_tep:
+        hs = _doc_json(os.path.join(thu_muc, ten))
+        if not isinstance(hs, dict):
+            continue
+        for khung, gt in (hs.get("chi_so") or {}).items():
+            if not (isinstance(gt, dict) and gt.get("can_chup_lai")) or khung not in cao:
+                continue
+            try:
+                luc = _dt.datetime.strptime(str(gt.get("luc_chup")), "%Y-%m-%d %H:%M")
+                gio_nay = float(gt.get("moc_gio_that")) + (bay_gio - luc).total_seconds() / 3600.0
+            except (TypeError, ValueError):
+                continue
+            if gio_nay < cao[khung]:
+                ra.append((ten[:-len(".json")], khung))
+    return ra
+
+
 def _chuan_hoa_tieu_de_noi(t: str) -> str:
     """Chuẩn hoá THÔ để nối tiêu đề hồ sơ (tool đặt) ↔ tiêu đề Studio thật —
     cùng phép chuẩn hoá (bỏ khoảng trắng/dấu câu, hạ thường) mà
@@ -792,11 +826,26 @@ def cap_nhat_chi_so(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = No
                       and khung_dung.get(gt.get("luc_chup")) not in (None, "", k)]:
                 chi_so.pop(k, None)
                 thay = True
+            for k, gt in list(chi_so.items()):  # khung rỗng từ bản cũ (đã bị đè): đánh dấu để chụp lại
+                if isinstance(gt, dict) and not _khung_co_so(gt) and not gt.get("can_chup_lai"):
+                    chi_so[k] = dict(gt, can_chup_lai=True)
+                    thay = True
             for b in theo_video[video_id]:
                 ten_moc = _ten_moc(b.moc_gio)
                 if not ten_moc:
                     continue
                 cu = chi_so.get(ten_moc)
+                if b.impressions is None and b.views is None:
+                    # Bản chụp RỖNG (Studio chưa trả số / bộ giải mã chưa đọc được) KHÔNG được đè khung — bản cũ
+                    # đè nên khung 48h thành toàn None, bộ thu thập tưởng mốc đã xong. Khung đã có số thì giữ;
+                    # chưa có thì đánh dấu `can_chup_lai` để chụp lại khi cửa sổ khung còn mở.
+                    if _khung_co_so(cu) or (isinstance(cu, dict) and cu.get("can_chup_lai")
+                                            and cu.get("luc_chup") == b.luc_chup):
+                        continue
+                    chi_so[ten_moc] = {"impressions": None, "ctr": None, "views": None, "luc_chup": b.luc_chup,
+                                       "moc_gio_that": b.moc_gio, "can_chup_lai": True}
+                    thay = True
+                    continue
                 if isinstance(cu, dict) and cu.get("luc_chup") == b.luc_chup and "pct_browse" in cu:
                     continue  # số liệu y hệt lần trước — không phải "cập nhật mới"
                 # 01/10/2026 (giám đốc kênh): thêm CTR trang chủ (dòng Browse của traffic-type.csv),
@@ -815,8 +864,9 @@ def cap_nhat_chi_so(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = No
                 cap_nhat_moc += 1
             if chi_so:
                 ho_so["chi_so"] = chi_so
+                co_so = {k: gt for k, gt in chi_so.items() if _khung_co_so(gt)} or chi_so
                 ten_moc_moi, gt_moi = max(
-                    chi_so.items(),
+                    co_so.items(),
                     key=lambda kv: (kv[1].get("moc_gio_that")
                                    if isinstance(kv[1], dict) and kv[1].get("moc_gio_that") is not None
                                    else -1))

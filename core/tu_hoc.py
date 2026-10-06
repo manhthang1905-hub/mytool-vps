@@ -497,7 +497,7 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
     vm_theo_id: Optional[Dict[str, Any]] = None
     nguong: Optional[float] = None
     tv7: Optional[Tuple[Optional[float], str]] = None
-    so48 = so7 = 0
+    so48 = so7 = so_kd = 0
     for ma, v in van.items():
         hs = ho_so.get(ma) or {}
         if not hs:
@@ -510,7 +510,13 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
                 if (vid or hs.get("chi_so")) else ""
             if kl:
                 v["ket48"] = kl
+                v.pop("khong_do", None)
                 so48 += 1
+            elif "khong_do" not in v and not _moc_do_duoc(hs) and _du_ngay(hs, v, NGAY_KHONG_DO):
+                # Studio rỗng suốt ≥ 7 ngày (không mốc nào ≥ 22h có số): chốt "không đo được" — thôi nằm trong
+                # danh sách "thiếu 48h"; có số về sau thì nhánh trên tự gỡ cờ.
+                v["khong_do"] = time.strftime("%Y-%m-%d")
+                so_kd += 1
         if _moc(hs) and "lech" not in v:
             lech = _lech(v.get("du_doan") or {}, hs)
             if lech:
@@ -531,17 +537,36 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
     so_tv = _cham_tuong_doi(van, {ma: _hien_thi_48h((vm_theo_id or {}), ho_so.get(ma) or {}) for ma in van},
                             "ket_tv", N_TOI_THIEU_TV)
     soctr = _cham_tuong_doi(van, {ma: _ctr_48h(ho_so.get(ma) or {}) for ma in van}, "ket_ctr", N_TOI_THIEU_CTR)
-    if moi or so48 or so7 or soctr or so_tv:
+    if moi or so48 or so7 or soctr or so_tv or so_kd:
         _luu_van(goc, ma_kenh, van)
-    return {"van": len(van), "moi": moi, "ket48": so48, "ket7": so7, "ket_tv": so_tv, "ket_ctr": soctr}
+    return {"van": len(van), "moi": moi, "ket48": so48, "ket7": so7, "ket_tv": so_tv, "ket_ctr": soctr,
+            "khong_do": so_kd}
+
+
+GIO_XAP_XI_TOI_THIEU = 22.0   # mốc muộn nhất có số mà ≥ ngần này giờ thì dùng XẤP XỈ khi 48h/72h trống
+NGAY_KHONG_DO = 7             # đăng ≥ ngần này ngày mà không mốc nào ≥ 22h có số → chốt "không đo được", thôi nhắc
 
 
 def _moc_do_duoc(hs: Dict[str, Any]) -> Dict[str, Any]:
-    """Mốc 48h (lùi 72h) CÓ số hiển thị — bản chụp mà Studio trả trống (`impressions: null`) không phải số đo."""
+    """Mốc 48h (lùi 72h) CÓ số hiển thị — bản chụp mà Studio trả trống (`impressions: null`) không phải số đo.
+
+    06/10/2026: 48h và 72h đều trống (Studio chỉ trả số các mốc sớm — 8 video đo được) thì lùi tới mốc MUỘN NHẤT
+    ≥ `GIO_XAP_XI_TOI_THIEU` giờ có hiển thị, trả bản sao gắn `xap_xi=True` + `moc_dung` (tên khung) — số ấy
+    không cùng tuổi 48h nên người gọi phải đọc cờ (`_ket_luan_48h` chỉ tin chiều an toàn của nó)."""
     cs = hs.get("chi_so") or {}
     for m in ("48h", "72h"):
         if isinstance(cs.get(m), dict) and _so(cs[m].get("impressions")) is not None:
             return cs[m]
+    ung = []
+    for ten, gt in cs.items():
+        if not isinstance(gt, dict) or _so(gt.get("impressions")) is None:
+            continue
+        g = _so(gt.get("moc_gio_that"))
+        if g is not None and g >= GIO_XAP_XI_TOI_THIEU:
+            ung.append((g, ten, gt))
+    if ung:
+        g, ten, gt = max(ung, key=lambda x: x[0])
+        return dict(gt, xap_xi=True, moc_dung=ten)
     return {}
 
 
@@ -556,7 +581,16 @@ def _ket_luan_48h(ket_qua: Any, vm: Any, hs: Dict[str, Any], nguong: Optional[fl
         vm = None
     m = _moc_do_duoc(hs)
     hs2 = dict(hs, chi_so={"48h": m}) if m else dict(hs, chi_so={})
-    return ket_qua.ket_luan(vm, hs2, nguong)
+    kl = ket_qua.ket_luan(vm, hs2, nguong)
+    if m.get("xap_xi"):
+        # Số xấp xỉ khác tuổi 48h: mốc SỚM hơn 48h chỉ có thể THIẾU (hiển thị tăng dần) nên chỉ "thắng" là chắc;
+        # mốc MUỘN hơn 60h chỉ có thể THỪA nên chỉ "trượt" là chắc. Chiều kia để trống — chờ số thật, không khoá sai.
+        g = _so(m.get("moc_gio_that")) or 0.0
+        if g < 48.0 and kl != "thang":
+            return ""
+        if g >= 60.0 and kl != "truot":
+            return ""
+    return kl
 
 
 def _hien_thi_48h(vm_theo_id: Dict[str, Any], hs: Dict[str, Any]) -> Optional[float]:
@@ -802,6 +836,15 @@ def _ngay_dang(hs: Dict[str, Any], v: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _du_ngay(hs: Dict[str, Any], v: Dict[str, Any], so_ngay: int, bay_gio: Optional[float] = None) -> bool:
+    """Video đăng đã ≥ `so_ngay` ngày (theo `_ngay_dang`); không biết ngày đăng → False."""
+    nd = _ngay_dang(hs, v)
+    if not nd:
+        return False
+    han = time.strftime("%Y-%m-%d", time.localtime((bay_gio or time.time()) - so_ngay * 86400))
+    return nd <= han
+
+
 def tin_hieu_thieu(goc: str, ma_kenh: str, bay_gio: Optional[float] = None) -> Dict[str, Any]:
     """Đo độ "kín" của vòng học một kênh, chỉ đọc đĩa: `{van, co_ket, thieu_48h: [mã gói], khong_cum, van_cu_gio}`.
 
@@ -816,13 +859,19 @@ def tin_hieu_thieu(goc: str, ma_kenh: str, bay_gio: Optional[float] = None) -> D
     van = doc_van(goc, ma_kenh)
     ho_so = ket_qua.ho_so_theo_goi(goc, ma_kenh) if van else {}
     han = time.strftime("%Y-%m-%d", time.localtime(bay_gio - NGAY_CHO_48H * 86400))
-    thieu = sorted(ma for ma, v in van.items()
-                   if not v.get("ket48") and (_ngay_dang(ho_so.get(ma) or {}, v) or "9") <= han)
+    thieu = sorted(ma for ma, v in van.items() if not v.get("ket48") and not v.get("khong_do")
+                   and (_ngay_dang(ho_so.get(ma) or {}, v) or "9") <= han)
+    # Tách hai nguyên nhân (06/10/2026): Studio RỖNG (không mốc ≥ 22h nào có hiển thị) khác CHƯA TỚI MỐC (có số
+    # xấp xỉ nhưng chưa đủ chắc để kết luận 48h) — cách xử lý khác nhau nên báo cáo không gộp.
+    studio_rong = [ma for ma in thieu if not _moc_do_duoc(ho_so.get(ma) or {})]
+    cho_moc = [ma for ma in thieu if ma not in set(studio_rong)]
+    khong_do = sorted(ma for ma, v in van.items() if v.get("khong_do") and not v.get("ket48"))
     try:
         cu: Optional[float] = round((bay_gio - os.path.getmtime(
             os.path.join(_thu_muc(goc, ma_kenh), "bang-diem.md"))) / 3600.0, 1)
     except OSError:
         cu = None
     return {"van": len(van), "co_ket": sum(1 for v in van.values() if v.get("ket48") or v.get("ket7")),
-            "thieu_48h": thieu, "khong_cum": sum(1 for v in van.values() if not (v.get("nuoc") or {}).get("cum")),
+            "thieu_48h": thieu, "studio_rong": studio_rong, "cho_moc": cho_moc, "khong_do": khong_do,
+            "khong_cum": sum(1 for v in van.values() if not (v.get("nuoc") or {}).get("cum")),
             "van_cu_gio": cu}

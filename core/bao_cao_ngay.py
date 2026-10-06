@@ -140,20 +140,32 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
     lệnh chiến trường cũ, cảnh báo của các đường học 24h (`tu_hoc.canh_bao`)."""
     from core import tu_hoc  # noqa: PLC0415
     ts = bay_gio.timestamp()
-    thieu, khong_cum, cu = [], [], []
+    thieu, cho_moc, khong_do, khong_cum, cu = [], [], [], [], []
     for k in _cac_kenh(goc):
         t = tu_hoc.tin_hieu_thieu(goc, k, ts)
         if not t["van"]:
             continue
-        if t["thieu_48h"]:
-            thieu.append("{0} {1}".format(k, len(t["thieu_48h"])))
+        rong = t.get("studio_rong", t["thieu_48h"])
+        if rong:
+            thieu.append("{0} {1}".format(k, len(rong)))
+        if t.get("cho_moc"):
+            cho_moc.append("{0} {1}".format(k, len(t["cho_moc"])))
+        if t.get("khong_do"):
+            khong_do.append("{0} {1}".format(k, len(t["khong_do"])))
         if t["khong_cum"] * 2 >= t["van"] and t["khong_cum"]:
             khong_cum.append("{0} {1}/{2}".format(k, t["khong_cum"], t["van"]))
         if t["van_cu_gio"] is None or t["van_cu_gio"] > tu_hoc.GIO_VAN_CU:
             cu.append("{0} {1}".format(k, "chưa chấm" if t["van_cu_gio"] is None else "{0:.0f}h".format(t["van_cu_gio"])))
     ra = []
     if thieu:
-        ra.append("- Thiếu số 48h (đăng ≥{0} ngày, chưa có kết quả): {1}".format(tu_hoc.NGAY_CHO_48H, ", ".join(thieu)))
+        ra.append("- Thiếu số 48h — Studio rỗng (đăng ≥{0} ngày, không mốc nào có số; sau {1} ngày chốt "
+                  "«không đo được»): {2}".format(tu_hoc.NGAY_CHO_48H, tu_hoc.NGAY_KHONG_DO, ", ".join(thieu)))
+    if cho_moc:
+        ra.append("- Thiếu số 48h — chưa tới mốc (có số mốc khác nhưng chưa đủ chắc kết luận, chờ chụp lại): "
+                  + ", ".join(cho_moc))
+    if khong_do:
+        ra.append("- Đã chốt «không đo được» (Studio rỗng ≥{0} ngày, thôi chờ): {1}".format(
+            tu_hoc.NGAY_KHONG_DO, ", ".join(khong_do)))
     if khong_cum:
         ra.append("- Ván không nhãn cụm (trục cụm không học được): " + ", ".join(khong_cum))
     if cu:

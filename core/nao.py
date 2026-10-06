@@ -489,7 +489,8 @@ def ket_qua_goi(goc: str, kenh: str, goi: Any) -> List[str]:
         m = tu_hoc._moc_do_duoc(hs)  # noqa: SLF001
         ra.append("{0}: 48h {1}, 7d {2}, CTR-so-kênh {3} — hiển thị @48h {4}, CTR {5}".format(
             ma, chu.get(v.get("ket48"), "chờ"), chu.get(v.get("ket7"), "chờ"), chu.get(v.get("ket_ctr"), "chờ"),
-            _f(m.get("impressions")), _f(m.get("ctr"), 2, "%")))
+            _f(m.get("impressions")) + (" (~{0})".format(m.get("moc_dung")) if m.get("xap_xi") else ""),
+            _f(m.get("ctr"), 2, "%")))
     return ra
 
 

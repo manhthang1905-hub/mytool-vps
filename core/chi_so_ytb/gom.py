@@ -192,8 +192,23 @@ def phan_loai_nguon(t, nganh):
 
 def gom(kenh_dir, nganh):
     ban_ghi = []
+    # Hai lượt: lượt 1 đọc hết `tong-quan.json` để biết video nào CHƯA bản nào có số. Video ấy vẫn phải có MỘT dòng
+    # (bản rỗng mới nhất) — bản cũ bỏ mọi bản rỗng nên 4 video (06/10/2026) mất khỏi `bang-tom-tat.csv`, bảng hiện
+    # như chưa từng chụp thay vì "chụp rồi mà Studio rỗng". Video có số ở mốc sớm thì dòng lấy mốc sớm đó.
+    tat_ca, co_so, rong_moi = [], set(), {}
     for tq_p in glob.glob(os.path.join(kenh_dir, "*", "*", "tong-quan.json")):
         tm = os.path.dirname(tq_p)
+        try:
+            q = json.load(io.open(tq_p, encoding="utf-8"))
+        except Exception:
+            continue
+        tat_ca.append((tq_p, tm, q))
+        vid = q.get("video_id") or os.path.basename(os.path.dirname(tm))
+        if q.get("impressions") is not None or q.get("views") is not None:
+            co_so.add(vid)
+        elif vid != "kenh" and (q.get("gio_sau_dang") or 0) >= (rong_moi.get(vid) or (-1, ""))[0]:
+            rong_moi[vid] = (q.get("gio_sau_dang") or 0, tq_p)
+    for tq_p, tm, q in tat_ca:
         # ĐỪNG bỏ theo TÊN THƯ MỤC. Lịch hằng ngày của tiện ích ghi gói kênh vào
         # `chi-so/kenh/kenh-<ngày>/`, và chính gói đó mới có thẻ phễu — nơi duy nhất có
         # TỔNG IMPRESSIONS và CTR TOÀN KÊNH. Bộ lọc `startswith("kenh")` cũ ném hết chúng
@@ -202,15 +217,12 @@ def gom(kenh_dir, nganh):
         # cột cho biết cổng 1 và cổng 2 của kênh đang ở đâu.
         # Bản ghi cấp kênh vẫn được loại khỏi bảng VIDEO — nhưng loại ở `doc_kenh()` theo
         # `video_id == "kenh"`, tức theo NỘI DUNG gói, không theo cách đặt tên thư mục.
-        try:
-            q = json.load(io.open(tq_p, encoding="utf-8"))
-        except Exception:
-            continue
         # Bản chụp "tay-*" (extension bắt được từ tab đang mở) trước đây bị bỏ hết. Nhưng đúng những
         # bản đó giữ mốc 69h của video 2 — mốc cho thấy nó đã dừng. Giữ lại, miễn là có chỉ số thật.
-        if q.get("impressions") is None and q.get("views") is None:
-            continue
         vid = q.get("video_id") or os.path.basename(os.path.dirname(tm))
+        if q.get("impressions") is None and q.get("views") is None:
+            if vid in co_so or (rong_moi.get(vid) or (0, ""))[1] != tq_p:
+                continue
 
         # --- vùng: LUÔN lấy dòng Total làm mẫu số
         geo_rows = doc_csv(os.path.join(tm, "geo.csv"))
