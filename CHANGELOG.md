@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.177.0** — 2026-10-07 — `vps-jp1` — feat(tu-hoc): gan nhan cum theo NGHIA (LLM, nho dem, toi da 60 tieu de/luot) khi bo cum tu khoa tra rong; bu nhan hoi to cho van cu; picker luon ghi cum_tu_hoc + cum_nguon; khac la mot canh tay that
 - **2.176.1** — 2026-10-07 — `vps-jp1` — fix(dieu-phoi): van nghet RAM nho so lan cu va tu tra lai khi RAM trong >=4GB lien tuc 30' — truoc day ha mot lan la ket 1 lan mai (07/10 00:02)
 - **2.176.0** — 2026-10-07 — `vps-jp1` — feat(chat-luong): khong bao gio dang san pham kem — kho clip het han muc chi cho/thu lai (bo dung canh tu anh, bo giu hinh khi thieu clip), cuu canh bi tu choi noi dung roi bao nguoi; ban giao + may dang tu choi goi con clip tu anh; lenh l…
 - **2.175.0** — 2026-10-07 — `vps-jp1` — fix(tu-hoc): cham ket qua muon 96-240h (kenh non duoc day muon, 48h chi ~28% so cuoi) thay vi 48h; bien tap xep video theo so muon + gan sao video thang; chu bia 10-20 ky tu (ja/zh/ko) viet lai khi lech khung; truc do chu_bia_dai, mo_dau
