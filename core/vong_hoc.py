@@ -89,8 +89,8 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
                bay_gio: Optional[_dt.datetime] = None, bo_kho_nhac: bool = False) -> Dict[str, Any]:
     """Bốn bước "học từ số liệu" — gọi TRƯỚC "1) Nghiên cứu" của mỗi lượt.
 
-    `goi_chat` dành cho bước 4 (Việc 4, mô tả khuôn ảnh bìa bằng AI) — Việc 3
-    không tự gọi AI ở đâu cả (0₫ đúng như bản thiết kế). Không bao giờ ném lỗi:
+    `goi_chat` dành cho bước 4 (Việc 4, mô tả khuôn ảnh bìa bằng AI) và — chỉ như cờ "vòng thật" — bước 6
+    (nhãn cụm theo nghĩa, gọi qua ví `goi_chat_that`). Không bao giờ ném lỗi:
     mỗi bước tự `try/except`, hỏng bước nào chỉ ghi log rồi bỏ qua bước đó, các
     bước sau vẫn chạy tiếp. Trả một tóm tắt để nơi gọi/test kiểm được đã làm
     gì — KHÔNG dùng để quyết định có tiếp tục lượt sản xuất hay không.
@@ -164,10 +164,12 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
         log("  0) [vòng học] thống kê theo công thức hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
 
     # 6) Tự học (`core/tu_hoc`): chấm ván + bảng điểm cho người đọc — try riêng, không chặn gì.
+    #    07/10/2026: vòng thật (`goi_chat` có) thì ván thiếu nhãn cụm được nhãn THEO NGHĨA (≤ 60 tiêu đề/lượt,
+    #    qua van ví — `core/cum_y_nghia`); `goi_chat=None` (bài kiểm, chạy tay) thì không gọi AI.
     try:
         from . import tu_hoc  # noqa: PLC0415
 
-        ket["tu_hoc"] = tu_hoc.cham_van(goc, ma_kenh)
+        ket["tu_hoc"] = tu_hoc.cham_van(goc, ma_kenh, dung_ai=goi_chat is not None)
         tu_hoc.ghi_bang_diem_md(goc, ma_kenh)
     except Exception as loi:  # noqa: BLE001
         log("  0) [vòng học] tự học (chấm ván) hỏng: {0} — bỏ qua.".format(str(loi)[:200]))

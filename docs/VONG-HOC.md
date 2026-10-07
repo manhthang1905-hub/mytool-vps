@@ -62,6 +62,10 @@ sinh ra (`nao.ket_qua_goi`) → não `cham <id> dung|sai` → tỉ lệ đúng <
 * `tu_hoc.chuan_gia_tri` là MỘT luật cho mọi nơi đếm / rút / khớp `thu`: chữ thường; `kieu_bia` bỏ hậu tố số biến
   thể (`khuon_thang_2` = `khuon_thang`). Ván ghi nhãn chuẩn, bản thô để ở `kieu_bia_tho`.
 * Cụm của một video là nhãn **lúc chọn** (`cum_tu_hoc`), không phân loại lại lúc bàn giao.
+* Bộ cụm V7 trả `[]` → nhãn **theo nghĩa** (`core/cum_y_nghia`, 07/10/2026): một lượt LLM xếp tiêu đề vào MỘT cụm
+  có sẵn hoặc `khac` (cũng là một cánh tay). Nhớ `CHANNEL/<k>/tu-hoc/cum-y-nghia.json`, mỗi tiêu đề hỏi một lần,
+  ≤ 60 tiêu đề/lượt, qua van ví. Chạy ở `phan_cum_ai.lam_nong` (ứng viên lúc chọn) và `cham_van(dung_ai=True)`
+  (bù hồi tố ván cũ). Ván ghi `nuoc.cum_nguon`: `nguon` | `tu_khoa` | `y_nghia`.
 * Ván chỉ nhận `ket48` từ số 48h THẬT — cờ "thắng sớm" mốc 13h của V7 không được khoá vào ván.
 
 ## 4. Khi vòng hở — xem ở đâu

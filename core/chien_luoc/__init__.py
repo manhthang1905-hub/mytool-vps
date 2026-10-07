@@ -315,9 +315,17 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
 
         from .. import tu_hoc  # noqa: PLC0415
 
+        nhan_ng = _nhan_cum_chon(nc, bang)
         if not tu_hoc.bang_diem(nc.goc, nc.ma_kenh).get("cum") and not tu_hoc._nao_hieu_luc(nc.goc, nc.ma_kenh, "cum"):
+            # 07/10/2026: chưa có bảng điểm cụm thì không nhân hệ số, nhưng VẪN ghi nhãn — trước đây nhánh này
+            # thoát sớm, nguồn được chọn không có `cum_tu_hoc` và ván của nó có thể thiếu nhãn cụm.
+            for ds in bang.values():
+                for d in ds:
+                    cum, tu = nhan_ng[id(d)]
+                    if cum:
+                        d["cum_tu_hoc"], d["cum_nguon"] = cum, tu
             return
-        nhan = {id(d): tu_hoc.nhan_cum(d, nc.cum_cua) for ds in bang.values() for d in ds}
+        nhan = {k: v[0] for k, v in nhan_ng.items()}
         hat = hashlib.sha1("hs|{0}|{1}|{2}".format(nc.ma_kenh, nc.bay_gio.date().isoformat(),
                                                    nc.so_luot_hom_nay).encode("utf-8")).hexdigest()
         rut = tu_hoc.rut(nc.goc, nc.ma_kenh, "cum", sorted({c for c in nhan.values() if c}), random.Random(hat))
@@ -335,6 +343,8 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
                 # 06/10/2026: ghi NHÃN đã dùng — `tu_hoc.nhan_cum` lúc bàn giao lấy lại đúng nhãn này, nên ván được
                 # tính cho đúng cánh tay đã nhận hệ số (bộ cụm AI có thể đổi nhãn giữa lúc chọn và lúc bàn giao).
                 d["cum_tu_hoc"] = cum
+                if cum:
+                    d["cum_nguon"] = nhan_ng[id(d)][1]
                 d["he_so_cum"] = round(he, 3)
                 try:
                     d["diem_goc"] = d.get("diem", 0)
@@ -353,6 +363,28 @@ def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
             tu_hoc.canh_bao(nc.goc, "he_so_cum", loi, nc.ma_kenh)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _nhan_cum_chon(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> Dict[int, Tuple[str, str]]:
+    """`{id(dòng): (nhãn cụm, nguồn nhãn)}` cho mọi dòng: `tu_hoc.nhan_cum_nguon` (nhãn sẵn / bộ nhận cụm V7),
+    rỗng thì bộ nhớ nhãn THEO NGHĨA (`core/cum_y_nghia`, chỉ đọc — lượt LLM chạy ở `phan_cum_ai.lam_nong` và vòng
+    học). Bộ nhớ hỏng → giữ nhãn rỗng + cảnh báo học."""
+    from .. import tu_hoc  # noqa: PLC0415
+
+    ra = {id(d): tu_hoc.nhan_cum_nguon(d, nc.cum_cua) for ds in bang.values() for d in ds}
+    rong = [d for ds in bang.values() for d in ds if not ra[id(d)][0] and str(d.get("tieu_de") or "").strip()]
+    if rong:
+        try:
+            from .. import cum_y_nghia  # noqa: PLC0415
+
+            bo = cum_y_nghia.BoNho(nc.goc, nc.ma_kenh, ch=getattr(nc, "_ch_v7", None) or None)
+            for d in rong:
+                c = bo.tra(str(d["tieu_de"]))
+                if c:
+                    ra[id(d)] = (c, cum_y_nghia.NGUON_Y_NGHIA)
+        except Exception as loi:  # noqa: BLE001
+            tu_hoc.canh_bao(nc.goc, "cum_y_nghia", loi, nc.ma_kenh)
+    return ra
 
 
 def _ap_tan_cong(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:

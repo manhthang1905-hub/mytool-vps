@@ -215,16 +215,64 @@ def nhan_cum(d: Dict[str, Any], cum_cua: Any = None) -> str:
     """Nhãn cụm của một nguồn. Thứ tự: nhãn ĐÃ DÙNG lúc chọn (`cum_tu_hoc`, do `chien_luoc._ap_he_so_cum` ghi —
     ván được tính cho đúng cánh tay đã nhận hệ số), cụm đã gắn trong dòng, không có thì phân theo tiêu đề
     (cùng bộ cụm V7)."""
+    return nhan_cum_nguon(d, cum_cua)[0]
+
+
+def nhan_cum_nguon(d: Dict[str, Any], cum_cua: Any = None) -> Tuple[str, str]:
+    """`(nhãn, nguồn nhãn)` — như `nhan_cum`, kèm nguồn (`cum_y_nghia.NGUON_*`): "nguon" (nhãn sẵn trong dòng;
+    `cum_tu_hoc` giữ `cum_nguon` đã ghi lúc chọn), "tu_khoa" (bộ nhận cụm V7 trên tiêu đề). Không có → ("", "")."""
     if str(d.get("cum_tu_hoc") or "").strip():
-        return str(d["cum_tu_hoc"]).strip()
+        return str(d["cum_tu_hoc"]).strip(), str(d.get("cum_nguon") or "nguon")
     cum = [str(c) for c in (d.get("cum") or []) if c]
-    if not cum and cum_cua is not None and d.get("tieu_de"):
+    if cum:
+        return cum[0], "nguon"
+    if cum_cua is not None and d.get("tieu_de"):
         try:
             cum = [str(c) for c in (cum_cua(str(d["tieu_de"])) or []) if c]
         except Exception as loi:  # noqa: BLE001
             canh_bao("", "nhan_cum", loi)
             cum = []
-    return cum[0] if cum else ""
+    return (cum[0], "tu_khoa") if cum else ("", "")
+
+
+def _mo_ta_van(nguon: Dict[str, Any], hs: Dict[str, Any]) -> str:
+    """Ngữ cảnh cho LLM nhãn cụm: tiêu đề video CỦA KÊNH (nếu khác tiêu đề nguồn) + chữ bìa."""
+    td_ng, td_hs = str((nguon or {}).get("tieu_de") or "").strip(), str((hs or {}).get("tieu_de") or "").strip()
+    phan = []
+    if td_hs and td_ng and td_hs != td_ng:
+        phan.append("video của kênh: " + td_hs)
+    if str((hs or {}).get("chu_bia") or "").strip():
+        phan.append("chữ bìa: " + " ".join(str(hs["chu_bia"]).split()))
+    return "; ".join(phan)
+
+
+def _nhan_cum_van(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any, bo: Any = None) -> Tuple[str, str]:
+    """Nhãn cụm của một VÁN, không gọi AI: nhãn của nguồn (`nhan_cum_nguon`) → bộ nhận cụm V7 trên tiêu đề video
+    của kênh (hồ sơ) → bộ nhớ nhãn theo nghĩa (`cum_y_nghia`) của tiêu đề nguồn / tiêu đề kênh."""
+    nhan, tu = nhan_cum_nguon(nguon or {}, cum_cua)
+    if nhan:
+        return nhan, tu
+    td_hs = str((hs or {}).get("tieu_de") or "").strip()
+    if td_hs and cum_cua is not None:
+        nhan, tu = nhan_cum_nguon({"tieu_de": td_hs}, cum_cua)
+        if nhan:
+            return nhan, tu
+    if bo is not None:
+        for td in (str((nguon or {}).get("tieu_de") or "").strip(), td_hs):
+            c = bo.tra(td) if td else ""
+            if c:
+                return c, "y_nghia"
+    return "", ""
+
+
+def _bo_nho_cum(goc: str, ma_kenh: str) -> Any:
+    try:
+        from . import cum_y_nghia  # noqa: PLC0415
+
+        return cum_y_nghia.BoNho(goc, ma_kenh)
+    except Exception as loi:  # noqa: BLE001
+        canh_bao(goc, "cum_y_nghia", loi, ma_kenh)
+        return None
 
 
 _RE_HAU_TO_SO = re.compile(r"_\d+$")
@@ -260,12 +308,15 @@ def _doc_ho_so(goc: str, ma_kenh: str, ma_goi: str) -> Dict[str, Any]:
         return {}
 
 
-def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any) -> Dict[str, Any]:
+def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any, bo: Any = None) -> Dict[str, Any]:
     th = hs.get("thumbnail") or {}
     kieu_tho = str(th.get("kieu") or "")
-    ra = {"cum": nhan_cum(nguon or {}, cum_cua),
+    cum, cum_nguon = _nhan_cum_van(nguon or {}, hs, cum_cua, bo)
+    ra = {"cum": cum,
           "cong_thuc": str((nguon or {}).get("cong_thuc") or hs.get("cong_thuc") or (nguon or {}).get("nguon") or ""),
           "kieu_bia": chuan_gia_tri("kieu_bia", kieu_tho), "do_dai": nhom_do_dai(hs.get("thoi_luong_giay"))}
+    if cum:
+        ra["cum_nguon"] = cum_nguon   # tu_khoa | y_nghia | nguon — để đọc, không phải trục
     if kieu_tho and kieu_tho != ra["kieu_bia"]:
         ra["kieu_bia_tho"] = kieu_tho   # biến thể thật (`khuon_thang_2`) — để đọc, không phải trục
     ra.update(_nhan_dot2(hs))
@@ -424,7 +475,8 @@ def _du_doan_tu(nguon: Dict[str, Any]) -> Dict[str, Any]:
 
 def ghi_van_tu_luot(goc: str, ma_kenh: str, ma_goi: str, nguon: Dict[str, Any]) -> None:
     """Nơi gọi lúc bàn giao: `nguon` = `run["nguon"]`. Hồ sơ video đã được `ban_giao` ghi trước đó."""
-    ghi_van(goc, ma_kenh, ma_goi, _nuoc_tu(nguon or {}, _doc_ho_so(goc, ma_kenh, ma_goi), _ham_cum(goc, ma_kenh)),
+    ghi_van(goc, ma_kenh, ma_goi, _nuoc_tu(nguon or {}, _doc_ho_so(goc, ma_kenh, ma_goi), _ham_cum(goc, ma_kenh),
+                                           _bo_nho_cum(goc, ma_kenh)),
             _du_doan_tu(nguon or {}))
 
 
@@ -504,8 +556,54 @@ def _lech(du_doan: Dict[str, Any], hs: Dict[str, Any]) -> Dict[str, float]:
     return ra
 
 
-def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
-    """Bù ván từ hồ sơ video + sổ lượt cho gói chưa có ván, rồi chấm ván chưa kết luận. Không ném lỗi số liệu."""
+def _bu_nhan_cum(goc: str, ma_kenh: str, van: Dict[str, Dict[str, Any]], ho_so: Dict[str, Dict[str, Any]],
+                 nguon_so: Dict[str, Dict[str, Any]], cum_cua: Any, dung_ai: bool = False, bo: Any = None,
+                 goi: Any = None) -> int:
+    """Bù nhãn cụm cho ván THIẾU `nuoc.cum` (07/10/2026 — ván cũ được nhãn hồi tố): `_nhan_cum_van` (không AI),
+    còn thiếu mà `dung_ai` thì MỘT lượt LLM theo lô (`cum_y_nghia.phan_loai`, tối đa `TOI_DA_MOT_LUOT` tiêu đề,
+    qua van ví; `goi` thay được — chạy thử). Ghi `nuoc.cum` + `nuoc.cum_nguon`. Trả số ván được gắn nhãn."""
+    thieu = [ma for ma, v in van.items() if not (v.get("nuoc") or {}).get("cum")
+             and ((ho_so.get(ma) or {}).get("tieu_de") or (nguon_so.get(ma) or {}).get("tieu_de")
+                  or (nguon_so.get(ma) or {}).get("cum_tu_hoc") or (nguon_so.get(ma) or {}).get("cum"))]
+    if not thieu:
+        return 0
+    bo = bo if bo is not None else _bo_nho_cum(goc, ma_kenh)
+
+    def gan(ma: str, nhan: str, tu: str) -> None:
+        van[ma]["nuoc"] = dict(van[ma].get("nuoc") or {}, cum=nhan, cum_nguon=tu)
+
+    doi = 0
+    cho: List[Tuple[str, str, str]] = []
+    for ma in thieu:
+        ng, hs = nguon_so.get(ma) or {}, ho_so.get(ma) or {}
+        nhan, tu = _nhan_cum_van(ng, hs, cum_cua, bo)
+        if nhan:
+            gan(ma, nhan, tu)
+            doi += 1
+            continue
+        td = str(ng.get("tieu_de") or "").strip() or str(hs.get("tieu_de") or "").strip()
+        if td:
+            cho.append((ma, td, _mo_ta_van(ng, hs)))
+    if cho and dung_ai and bo is not None:
+        try:
+            from . import cum_y_nghia  # noqa: PLC0415
+
+            goi = goi if goi is not None else cum_y_nghia.goi_vi(goc)
+            if goi is not None:  # None = ví đang chặn: lượt sau thử lại
+                cum_y_nghia.phan_loai(goc, ma_kenh, [(td, mt) for _ma, td, mt in cho], goi, bo=bo)
+                for ma, td, _mt in cho:
+                    c = bo.tra(td)
+                    if c:
+                        gan(ma, c, "y_nghia")
+                        doi += 1
+        except Exception as loi:  # noqa: BLE001
+            canh_bao(goc, "cum_y_nghia", loi, ma_kenh)
+    return doi
+
+
+def cham_van(goc: str, ma_kenh: str, dung_ai: bool = False) -> Dict[str, int]:
+    """Bù ván từ hồ sơ video + sổ lượt cho gói chưa có ván, rồi chấm ván chưa kết luận. Không ném lỗi số liệu.
+    `dung_ai=True` (vòng học thật): ván thiếu nhãn cụm được nhãn THEO NGHĨA bằng một lượt LLM (`_bu_nhan_cum`)."""
     from .chien_luoc import ket_qua  # noqa: PLC0415
 
     van = doc_van(goc, ma_kenh)
@@ -536,7 +634,15 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
             if them:
                 v["nuoc"] = dict(v.get("nuoc") or {}, **them)
                 bu += 1
-    moi += bu
+    cum_bu = 0
+    if any(not (v.get("nuoc") or {}).get("cum") for v in van.values()):
+        try:
+            if nguon_so is None:
+                nguon_so, cum_cua = _nguon_theo_goi(goc, ma_kenh), _ham_cum(goc, ma_kenh)
+            cum_bu = _bu_nhan_cum(goc, ma_kenh, van, ho_so, nguon_so, cum_cua, dung_ai)
+        except Exception as loi:  # noqa: BLE001 — nhãn cụm hỏng không được chặn chấm ván
+            canh_bao(goc, "bu_nhan_cum", loi, ma_kenh)
+    moi += bu + cum_bu
     vm_theo_id: Optional[Dict[str, Any]] = None
     nguong: Optional[float] = None
     tv7: Optional[Tuple[Optional[float], str]] = None
@@ -585,7 +691,7 @@ def cham_van(goc: str, ma_kenh: str) -> Dict[str, int]:
     if moi or so48 or so7 or soctr or so_tv or so_kd or so_muon:
         _luu_van(goc, ma_kenh, van)
     return {"van": len(van), "moi": moi, "ket48": so48, "ket7": so7, "ket_tv": so_tv, "ket_ctr": soctr,
-            "ket_muon": so_muon, "khong_do": so_kd}
+            "ket_muon": so_muon, "khong_do": so_kd, "cum_bu": cum_bu}
 
 
 GIO_XAP_XI_TOI_THIEU = 22.0   # mốc muộn nhất có số mà ≥ ngần này giờ thì dùng XẤP XỈ khi 48h/72h trống

@@ -313,4 +313,14 @@ def lam_nong(goc: str, kenh: str, ch: Dict, goi_chat: Callable[..., str],
             tc.append((tuoi, str(r["Tiêu đề"])))
     tc.sort(key=lambda x: x[0])
     muc += [(t, "") for _tuoi, t in tc]
-    return phan_loai(goc, kenh, ch, muc, goi_chat, mo_hinh=mo_hinh, toi_da=toi_da, log=log)
+    moi = phan_loai(goc, kenh, ch, muc, goi_chat, mo_hinh=mo_hinh, toi_da=toi_da, log=log)
+    # 07/10/2026: ứng viên đầu bảng mà bộ cụm vẫn trả [] → nhãn MỘT cụm theo nghĩa (hoặc "khac") cho vòng tự học
+    # (`core/cum_y_nghia`; chỉ với hàm gọi AI thật + van ví, ≤ 60 tiêu đề/lượt; hỏng = cảnh báo, không chặn chọn).
+    try:
+        from . import cum_y_nghia  # noqa: PLC0415
+
+        moi += cum_y_nghia.gan_ung_vien(goc, kenh, ch, goi_chat, list(tieu_de_ung_vien), log=log)
+    except Exception as loi:  # noqa: BLE001
+        if log is not None:
+            log("  (nhãn cụm theo nghĩa hỏng: {0})".format(str(loi)[:100]))
+    return moi
