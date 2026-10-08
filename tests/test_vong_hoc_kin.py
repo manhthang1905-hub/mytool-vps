@@ -4,6 +4,7 @@ não thấy kết quả lần thử, bài học khám nghiệm vào lời nhắc
 Toàn dữ liệu GIẢ trong tmp_path — không mạng, không AI, không đụng số liệu thật."""
 
 import datetime as _dt
+import re
 import json
 import os
 import random
@@ -294,7 +295,7 @@ def test_tin_hieu_thieu_va_muc_hoc(tmp_path, monkeypatch):
     tu_hoc.canh_bao(g, "bo_cum", "không có bộ cụm", "A")
     monkeypatch.setattr(bc, "_cac_kenh", lambda goc: ["A", "B"])
     ra = "\n".join(bc._muc_hoc(g, _dt.datetime.now()))  # noqa: SLF001
-    assert "Thiếu số 48h" in ra and "A 1" in ra
+    assert "Thiếu số 48h" in ra and re.search(r"A [12]", ra)   # 1 hay 2 tuỳ ngày chạy (mốc ≥4 ngày)
     assert "chưa chấm" in ra and "Lệnh chiến trường" in ra and "Cảnh báo học 24h: 1" in ra
     assert "B" not in ra.replace("bo_cum", "")               # kênh chưa có ván: không báo
 
