@@ -1587,6 +1587,8 @@ def quet_trang_chu(cau_hinh: dict) -> str:
 #: hút được đã nằm ở trạm rồi (extension gửi TỪNG video một, không gom tới cuối), và
 #: phần chưa hút thì phiên mai lấy tiếp.
 CHO_MOI_VIDEO_LOI_THOAI_GIAY = 25
+#: Chờ trạm trả `/loi-thoai/can-lay` (đọc kho trên đĩa — kênh kho lớn mất 7–24 s lúc máy rảnh, 09/10/2026).
+CHO_TRAM_LOI_THOAI_GIAY = 120.0
 
 
 def lay_loi_thoai(cau_hinh: dict) -> dict:
@@ -1626,8 +1628,10 @@ def lay_loi_thoai(cau_hinh: dict) -> dict:
         ket["ghi_chu"] = "van IPv4 đang mở (máy đăng đang chép file) — bỏ bước này"
         return ket
     kenh = cau_hinh.get("kenh") or "kenh"
+    # 09/10/2026: trạm trả `/loi-thoai/can-lay` mất 7–24 s lúc máy rảnh (kho kênh mới lớn) và lâu hơn khi đang
+    # quét/dựng — chờ mặc định 20 s làm 4 kênh mới "timed out" mọi ngày, không hút được lời thoại đối thủ nào.
     truoc = _goi(cau_hinh["tram"], "/loi-thoai/can-lay?" + urllib.parse.urlencode(
-        {"kenh": kenh, "k": 8}))
+        {"kenh": kenh, "k": 8}), cho=CHO_TRAM_LOI_THOAI_GIAY)
     ds = [v for v in (truoc.get("video") or [])
           if isinstance(v, dict) and str(v.get("video_id") or "")]
     kho_truoc = truoc.get("kho") or {}
@@ -1667,7 +1671,7 @@ def lay_loi_thoai(cau_hinh: dict) -> dict:
     # rồi có ra chữ hay chỉ mở tab cho vui.
     try:
         sau = _goi(cau_hinh["tram"], "/loi-thoai/can-lay?" + urllib.parse.urlencode(
-            {"kenh": kenh, "k": 1}))
+            {"kenh": kenh, "k": 1}), cho=CHO_TRAM_LOI_THOAI_GIAY)
         kho_sau = sau.get("kho") or {}
     except Exception as loi:  # noqa: BLE001 — không đếm được thì vẫn báo phần biết chắc
         ket["ghi_chu"] = "không đếm lại được kho ({0})".format(str(loi)[:80])
