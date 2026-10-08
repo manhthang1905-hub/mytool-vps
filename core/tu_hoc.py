@@ -34,10 +34,13 @@ _log = logging.getLogger(__name__)
 #: thêm hai trục ĐO (chưa trục nào bẻ lựa chọn — chỉ bảng điểm/bộ não đọc): "chu_bia_dai" (số ký tự chữ bìa:
 #: 15–20 ký tự CTR trung vị 4,84% n=12, ≤14 ký tự 1,9–2,8% n=10) và "mo_dau" (giây của phần mở đầu trước ý 1:
 #: TL4 trung vị ~59s, kênh mình có bài 110–265s).
-TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook", "chu_bia_dai", "mo_dau")
+#: 09/10/2026 (`core/do_bia.py`): trục ĐO "bia_doc_duoc" (cao|vua|thap — độ đọc được của bìa, tương phản WCAG +
+#: cỡ chữ ở khung điện thoại) để học xem độ đọc được đi với CTR thế nào (40 bìa 09/10: bìa ĐẠT CTR trung vị 4,8%
+#: n=11 vs TRƯỢT 3,1% n=23 — mẫu nhỏ, cần học tiếp).
+TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook", "chu_bia_dai", "mo_dau", "bia_doc_duoc")
 #: Trục "bao bì" (06/10/2026): ngoài kết quả chung (hiển thị 48h / giờ xem 7d) còn được chấm thêm bằng CTR 48h
 #: so trung vị CTR của chính kênh (`ket_ctr`) — bìa và tiêu đề tác động thẳng vào CTR, hiển thị chỉ gián tiếp.
-TRUC_BAO_BI = ("kieu_bia", "kieu_tieu_de", "chu_bia_dai")
+TRUC_BAO_BI = ("kieu_bia", "kieu_tieu_de", "chu_bia_dai", "bia_doc_duoc")
 #: Kết quả TƯƠNG ĐỐI 48h (`ket_tv`, 06/10/2026): hiển thị 48h ≥ trung vị hiển thị 48h của chính kênh. `ket48` đo
 #: "cú nổ" (≥ max(sàn tuyệt đối, 3 × trung vị)) — kênh nhỏ ~9/10 ván "trượt", nên mọi cánh tay cùng tụt và Thompson
 #: gần như không phân biệt được; `ket_tv` cho tín hiệu ở MỌI video đủ 48h. Chỉ góp khi ván chưa có 7d.
@@ -325,8 +328,11 @@ def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any, bo: Any = 
 
 
 def _nhan_do(hs: Dict[str, Any]) -> Dict[str, str]:
-    """Hai trục ĐO 07/10/2026 (`chu_bia_dai`, `mo_dau`) — tính thẳng từ hồ sơ, thiếu số thì không ghi."""
-    ra = {"chu_bia_dai": nhom_chu_bia(hs.get("chu_bia")), "mo_dau": nhom_mo_dau(hs)}
+    """Các trục ĐO (`chu_bia_dai`, `mo_dau` 07/10; `bia_doc_duoc` 09/10) — tính thẳng từ hồ sơ, thiếu số thì
+    không ghi."""
+    th = hs.get("thumbnail") if isinstance(hs.get("thumbnail"), dict) else {}
+    ra = {"chu_bia_dai": nhom_chu_bia(hs.get("chu_bia")), "mo_dau": nhom_mo_dau(hs),
+          "bia_doc_duoc": str(th.get("bia_doc_duoc") or "") if th.get("bia_doc_duoc") in ("cao", "vua", "thap") else ""}
     return {k: v for k, v in ra.items() if v}
 
 

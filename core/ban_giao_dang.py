@@ -271,6 +271,16 @@ def xuat_goi(thu_muc_luot: str, thu_muc_done: str, ma: str) -> str:
               else os.path.join(thu_muc_luot, TEP_SRT), TEP_SRT)]
     anh = _tim_thumb(thu_muc_luot)
     nguon.append((anh, os.path.basename(anh)))
+    # 09/10/2026: báo cáo đo độ đọc được CHÍNH XÁC của bộ vẽ (`core/do_bia.py`) đi kèm ảnh — QA đọc nó
+    # (đúng vân tay ảnh) thay vì chấm mù. Thiếu thì thôi, QA tự chấm mù.
+    try:
+        from . import do_bia  # noqa: PLC0415
+
+        bc_anh = do_bia.duong_bao_cao(anh)
+        if os.path.isfile(bc_anh):
+            nguon.append((bc_anh, os.path.basename(do_bia.duong_bao_cao(os.path.join(dich, os.path.basename(anh))))))
+    except Exception:  # noqa: BLE001
+        pass
     # Bình luận để GHIM sau khi đăng — đi CÙNG gói, không đi qua bảng kế hoạch.
     # Bảng ấy có sẵn cột cố định mà cả tool đăng bên máy ảo lẫn giao diện đều
     # đọc; thêm cột là sửa lược đồ đang chạy ở hai nơi. Đặt tệp cạnh mp4 thì ai

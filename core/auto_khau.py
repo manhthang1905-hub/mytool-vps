@@ -8836,10 +8836,16 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
             except Exception as loi:  # noqa: BLE001 — giữ nền cũ, bộ chọn sẽ chấm
                 bc.ghi("    (vẽ lại hỏng: {0})".format(str(loi)[:100]))
         loai = "khuon" if kh.get("nhom") == "khuon" else "chuan_ngach"
+        do_doc: Dict[str, Any] = {}
         if not _btk.ve_chu_len_anh(dich, tep, _btk.bo_tri_chu(loai, kh["chu_tang"]), goc=bc.goc,
-                                   ngon_ngu=bc.kenh.ngon_ngu):
+                                   ngon_ngu=bc.kenh.ngon_ngu, bao_cao=do_doc):
             bc.ghi("  (ảnh bìa {0}: không vẽ được chữ — không có font Nhật?)".format(so_bia))
             return so_bia, False
+        try:
+            from . import do_bia as _db  # noqa: PLC0415
+            bc.ghi("  ảnh bìa {0}: chữ theo nền đo được — {1}".format(so_bia, _db.tom_tat(do_doc)))
+        except Exception:  # noqa: BLE001
+            pass
     return so_bia, False
 
 
@@ -8883,9 +8889,160 @@ def _khau_thumbnail(bc: BoiCanh):
             except Exception as loi:  # noqa: BLE001
                 bc.ghi("  (chọn ảnh bìa bằng AI hỏng: {0}) — bỏ qua, ảnh bìa dùng "
                       "luật cũ (tấm đầu/CHON- nếu có).".format(str(loi)[:150]))
+        # ═══ CỔNG ĐỌC ĐƯỢC (09/10/2026, `core/do_bia.py`) ═══
+        # Chủ dự án: "thumb rất kém — nền và text không tương phản". Bìa đã chọn phải ĐẠT số đo độ đọc
+        # được; không đạt thì tự sửa (tấm khác đạt → vẽ lại kiểu thích nghi → rút gọn chữ), hết cách thì
+        # NÉM LỖI — khâu không xong thì không bàn giao (luật 07/10: thà không đăng còn hơn sản phẩm kém).
+        ket["doc_duoc"] = _cong_doc_duoc_bia(bc, luot, thu_muc, chu_bia)
         return ket
 
     return lam
+
+
+#: Số lần rút gọn chữ bìa tối đa ở cổng đọc được (mỗi lần MỘT lượt chat, không gọi AI ảnh).
+CONG_DOC_DUOC_RUT_TOI_DA = 2
+
+
+def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) -> Dict[str, Any]:
+    """Cổng độ đọc được của bìa ĐÃ CHỌN (`CHON-*`). Thứ tự tự sửa, mỗi bước ĐO lại bằng `do_bia`:
+
+    1. bìa đã chọn ĐẠT (hoặc không đo được — không dò ra chữ: chỉ ghi log) → giữ;
+    2. tấm hợp lệ khác của giám khảo (theo điểm) ĐẠT → đổi sang tấm đó;
+    3. vẽ lại tấm đã chọn với kiểu thích nghi: tấm code vẽ chữ → vẽ lại trên nền `znen-*`; tấm mô hình vẽ
+       chữ → xoá chữ cũ + vẽ lại (`do_bia.ve_lai_tu_anh_ghep`) — không gọi AI ảnh;
+    4. vẫn trượt → rút gọn chữ bìa (≤ `CONG_DOC_DUOC_RUT_TOI_DA` lượt chat, khung 10–20 ký tự) rồi vẽ lại;
+    5. hết cách → RuntimeError nói rõ lý do (khâu hỏng, lượt KHÔNG được bàn giao).
+    Kênh tắt bằng `kenh.yaml: bia_cong_doc_duoc: false` (mặc định bật)."""
+    from . import bia_theo_khuon as _btk, chon_bia as _cb, do_bia  # noqa: PLC0415
+    cai: Dict[str, Any] = {}
+    if getattr(bc, "goc", ""):
+        try:
+            from .kenh import TEP_KENH, doc_yaml, duong_kenh  # noqa: PLC0415
+            cai = doc_yaml(os.path.join(duong_kenh(bc.goc, bc.kenh.ma), TEP_KENH)) or {}
+        except Exception:  # noqa: BLE001
+            cai = {}
+    if cai.get("bia_cong_doc_duoc") is False:
+        return {}
+    try:
+        chon = [t for t in sorted(os.listdir(thu_muc)) if t.upper().startswith("CHON-")
+                and os.path.splitext(t)[1].lower() in (".jpg", ".jpeg", ".png")]
+    except OSError:
+        chon = []
+    if not chon:
+        return {}
+    tep_chon = os.path.join(thu_muc, chon[0])
+    bao = do_bia.cham_tep(tep_chon)
+    bc.ghi("  ảnh bìa — độ đọc được: " + do_bia.tom_tat(bao))
+    if bao.get("dat") is not False:
+        return {"tep": chon[0], "bao_cao": _gon(bao), "sua": ""}
+    m_so = re.search(r"(\d+)", chon[0])
+    so_chon = int(m_so.group(1)) if m_so else -1
+
+    def dat_chon(nguon: str, so: int, bc_moi: Dict[str, Any], cach: str) -> Dict[str, Any]:
+        """Thay `CHON-*` bằng `nguon` (bản cũ chép vào `_truoc-do-bia/`) + ghi chú vào `chon-bia.json`."""
+        sao = os.path.join(thu_muc, "_truoc-do-bia")
+        os.makedirs(sao, exist_ok=True)
+        try:
+            os.replace(tep_chon, os.path.join(sao, os.path.basename(tep_chon)))
+        except OSError:
+            pass
+        dich = os.path.join(thu_muc, "CHON-thumb_{0:03d}.jpg".format(so))
+        _cb._xuat_jpg(nguon, dich)  # noqa: SLF001
+        do_bia.ghi_bao_cao(dich, bc_moi)
+        du = _cb.doc_chon_bia(thu_muc) or {}
+        c = du.get("chon") if isinstance(du.get("chon"), dict) else {}
+        c.update(so=so, tep=os.path.basename(dich), doc_duoc_sua=cach,
+                 ly_do=(str(c.get("ly_do") or "") + " | cổng đọc được: " + cach)[:600])
+        du["chon"] = c
+        _cb._ghi_json(_cb.duong_tep_chon_bia(thu_muc), du)  # noqa: SLF001
+        bc.ghi("  ảnh bìa — cổng đọc được: {0} → {1}".format(cach, do_bia.tom_tat(bc_moi)))
+        return {"tep": os.path.basename(dich), "bao_cao": _gon(bc_moi), "sua": cach,
+                "truoc": _gon(bao)}
+
+    # 2) Tấm hợp lệ khác của giám khảo đã ĐẠT sẵn.
+    du = _cb.doc_chon_bia(thu_muc) or {}
+    uv = sorted([u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")],
+                key=lambda u: -(u.get("tong_diem") or 0))
+    for u in uv:
+        so = int(u.get("so") or 0)
+        tep = _tep_bia(thu_muc, so)
+        if so == so_chon or not os.path.isfile(tep):
+            continue
+        b = do_bia.cham_tep(tep)
+        if b.get("dat"):
+            return dat_chon(tep, so, b, "đổi sang tấm {0} (đạt sẵn)".format(so))
+
+    # 3) + 4) Vẽ lại tấm đã chọn (rồi rút gọn chữ nếu cần).
+    kh = _muc_ke_hoach(thu_muc, so_chon)
+    znen = os.path.join(thu_muc, "znen-thumb_{0:03d}.png".format(so_chon))
+    goc_png = _tep_bia(thu_muc, so_chon)
+    nguon_anh = goc_png if os.path.isfile(goc_png) else tep_chon
+    tang = list(kh.get("chu_tang") or []) or do_bia._chia_tang(chu_bia)  # noqa: SLF001
+    loai = "khuon" if kh.get("nhom") == "khuon" else "chuan_ngach"
+    tep_moi = os.path.join(thu_muc, "_lam-lai", "thumb_{0:03d}.png".format(so_chon))
+    os.makedirs(os.path.dirname(tep_moi), exist_ok=True)
+
+    def ve(chu_tang_ve) -> Dict[str, Any]:
+        b: Dict[str, Any] = {}
+        if os.path.isfile(znen):
+            _btk.ve_chu_len_anh(znen, tep_moi, _btk.bo_tri_chu(loai, chu_tang_ve), goc=bc.goc,
+                                ngon_ngu=bc.kenh.ngon_ngu, bao_cao=b)
+        else:
+            do_bia.ve_lai_tu_anh_ghep(nguon_anh, chu_tang_ve, tep_moi, goc=bc.goc, ngon_ngu=bc.kenh.ngon_ngu,
+                                      bao_cao=b, ghi=bc.ghi)
+        return b
+    ly_do = [do_bia.tom_tat(bao)]
+    if tang:
+        b = ve(tang)
+        if b.get("dat"):
+            return dat_chon(tep_moi, so_chon, b, "vẽ lại kiểu thích nghi" + (" trên nền gốc" if os.path.isfile(
+                znen) else " (xoá chữ cũ, không gọi AI ảnh)"))
+        ly_do.append("vẽ lại: " + do_bia.tom_tat(b))
+        chu = chu_bia
+        co_dinh = bc.kenh.che_do_tieu_de == "nguyen_goc"
+        for lan in range(CONG_DOC_DUOC_RUT_TOI_DA if (not co_dinh and _dem_theo_ky_tu(bc.kenh.ngon_ngu)) else 0):
+            moi = _rut_chu_bia(bc, luot, chu, lan)
+            if not moi:
+                break
+            b = ve(do_bia._chia_tang(moi))  # noqa: SLF001
+            if b.get("dat"):
+                r = dat_chon(tep_moi, so_chon, b, "rút gọn chữ bìa 「{0}」→「{1}」 + vẽ lại".format(chu_bia, moi))
+                r["chu_bia_rut"] = moi
+                return r
+            ly_do.append("rút gọn 「{0}」: {1}".format(moi, do_bia.tom_tat(b)))
+            chu = moi
+    raise RuntimeError("ảnh bìa KHÓ ĐỌC, tự sửa không được — KHÔNG bàn giao (luật 07/10/2026: thà không đăng "
+                       "còn hơn sản phẩm kém). " + " || ".join(ly_do)[:900])
+
+
+def _gon(bc: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: bc.get(k) for k in ("dat", "diem", "tuong_phan_min", "cao_min_pct", "doc_duoc", "cach")}
+
+
+def _rut_chu_bia(bc: BoiCanh, luot: LuotChay, chu_bia: str, lan: int) -> str:
+    """MỘT lượt chat rút gọn chữ bìa cho dễ đọc trên điện thoại (khung `CHU_BIA_TOI_THIEU`–`CHU_BIA_TOI_DA`,
+    mỗi lần ngắn hơn ~3 ký tự). Bản mới ngoài khung / hỏng → ''."""
+    n = _dem_chu_bia(chu_bia)
+    tran = max(CHU_BIA_TOI_THIEU, min(CHU_BIA_TOI_DA, n - 3))
+    if n <= CHU_BIA_TOI_THIEU:
+        return ""
+    loi_nhac = ("Rewrite this YouTube thumbnail text SHORTER so it reads at a glance on a phone: at most {0} "
+                "characters (spaces and punctuation not counted), at least {1}, written as TWO short parts "
+                "separated by one space, same language, same curiosity hook — never the full title.\n"
+                "Current text ({2} characters): {3}\nReply with ONLY one line: THUMB: <text>").format(
+                    tran, CHU_BIA_TOI_THIEU, n, chu_bia)
+    try:
+        bc.kiem_dung()
+        tra = _goi(bc, loi_nhac, _khoa_chat(luot, "bia-doc-duoc-rut-{0}".format(lan)), toi_da_token=300)
+    except Exception as loi:  # noqa: BLE001
+        bc.ghi("  (rút gọn chữ bìa hỏng: {0})".format(str(loi)[:100]))
+        return ""
+    m = re.search(r"THUMB\s*[:：]\s*(.+)", str(tra or ""))
+    moi = " ".join((m.group(1) if m else "").split()).strip("「」\"' ")
+    if moi and CHU_BIA_TOI_THIEU <= _dem_chu_bia(moi) <= tran:
+        return moi
+    bc.ghi("  (bản rút gọn 「{0}」 ngoài khung — bỏ)".format(moi[:40]))
+    return ""
 
 
 def _goi_chon_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, muc, tieu_de: str,

@@ -410,7 +410,20 @@ def _kiem_thumbnail(duong_anh: str) -> Tuple[List[str], List[str]]:
     if dung_luong > _ANH_BIA_TOI_DA_BYTE:
         loi_ra.append("ảnh bìa nặng {0:.2f}MB, vượt mức khuyên dùng {1:.0f}MB"
                       .format(dung_luong / 1024 / 1024, _ANH_BIA_TOI_DA_BYTE / 1024 / 1024))
-    return loi_ra, []
+    # 09/10/2026 — ĐỘ ĐỌC ĐƯỢC (`core/do_bia.py`): chữ chìm vào nền / chữ nhỏ thì KHÔNG giao (luật chủ dự
+    # án 07/10: thà không đăng còn hơn sản phẩm kém). Không đo được (không dò ra chữ) → chỉ cảnh báo.
+    canh_bao: List[str] = []
+    try:
+        from . import do_bia  # noqa: PLC0415
+
+        bc = do_bia.cham_tep(duong_anh)
+        if bc.get("dat") is False:
+            loi_ra.append("ảnh bìa khó đọc — " + do_bia.tom_tat(bc)[:400])
+        elif bc.get("dat") is None:
+            canh_bao.append("không đo được độ đọc được của ảnh bìa — " + do_bia.tom_tat(bc)[:200])
+    except Exception as loi:  # noqa: BLE001 — bộ đo hỏng không được giết QA
+        canh_bao.append("đo độ đọc được ảnh bìa hỏng: {0}".format(str(loi)[:150]))
+    return loi_ra, canh_bao
 
 
 # ── Hàm chính: kiểm một gói ───────────────────────────────────────────────────

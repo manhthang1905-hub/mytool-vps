@@ -992,26 +992,39 @@ def _cho_xuong_dong(s: str) -> int:
 
 
 def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
-                   goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "") -> bool:
+                   goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "",
+                   khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
+                   bao_cao: Optional[Dict[str, Any]] = None) -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
-    Chữ TRẦN, mỗi đoạn một màu, viền đen dày + bóng đổ; `khoi_nen` true thì vẽ
-    khối đen bo góc phía sau. Bố cục theo luật điều phối (xem hằng trên): tầng
-    thiếu chiều cao thì XUỐNG 2 DÒNG, tổng diện tích chữ < 40% thì phóng to dần,
-    > 55% thì thu lại; tầng trên và dưới không được đè nhau. Trả False nếu không
-    có font/không mở được ảnh."""
+    Bố cục theo luật điều phối (xem hằng trên): tầng thiếu chiều cao thì XUỐNG 2 DÒNG, tổng diện tích
+    chữ < 40% thì phóng to dần, > 55% thì thu lại; tầng trên và dưới không được đè nhau.
+
+    09/10/2026 — KIỂU CHỮ THEO NỀN ĐO ĐƯỢC (`core/do_bia.py`): trước đây mọi đoạn tô đúng màu khuôn
+    (trắng / ĐỎ+VÀNG) + viền đen bất kể nền → chữ đỏ chìm trên nền gỗ nâu, chữ vàng trên nền kem. Giờ
+    MỖI DÒNG đo nền ngay dưới nó (`do_bia.chon_kieu_dong`): nền sáng → chữ xanh đen viền trắng; nền tối →
+    trắng/vàng viền đen; nền vừa/ấm/rối → viền dày, dải/khung nền mờ, bóng mạnh. Màu nhấn của kênh giữ
+    cho MỘT đoạn nếu nó đạt tương phản, không thì đổi màu nhấn đạt. Sau khi vẽ, ĐO lại cả bìa trên nền
+    thật (+ khung) → `bao_cao` (dict truyền vào được điền) và `<dich không đuôi>.do-bia.json`.
+
+    `khung_chu` (x0, y0, x1, y1 — tỉ lệ 0..1): dồn chữ vào vùng này (vẽ lại bìa cũ đúng chỗ chữ cũ);
+    `anh_nen`: PIL.Image dùng thay `nen` (đã mở sẵn). Trả False nếu không có font/không mở được ảnh."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
     font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu)
     if not font_duong:
         return False
     try:
-        anh = ImageOps.fit(Image.open(nen).convert("RGB"), kich_thuoc, method=Image.LANCZOS)
+        goc_anh = anh_nen if anh_nen is not None else Image.open(nen)
+        anh = ImageOps.fit(goc_anh.convert("RGB"), kich_thuoc, method=Image.LANCZOS)
     except (OSError, ValueError):
         return False
     W, H = anh.size
     le = int(W * 0.018)
+    kx0, ky0, kx1, ky1 = (0.0, 0.0, 1.0, 1.0) if not khung_chu else [float(v) for v in khung_chu]
+    zy0, zy1 = int(H * ky0), int(H * ky1)
+    zH = max(1, zy1 - zy0)
     do = ImageDraw.Draw(Image.new("RGB", (8, 8)))
     _cache: Dict[int, Any] = {}
 
@@ -1045,6 +1058,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         if not doan:
             continue
         vung = t.get("vung") or (0.0, 1.0)
+        if khung_chu:
+            vung = (kx0 + (kx1 - kx0) * float(vung[0]), kx0 + (kx1 - kx0) * float(vung[1]))
         vx0, vx1 = int(W * float(vung[0])) + le, int(W * float(vung[1])) - le
         rv = vx1 - vx0
         toi_thieu = (TANG_CHINH_TOI_THIEU_PCT if t.get("chinh") else TANG_TOI_THIEU_PCT) / 100.0 * H
@@ -1071,16 +1086,20 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     def chong_nhau() -> bool:
         tren = sum(cao_khoi(b) for b in bo if str(b["t"].get("vi_tri") or "tren") == "tren")
         duoi = sum(cao_khoi(b) for b in bo if str(b["t"].get("vi_tri") or "tren") != "tren")
-        return tren + duoi > H * 0.93
+        return tren + duoi > zH * 0.93
+
+    # Vùng chữ riêng (vẽ lại đúng chỗ chữ cũ): mục tiêu diện tích theo VÙNG, chữ phủ kín vùng hơn.
+    dt_muc = DIEN_TICH_CHU_PCT if not khung_chu else tuple(
+        x * (kx1 - kx0) * (ky1 - ky0) for x in (60.0, 85.0))
 
     # 2) Cân diện tích chữ về 40–55% mà không đè nhau / không tràn bề ngang.
     for _ in range(30):
         dt = dien_tich()
-        if dt > DIEN_TICH_CHU_PCT[1] or chong_nhau():
+        if dt > dt_muc[1] or chong_nhau():
             for b in bo:
                 b["co"] = max(14, int(b["co"] * 0.95))
             continue
-        if dt >= DIEN_TICH_CHU_PCT[0]:
+        if dt >= dt_muc[0]:
             break
         lon_duoc = False
         for b in bo:
@@ -1095,33 +1114,99 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                     b["co"] = max(14, int(b["co"] * 0.97))
             break
 
-    # 3) Vẽ: tầng "tren" xếp từ mép trên xuống, tầng khác từ mép dưới lên.
-    lop = Image.new("RGBA", anh.size, (0, 0, 0, 0))
-    bong = Image.new("RGBA", anh.size, (0, 0, 0, 0))
-    ve = ImageDraw.Draw(lop)
-    ve_bong = ImageDraw.Draw(bong)
-    y_tren = int(H * 0.03)
-    y_duoi = H - int(H * 0.045)
+    # 3) Hình học từng dòng: tầng "tren" xếp từ mép trên xuống, tầng khác từ mép dưới lên.
+    hinh: List[Dict[str, Any]] = []
+    y_tren = zy0 + int(H * 0.03)
+    y_duoi = zy1 - int(H * 0.045)
     ds_duoi = [b for b in bo if str(b["t"].get("vi_tri") or "tren") != "tren"]
     for b in bo:
         if b in ds_duoi:
             continue
         for d in b["dong"]:
-            y_tren = _ve_mot_dong(ve, ve_bong, d, b, font, vien_cua, rong_dong, hop_dong, y_tren, W, True)
+            g = _hinh_dong(d, b, font, vien_cua, rong_dong, hop_dong, y_tren, True)
+            y_tren = g["day"]
+            hinh.append(g)
     for b in reversed(ds_duoi):
         for d in reversed(b["dong"]):
-            y_duoi = _ve_mot_dong(ve, ve_bong, d, b, font, vien_cua, rong_dong, hop_dong, y_duoi, W, False)
+            g = _hinh_dong(d, b, font, vien_cua, rong_dong, hop_dong, y_duoi, False)
+            y_duoi = g["day"]
+            hinh.append(g)
+    hinh.sort(key=lambda g: g["top"])
+
+    # 4) Kiểu chữ THEO NỀN đo được (do_bia), rồi vẽ: khung/dải nền → bóng → viền → chữ.
+    from . import do_bia  # noqa: PLC0415
+    arr, canh = do_bia.mang_nen(anh)
+    chon = do_bia.chon_kieu_khoi(arr, canh, [
+        {"hop": g["hop"], "mau_doan": [_mau_rgb(p.get("mau", ""), (255, 255, 255)) for p in g["doan"]],
+         "vien_px": g["vien"] + g["dam"], "cao_px": g["cao_px"], "khoi_nen": bool(g["t"].get("khoi_nen"))}
+        for g in hinh], H=H)
+    for g, (kieu, _cham) in zip(hinh, chon):
+        g["kieu"] = kieu
+    from PIL import ImageChops  # noqa: PLC0415
+    mat_khung: Dict[Tuple[int, ...], Any] = {}
+    # Khung: các dòng LIỀN NHAU cùng kiểu khung gộp thành MỘT khung bo góc (khối chú thích liền mạch).
+    nhom: List[List[Dict[str, Any]]] = []
+    for g in hinh:
+        kh = g["kieu"].get("khung")
+        if not kh:
+            continue
+        if (nhom and nhom[-1][-1]["kieu"].get("khung") == kh
+                and g["top"] - (nhom[-1][-1]["top"] + nhom[-1][-1]["h"]) < 0.35 * g["h"]):
+            nhom[-1].append(g)
+        else:
+            nhom.append([g])
+    for ds_g in nhom:
+        kh = ds_g[0]["kieu"]["khung"]
+        mn = Image.new("L", anh.size, 0)
+        x0 = min(g["hop_khung"][0] for g in ds_g)
+        y0 = min(g["hop_khung"][1] for g in ds_g)
+        x1 = max(g["hop_khung"][2] for g in ds_g)
+        y1 = max(g["hop_khung"][3] for g in ds_g)
+        ImageDraw.Draw(mn).rounded_rectangle([x0, y0, x1, y1], radius=int(min(g["c"] for g in ds_g) * 0.22),
+                                             fill=int(255 * float(kh["alpha"])))
+        # Mặt nạ theo MÀU, ghép MAX alpha — hai khung chạm nhau không chồng tối gấp đôi.
+        khoa = tuple(int(v) for v in kh["mau"][:3])
+        mat_khung[khoa] = ImageChops.lighter(mat_khung[khoa], mn) if khoa in mat_khung else mn
+    nen_co_khung = anh.convert("RGBA")
+    for mau_k, mn in mat_khung.items():
+        lop_k = Image.new("RGBA", anh.size, mau_k + (255,))
+        lop_k.putalpha(mn)
+        nen_co_khung = Image.alpha_composite(nen_co_khung, lop_k)
+    lop = Image.new("RGBA", anh.size, (0, 0, 0, 0))
+    bong = Image.new("RGBA", anh.size, (0, 0, 0, 0))
+    ve = ImageDraw.Draw(lop)
+    ve_bong = ImageDraw.Draw(bong)
+    for g in hinh:
+        _ve_dong_kieu(ve, ve_bong, g)
     bong = bong.filter(ImageFilter.GaussianBlur(max(2, W // 320)))
-    ket = Image.alpha_composite(Image.alpha_composite(anh.convert("RGBA"), bong), lop).convert("RGB")
+    ket = Image.alpha_composite(Image.alpha_composite(nen_co_khung, bong), lop).convert("RGB")
     os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
     tam = dich + ".tmp.png"
     ket.save(tam, format="PNG")
     os.replace(tam, dich)
+
+    # 5) ĐO lại cả bìa trên nền thật (kèm khung) — báo cáo cạnh ảnh + trả cho người gọi.
+    try:
+        ds = [do_bia.cham_dong_ve(arr, canh, g["hop"], g["kieu"]["mau"], vien_mau=g["kieu"]["vien"],
+                                  vien_px=(g["vien"] + g["dam"]) * g["kieu"]["vien_he"], cao_px=g["cao_px"], H=H,
+                                  khung=g["kieu"].get("khung"),
+                                  ten="".join(p["chu"] for p in g["doan"])[:24]) for g in hinh]
+        for d, g in zip(ds, hinh):
+            d["kieu"] = g["kieu"]["ten"]
+        bc = do_bia.tong_hop(ds, cach="chinh_xac")
+        do_bia.ghi_bao_cao(dich, bc, anh=ket)
+        if bao_cao is not None:
+            bao_cao.clear()
+            bao_cao.update(bc)
+    except Exception as loi:  # noqa: BLE001 — đo hỏng không được làm mất bìa đã vẽ
+        if bao_cao is not None:
+            bao_cao.clear()
+            bao_cao.update({"dat": None, "loi": str(loi)[:200]})
     return True
 
 
-def _ve_mot_dong(ve, ve_bong, doan, b, font, vien_cua, rong_dong, hop_dong, y_moc: float, W: int,
-                 tu_tren: bool) -> float:
+def _hinh_dong(doan, b, font, vien_cua, rong_dong, hop_dong, y_moc: float, tu_tren: bool) -> Dict[str, Any]:
+    """Hình học MỘT dòng (chưa vẽ): vị trí chữ, hộp dòng, hộp khung, chiều cao nét chữ."""
     t, c = b["t"], b["co"]
     f = font(c)
     vien = vien_cua(c, t)
@@ -1133,25 +1218,37 @@ def _ve_mot_dong(ve, ve_bong, doan, b, font, vien_cua, rong_dong, hop_dong, y_mo
     h = hop_dong(c, t)
     top = y_moc if tu_tren else y_moc - h
     y = top + vien - tren + c * 0.04
-    if t.get("khoi_nen"):
-        ve.rounded_rectangle([x - vien * 2, top, x + rong - vien, top + h], radius=int(c * 0.2),
-                             fill=(20, 20, 20, 235))
-    # "Đậm giả": Yu Gothic Bold mảnh hơn nét Black của bìa thật — viền ĐEN rộng
-    # (dam + vien) trước, rồi chữ kèm viền CÙNG MÀU (dam) đè lên.
+    s = "".join(p["chu"] for p in doan)
+    _l, bt, _r2, bd = f.getbbox(s)
     dam = max(1, int(c * 0.022))
+    return {"t": t, "doan": doan, "c": c, "f": f, "vien": vien, "dam": dam, "x": x, "y": y, "top": top,
+            "h": h, "rong": rong, "vx0": vx0, "vx1": vx1, "cao_px": float(max(1, bd - bt)),
+            "hop": (x - vien, top, x + rong - vien, top + h),
+            "hop_khung": (x - vien - c * 0.12, top, x + rong - vien - c * 0.07 + c * 0.12, top + h),
+            "day": top + h if tu_tren else top}
+
+
+def _ve_dong_kieu(ve, ve_bong, g: Dict[str, Any]) -> None:
+    """Vẽ MỘT dòng theo kiểu đã chọn: bóng đổ, viền (màu viền của kiểu) rồi chữ từng đoạn.
+    "Đậm giả": Yu Gothic Bold mảnh hơn nét Black của bìa thật — viền rộng (dam + vien) trước, rồi chữ
+    kèm viền CÙNG MÀU (dam) đè lên."""
+    k = g["kieu"]
+    f, x, y = g["f"], g["x"], g["y"]
+    vien = max(1, int(round(g["vien"] * float(k.get("vien_he") or 1.0))))
+    dam = g["dam"]
+    vm = tuple(int(v) for v in k["vien"][:3])
+    a_bong = int(k.get("bong") or 200)
     x0 = x
-    for p in doan:
-        ve_bong.text((x + vien * 0.6, y + vien * 0.9), p["chu"], font=f, fill=(0, 0, 0, 200),
-                     stroke_width=vien + dam, stroke_fill=(0, 0, 0, 200))
-        ve.text((x, y), p["chu"], font=f, fill=(12, 8, 18, 255),
-                stroke_width=vien + dam, stroke_fill=(12, 8, 18, 255))
+    for p in g["doan"]:
+        ve_bong.text((x + vien * 0.6, y + vien * 0.9), p["chu"], font=f, fill=(0, 0, 0, a_bong),
+                     stroke_width=vien + dam, stroke_fill=(0, 0, 0, a_bong))
+        ve.text((x, y), p["chu"], font=f, fill=vm + (255,), stroke_width=vien + dam, stroke_fill=vm + (255,))
         x += ve.textlength(p["chu"], font=f)
     x = x0
-    for p in doan:
-        mau = _mau_rgb(p.get("mau", ""), (255, 255, 255))
+    for p, mau in zip(g["doan"], k["mau"]):
+        mau = tuple(int(v) for v in mau[:3])
         ve.text((x, y), p["chu"], font=f, fill=mau + (255,), stroke_width=dam, stroke_fill=mau + (255,))
         x += ve.textlength(p["chu"], font=f)
-    return top + h if tu_tren else top
 
 
 def bo_tri_chu(loai: str, chu_tang: Sequence[Dict[str, Any]],

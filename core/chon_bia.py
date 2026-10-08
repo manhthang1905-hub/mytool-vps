@@ -396,6 +396,27 @@ def _kiem_loai(ket: _KetQuaCham, *, chu_bia_mong_doi: str, doi_chieu_chu: bool,
     return ""
 
 
+def _loai_kho_doc(ung_cu_vien: Sequence[_KetQuaCham], duong_theo_so: Dict[int, str],
+                  ghi: Callable[[str], None]) -> None:
+    """09/10/2026 (`core/do_bia.py`): ĐO độ đọc được từng ứng viên (báo cáo chính xác của bộ vẽ, không
+    thì chấm mù). Còn ít nhất một tấm hợp lệ ĐẠT thì loại mọi tấm hợp lệ TRƯỢT ("khó đọc") — giám khảo
+    AI chấm tổng thể, hay cho điểm cao bìa đẹp mà thu nhỏ không đọc nổi. Không tấm nào đạt thì không loại
+    gì (cổng đọc được của khâu bìa sẽ vẽ lại / chặn). Đo hỏng → bỏ qua, không bao giờ làm hỏng chọn bìa."""
+    try:
+        from . import do_bia  # noqa: PLC0415
+        do = {k.so: do_bia.cham_tep(duong_theo_so[k.so]) for k in ung_cu_vien
+              if not k.loai and k.so in duong_theo_so}
+    except Exception as loi:  # noqa: BLE001
+        ghi("  (đo độ đọc được hỏng: {0}) — bỏ qua".format(str(loi)[:120]))
+        return
+    if not any(bc.get("dat") for bc in do.values()):
+        return
+    for k in ung_cu_vien:
+        bc = do.get(k.so) or {}
+        if bc.get("dat") is False:
+            k.loai = "khó đọc ({0})".format("; ".join(bc.get("ly_do") or [])[:160])
+
+
 # ── Xuất jpg ≤2MB 1280×720 ────────────────────────────────────────────────────
 
 
@@ -567,6 +588,7 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
 
         if not ung_cu_vien:
             raise RuntimeError("giám khảo không trả điểm cho ứng viên nào")
+        _loai_kho_doc(ung_cu_vien, {u.so: u.duong for u in ung_vien}, ghi)
 
         canh_bao = ""
         he_tu_hoc: Dict[str, Any] = {}

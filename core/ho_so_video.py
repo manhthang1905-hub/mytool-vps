@@ -318,6 +318,34 @@ def _thong_tin_chon_bia(duong_anh: str) -> Dict[str, Any]:
     }
 
 
+def _doc_duoc_bia(duong_anh: str, bc: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """09/10/2026 (`core/do_bia.py`): độ ĐỌC ĐƯỢC của bìa đang dùng — `bia_diem` (0–100),
+    `bia_tuong_phan_min` (WCAG, dòng tệ nhất), `bia_doc_duoc` (cao|vua|thap — trục học `tu_hoc`),
+    `bia_do` (chinh_xac | mu). Đo hỏng / không dò ra chữ → khung rỗng (không bịa)."""
+    try:
+        from . import do_bia  # noqa: PLC0415
+
+        bc = bc if bc is not None else do_bia.cham_tep(duong_anh)
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(bc, dict) or bc.get("dat") is None:
+        return {}
+    return {"bia_diem": bc.get("diem"), "bia_tuong_phan_min": bc.get("tuong_phan_min"),
+            "bia_doc_duoc": bc.get("doc_duoc") or "", "bia_do": bc.get("cach") or ""}
+
+
+def cap_nhat_bia_doc_duoc(goc: str, kenh: str, ma_goi: str, bc: Dict[str, Any]) -> bool:
+    """Ghi lại độ đọc được của bìa (vd sau khi đổi sang bìa vẽ lại `do_bia --lam-lai`). False nếu chưa có hồ sơ."""
+    ho_so = doc_ho_so(goc, kenh, ma_goi)
+    if not ho_so:
+        return False
+    th = ho_so.get("thumbnail") if isinstance(ho_so.get("thumbnail"), dict) else {}
+    th.update(_doc_duoc_bia("", bc))
+    ho_so["thumbnail"] = th
+    _luu_ho_so(goc, kenh, ma_goi, ho_so)
+    return True
+
+
 def _thong_tin_video(goc: str, duong_video: str) -> Dict[str, Any]:
     """`{thoi_luong_giay, rong, cao}` đọc bằng `ffmpeg -i` (không ffprobe, xem
     "Hiện trạng" mục 0 bản thiết kế) — tái dùng đúng bộ đọc của cổng QA
@@ -484,6 +512,7 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
         if tt_chon.get("theo_khuon") is not None:
             ho_so["thumbnail"].update(nhom=tt_chon.get("nhom", ""), theo_khuon=bool(tt_chon["theo_khuon"]),
                                       tham_do=bool(tt_chon.get("tham_do")))
+        ho_so["thumbnail"].update(_doc_duoc_bia(duong_anh))
         _sao_luu_anh_bia(goc, kenh, ma_goi, duong_anh)
         ho_so["bia_2"] = _sao_luu_bia_2(goc, kenh, ma_goi, duong_anh)
 
