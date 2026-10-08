@@ -445,3 +445,17 @@ def test_don_tep_py_rong_goc(tmp_path):
     assert ben_bi.don_tep_py_rong_goc(str(tmp_path)) == ["cdp_studio.py"]
     assert (tmp_path / "that.py").exists() and (tmp_path / "vm" / "rong.py").exists()
     assert ben_bi.don_tep_py_rong_goc(str(tmp_path)) == []
+
+
+def test_khong_san_xuat_tinh_goi_lam_lai_doi_ngay(tmp_path):
+    """08/10/2026: gói làm lại (cùng mã, ngày đăng mới) là video MỚI — không được báo "36 giờ không sản xuất"."""
+    import datetime as _d
+    goc = str(tmp_path)
+    anh = lambda ngay: {"kenh": {"K1": {"tu_chay": True, "ke_hoach": [{"Mã gói": "K1-0001", "Ngày đăng": ngay}]}}}
+    t0 = _d.datetime(2026, 10, 5, 1, 0)
+    assert ben_bi.kiem_khong_san_xuat(goc, anh("07/10/2026"), bay_gio=t0) == []          # lần đầu: đặt mốc
+    t1 = t0 + _d.timedelta(hours=30)
+    assert ben_bi.kiem_khong_san_xuat(goc, anh("08/10/2026"), bay_gio=t1) == []          # cùng mã, ngày mới → mới
+    t2 = t1 + _d.timedelta(hours=37)
+    sc = ben_bi.kiem_khong_san_xuat(goc, anh("08/10/2026"), bay_gio=t2)
+    assert sc and "37 giờ" in sc[0]["chuyen_gi"]                                       # không đổi gì 37h → báo

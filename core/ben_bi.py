@@ -328,7 +328,10 @@ def _duong_san_xuat_cuoi(goc: str) -> str:
 
 
 def _ma_goi_cua_anh(anh: Dict[str, Any]) -> Tuple[bool, List[str]]:
-    """(có kênh nào bật tự chạy không, danh sách "<kênh>/<mã gói>" của các kênh bật)."""
+    """(có kênh nào bật tự chạy không, danh sách "<kênh>/<mã gói>@<ngày đăng>" của các kênh bật).
+
+    08/10/2026: khoá gồm cả NGÀY ĐĂNG — gói LÀM LẠI (`core.lam_lai_clip_that`) xuất hiện lại với mã cũ nhưng
+    ngày mới; chỉ theo mã thì 7 video làm lại ngày 07/10 bị coi là "không sản xuất" và báo khẩn sai."""
     co_bat = False
     ds: List[str] = []
     for ma, snap in sorted((anh.get("kenh") or {}).items()):
@@ -338,7 +341,8 @@ def _ma_goi_cua_anh(anh: Dict[str, Any]) -> Tuple[bool, List[str]]:
         for d in snap.get("ke_hoach") or []:
             ma_goi = str((d or {}).get("Mã gói") or "").strip()
             if ma_goi:
-                ds.append("{0}/{1}".format(ma, ma_goi))
+                ngay = str((d or {}).get("Ngày đăng") or "").strip()
+                ds.append("{0}/{1}@{2}".format(ma, ma_goi, ngay) if ngay else "{0}/{1}".format(ma, ma_goi))
     return co_bat, ds
 
 
