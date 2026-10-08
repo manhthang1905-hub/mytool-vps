@@ -320,6 +320,32 @@
       ],
       "phu": true
     },
+    "mhkt_modal": {
+      "chon": [
+        "ytve-modal-host"
+      ],
+      "phu": true
+    },
+    "mhkt_gio_dau": {
+      "chon": [
+        "ytve-modal-host ytve-endscreen-editor-options-panel ytve-framestamp-input#start-input input",
+        "ytve-modal-host ytve-framestamp-input#start-input input"
+      ],
+      "phu": true
+    },
+    "mhkt_gio_cuoi": {
+      "chon": [
+        "ytve-modal-host ytve-endscreen-editor-options-panel ytve-framestamp-input#end-input input",
+        "ytve-modal-host ytve-framestamp-input#end-input input"
+      ],
+      "phu": true
+    },
+    "mhkt_phan_tu_loi": {
+      "chon": [
+        "ytve-modal-host ytve-endscreen-row.error"
+      ],
+      "phu": true
+    },
     "mhkt_mau_video_dk": {
       "chon": [
         "ytve-endscreen-template-picker div.card[aria-label='1 video, 1 đăng ký']",
@@ -1123,6 +1149,14 @@
     ],
     "loi_mhkt": [
       "Rất tiếc, đã xảy ra lỗi"
+    ],
+    "mhkt_loi_20s": [
+      "20 giây cuối",
+      "last 20 seconds",
+      "final 20 seconds",
+      "最後の 20 秒",
+      "最後の20秒",
+      "마지막 20초"
     ]
   },
   "dinh_dang_ngay": [

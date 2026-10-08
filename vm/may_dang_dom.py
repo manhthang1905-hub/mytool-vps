@@ -132,6 +132,9 @@ CHU_TRANG_THAI = {
                "interrupted", "Upload failed", "Processing abandoned", "アップロードが中断", "処理が中止", "업로드가 중단", "처리가 중단"],
     "mhkt_khong_nguon": ["không có màn hình kết thúc để nhập", "no end screen to import",
                          "doesn't have an end screen", "終了画面がありません"],
+    # 09/10: Studio vi đo thật (TL2-T7) — banner đỏ đầu trình soạn khi phần tử bắt đầu ngoài 20 giây cuối.
+    "mhkt_loi_20s": ["20 giây cuối", "last 20 seconds", "final 20 seconds",
+                     "最後の 20 秒", "最後の20秒", "最後の 20秒", "마지막 20초"],
 }
 #: Thứ tự dò có chủ ý: "Không công khai" ⊃ "công khai", "限定公開"/"非公開" ⊃ "公開"
 #: → không công khai, riêng tư dò TRƯỚC công khai.
@@ -301,6 +304,30 @@ _DONG_TIEN_DO = re.compile(
     r"đã hoàn tất quá trình tải lên|tải lên hoàn tất|tải lên không thành công|processing|"
     r"checking|checks complete|upload complete|uploading|upload failed|アップロード|処理|チェック)",
     re.I)
+
+
+def gio_sang_giay(chu):
+    """«MM:SS:FF» (hoặc «H:MM:SS:FF», «MM:SS») của ô giờ trình soạn MHKT → giây (FF
+    là phần trăm giây). Không đọc được → None."""
+    p = str(chu or "").strip().split(":")
+    if not 2 <= len(p) <= 4 or not all(x.strip().isdigit() for x in p):
+        return None
+    n = [int(x) for x in p]
+    if len(n) == 2:
+        return float(n[0] * 60 + n[1])
+    if len(n) == 3:
+        return n[0] * 60 + n[1] + n[2] / 100.0
+    return n[0] * 3600 + n[1] * 60 + n[2] + n[3] / 100.0
+
+
+def giay_sang_gio(giay, so_phan: int = 3) -> str:
+    """Ngược lại `gio_sang_giay` (FF = 00); `so_phan` 4 → có giờ."""
+    t = int(giay)
+    if so_phan >= 4:
+        return "{0}:{1:02d}:{2:02d}:00".format(t // 3600, t % 3600 // 60, t % 60)
+    if so_phan == 2:
+        return "{0:02d}:{1:02d}".format(t // 60, t % 60)
+    return "{0:02d}:{1:02d}:00".format(t // 60, t % 60)
 
 
 def _chu_loai(bo_chu, loai: str) -> list:
@@ -1654,8 +1681,91 @@ class MayDangDom:
                    han_hau=30)
         self.ngu(2)
 
+    def _mhkt_loi_20s(self, ta) -> bool:
+        """Trình soạn MHKT đang báo "chỉ thêm được trong 20 giây cuối" (banner đỏ đầu
+        hộp) HOẶC có hàng phần tử ở trạng thái lỗi (class `error`)."""
+        chu = (ta.doc_chu("mhkt_modal", han=1) or "").lower() if ta.co("mhkt_modal") else ""
+        if any(w and w.lower() in chu for w in _chu_loai(self.bo.get("chu_trang_thai"), "mhkt_loi_20s")):
+            return True
+        return bool(ta.co("mhkt_phan_tu_loi"))
+
+    def _mhkt_ghi_gio(self, ta, khoa: str, giay: float, so_phan: int):
+        """Gõ giờ vào ô `khoa` (Ctrl+A, gõ, Enter để Studio nhận), ĐỌC LẠI. Gõ dạng
+        «MM:SS:FF» trước; lệch thì thử chỉ chữ số (ô mặt nạ tự đặt dấu :) rồi Tab.
+        Trả giây đọc lại (None nếu không đọc được)."""
+        chu = giay_sang_gio(giay, so_phan)
+        doc = None
+        for cach in ("co_dau", "chu_so"):
+            ta.go_tho(khoa, chu if cach == "co_dau" else chu.replace(":", ""))
+            ta.phim("Enter" if cach == "co_dau" else "Tab")
+            self.ngu(1)
+            doc = gio_sang_giay(ta.doc_chu(khoa) or "")
+            if doc is not None and abs(doc - giay) < 0.6:
+                return doc
+        return doc
+
+    def _mhkt_sua_gio(self, ta, d: dict) -> bool:
+        """Nút Lưu tắt vì phần tử MHKT bắt đầu NGOÀI 20 giây cuối (đo 09/10 TL2-T7: nhập
+        MHKT từ video khác → «19:22:00 – 19:42:00» trong video 19:43, ô bắt đầu viền
+        đỏ). Sửa: với MỖI phần tử lỗi, dời giờ bắt đầu muộn lại = giờ kết thúc − 19
+        giây (lượt 2: − 17 giây), không bao giờ ≥ kết thúc − 5 giây. Tối đa 2 lượt;
+        True nếu sau đó nút Lưu bật."""
+        if not self._mhkt_loi_20s(ta):
+            return False
+        for lan, bu in enumerate((19.0, 17.0), 1):
+            pt = ta.tim("mhkt_phan_tu", han=2)
+            so = int((pt or {}).get("so") or 0)
+            loi = [chuan_hoa_tieu_de(str(x.get("chu") or "")) for x in (ta.doc_tat_ca("mhkt_phan_tu_loi") or [])]
+            self.nk("{0}: MHKT báo lỗi «20 giây cuối» — sửa giờ bắt đầu lượt {1}/2 ({2} phần tử)".format(
+                d["ma"], lan, so))
+            for i in range(so):
+                try:
+                    hang = ta.tim("mhkt_phan_tu", han=0, thu=i)
+                    if not hang:
+                        continue
+                    ten = chuan_hoa_tieu_de(ta.doc_chu(hang) or "")
+                    ta.bam(hang)
+                    self.ngu(1)
+                    o_dau, o_cuoi = ta.tim("mhkt_gio_dau", han=4), ta.tim("mhkt_gio_cuoi", han=2)
+                    if not o_dau or not o_cuoi:
+                        self.nk("{0}: MHKT hàng {1} — không thấy ô giờ".format(d["ma"], i))
+                        continue
+                    chu_dau, chu_cuoi = ta.doc_chu(o_dau) or "", ta.doc_chu(o_cuoi) or ""
+                    dau, cuoi = gio_sang_giay(chu_dau), gio_sang_giay(chu_cuoi)
+                    if dau is None or cuoi is None:
+                        self.nk("{0}: MHKT hàng {1} — không đọc được giờ ({2!r}–{3!r})".format(
+                            d["ma"], i, chu_dau, chu_cuoi))
+                        continue
+                    la_loi = bool(ten and ten in loi) or cuoi - dau >= 19.5
+                    moi = float(int(cuoi - bu))
+                    if not la_loi or moi <= dau:
+                        continue
+                    np = len(chu_dau.split(":"))
+                    if moi > cuoi - 5:
+                        self.nk("{0}: MHKT hàng {1} — giờ mới {2} quá sát kết thúc, bỏ qua".format(
+                            d["ma"], i, giay_sang_gio(moi, np)))
+                        continue
+                    doc = self._mhkt_ghi_gio(ta, "mhkt_gio_dau", moi, np)
+                    self.nk("{0}: MHKT hàng {1} «{2}» — bắt đầu {3} → {4} (kết thúc {5}), đọc lại {6}".format(
+                        d["ma"], i, ten[:30], chu_dau, giay_sang_gio(moi, np), chu_cuoi,
+                        giay_sang_gio(doc, np) if doc is not None else "?"))
+                except Exception as loi_:  # noqa: BLE001 — sửa không được thì xuống đường lỗi cũ
+                    self.nk("{0}: MHKT hàng {1} — sửa giờ lỗi: {2}".format(d["ma"], i, str(loi_)[:100]))
+            self.ngu(1.5)
+            luu = ta.tim("mhkt_luu", han=5, cho_tat=True)
+            if luu and not luu.get("tat"):
+                self.nk("{0}: MHKT — sửa giờ bắt đầu xong, nút Lưu đã bật".format(d["ma"]))
+                return True
+        return False
+
     def _mhkt_luu(self, ta, d: dict, cach: str) -> bool:
         luu = ta.tim("mhkt_luu", han=10, cho_tat=True)
+        if luu and luu.get("tat"):
+            try:
+                if self._mhkt_sua_gio(ta, d):
+                    luu = ta.tim("mhkt_luu", han=5, cho_tat=True)
+            except Exception as loi:  # noqa: BLE001 — sửa không được thì xuống đường lỗi cũ
+                self.nk("{0}: MHKT — sửa giờ lỗi: {1}".format(d["ma"], str(loi)[:100]))
         if not luu or luu.get("tat"):
             self.nk("{0}: MHKT ({1}) — nút Lưu chưa bật".format(d["ma"], cach))
             return False

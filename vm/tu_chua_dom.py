@@ -56,7 +56,7 @@ DAI_BO_CHON = 300
 #: Thêm `"khong_tu_chua": true` vào khoá trong JSON để loại khoá khác.
 KHOA_KHONG_TU_CHUA = frozenset((
     "the_da_co", "hop_da_xong", "danh_sach_trong", "tien_do", "nut_phan_hoi",
-    "nut_thu_lai", "hop_con_huy", "mhkt_mau_video_dk", "mhkt_phan_tu", "the_muc_ten",
+    "nut_thu_lai", "hop_con_huy", "mhkt_mau_video_dk", "mhkt_phan_tu", "mhkt_phan_tu_loi", "mhkt_modal", "the_muc_ten",
     "xem_bl_tat", "xem_huy_hieu_ghim", "xem_hop_xac_minh", "xem_hop_xac_minh_huy",
     "xem_menu_ghim", "sc_trong", "sc_bo_loc_phan_hoi", "o_tep_video", "sua_bia_input",
     "the_moc_o",
@@ -64,7 +64,7 @@ KHOA_KHONG_TU_CHUA = frozenset((
 #: Khoá DANH SÁCH (nhiều phần tử cùng loại): chấp nhận ≥1 khớp.
 KHOA_DANH_SACH = frozenset((
     "playlist_muc", "playlist_ten", "the_da_co", "mhkt_mau", "mhkt_chon_video",
-    "mhkt_video_dau", "mhkt_phan_tu", "the_chon_ds", "the_chon_video", "the_muc_ten",
+    "mhkt_video_dau", "mhkt_phan_tu", "mhkt_phan_tu_loi", "the_chon_ds", "the_chon_video", "the_muc_ten",
     "the_moc", "the_dau_phat", "the_loai_dau", "hang_video", "hang_tieu_de", "hang_che_do",
     "hang_ngay", "hang_sua_nhap", "xem_luong", "xem_noi_dung", "xem_tac_gia", "sc_luong",
     "sc_noi_dung", "sc_tac_gia", "sc_nut_tra_loi", "xem_menu",
