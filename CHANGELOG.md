@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.0** — 2026-10-09 — `vps-jp1` — feat(muc-luc): 6-10 chuong ten theo noi dung (AI + du phong sach), luat mo dau khong chao/xin dang ky 60s dau, tieu de 28-38 ky tu mac dinh
 - **2.179.0** — 2026-10-09 — `vps-jp1` — feat(chat-luong): cong chat luong thanh pham luc ban giao — do tieng/phu de/hinh/clip tinh/mo ta, tu sua, chan; truc chat_luong; sua test vong_hoc_kin khong phu thuoc ngay
 - **2.178.1** — 2026-10-09 — `vps-jp1` — test(vong-hoc-kin): khong phu thuoc ngay chay
 - **2.178.0** — 2026-10-09 — `vps-jp1` — feat(bia): do do de doc anh bia (tuong phan chu/nen tung dong, co chu tren dien thoai) — ve chu theo nen (sang/toi/am-roi: doi mau, vien day, khung mo), cong chan bia kho doc (doi tam, ve lai, rut gon, khong ban giao), truc hoc bia_doc_duo…
