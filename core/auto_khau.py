@@ -9059,10 +9059,14 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
 
     1. bìa đã chọn ĐẠT (hoặc không đo được — không dò ra chữ: chỉ ghi log) → giữ;
     2. tấm hợp lệ khác của giám khảo (theo điểm) ĐẠT → đổi sang tấm đó;
-    3. vẽ lại tấm đã chọn với kiểu thích nghi: tấm code vẽ chữ → vẽ lại trên nền `znen-*`; tấm mô hình vẽ
-       chữ → xoá chữ cũ + vẽ lại (`do_bia.ve_lai_tu_anh_ghep`) — không gọi AI ảnh;
+    3. CHỈ khi có NỀN SẠCH `znen-*` (tấm code vẽ chữ): vẽ lại cùng bố cục — trước hết đổi màu/viền dày, KHÔNG
+       khung; rồi mới cho khung gọn sau dòng (không che chủ thể). Bản vẽ lại chỉ được nhận khi ĐẠT, bố cục
+       không hỏng (`do_bia.bo_cuc_dat`: khung không chồng, không che nhân vật) và điểm ≥ bản gốc;
     4. vẫn trượt → rút gọn chữ bìa (≤ `CONG_DOC_DUOC_RUT_TOI_DA` lượt chat, khung 10–20 ký tự) rồi vẽ lại;
-    5. hết cách → RuntimeError nói rõ lý do (khâu hỏng, lượt KHÔNG được bàn giao).
+    5. hết cách: bìa RẤT KHÓ ĐỌC (`do_bia.rat_kho_doc`) → đổi sang tấm khác không rất khó đọc, không có thì
+       RuntimeError (lượt KHÔNG bàn giao); bìa chỉ trượt nhẹ → GIỮ bản gốc + ghi log.
+    Không có nền sạch (mô hình ảnh vẽ chữ) thì KHÔNG xoá chữ cũ để vẽ lại — 09/10 chủ dự án soi: bản xoá
+    chữ để lại vết chữ cũ, phủ hai tấm xám lên đám đông; tệ hơn bản gốc.
     Kênh tắt bằng `kenh.yaml: bia_cong_doc_duoc: false` (mặc định bật)."""
     from . import bia_theo_khuon as _btk, chon_bia as _cb, do_bia  # noqa: PLC0415
     cai: Dict[str, Any] = {}
@@ -9114,6 +9118,7 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
     du = _cb.doc_chon_bia(thu_muc) or {}
     uv = sorted([u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")],
                 key=lambda u: -(u.get("tong_diem") or 0))
+    khac: List[Tuple[int, str, Dict[str, Any]]] = []
     for u in uv:
         so = int(u.get("so") or 0)
         tep = _tep_bia(thu_muc, so)
@@ -9122,32 +9127,38 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
         b = do_bia.cham_tep(tep)
         if b.get("dat"):
             return dat_chon(tep, so, b, "đổi sang tấm {0} (đạt sẵn)".format(so))
+        khac.append((so, tep, b))
 
-    # 3) + 4) Vẽ lại tấm đã chọn (rồi rút gọn chữ nếu cần).
+    # 3) + 4) Vẽ lại tấm đã chọn trên NỀN SẠCH (rồi rút gọn chữ nếu cần) — không có nền sạch thì không vẽ.
     kh = _muc_ke_hoach(thu_muc, so_chon)
     znen = os.path.join(thu_muc, "znen-thumb_{0:03d}.png".format(so_chon))
-    goc_png = _tep_bia(thu_muc, so_chon)
-    nguon_anh = goc_png if os.path.isfile(goc_png) else tep_chon
     tang = list(kh.get("chu_tang") or []) or do_bia._chia_tang(chu_bia)  # noqa: SLF001
     loai = "khuon" if kh.get("nhom") == "khuon" else "chuan_ngach"
     tep_moi = os.path.join(thu_muc, "_lam-lai", "thumb_{0:03d}.png".format(so_chon))
-    os.makedirs(os.path.dirname(tep_moi), exist_ok=True)
-
-    def ve(chu_tang_ve) -> Dict[str, Any]:
-        b: Dict[str, Any] = {}
-        if os.path.isfile(znen):
-            _btk.ve_chu_len_anh(znen, tep_moi, _btk.bo_tri_chu(loai, chu_tang_ve), goc=bc.goc,
-                                ngon_ngu=bc.kenh.ngon_ngu, bao_cao=b)
-        else:
-            do_bia.ve_lai_tu_anh_ghep(nguon_anh, chu_tang_ve, tep_moi, goc=bc.goc, ngon_ngu=bc.kenh.ngon_ngu,
-                                      bao_cao=b, ghi=bc.ghi)
-        return b
     ly_do = [do_bia.tom_tat(bao)]
-    if tang:
-        b = ve(tang)
-        if b.get("dat"):
-            return dat_chon(tep_moi, so_chon, b, "vẽ lại kiểu thích nghi" + (" trên nền gốc" if os.path.isfile(
-                znen) else " (xoá chữ cũ, không gọi AI ảnh)"))
+
+    def tot_hon(b: Dict[str, Any]) -> bool:
+        """Bản vẽ lại chỉ thay bản gốc khi ĐẠT + bố cục không hỏng + điểm không thấp hơn (không làm xấu đi)."""
+        return bool(b.get("dat")) and do_bia.bo_cuc_dat(b) and float(b.get("diem") or 0) >= float(
+            bao.get("diem") or 0)
+
+    def ve(chu_tang_ve) -> Tuple[Dict[str, Any], str]:
+        """(b) đổi màu / viền dày, cùng bố cục, KHÔNG khung → (c) cho khung gọn sau dòng (tránh chủ thể)."""
+        b: Dict[str, Any] = {}
+        for cho_khung in (False, True):
+            b = {}
+            _btk.ve_chu_len_anh(znen, tep_moi, _btk.bo_tri_chu(loai, chu_tang_ve), goc=bc.goc,
+                                ngon_ngu=bc.kenh.ngon_ngu, bao_cao=b, cho_khung=cho_khung)
+            if tot_hon(b):
+                return b, " + khung gọn sau dòng" if cho_khung else " (đổi màu/viền, không khung)"
+            if b.get("dat") and not do_bia.bo_cuc_dat(b):
+                ly_do.append("vẽ lại đạt nhưng bố cục hỏng (giữ bản gốc): {0}".format(b.get("bo_cuc")))
+        return b, ""
+    if tang and os.path.isfile(znen):
+        os.makedirs(os.path.dirname(tep_moi), exist_ok=True)
+        b, cach = ve(tang)
+        if cach:
+            return dat_chon(tep_moi, so_chon, b, "vẽ lại trên nền sạch" + cach)
         ly_do.append("vẽ lại: " + do_bia.tom_tat(b))
         chu = chu_bia
         co_dinh = bc.kenh.che_do_tieu_de == "nguyen_goc"
@@ -9155,14 +9166,28 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
             moi = _rut_chu_bia(bc, luot, chu, lan)
             if not moi:
                 break
-            b = ve(do_bia._chia_tang(moi))  # noqa: SLF001
-            if b.get("dat"):
-                r = dat_chon(tep_moi, so_chon, b, "rút gọn chữ bìa 「{0}」→「{1}」 + vẽ lại".format(chu_bia, moi))
+            b, cach = ve(do_bia._chia_tang(moi))  # noqa: SLF001
+            if cach:
+                r = dat_chon(tep_moi, so_chon, b, "rút gọn chữ bìa 「{0}」→「{1}」 + vẽ lại{2}".format(
+                    chu_bia, moi, cach))
                 r["chu_bia_rut"] = moi
                 return r
             ly_do.append("rút gọn 「{0}」: {1}".format(moi, do_bia.tom_tat(b)))
             chu = moi
-    raise RuntimeError("ảnh bìa KHÓ ĐỌC, tự sửa không được — KHÔNG bàn giao (luật 07/10/2026: thà không đăng "
+    elif not os.path.isfile(znen):
+        ly_do.append("không có nền sạch (mô hình ảnh vẽ chữ) — không xoá chữ cũ để vẽ lại")
+
+    # 5) Hết cách sửa.
+    if not do_bia.rat_kho_doc(bao):
+        bc.ghi("  ảnh bìa — cổng đọc được: trượt NHẸ, không sửa được mà không làm xấu đi → GIỮ bản gốc. "
+               + " || ".join(ly_do)[:600])
+        return {"tep": chon[0], "bao_cao": _gon(bao), "sua": "", "giu_goc": True}
+    cuu = sorted([(so, tep, b) for so, tep, b in khac if b.get("dat") is not None and not do_bia.rat_kho_doc(b)],
+                 key=lambda x: -float(x[2].get("diem") or 0))
+    if cuu:
+        so, tep, b = cuu[0]
+        return dat_chon(tep, so, b, "đổi sang tấm {0} (tấm đã chọn RẤT khó đọc, tấm này trượt nhẹ)".format(so))
+    raise RuntimeError("ảnh bìa RẤT KHÓ ĐỌC, tự sửa không được — KHÔNG bàn giao (luật 07/10/2026: thà không đăng "
                        "còn hơn sản phẩm kém). " + " || ".join(ly_do)[:900])
 
 

@@ -994,7 +994,7 @@ def _cho_xuong_dong(s: str) -> int:
 def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                    goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "",
                    khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
-                   bao_cao: Optional[Dict[str, Any]] = None) -> bool:
+                   bao_cao: Optional[Dict[str, Any]] = None, cho_khung: bool = True) -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
@@ -1009,7 +1009,12 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     thật (+ khung) → `bao_cao` (dict truyền vào được điền) và `<dich không đuôi>.do-bia.json`.
 
     `khung_chu` (x0, y0, x1, y1 — tỉ lệ 0..1): dồn chữ vào vùng này (vẽ lại bìa cũ đúng chỗ chữ cũ);
-    `anh_nen`: PIL.Image dùng thay `nen` (đã mở sẵn). Trả False nếu không có font/không mở được ảnh."""
+    `anh_nen`: PIL.Image dùng thay `nen` (đã mở sẵn). Trả False nếu không có font/không mở được ảnh.
+
+    09/10/2026 (v2, sau khi chủ dự án soi bìa vẽ lại): mọi kiểu KHÔNG khung (đổi màu/viền dày) được thử
+    trước; khung/dải nền chỉ khi không kiểu nào đạt, và không bao giờ đặt khung lên CHỦ THỂ (nhân vật/mặt/
+    vật chính — `do_bia.ban_do_chu_the` đo trên nền sạch này). `cho_khung=False`: tuyệt đối không khung.
+    Báo cáo có `bo_cuc` = {so_khung, chong_khung, che_chu_the} để cổng kiểm bố cục (`do_bia.bo_cuc_dat`)."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
     font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu)
@@ -1136,10 +1141,14 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     # 4) Kiểu chữ THEO NỀN đo được (do_bia), rồi vẽ: khung/dải nền → bóng → viền → chữ.
     from . import do_bia  # noqa: PLC0415
     arr, canh = do_bia.mang_nen(anh)
+    try:
+        chu_the = do_bia.ban_do_chu_the(arr)
+    except Exception:  # noqa: BLE001 — không đo được chủ thể: vẫn vẽ, chỉ không tránh được
+        chu_the = None
     chon = do_bia.chon_kieu_khoi(arr, canh, [
         {"hop": g["hop"], "mau_doan": [_mau_rgb(p.get("mau", ""), (255, 255, 255)) for p in g["doan"]],
          "vien_px": g["vien"] + g["dam"], "cao_px": g["cao_px"], "khoi_nen": bool(g["t"].get("khoi_nen"))}
-        for g in hinh], H=H)
+        for g in hinh], H=H, cho_khung=cho_khung, chu_the=chu_the)
     for g, (kieu, _cham) in zip(hinh, chon):
         g["kieu"] = kieu
     from PIL import ImageChops  # noqa: PLC0415
@@ -1155,6 +1164,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
             nhom[-1].append(g)
         else:
             nhom.append([g])
+    hop_cac_khung: List[Tuple[float, float, float, float]] = []
+    che_max = 0.0
     for ds_g in nhom:
         kh = ds_g[0]["kieu"]["khung"]
         mn = Image.new("L", anh.size, 0)
@@ -1162,6 +1173,9 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         y0 = min(g["hop_khung"][1] for g in ds_g)
         x1 = max(g["hop_khung"][2] for g in ds_g)
         y1 = max(g["hop_khung"][3] for g in ds_g)
+        hop_cac_khung.append((x0, y0, x1, y1))
+        if not any(g["t"].get("khoi_nen") for g in ds_g):  # khối nền của KHUÔN là thiết kế, không tính che
+            che_max = max(che_max, do_bia.che_chu_the(chu_the, (x0, y0, x1, y1), W, H))
         ImageDraw.Draw(mn).rounded_rectangle([x0, y0, x1, y1], radius=int(min(g["c"] for g in ds_g) * 0.22),
                                              fill=int(255 * float(kh["alpha"])))
         # Mặt nạ theo MÀU, ghép MAX alpha — hai khung chạm nhau không chồng tối gấp đôi.
@@ -1194,6 +1208,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         for d, g in zip(ds, hinh):
             d["kieu"] = g["kieu"]["ten"]
         bc = do_bia.tong_hop(ds, cach="chinh_xac")
+        bc["bo_cuc"] = {"so_khung": len(hop_cac_khung), "chong_khung": do_bia.khung_chong_nhau(hop_cac_khung),
+                        "che_chu_the": round(che_max, 3)}
         do_bia.ghi_bao_cao(dich, bc, anh=ket)
         if bao_cao is not None:
             bao_cao.clear()

@@ -412,13 +412,17 @@ def _kiem_thumbnail(duong_anh: str) -> Tuple[List[str], List[str]]:
                       .format(dung_luong / 1024 / 1024, _ANH_BIA_TOI_DA_BYTE / 1024 / 1024))
     # 09/10/2026 — ĐỘ ĐỌC ĐƯỢC (`core/do_bia.py`): chữ chìm vào nền / chữ nhỏ thì KHÔNG giao (luật chủ dự
     # án 07/10: thà không đăng còn hơn sản phẩm kém). Không đo được (không dò ra chữ) → chỉ cảnh báo.
+    # v2 (09/10 tối): chỉ RẤT khó đọc mới chặn — bìa trượt nhẹ mà cổng khâu bìa đã giữ bản gốc (không có
+    # nền sạch để vẽ lại; vẽ lại kiểu xoá chữ làm xấu hơn) thì cảnh báo, không chặn lại lần nữa.
     canh_bao: List[str] = []
     try:
         from . import do_bia  # noqa: PLC0415
 
         bc = do_bia.cham_tep(duong_anh)
-        if bc.get("dat") is False:
+        if bc.get("dat") is False and do_bia.rat_kho_doc(bc):
             loi_ra.append("ảnh bìa khó đọc — " + do_bia.tom_tat(bc)[:400])
+        elif bc.get("dat") is False:
+            canh_bao.append("ảnh bìa trượt nhẹ độ đọc được — " + do_bia.tom_tat(bc)[:300])
         elif bc.get("dat") is None:
             canh_bao.append("không đo được độ đọc được của ảnh bìa — " + do_bia.tom_tat(bc)[:200])
     except Exception as loi:  # noqa: BLE001 — bộ đo hỏng không được giết QA

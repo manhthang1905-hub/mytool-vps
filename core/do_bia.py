@@ -12,17 +12,19 @@ trắng trên, ĐỎ+VÀNG dưới) quyết, bộ vẽ (`bia_theo_khuon._ve_mot_
 
 ═══ SỐ ĐO (mỗi DÒNG chữ) ═══
 
-    tuong_phan_nen   WCAG giữa MÀU CHỮ và nền quanh/dưới dòng (bách phân vị 25/75 độ sáng nền,
-                     lấy phía XẤU — nền loang thì phần gần màu chữ quyết). Đây là thứ mắt thấy
-                     "khối chữ có nổi khỏi nền không" — viền mảnh không cứu được khối chữ chìm.
-    tuong_phan       hiệu dụng = max(tuong_phan_nen, WCAG(chữ, viền)) khi viền đủ dày ở cỡ điện thoại
-                     (≥ `VIEN_DT_TOI_THIEU` px trên khung 320×180), không thì = tuong_phan_nen.
+    tuong_phan_nen   WCAG giữa MÀU CHỮ và từng điểm nền quanh/dưới dòng, bách phân vị XẤU
+                     `PHAN_VI_XAU` — "khối chữ tự nổi khỏi nền không" (chỉ để báo/ưu tiên kiểu).
+    tuong_phan       HIỆU DỤNG (v2, 09/10): từng điểm nền tách được nhờ màu chữ, HOẶC nhờ viền DÀY (≥
+                     `VIEN_DT_TOI_THIEU` px ở 320×180 và ≥ `VIEN_TI_LE_TOI_THIEU` × nét chữ) mà chữ↔viền và
+                     viền↔điểm đó cùng cao, HOẶC (dòng ≥ `CAO_LON_PCT`) nhờ khác SẮC (`HE_SAC_DO`); lấy bách
+                     phân vị xấu của mức tách. Chữ trắng viền đen dày trên nền kem ĐẠT (viền gánh) — v1 trượt oan.
     cao_pct          chiều cao nét chữ của dòng / chiều cao ảnh (%); `cao_dt_px` = cùng số ở 320×180.
     ban_ron          mật độ cạnh của NỀN dưới dòng (0..1) — nền rối thì chữ cần khung/dải nền.
 
-ĐẠT một dòng khi: tuong_phan ≥ 4,5 (≥ 3,0 nếu dòng rất lớn ≥ `CAO_LON_PCT`), tuong_phan_nen ≥
-`NGUONG_NEN` và cao_pct ≥ `CAO_TOI_THIEU_PCT`. Bìa ĐẠT khi mọi dòng đạt. Ngưỡng hiệu chỉnh trên
-bìa thật của các kênh (xem `hieu_chinh` / `python -m core.do_bia --hieu-chinh`).
+ĐẠT một dòng khi: tuong_phan ≥ ngưỡng THEO CỠ (`nguong_theo_co`: 4,5 ở 7% khung → 3,0 ở 12% → 2,7 từ
+18%) và cao_pct ≥ `CAO_TOI_THIEU_PCT`. Bìa ĐẠT khi mọi dòng đạt và có dòng chính ≥ 14%. `rat_kho_doc` =
+mức duy nhất được chặn bàn giao. Ngưỡng hiệu chỉnh trên bìa thật có CTR (`python -m core.do_bia --hieu-chinh`;
+09/10 v2 trên 45 bìa ≥ 50 lượt hiển thị: ĐẠT 34 / trung vị CTR 4,25% — TRƯỢT 11 / 3,0%).
 
 Hai cách đo:
   * CHÍNH XÁC — bộ vẽ chữ của tool (`bia_theo_khuon.ve_chu_len_anh`) biết hộp từng dòng, màu chữ,
@@ -32,12 +34,12 @@ Hai cách đo:
     viền (chữ bìa kiểu này luôn có viền tối/sáng bao quanh), ước màu chữ/viền/nền rồi đo y như trên.
     Không dò ra chữ → `tin_cay=False` (không kết luận).
 
-Ngoài đo còn: `chon_kieu_dong` (chọn màu chữ/viền/khung theo nền ĐO được — bộ vẽ dùng),
-`ve_lai_tu_anh_ghep` (xoá chữ cũ bằng nội suy nền + vẽ lại chữ theo kiểu thích nghi, KHÔNG gọi AI),
-và CLI:
+Ngoài đo còn: `chon_kieu_dong` (chọn màu chữ/viền/khung theo nền ĐO được — bộ vẽ dùng; không khung
+trước, khung không che CHỦ THỂ `ban_do_chu_the`), `ve_lai_tu_anh_ghep` (xoá chữ cũ bằng nội suy nền + vẽ
+lại — CHỈ dùng tay qua `--lam-lai --xoa-chu`, cổng tự động không bao giờ gọi: để vết chữ cũ), và CLI:
 
     python -m core.do_bia --kiem <kênh> <mã gói>
-    python -m core.do_bia --lam-lai <kênh> <mã gói> [--thu [--ra <thư mục>]]
+    python -m core.do_bia --lam-lai <kênh> <mã gói> [--thu [--ra <thư mục>]] [--xoa-chu]
     python -m core.do_bia --hieu-chinh [--n 40]
     python -m core.do_bia --xep-doi-bia <kênh> <mã gói> --anh <tệp>   # xếp việc đổi bìa cho máy DOM
 """
@@ -56,24 +58,43 @@ __all__ = [
     "NGUONG_TUONG_PHAN", "NGUONG_TUONG_PHAN_LON", "NGUONG_NEN", "CAO_TOI_THIEU_PCT", "CAO_LON_PCT",
     "do_sang", "ti_le_tuong_phan", "cham_dong", "tong_hop", "cham_anh", "cham_tep", "tim_dong_chu",
     "chon_kieu_dong", "ve_lai_tu_anh_ghep", "nhom_doc_duoc", "duong_bao_cao", "ghi_bao_cao",
-    "doc_bao_cao",
+    "doc_bao_cao", "nguong_theo_co", "rat_kho_doc", "ban_do_chu_the", "che_chu_the", "bo_cuc_dat",
 ]
 
-#: WCAG: chữ thường ≥ 4,5:1; chữ RẤT LỚN ≥ 3:1.
+#: WCAG: chữ thường ≥ 4,5:1; chữ lớn (≥ 24 px CSS) ≥ 3:1. Bìa trên điện thoại rộng ~360 px CSS → dòng 12%
+#: khung ≈ 24 px; dòng ≥ 18% khung (≥ 36 px) còn đọc được ở 2,7:1. Ngưỡng của một dòng nội suy tuyến tính
+#: theo cỡ (`nguong_theo_co`, bảng `NGUONG_THEO_CO`).
 NGUONG_TUONG_PHAN = 4.5
-NGUONG_TUONG_PHAN_LON = 3.0
-#: Màu chữ (không kể viền) ↔ nền dưới ngần này thì ghi CẢNH BÁO (không tự nó làm trượt: chữ trắng viền
-#: đen dày trên nền kem vẫn đọc tốt — viền↔nền gánh). Bộ chọn kiểu ưu tiên kiểu vượt cả ngưỡng này.
+NGUONG_TUONG_PHAN_LON = 2.7
+#: Màu chữ (không kể viền) ↔ nền dưới ngần này thì ghi CẢNH BÁO — chỉ khi viền KHÔNG đủ dày để gánh (chữ
+#: trắng viền đen dày trên nền kem đọc tốt: viền↔nền gánh). Bộ chọn kiểu ưu tiên kiểu vượt cả ngưỡng này.
 NGUONG_NEN = 2.0
 #: Dòng LỚN NHẤT của bìa phải cao ít nhất ngần này % khung — bìa không có "dòng chính" đủ lớn (chữ dồn
 #: một góc, hai dòng nhỏ đều nhau) thu về điện thoại là mất. Bộ vẽ đặt tầng chính ≥ 25% (khối 1–2 dòng).
 CAO_CHINH_TOI_THIEU_PCT = 14.0
-#: Dòng cao ≥ ngần này % khung là "chữ rất lớn" (ngưỡng 3:1).
+#: Dòng cao ≥ ngần này % khung là "chữ rất lớn" (ngưỡng thấp nhất + được tính tách nền bằng SẮC ĐỘ).
 CAO_LON_PCT = 18.0
 #: Dòng thấp hơn ngần này % khung thì thu về cỡ điện thoại (320×180) chỉ còn < ~13 px — không đọc nổi.
 CAO_TOI_THIEU_PCT = 7.0
+NGUONG_THEO_CO = ((CAO_TOI_THIEU_PCT, NGUONG_TUONG_PHAN), (12.0, 3.0), (CAO_LON_PCT, NGUONG_TUONG_PHAN_LON))
 #: Viền mỏng hơn ngần này px ở khung 320×180 thì coi như không có viền (bị nhoè lẫn vào nền khi thu nhỏ).
 VIEN_DT_TOI_THIEU = 1.2
+#: Viền chỉ "gánh" được khối chữ khi đủ dày SO VỚI nét chữ (viền / chiều cao nét ≥ ngần này): viền 6 px quanh
+#: chữ cao 130 px là đường chỉ, không phải khối viền.
+VIEN_TI_LE_TOI_THIEU = 0.05
+CAO_NET_TOI_DA_PCT = 25.0
+#: Tách nền đo TỪNG ĐIỂM nền quanh dòng (chữ hoặc viền tách khỏi điểm đó), lấy bách phân vị XẤU này: nền
+#: loang (nửa kem nửa tối) thì chữ trắng tách phần tối, viền đen tách phần kem — cả dòng vẫn đọc được.
+PHAN_VI_XAU = 15
+#: Chữ RẤT LỚN màu rực trên nền khác hẳn sắc (đỏ trên xanh đen): mắt tách bằng sắc độ dù độ sáng gần nhau.
+#: Tương phản tương đương = 1 + ΔE76 / HE_SAC_DO (đỏ trên xanh đen ΔE ~115 → 3,9; đỏ trên gỗ nâu đỏ ΔE
+#: ~40 → 2,0 — đo trên bìa thật 09/10). Chỉ cho dòng ≥ `CAO_LON_PCT` (sắc độ không tách nổi chữ nhỏ).
+HE_SAC_DO = 40.0
+#: Dòng có tương phản < ngần này × ngưỡng của nó là RẤT KHÓ ĐỌC — chỉ mức này mới chặn bàn giao khi đã hết
+#: cách sửa (bìa trượt nhẹ mà không có nền sạch để vẽ lại thì giữ bản gốc + ghi log, không làm xấu thêm).
+RAT_KHO_DOC_HE = 0.6
+#: Phiên bản bộ đo — báo cáo cạnh ảnh ghi bằng bộ đo cũ hơn thì chấm lại (mù), không tin số cũ.
+PHIEN_BAN_DO = 2
 #: Nền rối: mật độ cạnh vượt ngưỡng này mà dòng không có khung/dải nền → ghi lý do (trừ điểm).
 NGUONG_BAN_RON = 0.22
 KHUNG_DT = (320, 180)
@@ -127,6 +148,29 @@ def _mang_do_sang(arr):
         np.float32)
 
 
+def _lab(rgb):
+    """sRGB 0..255 (…x3) → CIELAB (…x3, D65) — đo khác biệt SẮC giữa màu chữ và nền."""
+    np = _np()
+    c = np.asarray(rgb, dtype=np.float32) / 255.0
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    m = np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]], np.float32)
+    xyz = lin @ m.T / np.array([0.95047, 1.0, 1.08883], np.float32)
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16.0 / 116.0)
+    return np.stack([116.0 * f[..., 1] - 16.0, 500.0 * (f[..., 0] - f[..., 1]), 200.0 * (f[..., 1] - f[..., 2])],
+                    axis=-1)
+
+
+def nguong_theo_co(cao_pct: float) -> float:
+    """Ngưỡng tương phản của một dòng theo chiều cao (% khung) — nội suy `NGUONG_THEO_CO`."""
+    bang = NGUONG_THEO_CO
+    if cao_pct <= bang[0][0]:
+        return bang[0][1]
+    for (c0, n0), (c1, n1) in zip(bang, bang[1:]):
+        if cao_pct <= c1:
+            return n0 + (n1 - n0) * (cao_pct - c0) / (c1 - c0)
+    return bang[-1][1]
+
+
 def _mat_do_canh(xam):
     """Độ lớn gradient (0..~1) của ảnh xám float 0..1 — sai phân trung tâm, không cần scipy."""
     np = _np()
@@ -162,55 +206,95 @@ def _phan_vi(v, q: float, mac_dinh: float = 0.0) -> float:
 # ── Đo một dòng ───────────────────────────────────────────────────────────────
 
 
+def _tp_mang(l, l_nen):
+    """Tỉ lệ tương phản WCAG giữa MỘT độ sáng `l` và từng điểm của mảng `l_nen`."""
+    np = _np()
+    return (np.maximum(l_nen, l) + 0.05) / (np.minimum(l_nen, l) + 0.05)
+
+
 def cham_dong(*, l_chu: Sequence[float], l_vien: Optional[float], vien_px: float, cao_px: float,
               H: int, l_nen, ban_ron: float = 0.0, co_khung: bool = False,
-              hop: Optional[Sequence[float]] = None, ten: str = "") -> Dict[str, Any]:
+              hop: Optional[Sequence[float]] = None, ten: str = "",
+              mau_chu: Optional[Sequence[Sequence[float]]] = None, rgb_nen=None) -> Dict[str, Any]:
     """Chấm MỘT dòng từ các số đã đo.
 
     `l_chu`: độ sáng của (các) màu chữ trong dòng — dòng nhiều màu thì chấm màu XẤU nhất; `l_vien`:
     độ sáng màu viền (None = không viền); `vien_px`/`cao_px`: độ dày viền / chiều cao nét chữ (px ở
-    ảnh cao `H`); `l_nen`: mảng độ sáng các điểm NỀN dưới/quanh dòng (đã gồm khung nền nếu có)."""
+    ảnh cao `H`); `l_nen`: mảng độ sáng các điểm NỀN dưới/quanh dòng (đã gồm khung nền nếu có);
+    `mau_chu` (rgb, cùng thứ tự `l_chu`) + `rgb_nen` (Nx3, cùng điểm với `l_nen`): bật đường SẮC ĐỘ cho
+    dòng rất lớn.
+
+    Đo TỪNG ĐIỂM nền (v2, 09/10 sau khi chủ dự án soi bìa): mỗi điểm nền "tách" được khi
+      * màu chữ ↔ điểm đó đủ tương phản (khối chữ nổi thẳng khỏi nền), HOẶC
+      * viền DÀY (≥ `VIEN_DT_TOI_THIEU` px ở 320×180 và ≥ `VIEN_TI_LE_TOI_THIEU` × nét chữ): min(chữ↔viền,
+        viền↔điểm đó) — nét chữ tách khỏi viền VÀ khối viền tách khỏi nền, HOẶC
+      * dòng rất lớn: tương phản tương đương theo khác biệt sắc (`HE_SAC_DO`).
+    Tương phản dòng = bách phân vị `PHAN_VI_XAU` của mức tách trên các điểm nền. Chữ trắng viền đen dày
+    trên nền nửa kem nửa tối: phần kem do viền gánh, phần tối do chữ gánh → ĐẠT (bộ đo v1 lấy phía xấu
+    của từng thứ riêng rẽ → trượt oan). Đỏ viền đen trên gỗ nâu đỏ: cả ba đường đều thấp → TRƯỢT."""
     np = _np()
     l_nen = np.asarray(l_nen, dtype=np.float32).ravel()
     if l_nen.size == 0:
         l_nen = np.array([0.5], dtype=np.float32)
-    p25, p50, p75 = (_phan_vi(l_nen, q) for q in (25, 50, 75))
+    p50 = _phan_vi(l_nen, 50)
     he = KHUNG_DT[1] / float(max(1, H))
     vien_dt = vien_px * he
     cao_pct = 100.0 * cao_px / float(max(1, H))
     lon = cao_pct >= CAO_LON_PCT
-    nguong = NGUONG_TUONG_PHAN_LON if lon else NGUONG_TUONG_PHAN
-    tp_nen_ds, tp_ds = [], []
+    nguong = round(nguong_theo_co(cao_pct), 2)
     co_vien = l_vien is not None and vien_dt >= VIEN_DT_TOI_THIEU
-    # Viền tách khỏi nền ở phía XẤU của nền (viền tối ↔ phần nền tối nhất p25, và ngược lại).
-    tp_vien_nen = 0.0
-    if co_vien:
-        tp_vien_nen = ti_le_tuong_phan(l_vien, p25 if l_vien < p50 else p75)
-    for lc in (l_chu or [1.0]):
-        # Phía XẤU của nền: chữ sáng → phần nền SÁNG nhất (p75) quyết; chữ tối → phần nền TỐI nhất (p25).
-        lb = p75 if lc >= p50 else p25
-        tn = ti_le_tuong_phan(lc, lb)
-        # Đường viền chỉ cứu được khi CẢ HAI phía tách: chữ↔viền (nét chữ) VÀ viền↔nền (khối chữ nổi
-        # khỏi nền). Đỏ viền đen trên gỗ nâu: chữ↔viền 4,7 nhưng viền↔nền ~2 → khối chữ chìm.
-        tv = min(ti_le_tuong_phan(lc, l_vien), tp_vien_nen) if co_vien else 0.0
-        tp_nen_ds.append(tn)
-        tp_ds.append(max(tn, tv))
-    tp_nen, tp = min(tp_nen_ds), min(tp_ds)
+    # Nét chữ để so độ dày viền: bộ dò mù đôi khi gộp 2–3 dòng thành một khối cao 40–60% khung — một dòng
+    # chữ bìa không cao quá ~25% khung (`bia_theo_khuon.DONG_TOI_DA_PCT` 30% kể cả viền) nên chặn trên ở đó.
+    net = min(max(1.0, float(cao_px)), CAO_NET_TOI_DA_PCT / 100.0 * H)
+    vien_day = co_vien and vien_px >= VIEN_TI_LE_TOI_THIEU * net
+    lab_nen = None
+    if lon and mau_chu is not None and rgb_nen is not None:
+        rgb_nen = np.asarray(rgb_nen, dtype=np.float32).reshape(-1, 3)
+        if len(rgb_nen) == len(l_nen) and len(list(mau_chu)) == len(list(l_chu or [])):
+            lab_nen = _lab(rgb_nen)
+    tv_mang = _tp_mang(l_vien, l_nen) if co_vien else None
+    tp_vien_nen = _phan_vi(tv_mang, PHAN_VI_XAU) if co_vien else 0.0
+    tp_nen_ds, tp_ds, ganh_ds = [], [], []
+    mau_ds = list(mau_chu) if lab_nen is not None else [None] * len(list(l_chu or [1.0]))
+    for lc, mc in zip(l_chu or [1.0], mau_ds):
+        tn_mang = _tp_mang(lc, l_nen)
+        tach = tn_mang
+        duong = {"chu": _phan_vi(tn_mang, PHAN_VI_XAU)}
+        if vien_day:
+            # Viền chỉ cứu được khi CẢ HAI phía tách: chữ↔viền (nét chữ) VÀ viền↔nền (khối chữ nổi khỏi nền).
+            tv = np.minimum(ti_le_tuong_phan(lc, l_vien), tv_mang)
+            tach = np.maximum(tach, tv)
+            duong["vien"] = _phan_vi(tv, PHAN_VI_XAU)
+        if mc is not None:
+            de = np.sqrt(((lab_nen - _lab(np.asarray(mc[:3], dtype=np.float32))) ** 2).sum(axis=-1))
+            ts = 1.0 + de / HE_SAC_DO
+            tach = np.maximum(tach, ts)
+            duong["sac_do"] = _phan_vi(ts, PHAN_VI_XAU)
+        tp_i = _phan_vi(tach, PHAN_VI_XAU)
+        tp_nen_ds.append(duong["chu"])
+        tp_ds.append(tp_i)
+        # Đường nào gánh: một đường tự đủ → tên nó; phải ghép từng vùng nền (chữ chỗ này, viền chỗ kia) → ghép.
+        tot = max(duong, key=lambda k: duong[k])
+        ganh_ds.append(tot if duong[tot] >= 0.95 * tp_i else "+".join(sorted(duong)))
+    i_xau = min(range(len(tp_ds)), key=lambda i: tp_ds[i])
+    tp_nen, tp, ganh = min(tp_nen_ds), tp_ds[i_xau], ganh_ds[i_xau]
     ly_do: List[str] = []
     if tp < nguong:
         ly_do.append("tương phản {0:.1f}:1 < {1:.1f}:1 (màu chữ↔nền {2:.1f}{3})".format(
-            tp, nguong, tp_nen, ", viền↔nền {0:.1f}".format(tp_vien_nen) if co_vien else ", viền mỏng/không có"))
+            tp, nguong, tp_nen, ", viền↔nền {0:.1f}".format(tp_vien_nen) if vien_day else
+            (", viền mỏng so với nét chữ" if co_vien else ", viền mỏng/không có")))
     if cao_pct < CAO_TOI_THIEU_PCT:
         ly_do.append("chữ nhỏ {0:.1f}% khung (~{1:.0f}px trên điện thoại) < {2:.0f}%".format(
             cao_pct, cao_px * he, CAO_TOI_THIEU_PCT))
     canh_bao = []
-    if tp_nen < NGUONG_NEN:
-        canh_bao.append("màu chữ gần độ sáng nền ({0:.1f}:1) — chỉ viền gánh".format(tp_nen))
+    if tp_nen < NGUONG_NEN and not (vien_day and tp >= nguong):
+        canh_bao.append("màu chữ gần độ sáng nền ({0:.1f}:1) — viền không gánh nổi".format(tp_nen))
     if ban_ron > NGUONG_BAN_RON and not co_khung:
         canh_bao.append("nền rối {0:.2f} dưới chữ, không có khung/dải nền".format(ban_ron))
     return {
         "ten": ten, "hop": [int(round(x)) for x in hop] if hop else None,
         "tuong_phan": round(tp, 2), "tuong_phan_nen": round(tp_nen, 2), "nguong": nguong,
+        "tuong_phan_vien_nen": round(tp_vien_nen, 2), "vien_day": bool(vien_day), "ganh": ganh,
         "cao_pct": round(cao_pct, 1), "cao_dt_px": round(cao_px * he, 1), "vien_dt_px": round(vien_dt, 2),
         "ban_ron": round(float(ban_ron), 3), "nen_p50": round(p50, 3), "co_khung": bool(co_khung),
         "dat": not ly_do, "ly_do": ly_do, "canh_bao": canh_bao,
@@ -218,13 +302,17 @@ def cham_dong(*, l_chu: Sequence[float], l_vien: Optional[float], vien_px: float
 
 
 def _diem_dong(d: Dict[str, Any]) -> float:
-    """0..100: tương phản (60%) + tách nền (15%) + cỡ chữ (20%) + nền gọn (5%)."""
+    """0..100: tương phản (60%, chuẩn hoá theo ngưỡng của CỠ dòng) + tách nền (15%) + cỡ chữ (20%) + nền
+    gọn (5%). "Tách nền" = màu chữ↔nền, hoặc tương phản hiệu dụng khi viền dày gánh khối chữ."""
     import math  # noqa: PLC0415
 
     def ty(x, a, b):
         return max(0.0, min(1.0, (x - a) / (b - a)))
-    f_tp = ty(math.log(max(1.0, d["tuong_phan"])), math.log(1.5), math.log(7.0))
-    f_nen = ty(math.log(max(1.0, d["tuong_phan_nen"])), math.log(1.2), math.log(4.5))
+    nguong = float(d.get("nguong") or NGUONG_TUONG_PHAN)
+    tp_chuan = d["tuong_phan"] * NGUONG_TUONG_PHAN / max(1.0, nguong)
+    f_tp = ty(math.log(max(1.0, tp_chuan)), math.log(1.5), math.log(7.0))
+    tach = max(d["tuong_phan_nen"], d["tuong_phan"] if d.get("vien_day") else 0.0)
+    f_nen = ty(math.log(max(1.0, tach)), math.log(1.2), math.log(4.5))
     f_cao = ty(d["cao_pct"], 4.0, 20.0)
     f_br = 1.0 if d.get("co_khung") else 1.0 - ty(d["ban_ron"], 0.08, 0.40)
     return 100.0 * (0.60 * f_tp + 0.15 * f_nen + 0.20 * f_cao + 0.05 * f_br)
@@ -263,7 +351,24 @@ def tong_hop(cac_dong: Sequence[Dict[str, Any]], *, cach: str = "", tin_cay: boo
         "tuong_phan_nen_min": min(d["tuong_phan_nen"] for d in ds),
         "cao_min_pct": min(d["cao_pct"] for d in ds), "ban_ron_max": max(d["ban_ron"] for d in ds),
         "doc_duoc": nhom_doc_duoc(diem, dat) if tin_cay else "", "ly_do": ly_do, "dong": ds,
+        "phien_ban": PHIEN_BAN_DO,
     }
+
+
+def rat_kho_doc(bc: Optional[Dict[str, Any]]) -> bool:
+    """Bìa RẤT KHÓ ĐỌC (mức duy nhất được chặn bàn giao sau khi hết cách sửa): có dòng tương phản <
+    `RAT_KHO_DOC_HE` × ngưỡng của cỡ dòng đó, hoặc dòng lớn nhất vẫn dưới `CAO_TOI_THIEU_PCT`. Bìa trượt nhẹ
+    (vd. 2,3:1 ở dòng 22% — ngưỡng 2,7) KHÔNG rất khó đọc: giữ bản gốc + ghi log còn hơn vẽ lại xấu đi."""
+    if not bc or bc.get("dat") is not False:
+        return False
+    ds = bc.get("dong") or []
+    if not ds:
+        return False
+    for d in ds:
+        ng = float(d.get("nguong") or nguong_theo_co(float(d.get("cao_pct") or 0)))
+        if float(d.get("tuong_phan") or 0) < RAT_KHO_DOC_HE * ng:
+            return True
+    return max(float(d.get("cao_pct") or 0) for d in ds) < CAO_TOI_THIEU_PCT
 
 
 # ── Dò MÙ dòng chữ trên ảnh đã ghép ───────────────────────────────────────────
@@ -501,13 +606,15 @@ def _do_dong_mu(arr, L, canh, bien, trong, hop, he: float, H0: int) -> Optional[
     chu = _gian((trong | bien)[y0:y1, x0:x1] & _gian(trong[y0:y1, x0:x1], 8), 3)
     nen = ~chu
     l_nen = L[y0:y1, x0:x1][nen]
+    rgb_nen = arr[y0:y1, x0:x1][nen]
     ban_ron = float((canh[y0:y1, x0:x1][nen] > 0.12).mean()) if nen.any() else 0.0
     # Chiều cao nét = khoảng hàng có điểm trong-nét (bỏ 3% đuôi hai đầu).
     hang = np.where(tr.any(axis=1))[0]
     cao = float(hang[-1] - hang[0] + 1) if len(hang) else float(h)
     return {"hop": [xa * he, ya * he, xb * he, yb * he], "mau_chu": [m_ for m_, _p in mau],
             "ti_phan_mau": [round(p, 2) for _m, p in mau], "l_chu": [do_sang(m_) for m_, _p in mau],
-            "l_vien": l_vien, "vien_px": vien * he, "cao_px": cao * he, "l_nen": l_nen, "ban_ron": ban_ron}
+            "l_vien": l_vien, "vien_px": vien * he, "cao_px": cao * he, "l_nen": l_nen, "rgb_nen": rgb_nen,
+            "ban_ron": ban_ron}
 
 
 def cham_anh(anh_hoac_duong) -> Dict[str, Any]:
@@ -520,7 +627,7 @@ def cham_anh(anh_hoac_duong) -> Dict[str, Any]:
     for i, d in enumerate(tim["dong"]):
         ds.append(cham_dong(l_chu=d["l_chu"], l_vien=d["l_vien"], vien_px=d["vien_px"], cao_px=d["cao_px"],
                             H=H, l_nen=d["l_nen"], ban_ron=d["ban_ron"], hop=d["hop"],
-                            ten="dòng {0}".format(i + 1)))
+                            ten="dòng {0}".format(i + 1), mau_chu=d["mau_chu"], rgb_nen=d.get("rgb_nen")))
         ds[-1]["mau_chu"] = ["#{0:02X}{1:02X}{2:02X}".format(*m) for m in d["mau_chu"]]
         ds[-1]["mat_do"] = d.get("mat_do")
         ds[-1]["doi_em"] = d.get("doi_em")
@@ -585,6 +692,8 @@ def cham_tep(duong_anh: str) -> Dict[str, Any]:
     """Điểm đọc được của MỘT tệp bìa: báo cáo CHÍNH XÁC lúc vẽ nếu có và đúng ảnh này (vân tay),
     không thì chấm mù."""
     bc = doc_bao_cao(duong_anh)
+    if bc is not None and int(bc.get("phien_ban") or 1) < PHIEN_BAN_DO:
+        bc = None  # báo cáo của bộ đo cũ (v1 trượt oan chữ trắng viền đen trên nền sáng) — chấm lại
     if bc is not None:
         try:
             if _lech_van_tay(bc.get("van_tay") or [], van_tay(duong_anh)) < _LECH_VAN_TAY:
@@ -609,6 +718,93 @@ def tom_tat(bc: Dict[str, Any]) -> str:
     if not bc["dat"]:
         s += " — " + "; ".join(bc.get("ly_do") or [])[:300]
     return s
+
+
+# ── Bản đồ CHỦ THỂ (nhân vật / mặt / vật chính) — khung nền không được che ─────
+
+#: Khung nền (dải mờ sau chữ) che quá ngần này phần diện tích hộp của nó là vùng CHỦ THỂ → không dùng khung
+#: đó (chủ dự án 09/10: bản vẽ lại TL4 phủ hai tấm xám lên đám đông — phần kể chuyện của bìa).
+CHE_CHU_THE_TOI_DA = 0.25
+#: Tỉ phần điểm "nổi bật nhất" của khung coi là chủ thể.
+_TI_CHU_THE = 0.22
+_KHUNG_NB = (128, 72)
+
+
+def _mo_hop(a, r: int):
+    """Làm mờ hộp 3 lần (≈ Gauss) mảng 2D float — không cần scipy."""
+    np = _np()
+    r = max(1, int(r))
+    a = a.astype(np.float32)
+    for _ in range(3):
+        for truc in (0, 1):
+            b = np.moveaxis(a, truc, 0)
+            p = np.concatenate([np.repeat(b[:1], r + 1, 0), b, np.repeat(b[-1:], r, 0)], 0)
+            c = np.cumsum(p, 0)
+            a = np.moveaxis((c[2 * r + 1:] - c[:-2 * r - 1]) / (2 * r + 1), 0, truc)
+    return a
+
+
+def ban_do_chu_the(arr):
+    """Mặt nạ CHỦ THỂ (bool, khung 72×128) của ảnh NỀN SẠCH (chưa có chữ) RGB uint8 HxWx3.
+
+    Repo không có bộ dò mặt/mô hình nổi bật, nên dùng cách rẻ: phần dư phổ (spectral residual — Hou & Zhang
+    2007) trên ba kênh L*a*b* + độ khác màu so với vùng xung quanh rộng; lấy `_TI_CHU_THE` điểm cao nhất.
+    Trên tranh bìa (nhân vật đặt trên phòng/nền tối) nó bắt đúng người, mặt, vật cầm tay; nền trơn/tường
+    không lên. Chạy trên ảnh CÓ chữ thì chữ thành "chủ thể" — chỉ gọi với nền sạch."""
+    np = _np()
+    from PIL import Image  # noqa: PLC0415
+    nho = np.asarray(Image.fromarray(np.asarray(arr, dtype=np.uint8)).resize(_KHUNG_NB, Image.BOX))
+    lb = _lab(nho)
+
+    def du_pho(k):
+        F = np.fft.fft2(k)
+        A = np.log(np.abs(F) + 1e-6)
+        p = np.pad(A, 1, mode="wrap")
+        Am = sum(p[dy:dy + A.shape[0], dx:dx + A.shape[1]] for dy in range(3) for dx in range(3)) / 9.0
+        s = _mo_hop(np.abs(np.fft.ifft2(np.exp(A - Am + 1j * np.angle(F)))) ** 2, 2)
+        return s / (float(s.max()) + 1e-9)
+
+    def chuan(x):
+        return (x - x.min()) / (float(x.max() - x.min()) + 1e-9)
+    s1 = sum(du_pho(lb[..., i]) for i in range(3))
+    quanh = np.stack([_mo_hop(lb[..., i], 20) for i in range(3)], axis=-1)
+    s2 = _mo_hop(np.sqrt(((lb - quanh) ** 2).sum(axis=-1)), 2)
+    s = chuan(chuan(s1) + chuan(s2))
+    return s >= float(np.percentile(s, 100.0 * (1.0 - _TI_CHU_THE)))
+
+
+def che_chu_the(mat_na, hop, W: int, H: int) -> float:
+    """Phần diện tích hộp `hop` (px trên ảnh W×H) nằm trên CHỦ THỂ (`ban_do_chu_the`)."""
+    if mat_na is None or not hop:
+        return 0.0
+    h, w = mat_na.shape
+    x0, y0, x1, y1 = hop
+    a0, a1 = max(0, int(x0 * w / W)), min(w, int(round(x1 * w / W)) + 1)
+    b0, b1 = max(0, int(y0 * h / H)), min(h, int(round(y1 * h / H)) + 1)
+    if a1 <= a0 or b1 <= b0:
+        return 0.0
+    return float(mat_na[b0:b1, a0:a1].mean())
+
+
+def bo_cuc_dat(bc: Optional[Dict[str, Any]]) -> bool:
+    """Bố cục bìa VẼ LẠI không hỏng: không hai khung nền chồng nhau, không khung nào che chủ thể quá
+    `CHE_CHU_THE_TOI_DA`, không vết xoá chữ cũ lộ ra. Báo cáo không có mục `bo_cuc` (bộ đo mù) → True."""
+    bo = (bc or {}).get("bo_cuc")
+    if not isinstance(bo, dict):
+        return True
+    return (not bo.get("chong_khung") and float(bo.get("che_chu_the") or 0) <= CHE_CHU_THE_TOI_DA
+            and float(bo.get("vet_lo") or 0) <= VET_LO_TOI_DA)
+
+
+def khung_chong_nhau(cac_hop: Sequence[Sequence[float]]) -> bool:
+    """Có hai hộp khung nền nào giao nhau (diện tích > 0) không."""
+    ds = [tuple(h) for h in cac_hop]
+    for i in range(len(ds)):
+        for j in range(i + 1, len(ds)):
+            a, b = ds[i], ds[j]
+            if min(a[2], b[2]) - max(a[0], b[0]) > 0 and min(a[3], b[3]) - max(a[1], b[1]) > 0:
+                return True
+    return False
 
 
 # ── Chọn kiểu chữ theo NỀN đo được (bộ vẽ dùng) ───────────────────────────────
@@ -640,7 +836,7 @@ def _kieu_theo_nen(p50: float) -> List[Dict[str, Any]]:
         return {"mau": mau, "alpha": a, "dang": dang}
     if p50 >= 0.45:
         return [k("toi_tren_sang", sang, 1.0, 150), k("trang_vien_den", toi, 1.0, 200),
-                k("trang_vien_den_day", toi, 1.35, 230),
+                k("trang_vien_den_day", toi, 1.35, 230), k("toi_vien_trang_day", sang, 1.5, 130),
                 k("toi_tren_sang+khung", sang, 1.0, 120, kh(_KHUNG_SANG, 0.72)),
                 k("trang+khung_toi", toi, 1.15, 220, kh(_KHUNG_TOI, 0.72)),
                 k("trang+khung_toi_dam", toi, 1.15, 220, kh(_KHUNG_TOI, 0.88))]
@@ -649,6 +845,7 @@ def _kieu_theo_nen(p50: float) -> List[Dict[str, Any]]:
                 k("trang+khung_toi_nhat", toi, 1.15, 220, kh(_KHUNG_TOI, 0.6)),
                 k("trang+khung_toi_dam", toi, 1.15, 220, kh(_KHUNG_TOI, 0.85))]
     return [k("trang_vien_den", toi, 1.0, 200), k("trang_vien_den_day", toi, 1.35, 235),
+            k("trang_vien_den_rat_day", toi, 1.6, 240),
             k("trang+khung_toi_nhat", toi, 1.15, 225, kh(_KHUNG_TOI, 0.6)),
             k("trang+khung_toi", toi, 1.15, 225, kh(_KHUNG_TOI, 0.72)),
             k("trang+khung_toi_dam", toi, 1.15, 225, kh(_KHUNG_TOI, 0.88)),
@@ -661,8 +858,8 @@ def _vung(hop, H: int, W: int, nong: float = 0.0):
     return (max(0, int(y0 - m)), min(H, int(y1 + m)), max(0, int(x0 - m)), min(W, int(x1 + m)))
 
 
-def _nen_sau_khung(arr, canh, hop, khung: Optional[Dict[str, Any]]):
-    """(độ sáng nền, mật độ cạnh nền) dưới `hop` SAU khi phủ khung/dải nền (nếu có)."""
+def _nen_sau_khung(arr, canh, hop, khung: Optional[Dict[str, Any]], *, rgb: bool = False):
+    """(độ sáng nền, mật độ cạnh nền[, rgb nền Nx3]) dưới `hop` SAU khi phủ khung/dải nền (nếu có)."""
     np = _np()
     H, W = arr.shape[:2]
     y0, y1, x0, x1 = _vung(hop, H, W, 0.0 if khung else 0.12)
@@ -672,8 +869,14 @@ def _nen_sau_khung(arr, canh, hop, khung: Optional[Dict[str, Any]]):
         a = float(khung["alpha"])
         vung = vung * (1.0 - a) + np.array(khung["mau"], dtype=np.float32) * a
         c = c * (1.0 - a)
-    L = _mang_do_sang(np.clip(vung, 0, 255).astype(np.uint8))
-    return L, (float((c > 0.12).mean()) if c.size else 0.0)
+    u8 = np.clip(vung, 0, 255).astype(np.uint8)
+    L = _mang_do_sang(u8)
+    br = float((c > 0.12).mean()) if c.size else 0.0
+    if rgb:
+        # thưa ra ≤ ~20k điểm (đo sắc độ trên cả hộp dòng 1280×720 tốn vô ích)
+        b = max(1, int((u8.shape[0] * u8.shape[1] / 20000.0) ** 0.5))
+        return L[::b, ::b], br, u8[::b, ::b].reshape(-1, 3)
+    return L, br
 
 
 def mang_nen(anh):
@@ -686,10 +889,11 @@ def mang_nen(anh):
 def cham_dong_ve(arr, canh, hop, mau: Sequence[Sequence[int]], *, vien_mau, vien_px: float, cao_px: float,
                  H: int, khung: Optional[Dict[str, Any]] = None, ten: str = "") -> Dict[str, Any]:
     """Chấm một dòng do TOOL vẽ — đo trên ảnh NỀN trước khi vẽ chữ (`arr`, `canh` = mật độ cạnh)."""
-    L, br = _nen_sau_khung(arr, canh, hop, khung)
+    L, br, rgb = _nen_sau_khung(arr, canh, hop, khung, rgb=True)
     d = cham_dong(l_chu=[do_sang(m) for m in mau], l_vien=do_sang(vien_mau) if vien_mau else None,
-                  vien_px=vien_px, cao_px=cao_px, H=H, l_nen=L, ban_ron=br,
-                  co_khung=bool(khung and khung.get("alpha", 0) >= 0.5), hop=hop, ten=ten)
+                  vien_px=vien_px, cao_px=cao_px, H=H, l_nen=L.ravel(), ban_ron=br,
+                  co_khung=bool(khung and khung.get("alpha", 0) >= 0.5), hop=hop, ten=ten,
+                  mau_chu=[tuple(int(v) for v in m[:3]) for m in mau], rgb_nen=rgb)
     d["mau_chu"] = ["#{0:02X}{1:02X}{2:02X}".format(*[int(v) for v in m[:3]]) for m in mau]
     d["vien_mau"] = "#{0:02X}{1:02X}{2:02X}".format(*[int(v) for v in vien_mau[:3]]) if vien_mau else ""
     d["khung"] = dict(khung, mau=list(khung["mau"])) if khung else None
@@ -744,13 +948,32 @@ def chon_kieu_dong(arr, canh, hop, mau_doan: Sequence[Sequence[int]], *, vien_px
     return ra[0]
 
 
-def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int,
-                   nhan_toi_da: int = 1) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+def _cac_vong(cac: Sequence[Dict[str, Any]], cho_khung: bool) -> List[Tuple[int, List[Dict[str, Any]]]]:
+    """Thứ tự thử (chủ dự án 09/10 — bìa vẽ lại phủ khung xám che đám đông): MỌI kiểu KHÔNG khung trước
+    (đổi màu chữ / viền dày hơn trên đúng bố cục: vòng 1 đòi thêm tách nền, vòng 2 chỉ tương phản hiệu
+    dụng), CHỈ khi không kiểu nào đạt mới tới kiểu có khung gọn sau dòng (và chỉ khi `cho_khung`)."""
+    kk = [k for k in cac if not k.get("khung")]
+    ck = [k for k in cac if k.get("khung")] if cho_khung else []
+    return [(1, kk), (2, kk), (1, ck), (2, ck)]
+
+
+def _khung_che(chu_the, hop, arr) -> bool:
+    """Khung nền sau dòng `hop` sẽ che chủ thể quá `CHE_CHU_THE_TOI_DA` (không có bản đồ → không che)."""
+    if chu_the is None:
+        return False
+    H, W = arr.shape[:2]
+    return che_chu_the(chu_the, hop, W, H) > CHE_CHU_THE_TOI_DA
+
+
+def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int, nhan_toi_da: int = 1,
+                   cho_khung: bool = True, chu_the=None) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """Chọn kiểu cho CẢ KHỐI chữ — ưu tiên MỘT kiểu chung cho mọi dòng (bìa nhìn liền một khối, không
-    dòng tối dòng sáng). Thứ tự kiểu theo nền dưới cả khối; kiểu chung đầu tiên mà MỌI dòng đạt được chọn
-    (vòng 1 đòi thêm tách nền, vòng 2 không). Không kiểu chung nào đạt → từng dòng tự chọn
+    dòng tối dòng sáng). Thứ tự kiểu theo nền dưới cả khối, vòng thử theo `_cac_vong` (không khung trước,
+    khung sau); kiểu chung đầu tiên mà MỌI dòng đạt được chọn. Không kiểu chung nào đạt → từng dòng tự chọn
     (`_kieu_theo_nen` của nền riêng dòng đó); dòng vẫn trượt giữ kiểu tương phản cao nhất.
-    Dòng có `khoi_nen` (khuôn có khối nền) luôn giữ khối đậm. Trả [(kieu, cham)] theo thứ tự `cac_dong`."""
+    `cho_khung=False`: không bao giờ thêm khung/dải nền. `chu_the` (`ban_do_chu_the` của nền sạch): kiểu có
+    khung bị bỏ cho dòng mà khung sẽ che chủ thể. Dòng có `khoi_nen` (khuôn có khối nền) luôn giữ khối đậm.
+    Trả [(kieu, cham)] theo thứ tự `cac_dong`."""
     ds = list(cac_dong)
     if not ds:
         return []
@@ -762,11 +985,13 @@ def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int,
         x1 = max(ds[i]["hop"][2] for i in thuong)
         y1 = max(ds[i]["hop"][3] for i in thuong)
         L0, _ = _nen_sau_khung(arr, canh, (x0, y0, x1, y1), None)
-        for vong in (1, 2):
-            for kieu in _kieu_theo_nen(_phan_vi(L0, 50, 0.5)):
+        for vong, cac in _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung):
+            for kieu in cac:
                 kq = []
                 for i in thuong:
                     dd = ds[i]
+                    if kieu.get("khung") and _khung_che(chu_the, dd["hop"], arr):
+                        break
                     k, d, ok = _ap_kieu(arr, canh, dd["hop"], dd["mau_doan"], kieu, vien_px=dd["vien_px"],
                                         cao_px=dd["cao_px"], H=H, vong=vong, nhan_toi_da=nhan_toi_da)
                     if not ok:
@@ -778,20 +1003,21 @@ def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int,
                         ra[i] = x
                     for i, dd in enumerate(ds):
                         if ra[i] is None:
-                            ra[i] = _mot(arr, canh, dd, H, nhan_toi_da)
+                            ra[i] = _mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the)
                     return ra
     # 2) Từng dòng tự chọn theo nền riêng.
-    return [_mot(arr, canh, dd, H, nhan_toi_da) for dd in ds]
+    return [_mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the) for dd in ds]
 
 
-def _mot(arr, canh, dd: Dict[str, Any], H: int, nhan_toi_da: int):
+def _mot(arr, canh, dd: Dict[str, Any], H: int, nhan_toi_da: int, cho_khung: bool = True, chu_the=None):
     if dd.get("khoi_nen"):
-        cac = [_KHOI_NEN]
+        vong_ds = [(1, [_KHOI_NEN]), (2, [_KHOI_NEN])]
     else:
         L0, _ = _nen_sau_khung(arr, canh, dd["hop"], None)
-        cac = _kieu_theo_nen(_phan_vi(L0, 50, 0.5))
+        che = _khung_che(chu_the, dd["hop"], arr)
+        vong_ds = _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung and not che)
     tot = None
-    for vong in (1, 2):
+    for vong, cac in vong_ds:
         for kieu in cac:
             k, d, ok = _ap_kieu(arr, canh, dd["hop"], dd["mau_doan"], kieu, vien_px=dd["vien_px"],
                                 cao_px=dd["cao_px"], H=H, vong=vong, nhan_toi_da=nhan_toi_da)
@@ -959,6 +1185,7 @@ def ve_lai_tu_anh_ghep(anh, chu_tang: Sequence[Dict[str, Any]], dich: str, *, go
             cach_thu += [((x0, n0, x1, min(1.0, n0 + 0.6)), True)]
     cach_thu += [(None, False), (None, True)]
     tot: Optional[Tuple[float, str, Dict[str, Any]]] = None
+    chu_the_nen: Any = None
     tam_dir = os.path.dirname(os.path.abspath(dich)) or "."
     for i, (kc, phu) in enumerate(cach_thu):
         if phu and not vung:
@@ -970,14 +1197,28 @@ def ve_lai_tu_anh_ghep(anh, chu_tang: Sequence[Dict[str, Any]], dich: str, *, go
         if phu:
             nen_thu, hop_phu = _phu_khoi(nen, vung, tim.get("hong"))
             phu_them = [hop_phu]
+        # Đã phủ khung khối thì KHÔNG thêm khung dòng (hai tấm chồng nhau — bản vẽ lại TL4 09/10).
         if not btk.ve_chu_len_anh("", tep, tang, goc=goc, ngon_ngu=ngon_ngu, khung_chu=kc, anh_nen=nen_thu,
-                                  bao_cao=bc):
+                                  bao_cao=bc, cho_khung=not phu):
             continue
         lo = vet_xoa_lo(tim.get("hong"), bc, phu_them)
-        if lo > VET_LO_TOI_DA and bc.get("dat"):
+        bo = bc.setdefault("bo_cuc", {"so_khung": 0, "chong_khung": False, "che_chu_the": 0.0})
+        bo["vet_lo"] = round(lo, 3)
+        if phu:
+            if chu_the_nen is None:
+                try:
+                    chu_the_nen = ban_do_chu_the(_np().asarray(nen))
+                except Exception:  # noqa: BLE001
+                    chu_the_nen = False
+            bo["so_khung"] = int(bo.get("so_khung") or 0) + 1
+            if chu_the_nen is not False:
+                bo["che_chu_the"] = round(max(float(bo.get("che_chu_the") or 0),
+                                              che_chu_the(chu_the_nen, hop_phu, W, H)), 3)
+        if not bo_cuc_dat(bc) and bc.get("dat"):
             bc["dat"] = False
             bc["doc_duoc"] = "thap"
-            bc.setdefault("ly_do", []).insert(0, "vết xoá chữ cũ lộ {0:.0%} khung".format(lo))
+            bc.setdefault("ly_do", []).insert(0, "bố cục hỏng (vết xoá chữ cũ lộ {0:.0%} khung, khung che chủ thể "
+                                                 "{1:.0%})".format(lo, float(bo.get("che_chu_the") or 0)))
         bc["vet_lo"] = round(lo, 3)
         diem = float(bc.get("diem") or 0) + (1000 if bc.get("dat") else 0)
         if ghi:
@@ -1032,6 +1273,7 @@ def tim_bia_goi(goc: str, kenh: str, ma: str) -> Dict[str, Any]:
     anh_hs = ho_so_video.duong_anh_ho_so(goc, kenh, ma)
     chu_bia = str(hs.get("chu_bia") or "")
     chu_tang: List[Dict[str, Any]] = []
+    nhom = ""
     try:
         from . import bia_theo_khuon as btk  # noqa: PLC0415
         kh = btk.doc_ke_hoach(thu_muc_thumb) or {}
@@ -1039,11 +1281,15 @@ def tim_bia_goi(goc: str, kenh: str, ma: str) -> Dict[str, Any]:
         for m in kh.get("muc") or []:
             if int(m.get("so") or 0) == so and m.get("chu_tang"):
                 chu_tang = list(m["chu_tang"])
+                nhom = str(m.get("nhom") or "")
     except Exception:  # noqa: BLE001
         chu_tang = []
     nguon = chon if chon else (anh_hs if os.path.isfile(anh_hs) else "")
+    m_so = re.search(r"(\d+)", os.path.basename(chon)) if chon else None
+    znen = os.path.join(thu_muc_thumb, "znen-thumb_{0:03d}.png".format(int(m_so.group(1)))) if m_so else ""
     return {"luot": luot, "thu_muc_luot": thu_muc_luot, "thu_muc_thumb": thu_muc_thumb, "chon": chon,
             "ho_so_anh": anh_hs, "chu_bia": chu_bia, "chu_tang": chu_tang, "nguon": nguon,
+            "znen": znen if znen and os.path.isfile(znen) else "", "nhom": nhom,
             "ngon_ngu": _ngon_ngu_kenh(goc, kenh)}
 
 
@@ -1056,11 +1302,17 @@ def _ngon_ngu_kenh(goc: str, kenh: str) -> str:
 
 
 def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = "", ep: bool = False,
-                ghi: Any = print) -> Dict[str, Any]:
+                xoa_chu: bool = False, ghi: Any = print) -> Dict[str, Any]:
     """Vẽ lại bìa của gói đã có bằng kiểu thích nghi (không gọi AI). `thu=True`: chỉ ghi vào `ra` (thư mục
     tạm); không thì thay `CHON-*.jpg` trong `7-thumbnail` (bản cũ chép vào `7-thumbnail/_truoc-do-bia/`) và
-    ghi bản chờ đổi `ho-so-video/anh/_doc-duoc/<mã>.jpg` cho `--xep-doi-bia`. Trả {truoc, sau, tep}."""
+    ghi bản chờ đổi `ho-so-video/anh/_doc-duoc/<mã>.jpg` cho `--xep-doi-bia`. Trả {truoc, sau, tep}.
+
+    Vẽ lại trên NỀN SẠCH `znen-thumb_NNN.png` (cùng bố cục, không khung trước). Không có nền sạch thì chỉ
+    xoá-chữ-cũ-rồi-vẽ khi `xoa_chu=True` (CLI `--xoa-chu`, người xem bản thử trước) — 09/10 bản xoá chữ
+    để lại vết chữ cũ, phủ hai tấm xám lên đám đông. Bản vẽ lại chỉ thay bìa khi ĐẠT, bố cục không hỏng
+    (`bo_cuc_dat`) và điểm không thấp hơn bản gốc."""
     from PIL import Image  # noqa: PLC0415
+    from . import bia_theo_khuon as btk  # noqa: PLC0415
     tt = tim_bia_goi(goc, kenh, ma)
     if not tt["nguon"]:
         raise RuntimeError("không thấy bìa của {0} (7-thumbnail/CHON-* hay ho-so-video/anh)".format(ma))
@@ -1069,6 +1321,9 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
         # Bìa đang ĐẠT: không đụng (xoá chữ cũ có thể xoá luôn nhân vật nằm sau chữ — TL3 nền tím).
         ghi("  bìa đang dùng đã ĐẠT — giữ nguyên (thêm --ep để vẫn vẽ lại).")
         return {"ma": ma, "truoc": truoc, "sau": truoc, "tep": tt["nguon"], "nguon": tt["nguon"], "giu": True}
+    if not tt["znen"] and not xoa_chu:
+        raise RuntimeError("không có nền sạch (znen-thumb_*.png) của {0} — không vẽ lại (xoá chữ cũ để lại vết, "
+                           "phải phủ khung). Thêm --xoa-chu --thu để thử và XEM bản thử trước.".format(ma))
     chu_tang = tt["chu_tang"] or _chia_tang(tt["chu_bia"])
     if not chu_tang:
         raise RuntimeError("không có chữ bìa cho {0} (hồ sơ thiếu chu_bia)".format(ma))
@@ -1080,8 +1335,17 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
     os.makedirs(thu_muc, exist_ok=True)
     png = os.path.join(thu_muc, "{0}.png".format(ma))
     bc: Dict[str, Any] = {}
-    if not ve_lai_tu_anh_ghep(tt["nguon"], chu_tang, png, goc=goc, ngon_ngu=tt["ngon_ngu"], bao_cao=bc,
-                              ghi=ghi):
+    if tt["znen"]:
+        loai = "khuon" if tt["nhom"] in ("khuon", "") else "chuan_ngach"
+        for cho_khung in (False, True):
+            if not btk.ve_chu_len_anh(tt["znen"], png, btk.bo_tri_chu(loai, chu_tang), goc=goc,
+                                      ngon_ngu=tt["ngon_ngu"], bao_cao=bc, cho_khung=cho_khung):
+                raise RuntimeError("không vẽ lại được (thiếu font?)")
+            ghi("    nền sạch{0}: {1}".format(" + khung gọn" if cho_khung else "", tom_tat(bc)))
+            if bc.get("dat") and bo_cuc_dat(bc):
+                break
+    elif not ve_lai_tu_anh_ghep(tt["nguon"], chu_tang, png, goc=goc, ngon_ngu=tt["ngon_ngu"], bao_cao=bc,
+                                ghi=ghi):
         raise RuntimeError("không vẽ lại được (thiếu font?)")
     jpg = os.path.join(thu_muc, "{0}.jpg".format(ma))
     Image.open(png).convert("RGB").save(jpg, format="JPEG", quality=92)
@@ -1089,8 +1353,9 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
     ra_tt = {"ma": ma, "truoc": truoc, "sau": bc, "tep": jpg, "nguon": tt["nguon"], "chu_tang": chu_tang}
     if thu:
         return ra_tt
-    if not bc.get("dat"):
-        ghi("  (!) bản vẽ lại vẫn TRƯỢT — KHÔNG thay bìa gói: " + tom_tat(bc))
+    if not bc.get("dat") or not bo_cuc_dat(bc) or float(bc.get("diem") or 0) < float(truoc.get("diem") or 0):
+        ghi("  (!) bản vẽ lại không tốt hơn bản gốc (trượt / bố cục hỏng / điểm thấp hơn) — KHÔNG thay bìa gói: "
+            + tom_tat(bc))
         return ra_tt
     if tt["chon"]:
         sao = os.path.join(tt["thu_muc_thumb"], "_truoc-do-bia")
@@ -1163,7 +1428,8 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
 
 
 def hieu_chinh(goc: str, n: int = 40) -> List[Dict[str, Any]]:
-    """Chấm MÙ `n` bìa mới nhất (`CHANNEL/*/ho-so-video/anh/<mã gói>.jpg`) — bảng hiệu chỉnh ngưỡng."""
+    """Chấm MÙ `n` bìa mới nhất (`CHANNEL/*/ho-so-video/anh/<mã gói>.jpg`; bìa đã đổi thì lấy bản CŨ trong
+    `anh/_truoc-do-bia/` — bản đã chạy khi đo CTR) kèm CTR/hiển thị mới nhất của hồ sơ — bảng hiệu chỉnh."""
     import glob  # noqa: PLC0415
     ds = []
     for d in glob.glob(os.path.join(goc, "CHANNEL", "*", "ho-so-video", "anh", "*.jpg")):
@@ -1173,12 +1439,33 @@ def hieu_chinh(goc: str, n: int = 40) -> List[Dict[str, Any]]:
         ds.append((os.path.getmtime(d), ten, d))
     ra = []
     for _m, ten, d in sorted(ds, reverse=True)[:n]:
-        bc = cham_tep(d)
+        cu = os.path.join(os.path.dirname(d), "_truoc-do-bia", os.path.basename(d))
+        bc = cham_tep(cu if os.path.isfile(cu) else d)
+        so: Dict[str, Any] = {}
+        try:
+            with open(os.path.join(os.path.dirname(os.path.dirname(d)), ten + ".json"), encoding="utf-8") as tep:
+                so = (json.load(tep) or {}).get("so_lieu_moi_nhat") or {}
+        except (OSError, ValueError, AttributeError):
+            so = {}
         ra.append({"ma": ten, "dat": bc.get("dat"), "diem": bc.get("diem"), "tp_min": bc.get("tuong_phan_min"),
                    "nen_min": bc.get("tuong_phan_nen_min"), "cao_min": bc.get("cao_min_pct"),
                    "cao_max": max([x["cao_pct"] for x in bc.get("dong") or []] or [0]),
-                   "so_dong": len(bc.get("dong") or []), "ly_do": (bc.get("ly_do") or [""])[0][:90]})
+                   "so_dong": len(bc.get("dong") or []), "ly_do": (bc.get("ly_do") or [""])[0][:90],
+                   "ctr": so.get("ctr"), "hien_thi": so.get("impressions") or 0})
     return ra
+
+
+def tom_tat_hieu_chinh(ra: Sequence[Dict[str, Any]], hien_thi_toi_thieu: int = 50) -> str:
+    """Trung vị CTR nhóm ĐẠT / TRƯỢT (chỉ bìa có ≥ `hien_thi_toi_thieu` lượt hiển thị)."""
+    import statistics  # noqa: PLC0415
+    co = [r for r in ra if r.get("ctr") is not None and (r.get("hien_thi") or 0) >= hien_thi_toi_thieu]
+
+    def md(x):
+        return "{0:.2f}%".format(statistics.median(x)) if x else "—"
+    d = [float(r["ctr"]) for r in co if r["dat"] is True]
+    t = [float(r["ctr"]) for r in co if r["dat"] is False]
+    return "ĐẠT {0} bìa, trung vị CTR {1} | TRƯỢT {2} bìa, trung vị CTR {3} | (≥ {4} hiển thị: {5}/{6} bìa)".format(
+        len(d), md(d), len(t), md(t), hien_thi_toi_thieu, len(co), len(ra))
 
 
 def _in_bc(bc: Dict[str, Any], ghi=print) -> None:
@@ -1199,6 +1486,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--thu", action="store_true", help="với --lam-lai: chỉ ghi vào thư mục tạm (--ra)")
     ap.add_argument("--ra", default="", help="thư mục ra cho --thu")
     ap.add_argument("--ep", action="store_true", help="với --lam-lai: vẽ lại cả khi bìa đang ĐẠT")
+    ap.add_argument("--xoa-chu", action="store_true",
+                    help="với --lam-lai: gói không có nền sạch → xoá chữ cũ rồi vẽ (nên kèm --thu, xem bản thử)")
     ap.add_argument("--anh", default="", help="chấm một tệp ảnh bất kỳ / ảnh cho --xep-doi-bia")
     ap.add_argument("--xep-doi-bia", nargs=2, metavar=("KENH", "MA"), help="xếp việc đổi bìa cho máy DOM")
     ap.add_argument("--hieu-chinh", action="store_true", help="bảng điểm n bìa mới nhất (chỉ đọc)")
@@ -1215,7 +1504,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         _in_bc(bc)
         return 0 if bc.get("dat") else 1
     if a.lam_lai:
-        r = lam_lai_goi(a.goc, a.lam_lai[0], a.lam_lai[1], thu=a.thu, ra=a.ra, ep=a.ep)
+        r = lam_lai_goi(a.goc, a.lam_lai[0], a.lam_lai[1], thu=a.thu, ra=a.ra, ep=a.ep, xoa_chu=a.xoa_chu)
         print("{0}: TRƯỚC".format(r["ma"]))
         _in_bc(r["truoc"])
         print("{0}: SAU → {1}".format(r["ma"], r["tep"]))
@@ -1228,11 +1517,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("đã xếp việc", r["viec"], "video", r["video_id"], "— máy DOM làm ở lượt --sua-video kế tiếp")
         return 0
     if a.hieu_chinh:
-        for r in hieu_chinh(a.goc, a.n):
+        ra = hieu_chinh(a.goc, a.n)
+        for r in ra:
             print("{ma:<18} {d:<6} điểm {diem:>5}  tp_min {tp:>5}  chữ↔nền {nen:>5}  cao {cmin:>4}–{cmax:>4}%  "
-                  "{n} dòng  {ly}".format(ma=r["ma"], d={True: "ĐẠT", False: "TRƯỢT", None: "?"}[r["dat"]],
-                                          diem=r["diem"], tp=r["tp_min"], nen=r["nen_min"], cmin=r["cao_min"],
-                                          cmax=round(r["cao_max"], 1), n=r["so_dong"], ly=r["ly_do"]))
+                  "{n} dòng  CTR {ctr:>5} ({ht} ht)  {ly}".format(
+                      ma=r["ma"], d={True: "ĐẠT", False: "TRƯỢT", None: "?"}[r["dat"]], diem=str(r["diem"]),
+                      tp=str(r["tp_min"]), nen=str(r["nen_min"]), cmin=str(r["cao_min"]), cmax=round(r["cao_max"], 1),
+                      n=r["so_dong"], ctr=str(r["ctr"]), ht=r["hien_thi"], ly=r["ly_do"]))
+        print(tom_tat_hieu_chinh(ra))
         return 0
     if a.anh:
         _in_bc(cham_tep(a.anh))
