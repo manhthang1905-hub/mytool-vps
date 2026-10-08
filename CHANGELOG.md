@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.3** — 2026-10-09 — `vps-jp1` — fix(agent): cho tram /loi-thoai/can-lay 120s (kenh moi mat 24s, 4 kenh moi timed out moi ngay, khong hut duoc loi thoai doi thu)
 - **2.180.2** — 2026-10-09 — `vps-jp1` — fix(mhkt): Studio bao 'chi trong 20 giay cuoi' -> doi gio bat dau vao trong cua so roi Luu (TL2 that bai lap)
 - **2.180.1** — 2026-10-09 — `vps-jp1` — fix(do-bia): hieu chinh vien day + nguong theo co chu; ve lai tren nen sach khong khung, khong che nhan vat; cong khong bao gio lam bia te hon goc
 - **2.180.0** — 2026-10-09 — `vps-jp1` — feat(muc-luc): 6-10 chuong ten theo noi dung (AI + du phong sach), luat mo dau khong chao/xin dang ky 60s dau, tieu de 28-38 ky tu mac dinh
