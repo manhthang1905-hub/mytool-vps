@@ -293,6 +293,18 @@ class Kenh:
     #: triết lý "cờ tắt theo kênh trong kenh.yaml, mặc định bật" của cả bản thiết
     #: kế (đầu tệp `THIET-KE-DUNG-VA-VONG-HOC.md`).
     so_tieu_de: int = 4
+    #: ═══ KIỂM TOÁN CHẤT LƯỢNG 09/10/2026 (`workspace/chan-doan/chat-luong-2026-10-09.md`) ═══
+    #:
+    #: Độ dài tiêu đề NÊN nhắm, dạng `"28-38"` (ký tự). Rỗng = mặc định theo tiếng (ja/zh/ko 28–38: video
+    #: thắng TL4 trung vị 32, kênh mới 42–43; tiếng khác không có mặc định). `0`/`tat` = không nhắc. Chỉ là
+    #: luật MỀM trong lời nhắc tiêu đề — bảng CTR thật của kênh (bước chấm) vẫn quyết.
+    tieu_de_ky_tu: str = ""
+    #: Luật mở đầu kịch bản (mọi kênh): không chào/tự giới thiệu/xin đăng ký trong `giay_mo_dau_toi_da` giây
+    #: đầu, mở đầu trước ý 1 ≤ chừng ấy giây, móc trước, lời mời chỉ ở cuối. `false` = tắt cho kênh này.
+    luat_mo_dau: bool = True
+    giay_mo_dau_toi_da: int = 60
+    #: Trần số chương mục lục (gộp phần kề nhau khi nhiều hơn). Video thắng TL4: 6–11 chương.
+    chuong_toi_da: int = 10
     #: Mã giọng đọc trên cổng ShopAPI.
     voice_id: str = ""
     #: Engine dựng clip — quyết định trần độ dài mỗi cảnh (veo3 8s, seedance 10s).
@@ -931,6 +943,10 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         # Việc 5 — trần 8: gõ nhầm một số lớn không được làm phình một lượt gọi
         # (mỗi bản một dòng trong cùng lời nhắc) thành một khối chữ khổng lồ.
         so_tieu_de=max(0, min(8, int(_so(cai.get("so_tieu_de"), 4)))),
+        tieu_de_ky_tu=str(cai.get("tieu_de_ky_tu") if cai.get("tieu_de_ky_tu") is not None else "").strip(),
+        luat_mo_dau=_co_mac_dinh(cai.get("luat_mo_dau"), True),
+        giay_mo_dau_toi_da=max(20, min(180, int(_so(cai.get("giay_mo_dau_toi_da"), 60)))),
+        chuong_toi_da=max(3, min(20, int(_so(cai.get("chuong_toi_da"), 10)))),
         voice_id=str(cai.get("voice_id") or ""),
         engine=str(cai.get("engine") or "veo3"),
         mo_hinh=str(cai.get("mo_hinh") or "claude-sonnet-5"),

@@ -612,7 +612,7 @@ class BoiCanh:
 
 
 def _goi(bc: "BoiCanh", loi_nhac: str, khoa: str,
-         toi_da_token: int = 8192, anh: str | List[str] = "") -> str:
+         toi_da_token: int = 8192, anh: str | List[str] = "", mo_hinh: str = "") -> str:
     """Gọi AI, kèm Idempotency-Key **cố định theo bước**.
 
     ═══ VÌ SAO CẦN KHOÁ CỐ ĐỊNH, VÀ VÌ SAO KHÔNG ĐƯỢC GỬI LẠI ═══
@@ -699,7 +699,9 @@ def _goi(bc: "BoiCanh", loi_nhac: str, khoa: str,
             # `List[str]` (nhiều ảnh, Việc 4) — `bc.goi_chat` (Việc 4 mở rộng
             # `_dung_goi_chat_mac_dinh`/`_dung_goi_chat`) tự phân biệt hai kiểu.
             them = {"anh": anh} if anh else {}
-            ket = bc.goi_chat(loi_nhac, mo_hinh=bc.kenh.mo_hinh,
+            # `mo_hinh` riêng (09/10/2026): việc chữ NGẮN (tên chương) đi bậc giữa, không theo mô hình
+            # viết kịch bản của kênh. Rỗng → `bc.kenh.mo_hinh` như cũ.
+            ket = bc.goi_chat(loi_nhac, mo_hinh=mo_hinh or bc.kenh.mo_hinh,
                               khoa=khoa_lan, toi_da_token=toi_da_token, **them)
             # ═══ BÓC LỚP VỎ "GỌI CÔNG CỤ" GIẢ ═══
             #
@@ -2443,6 +2445,72 @@ def _bo_tep(duong: str) -> None:
         pass
 
 
+# ── Luật MỞ ĐẦU kịch bản (kiểm toán chất lượng 09/10/2026) ──────────────────
+#
+# `workspace/chan-doan/chat-luong-2026-10-09.md`: câu chào / tự giới thiệu / xin đăng ký trong ~60 s đầu ở
+# TL3 6/19 gói, TL1 3/19, TL5 xin đăng ký+like ngay đầu; mở đầu trước ý 1 > 90 s ở TL2 8/18 (tới 321 s) —
+# video thắng TL4 mở đầu trung vị ~59 s. Bản gốc đối thủ hay có những câu ấy, và lời nhắc "viết tương tự cấu
+# trúc" chép theo. Luật này CHUNG mọi kênh/chủ đề/tiếng (tool phát hành cho VPS khác), nối vào các lời nhắc
+# viết (2-viet, 2c-hoan-thien, 2d-hook); kênh đặt `<<LUAT_MO_DAU>>` trong lời nhắc thì luật nằm đúng chỗ ấy,
+# không thì nối cuối. Tắt theo kênh: `luat_mo_dau: false`; đổi số giây: `giay_mo_dau_toi_da`.
+
+LUAT_MO_DAU = (
+    "═══ LUẬT MỞ ĐẦU (áp cho mọi bản viết — ghi đè cách mở của bản gốc nếu bản gốc làm khác) ═══\n"
+    "1. {giay} giây đầu (~{kt} ký tự đọc) KHÔNG chào hỏi, KHÔNG tự giới thiệu kênh/người nói (kiểu \"chào mừng "
+    "đến với kênh…\"), KHÔNG xin đăng ký / like / bật chuông / xem đến cuối, KHÔNG câu rào kiểu \"trước khi vào "
+    "chủ đề…\" — kể cả khi bản gốc có những câu ấy.\n"
+    "2. Câu ĐẦU TIÊN là MÓC: vào thẳng tình huống, câu hỏi hoặc sự thật gây tò mò của chủ đề.\n"
+    "3. Phần mở đầu trước ý chính thứ nhất dài tối đa ~{giay} giây (~{kt} ký tự); hết chừng ấy là vào ý 1.\n"
+    "4. Lời mời đăng ký / like / bình luận (nếu có) chỉ đặt ở đoạn KẾT, một lần, ngắn.\n")
+
+
+def luat_mo_dau(k: Any) -> str:
+    """Khối luật mở đầu cho kênh `k` ("" khi kênh tắt `luat_mo_dau`)."""
+    bat = getattr(k, "luat_mo_dau", True)
+    if bat is False or str(bat).strip().lower() in ("false", "no", "0", "tat"):
+        return ""
+    try:
+        giay = max(20, min(180, int(getattr(k, "giay_mo_dau_toi_da", 60) or 60)))
+    except (TypeError, ValueError):
+        giay = 60
+    try:
+        nhip = float(getattr(k, "ky_tu_moi_phut", 0) or 0) or 300.0
+    except (TypeError, ValueError):
+        nhip = 300.0
+    return LUAT_MO_DAU.format(giay=giay, kt=int(round(nhip * giay / 60.0 / 10.0)) * 10)
+
+
+#: Ô DỮ LIỆU dài (bản gốc, bản nháp, thân bài) — luật phải nằm TRƯỚC khối dữ liệu đầu tiên, không sau bản
+#: nháp: bước hoàn thiện "trả về nguyên văn" cần bản nháp là thứ cuối cùng của lời nhắc.
+_O_DU_LIEU = ("<<COMPETITOR_TRANSCRIPT>>", "<<DRAFT>>", "<<THAN_BAI>>", "<<TRANSCRIPT_SAMPLE>>")
+
+
+def them_luat_mo_dau(khuon: str, k: Any) -> str:
+    """Đưa `luat_mo_dau(k)` vào lời nhắc: thay ô `<<LUAT_MO_DAU>>` nếu có; không thì chèn ngay trước khối dữ
+    liệu đầu tiên (kể cả dòng nhãn "…:" đứng trên nó); không có khối dữ liệu thì nối cuối. Lời nhắc rỗng giữ
+    rỗng (bước bị tắt)."""
+    if not (khuon or "").strip():
+        return khuon
+    luat = luat_mo_dau(k)
+    if "<<LUAT_MO_DAU>>" in khuon:
+        return khuon.replace("<<LUAT_MO_DAU>>", luat)
+    if not luat:
+        return khuon
+    vt = [khuon.find(o) for o in _O_DU_LIEU if o in khuon]
+    if not vt:
+        return khuon.rstrip() + "\n\n" + luat
+    p = khuon.rfind("\n", 0, min(vt)) + 1          # đầu dòng chứa ô dữ liệu
+    if khuon[p:min(vt)].strip():                    # ô nằm giữa dòng → chèn ngay trước ô
+        return khuon[:min(vt)] + "\n" + luat + "\n" + khuon[min(vt):]
+    dong = khuon[:p].split("\n")[:-1]               # các dòng phía trên
+    j = len(dong)
+    while j > 0 and not dong[j - 1].strip():
+        j -= 1
+    if j > 0 and dong[j - 1].rstrip().endswith((":", "：")):
+        p = len("\n".join(dong[:j - 1])) + (1 if j > 1 else 0)
+    return khuon[:p] + luat + "\n" + khuon[p:]
+
+
 def _khau_kich_ban(bc_goc: BoiCanh):
     def lam(luot: LuotChay, tt: TrangThaiKhau):
         # Khâu này — và CHỈ khâu này — được đổi đường viết chữ sang thuê bao
@@ -2744,8 +2812,12 @@ def _khau_kich_ban(bc_goc: BoiCanh):
         else:
             bc.kiem_dung()
             bc.ghi("  đang đặt tiêu đề…")
+            # Luật MỀM độ dài tiêu đề (kiểm toán 09/10/2026: kênh faithful TL5/TL6 trung vị 42–43 ký tự vs
+            # video thắng 32) — nối cuối lời nhắc, `kenh.yaml: tieu_de_ky_tu` đổi/tắt. Xem `khoang_tieu_de`.
+            luat_dai = luat_do_dai_tieu_de(k)
             tra = _goi(bc, _thay(khuon_tieu_de, dict(
-                chung, COMPETITOR_TITLE=tieu_de_doi_thu)),
+                chung, COMPETITOR_TITLE=tieu_de_doi_thu)) + (
+                    "\n\n" + luat_dai if luat_dai else ""),
                 _khoa_chat(luot, "tieu-de"))
             t, b = _doc_tieu_de(tra)
             tieu_de = tieu_de or t
@@ -2828,6 +2900,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 khuon = k.prompt.get(ten, "")
                 if not khuon.strip():
                     continue
+                khuon = them_luat_mo_dau(khuon, k)
                 nhap = os.path.join(d, "1-nhap-{0}.txt".format(ten[0]))
                 da_co = _doc_chu(nhap).strip()
                 if da_co:
@@ -3593,7 +3666,7 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
             # "làm nhiều chọn một" của cả template. Kênh không bật đi y đường cũ.
             so_ht = max(1, int(getattr(k, "so_ban_va", 1) or 1)) if so_vong > 0 else 1
             tran_ht = 1.5 if so_vong > 0 else 1.25
-            khuon_ht = dien_o_giu_lai(k.prompt.get("2c-hoan-thien.md", ""),
+            khuon_ht = dien_o_giu_lai(them_luat_mo_dau(k.prompt.get("2c-hoan-thien.md", ""), k),
                                       dict(chung, SO_BAN=len(ban)))
             ung_vien: List[str] = []
             ghi_ht = ""
@@ -3647,7 +3720,7 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
     # hook dẫn được vào thân, không cần bước làm mượt nào nữa.
     ghi_hook = ""
     so_hook = max(0, int(getattr(k, "so_ban_hook", 0) or 0))
-    khuon_hook = k.prompt.get("2d-hook.md", "")
+    khuon_hook = them_luat_mo_dau(k.prompt.get("2d-hook.md", ""), k)
     if so_hook > 1 and khuon_hook.strip():
         from .viet_nhieu_ban import tach_hook, thay_hook  # noqa: PLC0415
 
@@ -4231,7 +4304,43 @@ def _chuan_hoa_nhan_tieu_de(tieu_de: str, nhan: str) -> str:
 # `viet_nhieu_ban.cham_va_chon`, với khuôn chấm biết bảng CTR THẬT của kênh.
 
 
-def _de_bai_n_ban_tieu_de(tieu_de_nguon: str, so_ban: int, nhan: str = "") -> str:
+#: Độ dài tiêu đề NÊN nhắm khi kênh chưa khai `tieu_de_ky_tu` — chỉ cho tiếng đếm ký tự (ja/zh/ko).
+#: Kiểm toán 09/10/2026: video thắng TL4 trung vị 32 ký tự (20–52), kênh mới TL5/TL6 42–43 (tới 55–60).
+TIEU_DE_KY_TU_MAC_DINH = (28, 38)
+
+
+def khoang_tieu_de(k: Any) -> Optional[Tuple[int, int]]:
+    """`(sàn, trần)` ký tự tiêu đề nên nhắm cho kênh `k`, hoặc None (không nhắc).
+
+    `kenh.yaml: tieu_de_ky_tu: "30-40"` ghi đè; `0`/`tat` tắt; rỗng → mặc định theo tiếng (CJK 28–38, tiếng
+    khác không có mặc định — không bịa số cho ngách chưa đo). Trục học `tu_hoc` hiện KHÔNG có trục độ dài
+    tiêu đề, nên luật mềm này không giẫm lên lựa chọn nào của vòng học; bảng CTR thật ở bước chấm vẫn quyết.
+    """
+    tho = str(getattr(k, "tieu_de_ky_tu", "") or "").strip().lower()
+    if tho in ("0", "tat", "tắt", "false", "no", "off"):
+        return None
+    m = re.match(r"^(\d{1,3})\s*[-–~,]\s*(\d{1,3})$", tho)
+    if m:
+        a, b = sorted((int(m.group(1)), int(m.group(2))))
+        return (a, b) if 5 <= a < b <= 100 else None
+    if tho:
+        return None
+    nn = str(getattr(k, "ngon_ngu", "") or "ja").strip().lower()[:2]
+    return TIEU_DE_KY_TU_MAC_DINH if nn in ("ja", "zh", "ko") else None
+
+
+def luat_do_dai_tieu_de(k: Any) -> str:
+    """Một câu luật MỀM về độ dài tiêu đề cho lời nhắc viết tiêu đề ("" khi không nhắc)."""
+    kh = khoang_tieu_de(k)
+    if not kh:
+        return ""
+    return ("Độ dài TITLE nên khoảng {0}–{1} ký tự (gọn như các video đang thắng; trang chủ chỉ hiện ~30 ký "
+            "tự đầu, nên móc phải nằm ở đầu). Đây là luật MỀM: nếu tiêu đề mẫu hoặc số CTR của kênh cho thấy "
+            "độ dài khác đang thắng thì theo số thật; không bao giờ cắt mất lời hứa chính để cho đủ số."
+            ).format(kh[0], kh[1])
+
+
+def _de_bai_n_ban_tieu_de(tieu_de_nguon: str, so_ban: int, nhan: str = "", luat_dai: str = "") -> str:
     """Lời nhắc NGẮN xin `so_ban` cách đặt tên KHÁC NHAU cho cùng một video,
     giữ nguyên luận điểm — một lượt gọi rẻ, khác hẳn `de_bai_nan_khuon` (đó là
     NẮN theo khuôn kênh, kèm cả bảng mẫu dài); ở đây chỉ cần thêm ỨNG VIÊN cho
@@ -4242,11 +4351,12 @@ def _de_bai_n_ban_tieu_de(tieu_de_nguon: str, so_ban: int, nhan: str = "") -> st
         "tượng, chỉ đổi CÁCH DIỄN ĐẠT (thứ tự vế câu, từ đồng nghĩa, cách vào đề). Không đổi "
         "chủ đề, không thêm ý mới, không bịa số liệu, không bịa số liệu chưa có trong tiêu đề "
         "gốc.\n"
-        "{2}"
+        "{2}{3}"
         "Mỗi dòng một bản, đúng định dạng, không đánh số, không giải thích thêm:\n"
         "TITLE: <tiêu đề>"
     ).format(tieu_de_nguon, max(1, int(so_ban)),
-             ("Nhãn thể loại ở đầu mỗi câu phải là 【{0}】.\n".format(nhan) if nhan else ""))
+             ("Nhãn thể loại ở đầu mỗi câu phải là 【{0}】.\n".format(nhan) if nhan else ""),
+             (luat_dai.strip() + "\n") if luat_dai and luat_dai.strip() else "")
 
 
 _RE_TITLE_DONG = re.compile(r"(?im)^[ \t]*TITLE[ \t]*:[ \t]*(.+?)[ \t]*$")
@@ -4411,7 +4521,8 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         try:
             bc.kiem_dung()
             bc.ghi("  đang viết {0} cách đặt tiêu đề khác…".format(k.so_tieu_de))
-            tra = _goi(bc, _de_bai_n_ban_tieu_de(sach, k.so_tieu_de, k.nhan_tieu_de) + khoi_bai_td,
+            tra = _goi(bc, _de_bai_n_ban_tieu_de(sach, k.so_tieu_de, k.nhan_tieu_de,
+                                             luat_do_dai_tieu_de(k)) + khoi_bai_td,
                       _khoa_chat(luot, "tieu-de:n-ban"))
             moi_ds = _doc_nhieu_tieu_de(tra, k.so_tieu_de)
             for moi in moi_ds:
@@ -4895,18 +5006,28 @@ def _bao_dam_ffmpeg(bc: BoiCanh) -> str:
 # về sau nó làm đúng loại mô tả có [timestamps]".
 
 
-def _muc_luc_tu_srt(srt: str) -> "list[str]":
+def _muc_luc_tu_srt(srt: str, *, goi_ai: Optional[Callable[[str, str], str]] = None,
+                    thu_muc: str = "", ngon_ngu: str = "ja", cam_them: Sequence[str] = (),
+                    toi_da: int = 0, ghi: Optional[Callable[[str], None]] = None) -> "list[str]":
     """Rút các dòng chương `MM:SS nhãn` từ dấu `---` trong phụ đề.
 
     Chương đầu luôn là `00:00` lấy câu mở màn làm nhãn. Trả `[]` khi không đủ
     3 chương — YouTube chỉ nhận mục lục từ 3 mốc trở lên, mốc đầu tại 00:00.
+
+    09/10/2026: phần → chương (gộp ≤ `toi_da`, nhãn ý nội dung, dự phòng tất
+    định, cất `3-muc-luc.json`) qua `core.muc_luc_chuong.chot_chuong` — CHUNG
+    với `phan_video.muc_luc`.
     """
+    from .muc_luc_chuong import TOI_DA_CHUONG, chot_chuong  # noqa: PLC0415
+
     cau = []  # (giây bắt đầu, chữ)
+    tong = 0.0
     for khoi in srt.replace("\r\n", "\n").split("\n\n"):
         dong = [x for x in khoi.strip().split("\n") if x.strip()]
         if len(dong) < 3 or "-->" not in dong[1]:
             continue
         giay = _giay_srt(dong[1].split("-->")[0].strip())
+        tong = max(tong, _giay_srt(dong[1].split("-->")[1].strip()))
         cau.append((giay, " ".join(dong[2:]).strip()))
     if not cau:
         return []
@@ -4914,7 +5035,7 @@ def _muc_luc_tu_srt(srt: str) -> "list[str]":
     # Luật nhãn nằm CHUNG ở `core/phan_video.py` (Việc 2, 28/09/2026): khâu
     # dựng theo phần đặt lại mục lục theo mốc video mới và phải ra ĐÚNG nhãn
     # như ở đây — hai bản chép tay sớm muộn sẽ lệch nhau.
-    from .phan_video import _nhan_chu as nhan, ghep_nhan  # noqa: PLC0415
+    from .phan_video import _nhan_chu as nhan, bo_tien_to_ngat, ghep_nhan  # noqa: PLC0415
 
     def ghep(i: int) -> str:
         """Nhãn chương = cả CÂU mở chương, ghép các dòng phụ đề từ `i` tới khi
@@ -4926,7 +5047,7 @@ def _muc_luc_tu_srt(srt: str) -> "list[str]":
         """
         return ghep_nhan(cau, i)
 
-    muc = [(0.0, ghep(0))]
+    muc = [(0.0, ghep(0), 0)]  # (giây, nhãn thô, chỉ số dòng mở phần)
     for i, (giay, chu) in enumerate(cau):
         if chu.startswith("---") and giay >= 10:
             chu = ghep(i)
@@ -4937,17 +5058,18 @@ def _muc_luc_tu_srt(srt: str) -> "list[str]":
             # Vẫn trùng nhãn chương trước (cùng câu mở) thì nối thêm câu kế.
             if muc and chu == muc[-1][1] and i + 1 < len(cau):
                 chu = nhan(chu + "、" + ghep(i + 1))
-            muc.append((giay, chu))
+            muc.append((giay, chu, i))
     if len(muc) < 3:
         return []
-    ra = []
-    for giay, chu in muc:
-        phut, s = divmod(int(giay), 60)
-        gio, phut = divmod(phut, 60)
-        moc = ("{0}:{1:02d}:{2:02d}".format(gio, phut, s) if gio
-               else "{0:02d}:{1:02d}".format(phut, s))
-        ra.append("{0} {1}".format(moc, chu))
-    return ra
+    phan = []
+    for k, (giay, chu, i) in enumerate(muc):
+        het = muc[k + 1][2] if k + 1 < len(muc) else len(cau)
+        phan.append((giay, chu, " ".join(bo_tien_to_ngat(c) for _g, c in cau[i:max(het, i + 1)])))
+    # Đuôi SRT chỉ là CẬN DƯỚI của độ dài video (video còn đuôi lặng/kết) — không dùng nó để bỏ chương cuối
+    # như đường `2-phan.json` (nết cũ của đường này); chỉ dùng để đo độ dài phần khi phải gộp.
+    tong = max(tong, muc[-1][0] + 10.0)
+    return chot_chuong(phan, tong, goi_ai=goi_ai, thu_muc=thu_muc, ngon_ngu=ngon_ngu,
+                       cam_them=cam_them, toi_da=toi_da or TOI_DA_CHUONG, ghi=ghi)
 
 
 def _chen_muc_luc_seo(bc: BoiCanh, d: str, duong_srt: str) -> None:
@@ -4971,7 +5093,7 @@ def _chen_muc_luc_seo(bc: BoiCanh, d: str, duong_srt: str) -> None:
 
         if not seo or co_muc_luc(seo):
             return
-        muc = _muc_luc_tu_srt(_doc_chu(duong_srt))
+        muc = _muc_luc_tu_srt(_doc_chu(duong_srt), **_tuy_chon_muc_luc(bc, d))
         if not muc:
             return
         dau = dau_muc_luc(bc.kenh.ngon_ngu)
@@ -5020,12 +5142,41 @@ def _muc_luc_tu_phan(bc: BoiCanh, d: str, duong_srt: str, duong_seo: str) -> boo
         return False
     if kh.tong_giong <= 0:
         return False
-    muc = phan_video.muc_luc(kh, _doc_chu(duong_srt), lam_sach=True)
+    muc = phan_video.muc_luc(kh, _doc_chu(duong_srt), lam_sach=True, **_tuy_chon_muc_luc(bc, d))
     ket = phan_video.dat_muc_luc_seo(duong_seo, muc, getattr(bc.kenh, "ngon_ngu", ""))
     if ket in ("thay", "chen"):
         bc.ghi("  đã đặt 目次 {0} chương (mốc giữa khoảng nghỉ, từ 2-phan.json) "
                "vào 1-seo.txt.".format(len(muc)))
     return True
+
+
+def _tuy_chon_muc_luc(bc: Any, d: str) -> Dict[str, Any]:
+    """Tham số CHUNG cho mọi đường đặt mục lục (`_muc_luc_tu_srt`, `phan_video.muc_luc` ở khâu phụ đề và
+    lúc đặt lại sau khi dựng) — để ba đường ra đúng một bộ chương (`core.muc_luc_chuong.chot_chuong`).
+
+    `goi_ai`: một lượt gọi bậc giữa qua `_goi` (đã thử lại + đổi khoá khi máy chủ hỏng), khoá idempotency
+    băm theo lời nhắc → cùng đầu vào không trả tiền hai lần. `bc` không có `goi_chat` (đồ giả) → None →
+    nhãn dự phòng tất định. Tên kênh vào danh sách cấm của nhãn (chương quảng bá kênh).
+    """
+    from .muc_luc_chuong import MO_HINH_NHAN, TOI_DA_CHUONG  # noqa: PLC0415
+
+    k = getattr(bc, "kenh", None)
+    goi_ai = None
+    if callable(getattr(bc, "goi_chat", None)):
+        ma = str(getattr(k, "ma", "") or "?")
+        luot = "{0}-{1}".format(os.path.basename(os.path.dirname(d)), os.path.basename(d))
+
+        def goi_ai(loi_nhac: str, khoa_phu: str) -> str:
+            return _goi(bc, loi_nhac, _khoa_ascii("{0}:{1}:chat:muc-luc:{2}".format(ma, luot, khoa_phu)),
+                        toi_da_token=1500, mo_hinh=MO_HINH_NHAN)
+    try:
+        toi_da = int(getattr(k, "chuong_toi_da", 0) or 0) or TOI_DA_CHUONG
+    except (TypeError, ValueError):
+        toi_da = TOI_DA_CHUONG
+    ten = str(getattr(k, "ten", "") or "").strip()
+    return {"goi_ai": goi_ai, "thu_muc": d, "ngon_ngu": str(getattr(k, "ngon_ngu", "") or "ja"),
+            "cam_them": (ten,) if len(ten) >= 2 else (), "toi_da": toi_da,
+            "ghi": getattr(bc, "ghi", None)}
 
 
 def _giay_nghi_video(kenh: Any) -> float:
@@ -9559,7 +9710,7 @@ def _hoan_tat_theo_phan(bc: BoiCanh, d: str, theo_phan: Optional[Dict[str, Any]]
             if os.path.exists(duong_seo):
                 pv.dat_muc_luc_seo(duong_seo, pv.muc_luc(
                     kh.khong_bu(), _doc_chu(os.path.join(d, "3-phu-de.srt")),
-                    lam_sach=True), ngon_ngu)
+                    lam_sach=True, **_tuy_chon_muc_luc(bc, d)), ngon_ngu)
             return {"lui": "dựng như cũ"}
         if da != "du":
             for ten in ("8-nhac.json", "8-nhac-nen.m4a"):
@@ -9572,7 +9723,7 @@ def _hoan_tat_theo_phan(bc: BoiCanh, d: str, theo_phan: Optional[Dict[str, Any]]
                     "nhac": da == "du", "so_canh": len(theo_phan["manh"])})
         ghi_json(os.path.join(d, pv.TEN_PHAN_DUNG), ban)
         if os.path.exists(duong_seo) and theo_phan["srt"]:
-            muc = pv.muc_luc(kh, _doc_chu(theo_phan["srt"]))
+            muc = pv.muc_luc(kh, _doc_chu(theo_phan["srt"]), **_tuy_chon_muc_luc(bc, d))
             ket = pv.dat_muc_luc_seo(duong_seo, muc, ngon_ngu)
             if ket in ("thay", "chen"):
                 bc.ghi("  đã đặt lại 目次 {0} chương theo mốc video mới vào "

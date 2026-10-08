@@ -695,17 +695,25 @@ def _nhan_cac_phan(kh: KeHoach, srt: str, truc_video: bool = False) -> List[str]
     return ra
 
 
-def muc_luc(kh: KeHoach, srt_sach: str, lam_sach: bool = False) -> List[str]:
+def muc_luc(kh: KeHoach, srt_sach: str, lam_sach: bool = False, *,
+            goi_ai: Optional[Callable[[str, str], str]] = None, thu_muc: str = "",
+            ngon_ngu: str = "ja", cam_them: Sequence[str] = (), toi_da: int = 0,
+            ghi: Optional[Callable[[str], None]] = None) -> List[str]:
     """Các dòng `MM:SS nhãn` cho mục lục YouTube (thiết kế (a)5).
 
     Chương k+1 bắt đầu `floor(m'_k)` — giữa khoảng nghỉ, chỗ tối nhất. Luật
     YouTube: ≥3 chương, chương đầu 00:00, mỗi chương ≥10 giây (chương quá
     ngắn thì GỘP vào chương trước, không bịa mốc). Không đủ 3 → `[]`.
 
+    09/10/2026: phần → chương (gộp tới ≤ `toi_da`, nhãn ý nội dung bằng AI,
+    dự phòng tất định) đi qua `core.muc_luc_chuong.chot_chuong` — CHUNG với
+    `auto_khau._muc_luc_tu_srt`, nên mọi đường ra cùng một bộ chương.
+
     `lam_sach=True`: `srt_sach` thật ra là `3-phu-de.srt` THÔ (trục giọng) —
     làm sạch trong bộ nhớ trước (`sach_srt`), để câu mở phần bị đặt ở đầu
     khoảng lặng vẫn được nhận đúng phần của nó.
     """
+    from .muc_luc_chuong import TOI_DA_CHUONG, chot_chuong  # noqa: PLC0415
     from .phu_de import doc_srt  # noqa: PLC0415
 
     cac = doc_srt(srt_sach)
@@ -722,24 +730,18 @@ def muc_luc(kh: KeHoach, srt_sach: str, lam_sach: bool = False) -> List[str]:
         idx = next((i for i, (t, _c) in enumerate(cau) if t >= b2 - 0.05), None)
         dau.append(idx if idx is not None else -1)
     tap = {i for i in dau if i >= 0}
-    muc: List[Tuple[float, str]] = []
-    for k, (t, i) in enumerate(zip(moc, dau)):
-        if i < 0:
-            continue
+    co = [(t, i) for t, i in zip(moc, dau) if i >= 0]
+    phan: List[Tuple[float, str, str]] = []
+    for k, (t, i) in enumerate(co):
         nhan = ghep_nhan(cau, i, lambda j: j in tap)
         if len(nhan) < 6 and i + 1 < len(cau) and (i + 1) not in tap:
             nhan = (nhan + "、" + _nhan_chu(cau[i + 1][1])).lstrip("、")
-        if muc and t - muc[-1][0] < 10:
-            continue            # chương < 10 giây: gộp vào chương trước
-        if muc and nhan == muc[-1][1] and i + 1 < len(cau):
+        if phan and nhan == phan[-1][1] and i + 1 < len(cau):
             nhan = _nhan_chu(nhan + "、" + ghep_nhan(cau, i + 1, lambda j: j in tap))
-        muc.append((t, nhan))
-    tong = kh.tong_moi
-    while len(muc) > 1 and tong > 0 and tong - muc[-1][0] < 10:
-        muc.pop()
-    if len(muc) < 3 or muc[0][0] != 0.0:
-        return []
-    return ["{0} {1}".format(_moc_chu(t), n) for t, n in muc]
+        het = co[k + 1][1] if k + 1 < len(co) else len(cau)
+        phan.append((t, nhan, " ".join(c for _t, c in cau[i:max(het, i + 1)])))
+    return chot_chuong(phan, kh.tong_moi, goi_ai=goi_ai, thu_muc=thu_muc, ngon_ngu=ngon_ngu,
+                       cam_them=cam_them, toi_da=toi_da or TOI_DA_CHUONG, ghi=ghi)
 
 
 _GACH = "━━━━━━━━━━━━━━"

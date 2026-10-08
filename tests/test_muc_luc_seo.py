@@ -44,8 +44,9 @@ def test_rut_chuong_va_moc():
 
 
 def test_nhan_cut_ghep_cau_sau():
+    # Nhãn cụt "では、" ghép câu sau; từ đệm đầu "では" bị bỏ ở nhãn dự phòng (09/10/2026, không có AI).
     muc = _muc_luc_tu_srt(SRT_3_CHUONG)
-    assert muc[2] == "03:31 では、この防衛は日常でどんな姿になるのでしょう"
+    assert muc[2] == "03:31 この防衛は日常でどんな姿になるのでしょう"
 
 
 def test_nhan_chuong_la_ca_cau_khong_dung_o_dau_phay_va_khong_trung():
@@ -63,10 +64,11 @@ def test_nhan_chuong_la_ca_cau_khong_dung_o_dau_phay_va_khong_trung():
         ("00:04:04,000", "--- 二つ目の特徴は、感情を細かく言葉にできることです。"),
     )
     muc = _muc_luc_tu_srt(it)
-    assert muc[0] == "00:00 にぎやかな集まりから帰った夜、一人の部屋でようやく息がつけた"
+    # 09/10/2026: không có AI → nhãn dự phòng ≤ 22 ký tự, cắt ở dấu phẩy / bỏ đuôi です, không cắt ngang chữ.
+    assert muc[0] == "00:00 にぎやかな集まりから帰った夜"
     assert muc[1] == "00:47 一つ目の特徴は、このすぐ後にお伝えします"
-    assert muc[2] == "02:14 一つ目の特徴は、答えを外に求める前に、一人で立ち止まって考える習慣です"
-    assert muc[3] == "04:04 二つ目の特徴は、感情を細かく言葉にできることです"
+    assert muc[2] == "02:14 一つ目の特徴は、答えを外に求める前に"
+    assert muc[3] == "04:04 二つ目の特徴は、感情を細かく言葉にできること"
     assert len({m.split(" ", 1)[1] for m in muc}) == len(muc), "không có hai nhãn trùng"
 
 
@@ -161,7 +163,7 @@ def test_muc_luc_theo_phan_moc_giua_nghi_va_nhan_khong_dau_ngat(tmp_path):
     assert muc[0] == "00:00 夜の部屋に、小さな明かり"
     # Chương 2 ở floor(m'_1) = floor((57,5 + 58,9+1,6)/2) = 59.
     assert muc[1] == "00:59 一つ目は、予測できない愛情です"
-    assert muc[2].startswith("03:3") and "では、この防衛は" in muc[2]
+    assert muc[2].startswith("03:3") and "この防衛は" in muc[2]
     assert all("---" not in m for m in muc)
     assert muc[3].startswith("13:")
     # Đưa SRT THÔ + lam_sach=True ra cùng kết quả.
