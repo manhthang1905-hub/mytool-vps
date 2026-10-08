@@ -3,6 +3,7 @@
 Bảy mục, mục nào hỏng cũng chỉ in một dòng "không đọc được" — không mục nào làm vỡ cả bản tin:
   1 Video mai (kênh nào đã có video ngày mai)      4 Chiến trường (thị phần, quy mô ngách, đối thủ số 1, lệnh tác chiến)
   2 Skill hỏng/thiếu (core.ky_nang)                4b Tín hiệu học thiếu/cũ (`_muc_hoc`: vòng tự học đứt ở đâu)
+                                                   4c Chất lượng thành phẩm (`_muc_chat_luong`: cổng lúc bàn giao)
   3 Đường tới YPP (core.ypp.du_bao)                5 Lỗi 24 giờ (workspace/loi-chay-max.md, bỏ mức nhắc)
                                                    6 Máy (RAM, đĩa, nhịp tim agent)
 
@@ -190,6 +191,39 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
     return ra or ["- vòng học kín: mọi kênh có số, có nhãn, chấm đều"]
 
 
+# ── 4c. Chất lượng thành phẩm ────────────────────────────────────────────────
+
+def _muc_chat_luong(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """Cổng chất lượng lúc bàn giao (`core.kiem_chat_luong`, nhật ký `workspace/chat-luong/nhat-ky.jsonl`) 24h qua:
+    số lần kiểm/đạt/đã tự sửa/chặn, lỗi chặn hay gặp, điểm trung vị theo kênh. Chỉ đọc đĩa."""
+    from core import kiem_chat_luong  # noqa: PLC0415
+    ds = kiem_chat_luong.doc_nhat_ky(goc, bay_gio.timestamp() - 24 * 3600)
+    ds = [x for x in ds if float(x.get("ts") or 0) <= bay_gio.timestamp()]
+    if not ds:
+        return ["- chưa video nào qua cổng chất lượng trong 24 giờ"]
+    dat = [x for x in ds if x.get("dat")]
+    chan = [x for x in ds if not x.get("dat")]
+    ra = ["- 24h: {0} lần kiểm · {1} đạt ({2} có tự sửa) · {3} chặn".format(
+        len(ds), len(dat), sum(1 for x in dat if x.get("da_sua")), len(chan))]
+    if chan:
+        dem: Dict[str, int] = {}
+        for x in chan:
+            ma = list(x.get("loi") or []) + (["lam_lai_canh"] if x.get("lam_lai") else [])
+            for m in ma or ["?"]:
+                dem[m] = dem.get(m, 0) + 1
+        ra.append("- Chặn vì: " + ", ".join("{0} x{1}".format(m, n) for m, n in sorted(dem.items(), key=lambda t: -t[1])[:4])
+                  + " · gói: " + ", ".join(sorted({str(x.get("ma_goi") or "?") for x in chan})[:5]))
+    theo: Dict[str, List[float]] = {}
+    for x in ds:
+        if x.get("diem") is not None:
+            theo.setdefault(str(x.get("kenh") or "?"), []).append(float(x["diem"]))
+    if theo:
+        import statistics  # noqa: PLC0415
+        ra.append("- Điểm trung vị: " + ", ".join("{0} {1:.0f}".format(k, statistics.median(v))
+                                                    for k, v in sorted(theo.items())))
+    return ra
+
+
 # ── 5. Lỗi 24h ────────────────────────────────────────────────────────────────
 
 _RE_LOI = re.compile(r"^- \[(\d{4}-\d\d-\d\d \d\d:\d\d)\] \*\*(\w+)\*\*\s*(.*)$")
@@ -250,6 +284,7 @@ def tao(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) -> st
         ("Đường tới YPP", lambda: _muc_ypp(goc, bay_gio)),
         ("Chiến trường", _muc_chien_truong),
         ("Tín hiệu học thiếu/cũ", lambda: _muc_hoc(goc, bay_gio)),
+        ("Chất lượng thành phẩm", lambda: _muc_chat_luong(goc, bay_gio)),
         ("Lỗi 24 giờ", lambda: _muc_loi(goc, bay_gio)),
         ("Máy", lambda: _muc_may(goc)),
     ]

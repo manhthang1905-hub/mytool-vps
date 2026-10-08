@@ -391,6 +391,8 @@ def _khung_ho_so(kenh: str, ma_goi: str, *, luc: Optional[_dt.datetime] = None) 
         # 06/10/2026: "<n>/<tổng cảnh>" cảnh dựng TỪ ẢNH (engine clip hết hạn mức tới hạn
         # chót, `core/clip_tu_anh.py`); None = mọi cảnh là clip engine thật.
         "clip_tu_anh": None,
+        # 09/10/2026: cổng chất lượng lúc bàn giao (`_chat_luong`); số phẳng `cl_*` chỉ có khi đã đo.
+        "chat_luong": None,
     }
 
 
@@ -519,8 +521,29 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
     duong_video = os.path.join(thu_muc_luot, ban_giao_dang.TEP_VIDEO)
     if os.path.isfile(duong_video):
         ho_so.update(_thong_tin_video(goc, duong_video))
+    ho_so.update(_chat_luong(thu_muc_luot))
 
     return ho_so
+
+
+def _chat_luong(thu_muc_luot: str) -> Dict[str, Any]:
+    """09/10/2026: số đo của cổng chất lượng (`core.kiem_chat_luong`, tệp `9-chat-luong.json` của lượt) — tóm tắt
+    `chat_luong` + số phẳng `cl_*` để vòng học/bộ não đối chiếu chất lượng với giữ chân/CTR. Không có → {}."""
+    try:
+        from . import kiem_chat_luong  # noqa: PLC0415
+
+        kq = kiem_chat_luong.doc_ket_qua(thu_muc_luot)
+        if not kq:
+            return {}
+        ra: Dict[str, Any] = {"chat_luong": {
+            "luc": kq.get("luc"), "diem": kq.get("diem"), "dat": kq.get("dat"),
+            "loi": [{"ma": x.get("ma"), "muc": x.get("muc")} for x in kq.get("loi") or []],
+            "da_sua": list(kq.get("da_sua") or []), "da_lam_lai": kq.get("da_lam_lai") or {},
+            "giay_do": (kq.get("do") or {}).get("giay_do")}}
+        ra.update(kiem_chat_luong.chi_so_ho_so(kq))
+        return ra
+    except Exception:  # noqa: BLE001 — metadata phụ, không chặn hồ sơ
+        return {}
 
 
 def _xay_ho_so_toi_gian(goc: str, kenh: str, ma_goi: str, hang: Dict[str, str]) -> Dict[str, Any]:

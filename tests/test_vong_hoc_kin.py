@@ -295,7 +295,7 @@ def test_tin_hieu_thieu_va_muc_hoc(tmp_path, monkeypatch):
     tu_hoc.canh_bao(g, "bo_cum", "không có bộ cụm", "A")
     monkeypatch.setattr(bc, "_cac_kenh", lambda goc: ["A", "B"])
     ra = "\n".join(bc._muc_hoc(g, _dt.datetime.now()))  # noqa: SLF001
-    assert "Thiếu số 48h" in ra and re.search(r"A [12]", ra)   # 1 hay 2 tuỳ ngày chạy (mốc ≥4 ngày)
+    assert "Thiếu số 48h" in ra and ("A 1" in ra or "A 2" in ra)   # 1 hay 2 tuỳ ngày chạy (mốc ≥4 ngày)
     assert "chưa chấm" in ra and "Lệnh chiến trường" in ra and "Cảnh báo học 24h: 1" in ra
     assert "B" not in ra.replace("bo_cum", "")               # kênh chưa có ván: không báo
 

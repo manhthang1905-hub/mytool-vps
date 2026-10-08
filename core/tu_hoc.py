@@ -37,7 +37,10 @@ _log = logging.getLogger(__name__)
 #: 09/10/2026 (`core/do_bia.py`): trục ĐO "bia_doc_duoc" (cao|vua|thap — độ đọc được của bìa, tương phản WCAG +
 #: cỡ chữ ở khung điện thoại) để học xem độ đọc được đi với CTR thế nào (40 bìa 09/10: bìa ĐẠT CTR trung vị 4,8%
 #: n=11 vs TRƯỢT 3,1% n=23 — mẫu nhỏ, cần học tiếp).
-TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook", "chu_bia_dai", "mo_dau", "bia_doc_duoc")
+#: 09/10/2026 thêm trục ĐO "chat_luong" — điểm cổng chất lượng thành phẩm (`core/kiem_chat_luong`, hồ sơ `cl_diem`):
+#: để bảng điểm/bộ não thấy video điểm thấp có giữ chân/CTR kém hơn không (chưa bẻ lựa chọn).
+TRUC = ("cum", "cong_thuc", "kieu_bia", "do_dai", "kieu_tieu_de", "hook", "chu_bia_dai", "mo_dau", "bia_doc_duoc",
+        "chat_luong")
 #: Trục "bao bì" (06/10/2026): ngoài kết quả chung (hiển thị 48h / giờ xem 7d) còn được chấm thêm bằng CTR 48h
 #: so trung vị CTR của chính kênh (`ket_ctr`) — bìa và tiêu đề tác động thẳng vào CTR, hiển thị chỉ gián tiếp.
 TRUC_BAO_BI = ("kieu_bia", "kieu_tieu_de", "chu_bia_dai", "bia_doc_duoc")
@@ -205,6 +208,15 @@ def nhom_chu_bia(chu: Any) -> str:
     return "<10" if n < 10 else "10-14" if n <= 14 else "15-20" if n <= 20 else ">20"
 
 
+def nhom_chat_luong(hs: Dict[str, Any]) -> str:
+    """Nhóm điểm cổng chất lượng (`cl_diem`, 0–100): "<80" (≥ 1 lỗi đã tự sửa + vài cảnh báo, hoặc tệ hơn),
+    "80-94", "95+" (sạch). Hồ sơ trước 09/10 không có → ""."""
+    d = _so(hs.get("cl_diem"))
+    if d is None:
+        return ""
+    return "<80" if d < 80 else "80-94" if d < 95 else "95+"
+
+
 def nhom_mo_dau(hs: Dict[str, Any]) -> str:
     """Nhóm độ dài phần MỞ ĐẦU (phần 1 của `8-phan.json` trong hồ sơ) — trước ý chính đầu tiên."""
     ds = ((hs.get("phan") or {}).get("danh_sach") or []) if isinstance(hs.get("phan"), dict) else []
@@ -328,11 +340,12 @@ def _nuoc_tu(nguon: Dict[str, Any], hs: Dict[str, Any], cum_cua: Any, bo: Any = 
 
 
 def _nhan_do(hs: Dict[str, Any]) -> Dict[str, str]:
-    """Các trục ĐO (`chu_bia_dai`, `mo_dau` 07/10; `bia_doc_duoc` 09/10) — tính thẳng từ hồ sơ, thiếu số thì
-    không ghi."""
+    """Các trục ĐO (`chu_bia_dai`, `mo_dau` 07/10; `bia_doc_duoc`, `chat_luong` 09/10) — tính thẳng từ hồ sơ,
+    thiếu số thì không ghi."""
     th = hs.get("thumbnail") if isinstance(hs.get("thumbnail"), dict) else {}
     ra = {"chu_bia_dai": nhom_chu_bia(hs.get("chu_bia")), "mo_dau": nhom_mo_dau(hs),
-          "bia_doc_duoc": str(th.get("bia_doc_duoc") or "") if th.get("bia_doc_duoc") in ("cao", "vua", "thap") else ""}
+          "bia_doc_duoc": str(th.get("bia_doc_duoc") or "") if th.get("bia_doc_duoc") in ("cao", "vua", "thap") else "",
+          "chat_luong": nhom_chat_luong(hs)}
     return {k: v for k, v in ra.items() if v}
 
 

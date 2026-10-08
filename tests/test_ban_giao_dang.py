@@ -138,6 +138,8 @@ def _goc_co_luot(tmp_path, *, tu_anh=None, thieu=(), so_canh=3, kenh_them=""):
     (d / ban_giao_dang.TEP_SRT).write_text("1\n", encoding="utf-8")
     (d / "7-thumbnail" / "CHON-a.jpg").write_bytes(b"jpg")
     (d / "1-tieu-de.txt").write_text("TITLE: tieu de thu\n", encoding="utf-8")
+    # mô tả RỖNG bị cổng chất lượng chặn (09/10/2026) — lượt đủ bộ thật luôn có 1-seo.txt
+    (d / "1-seo.txt").write_text("DESCRIPTION:\nmo ta thu\nKEYWORDS:\na, b\n", encoding="utf-8")
     (d / "4-canh.json").write_text(json.dumps([{"scene_id": i} for i in range(1, so_canh + 1)]),
                                    encoding="utf-8")
     for i in range(1, so_canh + 1):

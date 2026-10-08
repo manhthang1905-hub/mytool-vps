@@ -124,11 +124,12 @@ def doc_gioi_thieu(thu_muc_luot: str) -> Dict[str, str]:
     """
     ra = {"tieu_de": "", "mo_ta": "", "the": "", "binh_luan": ""}
     ra["binh_luan"] = _doc(os.path.join(thu_muc_luot, TEP_BINH_LUAN)).strip()
-    for dong in _doc(os.path.join(thu_muc_luot, "1-tieu-de.txt")).splitlines():
+    for dong in _doc(os.path.join(thu_muc_luot, "1-tieu-de.txt")).lstrip("﻿").splitlines():
         if dong.startswith("TITLE:"):
             ra["tieu_de"] = dong[len("TITLE:"):].strip()
             break
-    seo = _doc(os.path.join(thu_muc_luot, "1-seo.txt"))
+    # Bỏ BOM: `1-seo.txt` ghi kiểu utf-8-sig thì dòng đầu là "﻿DESCRIPTION:" — không nhận ra mục.
+    seo = _doc(os.path.join(thu_muc_luot, "1-seo.txt")).lstrip("﻿")
     if seo:
         muc: Dict[str, List[str]] = {}
         dang: Optional[str] = None
@@ -142,6 +143,16 @@ def doc_gioi_thieu(thu_muc_luot: str) -> Dict[str, str]:
             if dang:
                 muc.setdefault(dang, []).append(dong)
         ra["mo_ta"] = "\n".join(muc.get("DESCRIPTION", [])).strip()
+        if not ra["mo_ta"] and "DESCRIPTION" not in muc:
+            # 09/10/2026: 3/79 tệp `1-seo.txt` (vd TL6-T7-0003) mở thẳng bằng mô tả, THIẾU dòng `DESCRIPTION:`
+            # → video lên YouTube với mô tả RỖNG (mất chương, hashtag). Không có tiêu đề mục thì mô tả là cả khối
+            # chữ đứng trước mục đầu tiên.
+            truoc: List[str] = []
+            for dong in seo.splitlines():
+                if dong.strip().upper().startswith(("HASHTAGS:", "KEYWORDS:")):
+                    break
+                truoc.append(dong)
+            ra["mo_ta"] = "\n".join(truoc).strip()
         ra["the"] = " ".join(muc.get("KEYWORDS", [])).strip()
     return ra
 
@@ -316,8 +327,18 @@ def xuat_goi(thu_muc_luot: str, thu_muc_done: str, ma: str) -> str:
     return dich
 
 
+def _kiem_chat_luong_mac_dinh(goc: str, thu_muc_luot: str, *, gt: Dict[str, str], ma_goi: str, kenh: str,
+                              timelapse: bool = False):
+    """Cổng chất lượng thật (FFmpeg của máy). Kênh timelapse: clip cố ý chuyển động chậm → tắt luật clip tĩnh."""
+    from . import kiem_chat_luong  # noqa: PLC0415
+    from .dung_video import tim_ffmpeg  # noqa: PLC0415
+
+    return kiem_chat_luong.kiem_va_sua(goc, thu_muc_luot, tim_ffmpeg(goc), gt=gt, ma_goi=ma_goi, kenh=kenh,
+                                       nguong={"clip_tinh_pct_sua": 101.0} if timelapse else None)
+
+
 def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
-             ngay: str = "", gio: str = "", goi_ai=None) -> Tuple[str, bool]:
+             ngay: str = "", gio: str = "", goi_ai=None, kiem_cl=None) -> Tuple[str, bool]:
     """Xuất gói + kiểm chất lượng + ghi một dòng kế hoạch.
 
     Trả `(mã gói, có thêm dòng mới không)`.
@@ -361,10 +382,28 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
         raise RuntimeError("KHÔNG bàn giao {0}: {1} — luật 07/10/2026: thà không đăng còn hơn "
                            "sản phẩm kém; khâu clip làm lại bằng clip thật rồi mới bàn giao."
                            .format(ma, "; ".join(loi_clip)))
+    gt = doc_gioi_thieu(thu_muc_luot)
+    # ═══ CỔNG CHẤT LƯỢNG THÀNH PHẨM (09/10/2026, `core/kiem_chat_luong.py`) ═══
+    # Đo tiếng/phụ đề/hình/clip/kịch bản/siêu dữ liệu TRÊN THƯ MỤC LƯỢT (trước khi chép gói — sửa tiếng/phụ đề
+    # là sửa đúng tệp sẽ giao), tự sửa thứ rẻ, đo lại; còn lỗi chặn → KHÔNG bàn giao (luật 07/10). Nơi gọi
+    # (`tu_chay`) đang giữ khe "nang" (`dieu_phoi.giu_nang("qa_chep")`).
+    kiem_cl = kiem_cl or _kiem_chat_luong_mac_dinh
+    cl = kiem_cl(goc, thu_muc_luot, gt=gt, ma_goi=ma, kenh=kenh, timelapse=_la_timelapse(k))
+    if cl is not None:
+        if cl.gt:
+            gt = dict(gt, **cl.gt)
+        if not cl.dat:
+            ly_do = cl.ly_do()
+            try:
+                kq_bao = qa_truoc_dang.KetQuaQA(loi=["chất lượng: " + ly_do])
+                qa_truoc_dang.bao_qa_hong(goc, ma, kq_bao)
+            except Exception:  # noqa: BLE001 — báo hỏng không được che lỗi chặn
+                pass
+            raise RuntimeError("KHÔNG bàn giao {0}: chất lượng chưa đạt — {1} (luật 07/10/2026: thà không đăng "
+                               "còn hơn sản phẩm kém; chi tiết {2})".format(ma, ly_do, "9-chat-luong.json"))
     xuat_goi(thu_muc_luot, thu_muc_done, ma)
     thu_muc_goi = os.path.join(thu_muc_done, ma)
     _ghi_nguon_clip(thu_muc_goi, dict(clip, loi=loi_clip, cho_phep_tu_anh=cho_phep_tu_anh))
-    gt = doc_gioi_thieu(thu_muc_luot)
     ket_qua_qa = qa_truoc_dang.kiem_thu_muc_goi(
         thu_muc_goi, tieu_de=gt["tieu_de"], mo_ta=gt["mo_ta"],
         phut_muc_tieu=k.phut_muc_tieu, chenh_cho_phep=k.chenh_cho_phep,

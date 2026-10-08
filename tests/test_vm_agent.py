@@ -497,6 +497,8 @@ class TestDangTay:
                 tep.write(du_lieu)
         with open(os.path.join(d, "7-thumbnail", "CHON-t.jpg"), "wb") as tep:
             tep.write(b"x")
+        with open(os.path.join(d, "1-seo.txt"), "w", encoding="utf-8") as tep:   # mô tả rỗng bị cổng chặn
+            tep.write("DESCRIPTION:\nmo ta\n")
         bg.ban_giao(goc, "TL4-T7", "0006", str(tmp_path / "done"))
         _ma, moi = bg.ghi_nhan_dang_tay(goc, "TL4-T7", "0006")
         assert not moi, "không mọc dòng thứ hai cho cùng một lượt"
