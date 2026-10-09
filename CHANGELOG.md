@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.6** — 2026-10-09 — `vps-jp1` — fix(tu-chay): cong chat luong mo lai khau clip thi xoa bo dem tu phuc hoi (tran L3 khong bo oan luot dang sua)
 - **2.180.5** — 2026-10-09 — `vps-jp1` — fix(chat-luong): vuot tran 30 canh thi lam lai phan con suat (trung/den truoc, roi clip tinh) thay vi chan thang — TL2-T7-0022
 - **2.180.4** — 2026-10-09 — `vps-jp1` — fix(agent): keo cheo bi chan tam (ma 4, khoa may ban) thu lai sau 30 phut, toi da 6 lan/ngay — truoc day mat ca ngay
 - **2.180.3** — 2026-10-09 — `vps-jp1` — fix(agent): cho tram /loi-thoai/can-lay 120s (kenh moi mat 24s, 4 kenh moi timed out moi ngay, khong hut duoc loi thoai doi thu)
