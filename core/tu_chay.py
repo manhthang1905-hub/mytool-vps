@@ -599,6 +599,9 @@ def _tim_run_chua_xong(goc: str, ma_kenh: str, ngay_hien_tai: _dt.date,
 #: thì BỎ — một nguồn kẹt thật không tự khỏi chỉ vì thử thêm một lần nữa.
 TRAN_SO_LAN_PHUC_HOI = 3
 
+#: Câu `kiem_chat_luong.KetQuaChatLuong.ly_do` khi cổng chất lượng vừa mở lại khâu clip cho vài cảnh (09/10/2026).
+CHU_MO_LAI_CLIP_CHAT_LUONG = "đã mở lại khâu clip + dựng cho"
+
 #: Quá ngần này GIỜ kể từ LẦN PHỤC HỒI ĐẦU TIÊN mà vẫn chưa xong thì BỎ, dù số
 #: lần phục hồi chưa chạm trần trên (vd lượt chỉ bị nhặt lại một lần nhưng kẹt
 #: tại đó suốt mấy ngày vì chờ RAM/đĩa/ngân sách).
@@ -2945,6 +2948,12 @@ def _chay_mot_ngay_trong_khoa(
                     log("  bàn giao gói {0} — {1}".format(ma_goi, ly_do_trong))
             except Exception as loi:  # noqa: BLE001
                 run["ban_giao"]["loi"] = str(loi)[:400]
+                if CHU_MO_LAI_CLIP_CHAT_LUONG in str(loi):
+                    # 09/10/2026: cổng chất lượng vừa MỞ LẠI khâu clip cho vài cảnh — đó là tiến triển, không phải
+                    # lượt kẹt. Xoá bộ đếm phục hồi để trần L3 (3 lần) không bỏ oan lượt đang sửa (TL2-T7-0022 đã
+                    # 2/3). Vòng vô hạn vẫn chặn: mỗi cảnh làm lại tối đa 1 lần, ≤ 30 cảnh/lượt (`kiem_chat_luong`).
+                    run.pop("phuc_hoi", None)
+                    log("  cổng chất lượng mở lại khâu clip — xoá bộ đếm tự phục hồi của lượt (không tính là kẹt).")
                 log("  bàn giao hỏng: " + run["ban_giao"]["loi"])
                 return finalize(ok=False, buoc_loi="ban_giao", loi=run["ban_giao"]["loi"],
                                 tom_tat="{0}: bàn giao hỏng — {1}".format(ma_kenh, run["ban_giao"]["loi"]))
