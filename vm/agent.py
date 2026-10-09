@@ -3183,7 +3183,12 @@ def chay_nuoi_trang_chu(bay_gio: float = None, mo_con=None) -> int:
 #   van IPv4 mở hay đang có con nuôi/thiết lập giữ Chrome. Máy DOM tự giữ khoá máy + đóng Chrome; trần 60 phút. ──
 GIO_KEO_CHEO = (9, 20)
 TRAN_KEO_CHEO_GIAY = 60 * 60
-_KEO_CHEO = {"con": {}, "bd": {}, "ngay": ""}
+#: Con thoát mã 4 (`keo_cheo_dom.MA_CHAN`: khoá máy bận / van IPv4 mở / có máy kéo chéo khác) là BỊ CHẶN TẠM,
+#: chưa làm gì — 09/10/2026 09:01 mất trọn ngày vì việc nặng giữ khoá đúng lúc. Thử lại sau 30', tối đa 6 lần/ngày.
+MA_KEO_CHEO_CHAN = 4
+KEO_CHEO_THU_LAI_GIAY = 30 * 60
+KEO_CHEO_THU_LAI_TOI_DA = 6
+_KEO_CHEO = {"con": {}, "bd": {}, "ngay": "", "thu_lai_luc": 0.0, "chan": {}}
 
 
 def _tep_keo_cheo_ngay() -> str:
@@ -3194,13 +3199,29 @@ def chay_keo_cheo(bay_gio: float = None, mo_con=None, con_khac: int = 0) -> int:
     """MỘT bước kéo chéo (gọi mỗi nhịp tim). Trả số tiến trình con đang chạy (0/1)."""
     luc = time.time() if bay_gio is None else bay_gio
     con = _KEO_CHEO["con"]
+    hom = time.strftime("%Y-%m-%d", time.localtime(luc))
     for k in [k for k, c in con.items() if c.poll() is not None]:
-        ghi("kéo chéo: tiến trình con xong (mã {0})".format(con.pop(k).returncode))
+        ma = con.pop(k).returncode
         _KEO_CHEO["bd"].pop(k, None)
+        chan = _KEO_CHEO.setdefault("chan", {})
+        if ma == MA_KEO_CHEO_CHAN and chan.get(hom, 0) < KEO_CHEO_THU_LAI_TOI_DA:
+            chan[hom] = chan.get(hom, 0) + 1
+            _KEO_CHEO["ngay"] = ""            # chưa làm gì — mở lại cho hôm nay
+            _KEO_CHEO["thu_lai_luc"] = luc + KEO_CHEO_THU_LAI_GIAY
+            try:
+                with open(_tep_keo_cheo_ngay(), "w", encoding="utf-8") as tep:
+                    json.dump({"ngay": "", "chan": chan[hom], "ngay_chan": hom, "luc": luc}, tep)
+            except OSError:
+                pass
+            ghi("kéo chéo: tiến trình con bị chặn tạm (mã {0}) — thử lại sau {1:.0f} phút (lần {2}/{3})".format(
+                ma, KEO_CHEO_THU_LAI_GIAY / 60.0, chan[hom], KEO_CHEO_THU_LAI_TOI_DA))
+        else:
+            ghi("kéo chéo: tiến trình con xong (mã {0})".format(ma))
     dung_con_qua_tran(con, _KEO_CHEO["bd"], luc, tran_giay=TRAN_KEO_CHEO_GIAY, ten="kéo chéo")
     if con:
         return len(con)
-    hom = time.strftime("%Y-%m-%d", time.localtime(luc))
+    if luc < float(_KEO_CHEO.get("thu_lai_luc") or 0.0):
+        return 0
     if not _KEO_CHEO["ngay"]:
         try:
             with open(_tep_keo_cheo_ngay(), "r", encoding="utf-8") as tep:
