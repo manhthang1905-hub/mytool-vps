@@ -62,7 +62,8 @@ SO_LAN_BAM_CHE = 4
 #: Khoá được phép bấm bằng JS (`el.click()`) khi bấm thật bị che cả
 #: SO_LAN_BAM_CHE lần — chỉ nút AN TOÀN (đi tiếp / mở trình soạn / Xong phụ đề /
 #: đóng hộp con), hậu điều kiện vẫn kiểm. Ghi đè: `bam_js_an_toan` trong JSON.
-BAM_JS_AN_TOAN = ("nut_tiep", "the_them", "phu_de_xong", "hop_con_huy", "the_dong_chon")
+#: 10/10/2026: + "mhkt_phan_tu" — chọn hàng phần tử MHKT để sửa giờ (chỉ CHỌN, không lưu) bị div#touch-area che.
+BAM_JS_AN_TOAN = ("nut_tiep", "the_them", "phu_de_xong", "hop_con_huy", "the_dong_chon", "mhkt_phan_tu")
 
 
 class LoiThaoTac(Exception):
