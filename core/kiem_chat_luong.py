@@ -793,6 +793,15 @@ def canh_can_lam_lai(thu_muc_luot: str, do: Dict[str, Any], ng: Optional[Dict[st
     return sorted(set(ra))
 
 
+def _canh_phai_lam_lai(thu_muc_luot: str, do: Dict[str, Any]) -> List[int]:
+    """Cảnh hỏng nặng (clip trùng hệt, khung đen) — ưu tiên dùng suất làm lại trước clip tĩnh."""
+    ra: List[int] = []
+    for g in (do.get("clip") or {}).get("trung") or []:
+        ra.extend(g[1:])
+    ra.extend(_canh_theo_moc(thu_muc_luot, (do.get("hinh") or {}).get("den_ngoai_ranh") or []))
+    return ra
+
+
 def lam_lai_canh(thu_muc_luot: str, canh: Sequence[int]) -> None:
     """Xoá clip của đúng các cảnh + video và tệp suy ra từ nó, mở lại khâu clip + dựng."""
     from . import auto, lam_lai_clip_that  # noqa: PLC0415
@@ -906,7 +915,12 @@ def kiem_va_sua(goc: str, thu_muc_luot: str, ffmpeg: str, *, gt: Optional[Dict[s
         if "lam_lai_canh" in sua:
             canh = [c for c in canh_can_lam_lai(thu_muc_luot, kq.do, ng)
                     if da_lam_lai.get(str(c), 0) < 1]                     # mỗi cảnh tối đa MỘT lần
-            if canh and sum(da_lam_lai.values()) + len(canh) <= ng["toi_da_lam_lai_canh"]:
+            # 09/10/2026: vượt trần thì làm lại PHẦN còn suất (trùng/đen trước, rồi clip tĩnh) chứ không bỏ cả lượt
+            # — TL2-T7-0022 có 31 clip tĩnh > trần 30 → không làm lại cảnh nào, chặn thẳng "cần người xem".
+            con_suat = int(ng["toi_da_lam_lai_canh"]) - sum(da_lam_lai.values())
+            if canh and con_suat > 0:
+                phai = set(_canh_phai_lam_lai(thu_muc_luot, kq.do))
+                canh = sorted(sorted(canh, key=lambda c: (c not in phai, c))[:con_suat])
                 lam_lai_canh(thu_muc_luot, canh)
                 for c in canh:
                     da_lam_lai[str(c)] = da_lam_lai.get(str(c), 0) + 1

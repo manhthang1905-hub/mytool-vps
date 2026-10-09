@@ -289,6 +289,27 @@ def test_clip_trung_va_tinh_mo_lai_khau_clip_moi_canh_mot_lan(tmp_path):
 
 
 @can_ff
+def test_vuot_tran_lam_lai_phan_con_suat_uu_tien_trung(tmp_path):
+    """09/10/2026 (TL2-T7-0022: 31 clip tĩnh > trần 30 → cũ: không làm lại cảnh nào, chặn thẳng)."""
+    goc, d = _luot(tmp_path, video_kw={"giay": 10.0})
+    os.makedirs(os.path.join(d, "6-clip"))
+    canh = [{"scene_id": i, "srt_start": "00:00:{0:02d},000".format(i)} for i in range(1, 6)]
+    with open(os.path.join(d, "4-canh.json"), "w", encoding="utf-8") as f:
+        json.dump(canh, f)
+    for i in (1, 2, 3):
+        _clip(os.path.join(d, "6-clip", "{0}.mp4".format(i)), "testsrc2=size=160x90:rate=24", "hue=h={0}".format(i * 60))
+    shutil.copy(os.path.join(d, "6-clip", "1.mp4"), os.path.join(d, "6-clip", "4.mp4"))      # trùng hệt
+    _clip(os.path.join(d, "6-clip", "5.mp4"), "color=c=gray:size=160x90:rate=24")            # tĩnh
+    luot = auto.moi_luot(goc, "K1", "0001", {})
+    for m in auto.MA_KHAU:
+        luot.tt(m).trang_thai = auto.XONG
+    auto.ghi_luot(luot)
+    kq = kcl.kiem_va_sua(goc, d, FF, gt=_gt(d), nguong={"toi_da_lam_lai_canh": 1})
+    assert not kq.dat and kq.lam_lai == [4], "còn 1 suất → làm lại cảnh TRÙNG trước, không bỏ cả lượt"
+    assert kcl.doc_ket_qua(d)["da_lam_lai"] == {"4": 1}
+
+
+@can_ff
 def test_ban_giao_chan_khi_chat_luong_khong_dat(tmp_path):
     from core import ban_giao_dang, ke_hoach_dang
     goc, d = _luot(tmp_path, video_kw=None)
