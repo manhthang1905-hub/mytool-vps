@@ -208,8 +208,11 @@ _BANG: Sequence[Tuple[str, Tuple[str, ...]]] = (
     # Cả nhà máy đang tắt. Phải đứng TRƯỚC `TAM_NGHI`: câu này cũng có chữ
     # "KHÔNG bị trừ tiền", xếp sau là nó rơi nhầm vào nhóm trục trặc thoáng qua
     # rồi tool đợi kiểu sai.
+    # 10/10/2026 12:25 câu thật (TTS sập cả buổi): *"Hệ thống không có engine nào phục vụ loại yêu cầu
+    # "tts"."* — trước rơi vào `CHET` → hai lần liên tiếp là trần L3 BỎ HẲN lượt dở (mất kịch bản/ảnh đã làm).
     (NHA_MAY_NGHI, ("không có chỗ nào nhận việc", "không máy xử lý nào",
-                    "nhà máy này đang dừng", "no workers", "đang dừng, không nhận")),
+                    "nhà máy này đang dừng", "no workers", "đang dừng, không nhận",
+                    "không có engine nào", "no engine available", "no engine serving")),
     # Trục trặc tạm — máy chủ nói thẳng là chưa trừ tiền.
     (TAM_NGHI, ("tạm gián đoạn", "không bị trừ tiền", "502", "503", "504",
                 "bad gateway", "service unavailable", "gateway timeout",
