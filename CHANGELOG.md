@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.10** — 2026-10-10 — `vps-jp1` — fix(su-co): cau tool tu viet 'cong ShopAPI ngung nhan viec... phia may chu' la nha may nghi — L3 da bo oan TL1/0024, TL6/0006
 - **2.180.9** — 2026-10-10 — `vps-jp1` — fix(tu-chay): luot dung vi phia ShopAPI (engine tat/tam nghi/het kho) mien tran 3 lan nhat lai cua L3 — TTS tat ca buoi, TL1/TL6 suyt bi bo
 - **2.180.8** — 2026-10-10 — `vps-jp1` — fix(su-co): 'khong co engine nao phuc vu tts' la nha may nghi (cho, thu lai) chu khong phai CHET — tranh tran L3 bo oan luot do khi ShopAPI tat TTS
 - **2.180.7** — 2026-10-10 — `vps-jp1` — fix(mhkt): chon hang phan tu MHKT duoc bam JS khi bi div#touch-area che (sua gio 20s cuoi)
