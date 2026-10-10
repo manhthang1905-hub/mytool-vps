@@ -611,6 +611,13 @@ TRAN_GIO_PHUC_HOI = 48.0
 #: như "sẽ không bao giờ tự hết" — khác lỗi mạng thoáng qua, chỉ cần thử lại.
 _LOAI_LOI_KHONG_TU_HET = (su_co.HET_TIEN, su_co.CHET, su_co.NOI_DUNG)
 
+#: 10/10/2026: lượt dừng vì PHÍA ShopAPI (engine tắt, trục trặc tạm, hết kho, nghẹt, mất mạng) — không phải
+#: lượt kẹt. ShopAPI tắt TTS cả buổi trưa → mỗi giờ điều phối nhặt lại một lần, TL1/TL6 chạm trần 3 lần và suýt
+#: bị BỎ HẲN (mất kịch bản/ảnh/clip). Loại này MIỄN trần số lần; trần 48 giờ vẫn giữ.
+_LOAI_LOI_CHO_NGOAI = tuple(getattr(su_co, ten) for ten in
+                            ("NHA_MAY_NGHI", "TAM_NGHI", "HET_KHO", "CHAM_LAI", "MAT_MANG", "CHO_TIEP")
+                            if hasattr(su_co, ten))
+
 
 def _loai_loi_san_xuat(run: Dict[str, Any]) -> str:
     """Phân loại câu lỗi ĐÃ LƯU của lần sản xuất gần nhất (`run["san_xuat"]["loi"]`,
@@ -618,6 +625,16 @@ def _loai_loi_san_xuat(run: Dict[str, Any]) -> str:
     thứ vốn dò theo CÂU CHỮ nên nhận một chuỗi bọc trong `RuntimeError` là đủ."""
     loi = str((run.get("san_xuat") or {}).get("loi") or "")
     return su_co.phan_loai(RuntimeError(loi)) if loi else ""
+
+
+def _dung_vi_phia_shopapi(run: Dict[str, Any]) -> bool:
+    """Lượt dừng vì phía ShopAPI (engine tắt/tạm nghỉ/hết kho/nghẹt/mất mạng) — chỉ khi câu dừng KHỚP DẤU HIỆU
+    thật (không dựa vào loại mặc định `CHET` của câu lạ)."""
+    sx = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else {}
+    for cau in (sx.get("loi") or "", sx.get("loi_dung") or ""):
+        if cau and su_co.phan_loai(RuntimeError(str(cau))) in _LOAI_LOI_CHO_NGOAI:
+            return True
+    return False
 
 
 def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
@@ -634,7 +651,7 @@ def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
     ph = run.get("phuc_hoi") if isinstance(run.get("phuc_hoi"), dict) else {}
 
     so_lan = int(ph.get("so_lan") or 0)
-    if so_lan >= TRAN_SO_LAN_PHUC_HOI:
+    if so_lan >= TRAN_SO_LAN_PHUC_HOI and not _dung_vi_phia_shopapi(run):
         return ("đã tự phục hồi (nhặt lại) {0} lần mà vẫn chưa xong — chạm trần {1} lần, "
                 "khả năng nguồn hoặc khâu nào đó kẹt vĩnh viễn.").format(
                     so_lan, TRAN_SO_LAN_PHUC_HOI)
@@ -666,6 +683,21 @@ def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
                 "{1}) mà vẫn chưa xong — đánh dấu bỏ ngay, tránh bị quên im lặng."
                 ).format(so_ngay_cua_so, ngay_luot_str)
     return ""
+
+
+def _loi_luot_tren_dia(goc: str, ma_kenh: str, ma_luot: str) -> str:
+    """Câu tóm tắt (kèm lỗi khâu hỏng) của lượt từ `PROJECTS/AUTO/<kênh>/<lượt>/` — "" nếu không đọc được."""
+    if not ma_luot:
+        return ""
+    try:
+        from . import auto  # noqa: PLC0415
+
+        d = os.path.join(goc, "PROJECTS", "AUTO", ma_kenh, ma_luot)
+        if not os.path.isdir(d):
+            return ""
+        return str(auto.tom_tat(auto.doc_luot(d)) or "")[:400]
+    except Exception:  # noqa: BLE001 — chỉ để phân loại, đọc hỏng thì coi như không biết
+        return ""
 
 
 def _ghi_nhan_phuc_hoi(run: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None) -> None:
@@ -2506,6 +2538,11 @@ def _chay_mot_ngay_trong_khoa(
         # lại, hoặc sắp lọt cửa sổ quét) thì BỎ HẲN lượt này (không xoá gì) —
         # nhánh dưới coi như không có lượt dở, tự chọn nguồn mới.
         if run is not None:
+            sx_tim = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else None
+            if sx_tim is not None and not sx_tim.get("loi_dung") and sx_tim.get("khau_hong"):
+                # Sổ cũ không lưu câu dừng của lượt "chưa xong hết" — đọc từ trạng thái lượt trên đĩa
+                # để L3 biết có phải lỗi phía ShopAPI không (10/10/2026, xem `_LOAI_LOI_CHO_NGOAI`).
+                sx_tim["loi_dung"] = _loi_luot_tren_dia(goc, ma_kenh, str(run.get("ma_luot") or ""))
             ly_do_bo = _ly_do_vuot_tran_phuc_hoi(run, ngay, ngay_goc_str, bay_gio=bay_gio)
             if ly_do_bo:
                 _bo_luot_qua_han(goc, ma_kenh, run, bao_cao_goc, ngay_goc_str, ly_do_bo, log)
@@ -2880,7 +2917,11 @@ def _chay_mot_ngay_trong_khoa(
         run["san_xuat"]["xong_het"] = bool(luot.xong_het)
         run["san_xuat"]["khau_hong"] = list(luot.khau_dang_hong)
         if not luot.xong_het:
-            log("  chưa xong hết — " + auto.tom_tat(luot))
+            tom_luot = auto.tom_tat(luot)
+            # 10/10/2026: ô RIÊNG (không phải `loi`) — L3 chỉ dùng để MIỄN trần số lần khi lỗi ở phía ShopAPI;
+            # không đưa vào luật "lỗi lặp lại" (câu tóm tắt lạ rơi về CHET sẽ bỏ oan lượt đang chờ).
+            run["san_xuat"]["loi_dung"] = str(tom_luot)[:400]
+            log("  chưa xong hết — " + tom_luot)
     else:
         log("4) Sản xuất — lượt {0} đã xong hết từ trước, bỏ qua.".format(ma_luot))
         run["san_xuat"]["xong_het"] = True
