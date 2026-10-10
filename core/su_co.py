@@ -212,7 +212,10 @@ _BANG: Sequence[Tuple[str, Tuple[str, ...]]] = (
     # "tts"."* — trước rơi vào `CHET` → hai lần liên tiếp là trần L3 BỎ HẲN lượt dở (mất kịch bản/ảnh đã làm).
     (NHA_MAY_NGHI, ("không có chỗ nào nhận việc", "không máy xử lý nào",
                     "nhà máy này đang dừng", "no workers", "đang dừng, không nhận",
-                    "không có engine nào", "no engine available", "no engine serving")),
+                    "không có engine nào", "no engine available", "no engine serving",
+                    # câu TOOL tự viết khi gom việc giữa chừng (`auto_khau` ~6155) — đây là câu lưu lại trong
+                    # trạng thái lượt; thiếu nó thì L3 coi là CHET và bỏ oan (TL1/0024, TL6/0006 lúc 15:05 10/10)
+                    "ngừng nhận việc", "phía máy chủ, không phải tool")),
     # Trục trặc tạm — máy chủ nói thẳng là chưa trừ tiền.
     (TAM_NGHI, ("tạm gián đoạn", "không bị trừ tiền", "502", "503", "504",
                 "bad gateway", "service unavailable", "gateway timeout",

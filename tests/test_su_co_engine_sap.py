@@ -15,5 +15,16 @@ def test_nha_may_nghi_khong_nam_trong_loai_khong_tu_het():
     assert su_co.NHA_MAY_NGHI not in tu_chay._LOAI_LOI_KHONG_TU_HET  # noqa: SLF001
 
 
+def test_cau_tool_tu_viet_khi_cong_ngung_giua_chung():
+    cau = ("Dừng ở “Đọc thành giọng”: cổng ShopAPI ngừng nhận việc đoạn đọc giữa chừng. Đã giữ 0/8 — đây là "
+           "phía máy chủ, không phải tool. Bật lại thì bấm Chạy tiếp, tool chỉ làm phần còn thiếu.")
+    assert su_co.phan_loai(RuntimeError(cau)) == su_co.NHA_MAY_NGHI
+
+
+def test_tts_tam_dong_la_tam_nghi():
+    cau = 'Dịch vụ "tts" đang tạm đóng để khắc phục sự cố. Bạn KHÔNG bị trừ tiền. Vui lòng thử lại sau'
+    assert su_co.phan_loai(RuntimeError(cau)) in (su_co.TAM_NGHI, su_co.NHA_MAY_NGHI)
+
+
 def test_cau_tieng_anh_cung_vay():
     assert su_co.phan_loai(RuntimeError("No engine available for request type tts")) == su_co.NHA_MAY_NGHI
