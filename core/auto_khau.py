@@ -6421,6 +6421,98 @@ def _co_khung_dau(bc: BoiCanh) -> bool:
     return bool(getattr(getattr(bc, "kenh", None), "khung_dau", False))
 
 
+#: ═══ MỘT CẢNH BỊ "NHẬN VIỆC RỒI BỎ ĐÓ" HAI LẦN VỚI CÙNG ĐẦU VÀO → THÔI GỬI LẠI Y NGUYÊN ═══
+#:
+#: TL1-T7/0026 (11–12/10/2026): 172/173 clip xong, cảnh 37 lần nào cũng treo 12 phút. Mỗi lần chạy khâu
+#: bắn lại ĐÚNG tấm ảnh ấy + lời nhắc ấy: khoá đầu + 2 khoá mới × 12' ≈ 36', ba lượt thử khâu, rồi vòng
+#: cứu lại "thử y nguyên" thêm 36' trước khi viết lại lời nhắc — cả video lỡ khe 05:00 vì một cảnh. Nên:
+#: đếm số lần treo của từng cảnh theo vân tay (ảnh, lời nhắc clip, khung cuối) — qua khoá mới và qua các
+#: lần chạy khâu (`TEP_TREO_CLIP` ở thư mục lượt); chạm trần thì ném `LoiClipTreoLap` NGAY, không gọi máy
+#: chủ — khâu clip đưa thẳng cảnh ấy vào đường cứu (viết lại lời nhắc clip → vẽ lại ảnh bố cục mới).
+#: Đầu vào đổi (ảnh mới/lời nhắc mới) là vân tay đổi → đếm lại từ 0.
+TRAN_TREO_CLIP = 2
+TEP_TREO_CLIP = "_treo-clip.json"
+_KHOA_SO_TREO = threading.Lock()
+
+
+class LoiClipTreoLap(RuntimeError):
+    """Máy chủ đã treo clip của cảnh này `TRAN_TREO_CLIP` lần với cùng (ảnh, lời nhắc) — đừng gửi lại y
+    nguyên; đi đường cứu cảnh. Câu có "máy chủ vẫn chưa trả kết quả" → `su_co.CHO_TIEP` (không CHET)."""
+
+
+def _la_treo_lap(loi: Optional[BaseException]) -> bool:
+    return isinstance(loi, LoiClipTreoLap)
+
+
+def _dau_treo_clip(c: Dict[str, Any], anh: str, anh_cuoi: Optional[str]) -> str:
+    """Vân tay đầu vào clip: NỘI DUNG ảnh (không theo URL ký hạn) + lời nhắc clip + khung cuối."""
+    return VanTay._dau(str(c.get("video_prompt") or ""), _dau_tep(anh),
+                       _dau_tep(anh_cuoi) if anh_cuoi else "")
+
+
+def _tep_so_treo(luot: Optional[LuotChay]) -> str:
+    """Đường sổ treo ở thư mục lượt; "" khi không có lượt (nơi gọi lẻ/bài kiểm) — sổ thành no-op."""
+    thu_muc = str(getattr(luot, "thu_muc", "") or "")
+    return os.path.join(thu_muc, TEP_TREO_CLIP) if thu_muc else ""
+
+
+def _doc_so_treo(luot: Optional[LuotChay]) -> Dict[str, Any]:
+    tep_so = _tep_so_treo(luot)
+    if not tep_so:
+        return {}
+    try:
+        with open(tep_so, "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+        return du if isinstance(du, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _so_lan_treo(luot: LuotChay, so_canh: int, dau: str) -> int:
+    muc = _doc_so_treo(luot).get(str(so_canh))
+    if not isinstance(muc, dict) or muc.get("dau") != dau:
+        return 0
+    try:
+        return int(muc.get("lan") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _dem_treo(luot: LuotChay, so_canh: int, dau: str, loi: BaseException) -> int:
+    """+1 lần treo cho (cảnh, vân tay); trả số lần sau khi cộng. Ghi đĩa hỏng vẫn trả số đúng trong lần
+    gọi này (không chết vì sổ)."""
+    with _KHOA_SO_TREO:
+        so_treo = _doc_so_treo(luot)
+        muc = so_treo.get(str(so_canh))
+        lan = int(muc.get("lan") or 0) if isinstance(muc, dict) and muc.get("dau") == dau else 0
+        lan += 1
+        so_treo[str(so_canh)] = {"dau": dau, "lan": lan, "loi": str(loi)[:200],
+                                 "luc": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        if _tep_so_treo(luot):
+            try:
+                ghi_json(_tep_so_treo(luot), so_treo)
+            except OSError:
+                pass
+        return lan
+
+
+def _quen_treo(luot: LuotChay, canh: Sequence[int]) -> None:
+    """Xoá số lần treo của các cảnh (clip đã ra, hoặc hỏng có hệ thống — để lượt thử khâu gửi lại)."""
+    canh = [str(int(x)) for x in canh]
+    if not canh:
+        return
+    with _KHOA_SO_TREO:
+        so_treo = _doc_so_treo(luot)
+        if not any(k in so_treo for k in canh):
+            return
+        for k in canh:
+            so_treo.pop(k, None)
+        try:
+            ghi_json(_tep_so_treo(luot), so_treo)
+        except OSError:
+            pass
+
+
 def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
               dich: str, giay: int, so: Optional[SoTheoDoi] = None,
               khung_dau: bool = False, anh_cuoi: Optional[str] = None) -> None:
@@ -6535,9 +6627,29 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
             + (":tc" if luat_tieng else "") + hau_to)
         return _cho_job(bc, job, ten_viec="cảnh {0}".format(so_canh), so=so)
 
+    # Xem `TRAN_TREO_CLIP`: cùng (ảnh, lời nhắc) đã treo đủ trần → không gửi nữa, kể cả lần gọi đầu.
+    dau_treo = _dau_treo_clip(c, anh, anh_cuoi if url_cuoi else None)
+
+    def treo_lap(lan: int, loi: Optional[BaseException] = None) -> LoiClipTreoLap:
+        return LoiClipTreoLap(
+            "cảnh {0}: máy chủ nhận việc rồi bỏ đó {1} lần với cùng ảnh và lời nhắc clip ({2}) — thôi "
+            "gửi lại y nguyên, đi đường cứu cảnh (viết lại lời nhắc clip, vẽ lại ảnh bố cục mới)".format(
+                so_canh, lan, str(loi or "máy chủ vẫn chưa trả kết quả")[:90]))
+
+    def dem(loi: BaseException) -> None:
+        lan = _dem_treo(luot, so_canh, dau_treo, loi)
+        if lan >= TRAN_TREO_CLIP:
+            bc.ghi("    cảnh {0}: máy chủ treo {1} lần với cùng ảnh + lời nhắc — thôi gửi lại y nguyên, "
+                   "chuyển sang cứu cảnh.".format(so_canh, lan))
+            raise treo_lap(lan, loi) from loi
+
+    _da_treo = _so_lan_treo(luot, so_canh, dau_treo)
+    if _da_treo >= TRAN_TREO_CLIP:
+        raise treo_lap(_da_treo)
     try:
         goi = goi_clip(url_anh)
-    except LoiKetJob:
+    except LoiKetJob as _loi_ket:
+        dem(_loi_ket)
         # ═══ JOB KẸT: ĐẶT LẠI BẰNG KHOÁ MỚI ═══
         #
         # Máy chủ đã nhận việc nhưng mười hai phút vẫn "đang xử lý", với một
@@ -6559,7 +6671,8 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
             try:
                 goi = goi_clip(url_anh, khoa_thoat_ket(_lan))
                 break
-            except LoiKetJob:
+            except LoiKetJob as _loi_ket:
+                dem(_loi_ket)
                 if _lan == 2:
                     raise
     except Exception as loi:  # noqa: BLE001
@@ -6585,6 +6698,8 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
         goi = goi_clip(url_anh, ":hong2")
         _tai_ket_qua_dat_lai(bc, goi, dich, lambda h: goi_clip(url_anh, ":hong2" + h), ten_canh)
         _kiem_media(bc, dich)
+    if _tep_so_treo(luot) and os.path.exists(_tep_so_treo(luot)):
+        _quen_treo(luot, [so_canh])     # clip đã ra — sổ treo của cảnh này hết nghĩa
 
 
 def _hop_cho_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], hop: "ThamChieu"):
@@ -7811,6 +7926,10 @@ def _khau_clip(bc: BoiCanh):
       cảnh (`_cuu_canh_thieu_clip`): thử lại → viết lại lời nhắc clip → vẽ lại
       ảnh rồi làm clip. Vẫn không được sau `SO_VONG_CUU_CANH` vòng → dừng lượt,
       báo "cảnh X không làm được clip thật — cần người xem". Không dựng vá.
+    * Một cảnh máy chủ treo `TRAN_TREO_CLIP` lần với cùng (ảnh, lời nhắc) — đếm qua khoá mới và qua các
+      lần chạy khâu (`_treo-clip.json`) → `LoiClipTreoLap`: không gửi lại y nguyên nữa, vào thẳng đường
+      cứu (bỏ bước thử y nguyên; viết lại lời nhắc clip → vẽ lại ảnh bố cục mới). Nhiều cảnh cùng treo
+      (quá trần thiếu) là sự cố chung → quên sổ treo, để lượt thử khâu gửi lại như cũ.
     * Kênh khai tay `clip_tu_anh: true` mới còn đường lùi dựng cảnh từ ảnh ở
       hạn chót (`core/clip_tu_anh.py`).
     """
@@ -7941,6 +8060,10 @@ def _khau_clip(bc: BoiCanh):
                     # hỏng mà không cảnh nào vì nội dung) — để lượt thử khâu bên ngoài
                     # làm lại như cũ, không viết lại lời nhắc. Có cảnh bị từ chối vì
                     # nội dung (dù nhiều) thì đi cứu cảnh bên dưới.
+                    # Nhiều cảnh cùng treo một lúc là máy chủ treo, không phải lỗi của
+                    # từng cảnh → quên sổ treo của chúng để lượt thử khâu gửi lại như cũ
+                    # (không đẩy cả mẻ vào đường cứu vì một sự cố chung).
+                    _quen_treo(luot, [s for s, l in loi_canh.items() if _la_treo_lap(l)])
                     raise loi_me
                 kq = _cuu_canh_thieu_clip(bc, luot, con, mot_canh, loi_canh, so)
                 if kq == "het_han_muc" and not thieu_clip():
@@ -8125,17 +8248,23 @@ def _cuu_mot_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], mot_canh,
     def co_clip() -> bool:
         return os.path.exists(os.path.join(luot.thu_muc, "6-clip", "{0}.mp4".format(so_canh)))
 
-    if os.path.exists(anh) and not _la_loi_noi_dung_clip(loi):
+    # Máy chủ đã treo cảnh này đủ trần với cùng (ảnh, lời nhắc) — `TRAN_TREO_CLIP`: thử lại y nguyên là
+    # vô ích (và `_lam_clip` cũng từ chối gửi), nên bỏ bước (1); bước (3) đổi BỐ CỤC ảnh thẳng
+    # (`doi_bo_cuc`), không "làm dịu" lời nhắc ảnh vốn lành.
+    treo = _la_treo_lap(loi)
+    if os.path.exists(anh) and not _la_loi_noi_dung_clip(loi) and not treo:
         kq, e = thu(lambda: mot_canh(c))
         if kq != "hong" and (kq == "het_han_muc" or co_clip()):
             return kq, e
         loi = e or loi
+        treo = treo or _la_treo_lap(loi)
     if os.path.exists(anh) and _viet_lai_loi_nhac_clip(bc, luot, c, loi, vong):
         kq, e = thu(lambda: mot_canh(c))
         if kq != "hong" and (kq == "het_han_muc" or co_clip()):
             return kq, e
         loi = e or loi
-    kq, e = thu(lambda: _ve_lai_anh_cho_clip(bc, luot, c, loi, so, lay_hop, vong))
+        treo = treo or _la_treo_lap(loi)
+    kq, e = thu(lambda: _ve_lai_anh_cho_clip(bc, luot, c, loi, so, lay_hop, vong, bo_cuc_moi=treo))
     if kq == "het_han_muc":
         return kq, e
     if kq == "xong":
@@ -8179,10 +8308,13 @@ def _viet_lai_loi_nhac_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
 
 def _ve_lai_anh_cho_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
                          loi: Optional[BaseException], so: Optional["SoTheoDoi"], lay_hop,
-                         vong: int = 1) -> None:
+                         vong: int = 1, bo_cuc_moi: bool = False) -> None:
     """Vẽ ảnh cảnh (lại) để làm clip. Đã có ảnh → viết lại lời nhắc ảnh trước (cùng
     lời nhắc = cùng khoá = cổng trả đúng tấm cũ); tấm cũ cất `.cu`. Ném lỗi nếu
-    không vẽ được."""
+    không vẽ được.
+
+    `bo_cuc_moi=True` (clip bị máy chủ treo lặp lại — `LoiClipTreoLap`, không phải bị từ chối): không
+    nhờ AI "làm dịu" lời nhắc ảnh lành, đổi thẳng bố cục khung hình (`doi_bo_cuc`)."""
     from .viet_lai_prompt import lam_lanh_tho, viet_lai_prompt  # noqa: PLC0415
 
     so_canh = int(c["scene_id"])
@@ -8196,18 +8328,24 @@ def _ve_lai_anh_cho_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
                                khoa=khoa_viec(luot, "vl-img-clip", so_canh, cu, vong),
                                toi_da_token=2048)
 
-        try:
-            moi = viet_lai_prompt(goi_ai, cu, "the video clip made from this image was "
-                                  "refused: " + str(loi or "")[:160], loai="image")
-        except Exception:  # noqa: BLE001
-            moi = lam_lanh_tho(cu)
-        if not moi or moi.strip() == cu.strip():
-            # 11/10/2026: lời nhắc lành không có gì để "làm dịu" → đổi bố cục khung hình (cùng chủ thể/hành động/
-            # phong cách) để ra tấm mới, thay vì bỏ cả video vì một cảnh (TL1-T7/0026: 172/173 clip).
-            from .viet_lai_prompt import doi_bo_cuc  # noqa: PLC0415
+        from .viet_lai_prompt import doi_bo_cuc  # noqa: PLC0415
 
+        if bo_cuc_moi:
             moi = doi_bo_cuc(cu, vong)
-            bc.ghi("    cảnh {0}: lời nhắc ảnh không có gì để viết lại — đổi bố cục khung hình.".format(so_canh))
+            bc.ghi("    cảnh {0}: clip treo lặp lại ở máy chủ — vẽ lại ảnh với bố cục khung hình mới "
+                   "(cùng chủ thể/hành động/phong cách).".format(so_canh))
+        else:
+            try:
+                moi = viet_lai_prompt(goi_ai, cu, "the video clip made from this image was "
+                                      "refused: " + str(loi or "")[:160], loai="image")
+            except Exception:  # noqa: BLE001
+                moi = lam_lanh_tho(cu)
+            if not moi or moi.strip() == cu.strip():
+                # 11/10/2026: lời nhắc lành không có gì để "làm dịu" → đổi bố cục khung hình (cùng chủ
+                # thể/hành động/phong cách) để ra tấm mới, thay vì bỏ cả video vì một cảnh (TL1-T7/0026).
+                moi = doi_bo_cuc(cu, vong)
+                bc.ghi("    cảnh {0}: lời nhắc ảnh không có gì để viết lại — đổi bố cục khung hình.".format(
+                    so_canh))
         if not moi or moi.strip() == cu.strip():
             raise RuntimeError("cảnh {0}: không đổi được lời nhắc ảnh — vẽ lại sẽ ra đúng "
                                "tấm cũ".format(so_canh))

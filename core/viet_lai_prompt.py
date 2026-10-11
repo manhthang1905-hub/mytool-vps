@@ -238,12 +238,19 @@ def doi_bo_cuc(prompt: str, vong: int = 1) -> str:
     goc = str(prompt or "").strip()
     if not goc:
         return goc
+    # Vòng cứu sau nhận lại chính bản vòng trước đã đổi bố cục — gỡ cụm `_BO_CUC` cũ ở đầu, đừng chồng hai góc
+    # máy mâu thuẫn ("Wide establishing shot…: Eye-level medium shot…: …").
+    than = goc
+    for bo in _BO_CUC:
+        for noi in (": ", ", "):
+            if than.startswith(bo + noi):
+                than = than[len(bo + noi):].strip() or goc
     for i in range(len(_BO_CUC)):
         bo = _BO_CUC[(max(1, int(vong)) - 1 + i) % len(_BO_CUC)]
-        if _MAU_GOC_MAY.match(goc):
-            moi = _MAU_GOC_MAY.sub(bo + ", ", goc, count=1)
+        if _MAU_GOC_MAY.match(than):
+            moi = _MAU_GOC_MAY.sub(bo + ", ", than, count=1)
         else:
-            moi = bo + ": " + goc
+            moi = bo + ": " + than
         if moi.strip() != goc:
             return moi
     return goc + " (alternate composition)"
