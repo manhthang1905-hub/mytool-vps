@@ -232,7 +232,9 @@ _BANG: Sequence[Tuple[str, Tuple[str, ...]]] = (
                 # (`auto_khau._tai_ket_qua_dat_lai`) — phía máy chủ, để L3 không bỏ oan lượt dở.
                 DAU_KET_QUA_MAT)),
     # Hết giờ chờ phía client — máy chủ có thể vẫn đang làm.
-    (CHO_TIEP, ("timeout", "timed out", "hết giờ", "read timeout")),
+    # 11/10/2026: + câu `auto_khau` tự viết khi job treo phía máy chủ ("đợi N phút mà máy chủ vẫn chưa trả kết quả")
+    # — trước rơi `CHET` → trần L3 bỏ oan lượt (clip treo như TL1-T7/0026 cảnh 37).
+    (CHO_TIEP, ("timeout", "timed out", "hết giờ", "read timeout", "máy chủ vẫn chưa trả kết quả")),
     # Đứt mạng phía khách — request chưa rời khỏi máy, retry vô hạn an toàn.
     (MAT_MANG, ("connection", "kết nối", "mạng", "network", "ssl",
                 "remote end closed")),

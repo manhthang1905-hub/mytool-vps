@@ -26,5 +26,10 @@ def test_tts_tam_dong_la_tam_nghi():
     assert su_co.phan_loai(RuntimeError(cau)) in (su_co.TAM_NGHI, su_co.NHA_MAY_NGHI)
 
 
+def test_job_treo_phia_may_chu_la_cho_tiep():
+    cau = "Dừng ở “Tạo clip từng cảnh”: đợi 12 phút mà máy chủ vẫn chưa trả kết quả"
+    assert su_co.phan_loai(RuntimeError(cau)) == su_co.CHO_TIEP
+
+
 def test_cau_tieng_anh_cung_vay():
     assert su_co.phan_loai(RuntimeError("No engine available for request type tts")) == su_co.NHA_MAY_NGHI
