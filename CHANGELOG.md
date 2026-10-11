@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.12** — 2026-10-11 — `vps-jp1` — fix(job): ket qua job mat (download 400/404/410) — dat lai bang khoa moi toi da 2 lan; het lan thi bao loi phia may chu (mien tran L3)
 - **2.180.11** — 2026-10-11 — `vps-jp1` — fix(clip): loi nhac anh lanh ma clip treo — doi bo cuc khung hinh thay vi bo ca video vi mot canh (TL1/0026 172/173 clip)
 - **2.180.10** — 2026-10-10 — `vps-jp1` — fix(su-co): cau tool tu viet 'cong ShopAPI ngung nhan viec... phia may chu' la nha may nghi — L3 da bo oan TL1/0024, TL6/0006
 - **2.180.9** — 2026-10-10 — `vps-jp1` — fix(tu-chay): luot dung vi phia ShopAPI (engine tat/tam nghi/het kho) mien tran 3 lan nhat lai cua L3 — TTS tat ca buoi, TL1/TL6 suyt bi bo
