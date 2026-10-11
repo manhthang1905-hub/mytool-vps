@@ -21,8 +21,17 @@ thì rơi qua đường lùi 3 nấc (`_chon_duong_lui`), luôn ra một `CHON-*
 `_kiem_loai` cũng LOẠI THẲNG ảnh có chữ đọc ra (`chu_doc_ra`) dài hơn `bia_toi_da_ky_tu`
 (mặc định 14, không tính dấu câu/khoảng trắng) — thêm 29/09/2026, insight tâm lý Nhật
 29/09/2026: khán giả thật 55+ (61%), 30% giờ xem trên TV, và 6/9 bìa gần đây của TL1-3 đã
-vượt mốc này. Mọi ứng viên cùng bị loại thì vẫn phải ra MỘT tấm (không chặn sản xuất) —
-`chon()` chọn tấm ÍT CHỮ NHẤT trong số đó và ghi cảnh báo (`ket_qua["chon"]["canh_bao"]`).
+vượt mốc này.
+
+═══ 12/10/2026 — MỌI ỨNG VIÊN BỊ LOẠI THÌ KHÔNG XUẤT TẤM NÀO ═══
+
+Trước đây mọi ứng viên cùng bị loại (sai chữ / chữ vỡ / nhân vật dị dạng / ảnh thật / chữ quá dài) thì
+vẫn xuất tấm ÍT CHỮ NHẤT "cho khỏi chặn sản xuất" — tức là giao một bìa ĐÃ BIẾT là hỏng. Luật chủ dự án
+07/10/2026: *"thà không đăng còn hơn sản phẩm cuối không ổn"*. Giờ `chon()` KHÔNG xuất `CHON-*`, ghi
+`chon-bia.json` với `chon.het_hop_le = True` + lý do từng tấm, và trả bản ghi đó (`so=None`,
+`chon_boi="khong"`): khâu ảnh bìa (`core/auto_khau._khau_thumbnail`) sinh LÔ BÌA MỚI (có trần số vòng),
+hết vòng thì chặn bàn giao và báo người. Đường lùi khi GIÁM KHẢO HỎNG (mạng/JSON) vẫn như cũ — cổng chữ
+trên ảnh (`core/soat_bia.py`) ở khâu bìa soát lại tấm đó trước khi giao.
 """
 
 from __future__ import annotations
@@ -243,9 +252,13 @@ a warm or high-contrast background — never pale grey; an expressive character 
 height).
 - khac_video_gan_day: does this avoid repeating the layout of the recent thumbnails shown?
 
-Also report per tile: "chu_doc_ra" (the text you can actually read on it, empty if none), and \
+Also report per tile: "chu_doc_ra" (the text you can actually read on it, character by character as \
+drawn — do not correct it; empty if none), and \
 "loi_nang" — a list of strings from this fixed set ONLY, whichever apply: "sai_chu" (readable \
-text does not match the expected text above), "chu_vo" (text broken/overlapping/unreadable), \
+text does not match the expected text above), "sai_chinh_ta" (a wrong kanji, typo or misspelled \
+word in the text on the tile — even if it matches the expected text), "chu_vo" (text \
+broken/overlapping/unreadable), "dai_toi" (a dark or grey see-through band/box laid over a large part \
+of the picture or over the character), \
 "nhan_vat_di_dang" (a character/face is deformed or has extra/missing limbs), "anh_that" (a REAL \
 person, a photograph or a photo-realistic human/face anywhere in the tile, even in the background — the \
 channel only uses drawn illustration).
@@ -381,10 +394,14 @@ def _kiem_loai(ket: _KetQuaCham, *, chu_bia_mong_doi: str, doi_chieu_chu: bool,
     loi = set(ket.loi_nang)
     if "chu_vo" in loi:
         return "chữ vỡ"
+    if "sai_chinh_ta" in loi:  # 12/10/2026: TL1-0021 「意きつける」 — chữ sai dù khớp đúng chữ mong đợi (cũng sai)
+        return "sai chính tả trên ảnh"
     if "nhan_vat_di_dang" in loi:
         return "nhân vật dị dạng"
     if "anh_that" in loi:  # 01/10/2026: TL3-0015 — người chụp kiểu ảnh thật ở nền, lạc phong cách kênh
         return "người thật / ảnh chụp"
+    if "dai_toi" in loi:  # 12/10/2026: TL2-0021 — dải tối mờ đè ngang ảnh, che nhân vật (CTR 2,0%)
+        return "dải tối đè ảnh"
     if toi_da_ky_tu and ket.chu_doc_ra:
         so_ky_tu = len(_chuan_hoa_chu(ket.chu_doc_ra))
         if so_ky_tu > toi_da_ky_tu:
@@ -502,6 +519,10 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
     `chon-bia.json`. Trả bản ghi lựa chọn, hoặc `None` khi không có ứng viên
     nào (thư mục trống). KHÔNG BAO GIỜ ném lỗi ra ngoài.
 
+    12/10/2026: mọi ứng viên bị giám khảo LOẠI → KHÔNG xuất `CHON-*`; trả bản ghi
+    `{so: None, chon_boi: "khong", het_hop_le: True, ly_do, ly_do_tung_tam}` (cũng ghi
+    vào `chon-bia.json`) — nơi gọi sinh lô bìa mới / chặn bàn giao, không giao tấm hỏng.
+
     Đã có `CHON-*` sẵn (người tự chọn tay) → GIỮ NGUYÊN, không chấm lại, trả
     bản ghi tối giản đánh dấu `chon_boi: "nguoi"`.
 
@@ -593,20 +614,28 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
         canh_bao = ""
         he_tu_hoc: Dict[str, Any] = {}
         if all(k.loai for k in ung_cu_vien):
-            # Mọi ứng viên đều bị loại (chữ quá dài/sai/vỡ/nhân vật dị dạng) — luật "không
-            # chặn sản xuất" vẫn buộc phải ra MỘT tấm. Chọn tấm ÍT CHỮ NHẤT thay vì tấm điểm
-            # giám khảo cao nhất: điểm cao có thể đến từ một tấm dán nguyên tiêu đề (đã thấy
-            # thật ở TL1-0007, 43 ký tự) — giữa các phương án xấu, tấm ít chữ còn có cơ đọc
-            # được trên TV/điện thoại. Ghi CẢNH BÁO ra log + JSON, không ném lỗi.
-            hop_le = sorted(ung_cu_vien, key=lambda k: len(_chuan_hoa_chu(k.chu_doc_ra)))
-            thang = hop_le[0]
-            chon_boi = "ai"
-            so_ky_tu_thang = len(_chuan_hoa_chu(thang.chu_doc_ra))
-            canh_bao = ("mọi ứng viên đều bị loại ({0}) — chọn tấm ÍT CHỮ NHẤT ({1} ký tự) làm "
-                       "phương án dự phòng, không chặn sản xuất").format(thang.loai, so_ky_tu_thang)
-            ly_do_chon = canh_bao
-            ghi("  (!) ảnh bìa: MỌI ứng viên đều bị loại ({0}) — chọn tấm ít chữ nhất ({1} ký tự) "
-               "làm dự phòng.".format(thang.loai, so_ky_tu_thang))
+            # ═══ 12/10/2026 — KHÔNG XUẤT TẤM ĐÃ BIẾT LÀ HỎNG ═══
+            # Bản cũ chọn tấm ÍT CHỮ NHẤT "cho khỏi chặn sản xuất" — tức giao một bìa sai chữ / nhân vật
+            # dị dạng. Luật 07/10/2026: thà không đăng còn hơn sản phẩm kém. Không xuất CHON-*; khâu ảnh
+            # bìa đọc `het_hop_le` để sinh lô bìa mới (có trần vòng) rồi mới chặn bàn giao + báo người.
+            ly_do_tung_tam = {str(k.so): k.loai for k in ung_cu_vien}
+            gom: Dict[str, int] = {}
+            for k in ung_cu_vien:
+                gom[k.loai.split(" (")[0]] = gom.get(k.loai.split(" (")[0], 0) + 1
+            tom = ", ".join("{0} ×{1}".format(a, b) for a, b in sorted(gom.items(), key=lambda x: -x[1]))
+            ket_khong = {"so": None, "tep": "", "chon_boi": "khong", "het_hop_le": True,
+                         "ly_do": "mọi ứng viên đều bị loại ({0}) — không xuất bìa nào".format(tom),
+                         "ly_do_tung_tam": ly_do_tung_tam, "canh_bao": "",
+                         "nhom_uu_tien": nhom_uu_tien or "", "luot_tham_do": bool(luot_tham_do)}
+            _ghi_json(duong_tep_chon_bia(thu_muc_thumb), {
+                "chon": ket_khong,
+                "ung_vien": [{"so": k.so, "kieu": ten_kieu_theo_so.get(k.so, ""), "nhom": nhom_theo_so.get(k.so, ""),
+                              "tong_diem": round(k.tong, 1), "diem": {a: round(b, 1) for a, b in k.diem.items()},
+                              "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra} for k in ung_cu_vien],
+                "so_luot_cham": so_luot_cham, "co_khuon_thang": bool(khuon_thang)})
+            ghi("  (!) ảnh bìa: MỌI ứng viên đều bị loại ({0}) — KHÔNG xuất bìa nào (khâu bìa sẽ làm lô "
+                "mới).".format(tom))
+            return ket_khong
         else:
             hop_le = [k for k in ung_cu_vien if not k.loai]
             hop_le.sort(key=lambda k: -k.tong)
@@ -680,7 +709,7 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
             "ung_vien": [{"so": k.so, "kieu": ten_kieu_theo_so.get(k.so, ""),
                          "nhom": nhom_theo_so.get(k.so, ""),
                          "tong_diem": round(k.tong, 1), "diem": {a: round(b, 1) for a, b in k.diem.items()},
-                         "loai": k.loai, "ly_do": k.ly_do} for k in ung_cu_vien],
+                         "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra} for k in ung_cu_vien],
             "so_luot_cham": so_luot_cham, "co_khuon_thang": bool(khuon_thang),
         }
         _ghi_json(duong_tep_chon_bia(thu_muc_thumb), ket_qua)

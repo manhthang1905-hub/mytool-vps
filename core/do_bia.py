@@ -59,6 +59,7 @@ __all__ = [
     "do_sang", "ti_le_tuong_phan", "cham_dong", "tong_hop", "cham_anh", "cham_tep", "tim_dong_chu",
     "chon_kieu_dong", "ve_lai_tu_anh_ghep", "nhom_doc_duoc", "duong_bao_cao", "ghi_bao_cao",
     "doc_bao_cao", "nguong_theo_co", "rat_kho_doc", "ban_do_chu_the", "che_chu_the", "bo_cuc_dat",
+    "ly_do_bo_cuc", "phan_chu_the_bi_che", "dien_tich_hop", "soi_dai_toi", "dai_toi_moi", "tom_tat_dai",
 ]
 
 #: WCAG: chữ thường ≥ 4,5:1; chữ lớn (≥ 24 px CSS) ≥ 3:1. Bìa trên điện thoại rộng ~360 px CSS → dòng 12%
@@ -788,12 +789,285 @@ def che_chu_the(mat_na, hop, W: int, H: int) -> float:
 
 def bo_cuc_dat(bc: Optional[Dict[str, Any]]) -> bool:
     """Bố cục bìa VẼ LẠI không hỏng: không hai khung nền chồng nhau, không khung nào che chủ thể quá
-    `CHE_CHU_THE_TOI_DA`, không vết xoá chữ cũ lộ ra. Báo cáo không có mục `bo_cuc` (bộ đo mù) → True."""
+    `CHE_CHU_THE_TOI_DA`, không vết xoá chữ cũ lộ ra. Báo cáo không có mục `bo_cuc` (bộ đo mù) → True.
+
+    12/10/2026 (chẩn đoán view giảm: TL2-0021 vẽ lại có DẢI TỐI đè ngang ảnh, CTR 2,0% trên 5,4k hiển thị) —
+    thêm ba luật: tổng diện tích khung/dải nền (không kể khối nền thiết kế của khuôn) ≤ `KHUNG_DT_TOI_DA` khung
+    ảnh; khung che ≤ `CHE_CHU_THE_PHAN_TOI_DA` phần CHỦ THỂ (đo theo chủ thể — khung to che nửa người vẫn chỉ là
+    "20% diện tích khung" nên luật cũ không bắt); không có dải tối mờ mới (`soi_dai_toi`) so với nền/bản gốc."""
     bo = (bc or {}).get("bo_cuc")
     if not isinstance(bo, dict):
         return True
-    return (not bo.get("chong_khung") and float(bo.get("che_chu_the") or 0) <= CHE_CHU_THE_TOI_DA
-            and float(bo.get("vet_lo") or 0) <= VET_LO_TOI_DA)
+    return not ly_do_bo_cuc(bc)
+
+
+def ly_do_bo_cuc(bc: Optional[Dict[str, Any]]) -> List[str]:
+    """Các lý do bố cục bìa vẽ HỎNG (rỗng = đạt) — câu người đọc được cho log / chọn bìa."""
+    bo = (bc or {}).get("bo_cuc")
+    if not isinstance(bo, dict):
+        return []
+    ra: List[str] = []
+    if bo.get("chong_khung"):
+        ra.append("hai khung nền chồng nhau")
+    if float(bo.get("che_chu_the") or 0) > CHE_CHU_THE_TOI_DA:
+        ra.append("khung nền đè lên chủ thể ({0:.0%} hộp khung)".format(float(bo.get("che_chu_the") or 0)))
+    if float(bo.get("vet_lo") or 0) > VET_LO_TOI_DA:
+        ra.append("vết xoá chữ cũ lộ {0:.1%} khung".format(float(bo.get("vet_lo") or 0)))
+    if float(bo.get("dt_khung") or 0) > KHUNG_DT_TOI_DA:
+        ra.append("khung/dải nền tối phủ {0:.0%} ảnh (> {1:.0%})".format(float(bo.get("dt_khung") or 0),
+                                                                     KHUNG_DT_TOI_DA))
+    if float(bo.get("che_chu_the_phan") or 0) > CHE_CHU_THE_PHAN_TOI_DA:
+        ra.append("khung/dải nền che {0:.0%} nhân vật/chủ thể (> {1:.0%})".format(
+            float(bo.get("che_chu_the_phan") or 0), CHE_CHU_THE_PHAN_TOI_DA))
+    if bo.get("dai_toi"):
+        ra.append("dải tối mờ đè ngang ảnh ({0})".format(bo.get("dai_toi") if isinstance(bo.get("dai_toi"), str)
+                                                          else "đo điểm ảnh"))
+    return ra
+
+
+def phan_chu_the_bi_che(mat_na, cac_hop: Sequence[Sequence[float]], W: int, H: int) -> float:
+    """Phần CHỦ THỂ (`ban_do_chu_the`) nằm dưới HỢP các hộp `cac_hop` (px trên ảnh W×H) — 0..1.
+
+    Khác `che_chu_the` (tỉ lệ diện tích HỘP nằm trên chủ thể): khung lớn che nửa người chỉ chiếm ~20% hộp
+    của nó, nên phải đo theo phía chủ thể."""
+    np = _np()
+    if mat_na is None or not cac_hop:
+        return 0.0
+    h, w = mat_na.shape
+    tong = float(mat_na.sum())
+    if tong <= 0:
+        return 0.0
+    phu = np.zeros_like(mat_na, dtype=bool)
+    for x0, y0, x1, y1 in cac_hop:
+        a0, a1 = max(0, int(x0 * w / W)), min(w, int(round(x1 * w / W)))
+        b0, b1 = max(0, int(y0 * h / H)), min(h, int(round(y1 * h / H)))
+        if a1 > a0 and b1 > b0:
+            phu[b0:b1, a0:a1] = True
+    return float((mat_na & phu).sum()) / tong
+
+
+def dien_tich_hop(cac_hop: Sequence[Sequence[float]], W: int, H: int) -> float:
+    """Diện tích HỢP các hộp (px trên ảnh W×H) / diện tích ảnh — đo trên lưới 1/8 cho nhanh."""
+    np = _np()
+    if not cac_hop:
+        return 0.0
+    h, w = max(1, H // 8), max(1, W // 8)
+    phu = np.zeros((h, w), dtype=bool)
+    for x0, y0, x1, y1 in cac_hop:
+        a0, a1 = max(0, int(x0 * w / W)), min(w, int(round(x1 * w / W)))
+        b0, b1 = max(0, int(y0 * h / H)), min(h, int(round(y1 * h / H)))
+        if a1 > a0 and b1 > b0:
+            phu[b0:b1, a0:a1] = True
+    return float(phu.mean())
+
+
+# ── Dải / khung TỐI MỜ đè ngang ảnh — dò bằng điểm ảnh (12/10/2026) ────────────
+#
+# Chẩn đoán 12/10/2026 (`workspace/chan-doan/view-giam-2026-10-12.md`): bìa TL2-0021 sau lệnh vẽ lại (xoá chữ cũ rồi
+# phủ một khung khối tối mờ 66% lên vùng chữ cũ) có một DẢI TỐI đè ngang cả ảnh, che nửa người nhân vật — bản đó
+# được đổi lên YouTube, CTR 2,02% trên 5,4k hiển thị. Hai bản vẽ lại cùng đợt (TL4-K2-0004, TL6-K2-0005) cũng vậy.
+# Bộ đo độ đọc được chấm ba bản ấy ĐẠT 76–99/100 (chữ trắng/vàng trên nền tối là "dễ đọc") — nên cần một phép đo
+# riêng cho chính lỗi vẽ này, không phụ thuộc báo cáo của bộ vẽ (bìa cũ, bìa vẽ bằng lệnh tay, bìa người đặt).
+#
+# Dấu hiệu (đo trên lưới 320×180, độ sáng 0..255):
+#   * CẠNH THẲNG dài (≥ 30% bề ngang / 25% bề dọc) mà qua nó độ sáng nhân một hệ số GẦN NHƯ HẰNG (0,28–0,85, IQR ≤
+#     0,2) trên ≥ 85% điểm của đoạn — một lớp phủ mờ, không phải mép bàn/khung cửa (hệ số đổi theo vật).
+#   * Không tăng độ rực màu (khối màu cam/xanh/đỏ đặc của thiết kế làm TĂNG sắc độ; lớp tối mờ làm giảm).
+#   * XUYÊN THẤU: vân của nền vẫn chạy qua cạnh (tương quan vân ngoài↔trong ≥ 0,5, độ lệch vân trong ≈ hệ số × ngoài)
+#     và bên trong khung còn vân nền (khung đặc của thiết kế — hộp đen chữ trắng — không có).
+#   * Ghép thành HỘP: hai cạnh ngang cùng hệ số, hoặc một cạnh ngang + một cạnh dọc chạm đầu đoạn.
+# Chỉ hộp ≥ `DAI_TOI_DT_TOI_DA` khung ảnh mới tính là lỗi. Hiệu chỉnh 12/10/2026 trên 269 bìa/nền thật của các kênh:
+# bắt cả 3 bản vẽ lại lỗi (dải 46–68% khung) + bản đang sống trên YouTube của TL2-0021, không bắt nhầm tấm nào khác.
+
+#: Hộp dải tối mờ (dò điểm ảnh) lớn hơn ngần này phần khung là LỖI VẼ — không giao.
+DAI_TOI_DT_TOI_DA = 0.25
+#: Báo cáo của bộ vẽ: tổng diện tích khung/dải nền (không kể khối nền thiết kế) quá ngần này phần ảnh → bố cục hỏng.
+KHUNG_DT_TOI_DA = 0.20
+#: Báo cáo của bộ vẽ: khung/dải nền che quá ngần này phần CHỦ THỂ → bố cục hỏng.
+CHE_CHU_THE_PHAN_TOI_DA = 0.15
+_LUOI_DAI = (320, 180)
+_K_DAI = 3
+
+
+def _chay_dai_nhat(m, ho: int = 4) -> Tuple[int, int]:
+    """Đoạn True liền dài nhất của mảng bool 1D (cho phép lỗ ≤ `ho` điểm) → (đầu, cuối)."""
+    np = _np()
+    idx = np.flatnonzero(m)
+    if not idx.size:
+        return 0, 0
+    cat = np.flatnonzero(np.diff(idx) > ho + 1)
+    dau = np.concatenate([[0], cat + 1])
+    cuoi = np.concatenate([cat, [idx.size - 1]])
+    dai = idx[cuoi] - idx[dau]
+    k = int(np.argmax(dai))
+    return int(idx[dau[k]]), int(idx[cuoi[k]]) + 1
+
+
+def _loc_cao(v):
+    np = _np()
+    return v - np.convolve(v, np.ones(9, dtype=np.float32) / 9.0, mode="same")
+
+
+def _canh_phu_mo(rgb, toi_thieu_dai: float) -> List[Dict[str, Any]]:
+    """Cạnh thẳng của lớp phủ mờ dọc trục 0 (giữa hàng i-1 | i) của ảnh RGB float (N, M, 3).
+    `kieu` "vao": phía sau ranh (i, i+1…) tối hơn; "ra": phía trước tối hơn."""
+    np = _np()
+    L = rgb.mean(axis=2)
+    N, _M = L.shape
+    K = _K_DAI
+    ra: List[Dict[str, Any]] = []
+    # Hai cửa sổ K hàng cách ranh MỘT hàng (bỏ hàng chuyển tiếp): mép hộp đen ĐẶC bị nhoè khi thu nhỏ trông như
+    # "tối 40%" nếu lấy cả hàng mép; bỏ hàng mép thì bên trong hộp đặc lộ đúng độ tối (< 0,25) và bị loại.
+    S = 2 * K + 4  # độ sâu kiểm "lớp tối còn kéo dài vào trong" (đường kẻ/mép kệ mảnh thì hết ngay)
+    for i in range(K + 1, N - K):
+        tr, sa = L[i - K - 1:i - 1].mean(axis=0), L[i + 1:i + K + 1].mean(axis=0)
+        trc, sac = rgb[i - K - 1:i - 1].mean(axis=0), rgb[i + 1:i + K + 1].mean(axis=0)
+        sau_trong = L[i + S:i + S + K].mean(axis=0) if i + S + K <= N else None
+        truoc_trong = L[i - S - K:i - S].mean(axis=0) if i - S - K >= 0 else None
+        for kieu, sang, toi, sc, tc, sau in (("vao", tr, sa, trc, sac, sau_trong),
+                                             ("ra", sa, tr, sac, trc, truoc_trong)):
+            r = (toi + 1.0) / (sang + 1.0)
+            m = (sang > 22) & (r > 0.25) & (r < 0.85)
+            if m.sum() < toi_thieu_dai * 0.85:
+                continue
+            j0, j1 = _chay_dai_nhat(m)
+            if j1 - j0 < toi_thieu_dai:
+                continue
+            doan = m[j0:j1]
+            if doan.mean() < 0.85:
+                continue
+            rr = r[j0:j1][doan]
+            if float(np.percentile(rr, 75) - np.percentile(rr, 25)) > 0.2:
+                continue
+            # Lớp phủ thật DÀY: sâu thêm S hàng vào trong vẫn tối hơn bên ngoài (≥ 70% cột). Mép trên của một
+            # đường kệ/khung cửa mảnh thì sau vài hàng đã sáng lại — không phải dải.
+            if sau is None:
+                continue
+            r_sau = (sau[j0:j1] + 1.0) / (sang[j0:j1] + 1.0)
+            if float((r_sau < 0.9).mean()) < 0.7:
+                continue
+            # …và tối CÙNG MỘT MỨC như ở mép (lớp phủ mờ đều). Hộp ĐẶC: cửa sổ lệch mép trộn ngoài+trong nên mép
+            # trông "tối 45%" nhưng vào sâu là đen kịt (≈ 15%) — không phải lớp phủ.
+            if float(np.median(r_sau)) < 0.6 * float(np.median(rr)):
+                continue
+            sac_trong = tc[j0:j1].max(axis=1) - tc[j0:j1].min(axis=1)
+            sac_ngoai = sc[j0:j1].max(axis=1) - sc[j0:j1].min(axis=1)
+            if float(np.median((sac_trong - sac_ngoai)[doan])) > 15.0:
+                continue  # khối màu đặc của thiết kế (cam/xanh/đỏ) làm TĂNG sắc độ — lớp tối mờ thì không
+            he = float(np.median(rr))
+            if not 0.28 <= he <= 0.85:
+                continue
+            u, d = _loc_cao(sang[j0:j1])[4:-4], _loc_cao(toi[j0:j1])[4:-4]
+            tq = float(np.corrcoef(u, d)[0, 1]) if u.size > 8 and u.std() > 0.8 and d.std() > 0.4 else 0.0
+            xuyen = bool(u.size > 8 and u.std() >= 3.0 and tq >= 0.5
+                         and 0.35 * he <= d.std() / max(float(u.std()), 1e-6) <= 2.0 * he)
+            # Khối ĐẶC (hộp đen/màu của thiết kế): bên trong phẳng lì trong khi bên ngoài có vân — không xuyên thấu.
+            dac = bool(u.size > 8 and u.std() >= 3.0 and d.std() < 0.15 * float(u.std()))
+            ra.append({"i": i, "kieu": kieu, "j0": j0, "j1": j1, "he": he, "xuyen": xuyen, "dac": dac,
+                       "s": float(doan.mean() * (j1 - j0))})
+    ra.sort(key=lambda e: -e["s"])
+    giu: List[Dict[str, Any]] = []
+    for e in ra:
+        trung = [g for g in giu if g["kieu"] == e["kieu"] and abs(g["i"] - e["i"]) <= 3
+                 and min(g["j1"], e["j1"]) - max(g["j0"], e["j0"]) > 0.5 * (e["j1"] - e["j0"])]
+        if trung:
+            # Cùng một mép (lệch ±3 hàng): cửa sổ lệch hàng trộn ngoài+trong nên trông "mờ"; hàng ĐÚNG mép mà thấy
+            # khối đặc thì cả mép là khối đặc.
+            for g in trung:
+                g["dac"] = bool(g["dac"] or e["dac"])
+            continue
+        giu.append(e)
+    return giu
+
+
+def soi_dai_toi(anh_hoac_duong) -> Dict[str, Any]:
+    """Dò DẢI / KHUNG TỐI MỜ đè lên ảnh bìa bằng điểm ảnh (không cần báo cáo của bộ vẽ) — xem khối chú thích ở
+    trên. Trả `{"co": bool, "dai": [{"hop": (x0, y0, x1, y1) tỉ lệ 0..1, "he_so", "dt", "canh"}], "dt_max"}`;
+    `co` = có hộp ≥ `DAI_TOI_DT_TOI_DA` khung. Ảnh hỏng → `{"co": False, "loi": …}` (không kết luận)."""
+    import math  # noqa: PLC0415
+    np = _np()
+    from PIL import Image  # noqa: PLC0415
+    try:
+        anh = Image.open(anh_hoac_duong) if isinstance(anh_hoac_duong, str) else anh_hoac_duong
+        rgb = np.asarray(anh.convert("RGB").resize(_LUOI_DAI, Image.BOX)).astype(np.float32)
+    except (OSError, ValueError) as loi:
+        return {"co": False, "dai": [], "dt_max": 0.0, "loi": str(loi)[:120]}
+    W, H = _LUOI_DAI
+    ngang = [e for e in _canh_phu_mo(rgb, 0.3 * W) if not e["dac"]]
+    doc = [e for e in _canh_phu_mo(np.ascontiguousarray(rgb.transpose(1, 0, 2)), 0.25 * H) if not e["dac"]]
+    hop: List[Dict[str, Any]] = []
+
+    def them(x0, y0, x1, y1, he, canh):
+        if x1 - x0 < 8 or y1 - y0 < 8:
+            return
+        hop.append({"hop": (round(x0 / W, 3), round(y0 / H, 3), round(x1 / W, 3), round(y1 / H, 3)),
+                    "he_so": round(he, 2), "dt": round((x1 - x0) * (y1 - y0) / float(W * H), 3), "canh": canh})
+    for e in ngang:
+        y, x0, x1, he = e["i"], e["j0"], e["j1"], e["he"]
+        for e2 in ngang:
+            if e2["kieu"] == e["kieu"] or not (e["xuyen"] or e2["xuyen"]):
+                continue
+            if (e["kieu"] == "vao" and e2["i"] <= y + 0.1 * H) or (e["kieu"] == "ra" and e2["i"] >= y - 0.1 * H):
+                continue
+            if min(x1, e2["j1"]) - max(x0, e2["j0"]) < 0.6 * min(x1 - x0, e2["j1"] - e2["j0"]):
+                continue
+            if abs(math.log(he) - math.log(e2["he"])) > 0.4:
+                continue
+            ya, yb = sorted((y, e2["i"]))
+            them(max(x0, e2["j0"]), ya, min(x1, e2["j1"]), yb, (he + e2["he"]) / 2, "hai cạnh ngang")
+        for e2 in doc:
+            if not (e["xuyen"] or e2["xuyen"]) or abs(math.log(he) - math.log(e2["he"])) > 0.4:
+                continue
+            b0, b1, x = e2["j0"], e2["j1"], e2["i"]
+            if e["kieu"] == "vao":
+                if abs(b0 - y) > 6 or b1 - y < 0.15 * H:
+                    continue
+                ya, yb = y, b1
+            else:
+                if abs(b1 - y) > 6 or y - b0 < 0.15 * H:
+                    continue
+                ya, yb = b0, y
+            if e2["kieu"] == "vao" and abs(x - x0) <= 8:
+                them(x, ya, x1, yb, (he + e2["he"]) / 2, "cạnh ngang + cạnh dọc trái")
+            elif e2["kieu"] == "ra" and abs(x - x1) <= 8:
+                them(x0, ya, x, yb, (he + e2["he"]) / 2, "cạnh ngang + cạnh dọc phải")
+    hop.sort(key=lambda h: -h["dt"])
+    dt_max = hop[0]["dt"] if hop else 0.0
+    return {"co": dt_max >= DAI_TOI_DT_TOI_DA, "dai": hop[:4], "dt_max": dt_max}
+
+
+def _giao_ti_le(a: Sequence[float], b: Sequence[float]) -> float:
+    """Phần diện tích của hộp nhỏ hơn nằm trong hộp kia (0..1)."""
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    if w <= 0 or h <= 0:
+        return 0.0
+    nho = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return (w * h) / nho if nho > 0 else 0.0
+
+
+def dai_toi_moi(anh_hoac_duong, nguon) -> Dict[str, Any]:
+    """Dải tối mờ của `anh` mà ẢNH NGUỒN (nền sạch `znen-*` hoặc bản trước khi vẽ lại) KHÔNG có — tức do bộ vẽ
+    phủ thêm. Nguồn không mở được → so như không có nguồn. Trả cùng khuôn `soi_dai_toi` (chỉ giữ hộp mới)."""
+    sau = soi_dai_toi(anh_hoac_duong)
+    if not sau.get("co") or not nguon:
+        return sau
+    truoc = soi_dai_toi(nguon)
+    if truoc.get("loi"):
+        return sau
+    moi = [h for h in sau.get("dai") or [] if h["dt"] >= DAI_TOI_DT_TOI_DA
+           and not any(_giao_ti_le(h["hop"], g["hop"]) >= 0.5 for g in truoc.get("dai") or [])]
+    return {"co": bool(moi), "dai": moi, "dt_max": max([h["dt"] for h in moi] or [0.0])}
+
+
+def tom_tat_dai(dai: Dict[str, Any]) -> str:
+    """Một câu cho log: dải tối lớn nhất (vị trí, diện tích, độ tối)."""
+    if not dai or not dai.get("dai"):
+        return "không có dải tối"
+    h = dai["dai"][0]
+    x0, y0, x1, y1 = h["hop"]
+    return "dải tối mờ {0:.0%} khung (x {1:.0%}–{2:.0%}, y {3:.0%}–{4:.0%}, còn {5:.0%} độ sáng nền)".format(
+        h["dt"], x0, x1, y0, y1, h["he_so"])
 
 
 def khung_chong_nhau(cac_hop: Sequence[Sequence[float]]) -> bool:
@@ -1214,11 +1488,21 @@ def ve_lai_tu_anh_ghep(anh, chu_tang: Sequence[Dict[str, Any]], dich: str, *, go
             if chu_the_nen is not False:
                 bo["che_chu_the"] = round(max(float(bo.get("che_chu_the") or 0),
                                               che_chu_the(chu_the_nen, hop_phu, W, H)), 3)
+                # 12/10/2026: khung khối phủ vùng chữ cũ = đúng "dải tối" của TL2-0021 — đo theo CHỦ THỂ bị che
+                bo["che_chu_the_phan"] = round(max(float(bo.get("che_chu_the_phan") or 0),
+                                                   phan_chu_the_bi_che(chu_the_nen, [hop_phu], W, H)), 3)
+            bo["dt_khung"] = round(max(float(bo.get("dt_khung") or 0), dien_tich_hop([hop_phu], W, H)), 3)
+        # 12/10/2026: đo ĐIỂM ẢNH — bản vẽ lại có dải tối mờ mà bìa gốc không có thì bố cục hỏng.
+        try:
+            dai = dai_toi_moi(tep, anh)
+            if dai.get("co"):
+                bo["dai_toi"] = tom_tat_dai(dai)
+        except Exception:  # noqa: BLE001 — đo hỏng không được làm mất lần thử
+            pass
         if not bo_cuc_dat(bc) and bc.get("dat"):
             bc["dat"] = False
             bc["doc_duoc"] = "thap"
-            bc.setdefault("ly_do", []).insert(0, "bố cục hỏng (vết xoá chữ cũ lộ {0:.0%} khung, khung che chủ thể "
-                                                 "{1:.0%})".format(lo, float(bo.get("che_chu_the") or 0)))
+            bc.setdefault("ly_do", []).insert(0, "bố cục hỏng ({0})".format("; ".join(ly_do_bo_cuc(bc))))
         bc["vet_lo"] = round(lo, 3)
         diem = float(bc.get("diem") or 0) + (1000 if bc.get("dat") else 0)
         if ghi:
@@ -1347,6 +1631,16 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
     elif not ve_lai_tu_anh_ghep(tt["nguon"], chu_tang, png, goc=goc, ngon_ngu=tt["ngon_ngu"], bao_cao=bc,
                                 ghi=ghi):
         raise RuntimeError("không vẽ lại được (thiếu font?)")
+    # 12/10/2026 (TL2-0021 được đổi lên YouTube với dải tối đè ngang ảnh): đo ĐIỂM ẢNH bản vẽ lại so với nguồn —
+    # có dải tối mờ mới thì bố cục hỏng, không thay bìa gói (báo cáo cũ không có mục này nên đã cho qua).
+    try:
+        dai = dai_toi_moi(png, tt["znen"] or tt["nguon"])
+        if dai.get("co"):
+            bc.setdefault("bo_cuc", {"so_khung": 0, "chong_khung": False, "che_chu_the": 0.0})["dai_toi"] = \
+                tom_tat_dai(dai)
+            ghi("    (!) " + tom_tat_dai(dai))
+    except Exception:  # noqa: BLE001
+        pass
     jpg = os.path.join(thu_muc, "{0}.jpg".format(ma))
     Image.open(png).convert("RGB").save(jpg, format="JPEG", quality=92)
     ghi_bao_cao(jpg, bc)
@@ -1355,7 +1649,7 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
         return ra_tt
     if not bc.get("dat") or not bo_cuc_dat(bc) or float(bc.get("diem") or 0) < float(truoc.get("diem") or 0):
         ghi("  (!) bản vẽ lại không tốt hơn bản gốc (trượt / bố cục hỏng / điểm thấp hơn) — KHÔNG thay bìa gói: "
-            + tom_tat(bc))
+            + tom_tat(bc) + ("; " + "; ".join(ly_do_bo_cuc(bc)) if ly_do_bo_cuc(bc) else ""))
         return ra_tt
     if tt["chon"]:
         sao = os.path.join(tt["thu_muc_thumb"], "_truoc-do-bia")
@@ -1387,6 +1681,17 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
     bc = cham_tep(anh)
     if not bc.get("dat"):
         raise RuntimeError("bìa mới chưa ĐẠT độ đọc được — không xếp: " + tom_tat(bc))
+    # 12/10/2026: TL2-0021 được đổi lên YouTube bằng bản vẽ lại có DẢI TỐI đè ngang ảnh (độ đọc được vẫn "ĐẠT 96").
+    hong = ly_do_bo_cuc(bc)
+    anh_dang = ho_so_video.duong_anh_ho_so(goc, kenh, ma)
+    try:
+        dai = dai_toi_moi(anh, anh_dang if os.path.isfile(anh_dang) and os.path.abspath(anh_dang) != anh else "")
+    except Exception:  # noqa: BLE001
+        dai = {}
+    if dai.get("co"):
+        hong.append(tom_tat_dai(dai))
+    if hong:
+        raise RuntimeError("bìa mới hỏng bố cục — không xếp: " + "; ".join(hong))
     hs = ho_so_video.doc_ho_so(goc, kenh, ma) or {}
     vid = str(hs.get("video_id") or "")
     if not vid:

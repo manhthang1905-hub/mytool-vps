@@ -155,9 +155,10 @@ def test_chu_qua_dai_bi_loai_du_diem_cao_nhat(tmp_path):
     assert du["chon"]["chu_doc_ra"] == "ngắn gọn"
 
 
-def test_moi_ung_vien_bi_loai_chon_it_chu_nhat_va_canh_bao(tmp_path):
-    """Cả hai ứng viên đều chữ quá dài (mọi tấm bị loại) — vẫn phải ra MỘT tấm (không chặn
-    sản xuất): chọn tấm ÍT CHỮ NHẤT trong hai, và ghi cảnh báo."""
+def test_moi_ung_vien_bi_loai_KHONG_xuat_bia_nao(tmp_path):
+    """12/10/2026 (đổi luật 29/09): mọi ứng viên bị loại (chữ quá dài / nhân vật dị dạng…) thì KHÔNG
+    giao "tấm ít chữ nhất" nữa — không xuất CHON-*, ghi `het_hop_le` + lý do từng tấm để khâu bìa
+    làm lô mới (luật 07/10/2026: thà không đăng còn hơn sản phẩm kém)."""
     goc = str(tmp_path)
     _ghi_kenh_yaml(goc, "K1")
     thu_muc = os.path.join(str(tmp_path), "thumb")
@@ -165,17 +166,35 @@ def test_moi_ung_vien_bi_loai_chon_it_chu_nhat_va_canh_bao(tmp_path):
     _dung_ung_vien(thu_muc, 2, (50, 200, 50))
 
     chu_rat_dai = "một câu chữ bìa cực kỳ dài vượt xa mười bốn ký tự cho phép"
-    chu_hoi_dai = "chữ hơi dài hai mươi mốt ký tự nha"  # >20 (trần 30/09/2026)
     goi_chat = _goi_chat_diem(
         {"A": _DIEM_10, "B": _DIEM_2},
-        chu_theo_nhan={"A": chu_rat_dai, "B": chu_hoi_dai})
+        chu_theo_nhan={"A": chu_rat_dai, "B": "ngắn"}, loi_nang_theo_nhan={"B": ["nhan_vat_di_dang"]})
     ket = cb.chon(goc, "K1", thu_muc, ten_kieu_theo_so={1: "portrait_main", 2: "dramatic_scene"},
                  tieu_de="T", chu_bia="C", goi_chat=goi_chat, so_luot_cham=1, seed=1)
-    assert ket is not None
+    assert ket is not None and ket["so"] is None and ket["het_hop_le"] and ket["chon_boi"] == "khong"
+    assert not [t for t in os.listdir(thu_muc) if t.startswith("CHON-")], "không được xuất tấm hỏng"
     du = cb.doc_chon_bia(thu_muc)
-    assert du["chon"]["canh_bao"], "phải ghi cảnh báo khi mọi ứng viên bị loại"
-    assert du["chon"]["chu_doc_ra"] == chu_hoi_dai, "phải chọn tấm ÍT CHỮ HƠN trong hai tấm xấu"
+    assert du["chon"]["het_hop_le"] is True and "không xuất" in du["chon"]["ly_do"]
     assert all(u["loai"] for u in du["ung_vien"]), "cả hai ứng viên đều phải mang lý do loại"
+    assert sorted(du["chon"]["ly_do_tung_tam"].values(), key=len)[0] == "nhân vật dị dạng"
+
+
+def test_sai_chinh_ta_va_dai_toi_bi_loai(tmp_path):
+    """12/10/2026: giám khảo báo `sai_chinh_ta` (chữ sai dù khớp chữ mong đợi — TL1-0021 「意きつける」) hay
+    `dai_toi` (dải tối đè ảnh — TL2-0021) thì loại thẳng."""
+    goc = str(tmp_path)
+    _ghi_kenh_yaml(goc, "K1")
+    thu_muc = os.path.join(str(tmp_path), "thumb")
+    for so in (1, 2, 3):
+        _dung_ung_vien(thu_muc, so, (60 * so, 50, 50))
+    goi_chat = _goi_chat_diem({"A": _DIEM_10, "B": _DIEM_10, "C": _DIEM_2},
+                              loi_nang_theo_nhan={"A": ["sai_chinh_ta"], "B": ["dai_toi"]})
+    cb.chon(goc, "K1", thu_muc, ten_kieu_theo_so={1: "a", 2: "b", 3: "c"}, tieu_de="T", chu_bia="",
+            goi_chat=goi_chat, so_luot_cham=1, seed=3)
+    du = cb.doc_chon_bia(thu_muc)
+    loai = sorted(u["loai"] for u in du["ung_vien"])
+    assert loai == ["", "dải tối đè ảnh", "sai chính tả trên ảnh"]
+    assert du["chon"]["tong_diem"] < 50   # tấm điểm thấp nhưng sạch thắng
 
 
 # ── 3. Đảo thứ tự nhãn — điểm vẫn quy đúng về ứng viên gốc ───────────────────

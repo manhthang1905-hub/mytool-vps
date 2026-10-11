@@ -1165,6 +1165,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         else:
             nhom.append([g])
     hop_cac_khung: List[Tuple[float, float, float, float]] = []
+    hop_khung_them: List[Tuple[float, float, float, float]] = []  # khung bộ vẽ THÊM (không phải khối nền khuôn)
     che_max = 0.0
     for ds_g in nhom:
         kh = ds_g[0]["kieu"]["khung"]
@@ -1176,6 +1177,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         hop_cac_khung.append((x0, y0, x1, y1))
         if not any(g["t"].get("khoi_nen") for g in ds_g):  # khối nền của KHUÔN là thiết kế, không tính che
             che_max = max(che_max, do_bia.che_chu_the(chu_the, (x0, y0, x1, y1), W, H))
+            hop_khung_them.append((x0, y0, x1, y1))
         ImageDraw.Draw(mn).rounded_rectangle([x0, y0, x1, y1], radius=int(min(g["c"] for g in ds_g) * 0.22),
                                              fill=int(255 * float(kh["alpha"])))
         # Mặt nạ theo MÀU, ghép MAX alpha — hai khung chạm nhau không chồng tối gấp đôi.
@@ -1208,8 +1210,13 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         for d, g in zip(ds, hinh):
             d["kieu"] = g["kieu"]["ten"]
         bc = do_bia.tong_hop(ds, cach="chinh_xac")
+        # 12/10/2026 (TL2-0021: khung tối to đè ngang ảnh): thêm diện tích khung bộ vẽ thêm + phần CHỦ THỂ bị che
+        # (đo theo chủ thể, không theo hộp) — `do_bia.bo_cuc_dat` chặn khi quá `KHUNG_DT_TOI_DA` /
+        # `CHE_CHU_THE_PHAN_TOI_DA`.
         bc["bo_cuc"] = {"so_khung": len(hop_cac_khung), "chong_khung": do_bia.khung_chong_nhau(hop_cac_khung),
-                        "che_chu_the": round(che_max, 3)}
+                        "che_chu_the": round(che_max, 3),
+                        "dt_khung": round(do_bia.dien_tich_hop(hop_khung_them, W, H), 3),
+                        "che_chu_the_phan": round(do_bia.phan_chu_the_bi_che(chu_the, hop_khung_them, W, H), 3)}
         do_bia.ghi_bao_cao(dich, bc, anh=ket)
         if bao_cao is not None:
             bao_cao.clear()

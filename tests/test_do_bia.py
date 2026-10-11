@@ -211,13 +211,20 @@ def test_cham_mu_bia_kieu_cu_do_tren_nen_am_TRUOT():
     assert bc["tin_cay"] and bc["dat"] is False, do_bia.tom_tat(bc)
 
 
-def test_ve_lai_tu_anh_ghep_DAT_khong_goi_AI(tmp_path):
+def test_ve_lai_tu_anh_ghep_xoa_chu_phu_khung_khoi_bi_CHAN(tmp_path):
+    """12/10/2026 — đổi kỳ vọng: bản cũ của bài này nhận lần vẽ lại "xoá chữ cũ + phủ khung khối tối lên vùng chữ
+    cũ" (ĐẠT 100 về độ đọc được). Đúng kiểu đó là bìa TL2-0021 lên YouTube với DẢI TỐI đè ngang ảnh (CTR 2,0%).
+    Giờ lần thử ấy trượt bố cục (khung tối > 20% ảnh, che chủ thể, dải tối mờ đo điểm ảnh) — không ra bìa đạt thì
+    thôi, không giao bìa có dải tối."""
     im = _bia_kieu_cu(_nen("am_ron"), _font_nhat())
     dich = str(tmp_path / "lai.png")
     bc: dict = {}
-    assert do_bia.ve_lai_tu_anh_ghep(im, do_bia._chia_tang("人生後半で強くなる男"), dich, bao_cao=bc)  # noqa: SLF001
-    assert bc["dat"] is True, do_bia.tom_tat(bc)
-    assert do_bia.cham_tep(dich)["dat"] is True
+    dong: list = []
+    assert do_bia.ve_lai_tu_anh_ghep(im, do_bia._chia_tang("人生後半で強くなる男"), dich, bao_cao=bc,  # noqa: SLF001
+                                     ghi=dong.append)
+    assert bc["dat"] is False and not do_bia.bo_cuc_dat(bc), do_bia.tom_tat(bc)
+    co_khoi = [d for d in dong if "khung khối" in d and "cả khung" in d]
+    assert co_khoi and "dải tối" in co_khoi[0] and "phủ" in co_khoi[0], dong
 
 
 def test_chia_tang_cat_sau_tro_tu_khong_cat_giua_tu():
