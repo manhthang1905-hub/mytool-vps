@@ -191,7 +191,11 @@ def test_y_kien_chuyen_gia_chi_khi_bat_va_loi_nhac_bien_tap_y_het_khi_khong_co(t
 def test_do_chinh_xac_theo_loai_va_quyen_co_tre(tmp_path):
     goc = str(tmp_path)
     tm = os.path.join(goc, "CHANNEL", "K", "giam-doc")
-    dd = [{"video_id": "v{0}".format(i), "ket": "truot", "dung": i < 8} for i in range(10)]   # 8/10
+    # 8/10; kết quả thật xen kẽ (tỉ lệ nền 50%) — 12/10/2026: quyền cần kỹ năng hơn tỉ lệ nền, không chỉ % đúng
+    dd = [{"video_id": "v{0}".format(i), "dung": i < 8,
+           "ket_that": "thang" if i % 2 == 0 else "truot",
+           "ket": ("thang" if i % 2 == 0 else "truot") if i < 8 else ("truot" if i % 2 == 0 else "thang")}
+          for i in range(10)]
     _ghi(os.path.join(tm, "du-doan.json"), json.dumps({"du_doan": dd}))
     kn._ghi_json(os.path.join(tm, "kham-nghiem", "A-48h.json"), {
         "video_id": "A", "moc": "48h", "ket": {"cong_hong": "hien_thi"},

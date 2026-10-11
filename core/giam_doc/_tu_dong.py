@@ -138,7 +138,15 @@ def quyen_kenh(goc: str, ma: str, hien_tai: str) -> Dict[str, Any]:
 
     o = (hoi_dong.do_chinh_xac(goc, ma, ghi=False).get("loai") or {}).get("du_doan") or {}
     n, tl = int(o.get("n") or 0), o.get("ti_le")
-    if tl is None or n < hoi_dong.TU_AP_N:
+    ky_nang = True
+    if "ti_le_nen" in o:        # 12/10/2026: đúng nhiều nhờ tỉ lệ nền ≠ kỹ năng (xem hoi_dong.KY_NANG_*)
+        bien = hoi_dong.KY_NANG_GIU_HON_NEN if hien_tai == "tu_ap" else hoi_dong.KY_NANG_HON_NEN
+        nen = o.get("ti_le_nen")
+        ky_nang = bool(nen is not None and tl is not None and tl >= nen + bien
+                       and int(o.get("dung_thang") or 0) >= hoi_dong.KY_NANG_DUNG_THANG)
+    if not ky_nang:
+        moi = "goi_y"
+    elif tl is None or n < hoi_dong.TU_AP_N:
         moi = hien_tai
     elif hien_tai == "tu_ap":
         moi = "goi_y" if tl < hoi_dong.LUI_TI_LE else "tu_ap"

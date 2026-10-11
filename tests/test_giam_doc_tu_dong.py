@@ -126,8 +126,27 @@ def test_la_kenh_moi_theo_ngay_bat_dau(tmp_path):
 # ═══ 2. quyền theo thành tích ═══════════════════════════════════════════════════
 
 def _du_doan(goc, ma, dung, sai):
-    ds = [{"video_id": "v{0}".format(i), "dung": i < dung} for i in range(dung + sai)]
+    """Kết quả thật xen kẽ thắng/trượt (tỉ lệ nền 50%) — đúng thì đoán trùng thật, sai thì đoán ngược."""
+    ds = []
+    for i in range(dung + sai):
+        that = "thang" if i % 2 == 0 else "truot"
+        doan = that if i < dung else ("truot" if that == "thang" else "thang")
+        ds.append({"video_id": "v{0}".format(i), "dung": i < dung, "ket": doan, "ket_that": that})
     _ghi(os.path.join(du_lieu.thu_muc_giam_doc(goc, ma), "du-doan.json"), {"du_doan": ds})
+
+
+def test_dung_nho_ti_le_nen_khong_duoc_tu_ap(tmp_path):
+    """12/10/2026: đoán "trượt" cho mọi video, 14/15 đúng vì 93% video trượt sẵn — KHÔNG phải kỹ năng."""
+    goc = str(tmp_path)
+    _kenh(goc, giam_doc="goi_y")
+    ds = [{"video_id": "v{0}".format(i), "dung": i != 0, "ket": "truot",
+           "ket_that": "thang" if i == 0 else "truot"} for i in range(15)]
+    _ghi(os.path.join(du_lieu.thu_muc_giam_doc(goc, "GDT"), "du-doan.json"), {"du_doan": ds})
+    ghi, ghi_cai = _luc_ghi()
+    assert gd.tu_nang_ha_quyen(goc, bay_gio=BAY, ghi_cai=ghi_cai) == [] and not ghi
+    _kenh(goc, giam_doc="tu_ap")                         # đang có quyền mà không có kỹ năng → lùi
+    ra = gd.tu_nang_ha_quyen(goc, bay_gio=BAY, ghi_cai=ghi_cai)
+    assert [(d["truoc"], d["sau"]) for d in ra] == [("tu_ap", "goi_y")]
 
 
 def _luc_ghi():

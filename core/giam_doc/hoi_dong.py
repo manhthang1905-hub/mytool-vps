@@ -57,6 +57,10 @@ NGUONG_TIN_TRAI = 0.8      # … khi trái tri thức đã chứng minh
 NGUONG_THU_NHO = 0.4       # dưới đây: chỉ quan sát
 N_IT = 3                   # cỡ mẫu dưới đây: tối đa thay đổi nhỏ
 TU_AP_TI_LE, TU_AP_N, LUI_TI_LE = 0.70, 10, 0.55
+#: 12/10/2026: quyền tự áp của "dự đoán" cần KỸ NĂNG (hơn tỉ lệ nền ≥ 15 điểm, đúng ≥ 2 video thắng); "bài học"
+#: (n = 1 video, bất đối xứng — xem kiểm toán não 12/10) không tự áp cho tới khi bài học là so sánh có cỡ mẫu.
+KY_NANG_HON_NEN, KY_NANG_GIU_HON_NEN, KY_NANG_DUNG_THANG = 0.15, 0.05, 2
+LOAI_KHONG_TU_AP = frozenset({"bai_hoc"})
 TEP_CUOI = "hoi-dong-cuoi.json"
 TEP_NHAT_KY = "hoi-dong.jsonl"
 TEP_DO_CHINH_XAC = "do-chinh-xac.json"
@@ -769,9 +773,11 @@ def do_chinh_xac(goc: str, ma: str, *, ghi: bool = True) -> Dict[str, Any]:
             c = _cong_ma(((du.get("ho_so") or {}).get("so_lieu") or {}), str(du.get("moc")), str(du.get("video_id")))
             if c:
                 mau["chan_doan_cong"].append((k["cong_hong"] == c, "{0}@{1}".format(du.get("video_id"), du.get("moc"))))
+    nhan_du_doan: List[Tuple[str, str]] = []   # (đoán, thật) — để chấm KỸ NĂNG so với tỉ lệ nền
     for d in (_doc_json(os.path.join(tm, "du-doan.json"), {}) or {}).get("du_doan") or []:
         if isinstance(d, dict) and "dung" in d:
             mau["du_doan"].append((bool(d["dung"]), str(d.get("video_id"))))
+            nhan_du_doan.append((str(d.get("ket") or ""), str(d.get("ket_that") or "")))
     nhom: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
     for d in _doc_dong(os.path.join(tm, "bai-hoc.jsonl")):
         if d.get("truc") and d.get("video_id"):
@@ -801,14 +807,30 @@ def do_chinh_xac(goc: str, ma: str, *, ghi: bool = True) -> Dict[str, Any]:
         n, dung = len(xs), sum(1 for x in xs if x[0])
         tl = round(dung / n, 2) if n else None
         q_cu = (cu.get(k) or {}).get("quyen") if isinstance(cu.get(k), dict) else None
-        if n >= TU_AP_N and tl is not None and tl >= TU_AP_TI_LE:
+        them: Dict[str, Any] = {}
+        if k == "du_doan":
+            # 12/10/2026 (kiểm toán `workspace/chan-doan/nao-vong-hoc-2026-10-12.md`): đoán "trượt" cho mọi video
+            # đã được "đúng 93%" vì 93% video trượt sẵn → tự cấp quyền tự áp, rồi cấm đúng cụm từng nổ muộn.
+            # Quyền phải dựa trên KỸ NĂNG: hơn tỉ lệ nền của lớp đông nhất ≥ 15 điểm VÀ đoán đúng ≥ 2 video THẮNG.
+            that = [t for _d, t in nhan_du_doan if t]
+            nen = (max(that.count("thang"), len(that) - that.count("thang")) / len(that)) if that else None
+            dung_thang = sum(1 for dd, t in nhan_du_doan if dd == "thang" and t == "thang")
+            co_ky_nang = bool(tl is not None and nen is not None and tl >= nen + KY_NANG_HON_NEN
+                              and dung_thang >= KY_NANG_DUNG_THANG)
+            giu_ky_nang = bool(tl is not None and nen is not None and tl >= nen + KY_NANG_GIU_HON_NEN
+                               and dung_thang >= KY_NANG_DUNG_THANG)
+            them = {"ti_le_nen": round(nen, 2) if nen is not None else None, "dung_thang": dung_thang,
+                    "co_ky_nang": co_ky_nang if q_cu != "tu_ap" else giu_ky_nang}
+        else:
+            co_ky_nang = giu_ky_nang = k not in LOAI_KHONG_TU_AP
+        if co_ky_nang and n >= TU_AP_N and tl is not None and tl >= TU_AP_TI_LE:
             q = "tu_ap"
-        elif q_cu == "tu_ap" and tl is not None and tl >= LUI_TI_LE:
+        elif giu_ky_nang and q_cu == "tu_ap" and tl is not None and tl >= LUI_TI_LE:
             q = "tu_ap"  # đã có quyền: chỉ lùi khi tụt dưới 55%
         else:
             q = "goi_y"
-        loai[k] = {"ten": LOAI_DO[k], "n": n, "dung": dung, "ti_le": tl, "quyen": q,
-                   "sai_gan_day": [x[1] for x in xs if not x[0]][-5:]}
+        loai[k] = dict({"ten": LOAI_DO[k], "n": n, "dung": dung, "ti_le": tl, "quyen": q,
+                        "sai_gan_day": [x[1] for x in xs if not x[0]][-5:]}, **them)
     ra = {"kenh": ma, "luc": _luc(), "luat": "tu_ap khi ≥ {0:.0%} đúng trên n ≥ {1}; tụt < {2:.0%} → goi_y".format(
         TU_AP_TI_LE, TU_AP_N, LUI_TI_LE), "loai": loai}
     if ghi:
