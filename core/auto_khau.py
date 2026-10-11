@@ -8127,6 +8127,13 @@ def _ve_lai_anh_cho_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
         except Exception:  # noqa: BLE001
             moi = lam_lanh_tho(cu)
         if not moi or moi.strip() == cu.strip():
+            # 11/10/2026: lời nhắc lành không có gì để "làm dịu" → đổi bố cục khung hình (cùng chủ thể/hành động/
+            # phong cách) để ra tấm mới, thay vì bỏ cả video vì một cảnh (TL1-T7/0026: 172/173 clip).
+            from .viet_lai_prompt import doi_bo_cuc  # noqa: PLC0415
+
+            moi = doi_bo_cuc(cu, vong)
+            bc.ghi("    cảnh {0}: lời nhắc ảnh không có gì để viết lại — đổi bố cục khung hình.".format(so_canh))
+        if not moi or moi.strip() == cu.strip():
             raise RuntimeError("cảnh {0}: không đổi được lời nhắc ảnh — vẽ lại sẽ ra đúng "
                                "tấm cũ".format(so_canh))
         c["img_prompt"] = moi

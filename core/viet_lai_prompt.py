@@ -221,6 +221,34 @@ def lam_lanh_tho(prompt: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", chu).replace(" ,", ",").strip()
 
 
+#: 11/10/2026 (TL1-T7/0026 cảnh 37): clip của một tấm ảnh LÀNH cứ treo rồi hỏng; viết lại lời nhắc trả đúng bản cũ
+#: (không có từ thô nào để thay) → "vẽ lại sẽ ra đúng tấm cũ" → mất cả video 172/173 clip. Đổi BỐ CỤC khung hình
+#: (góc máy/cỡ cảnh) — cùng chủ thể, cùng hành động, cùng phong cách — là cách chắc chắn ra lời nhắc khác.
+_BO_CUC = ("Eye-level medium shot from the side", "Wide establishing shot from slightly behind",
+           "Gentle high-angle three-quarter view", "Medium close-up, three-quarter front view")
+_MAU_GOC_MAY = re.compile(
+    r"^\s*(?:(?:extreme\s+)?(?:low|high|eye[- ]level)[- ]angle|wide(?:\s+establishing)?\s+shot|medium(?:\s+close[- ]up)?"
+    r"\s*shot?|close[- ]up|over[- ]the[- ]shoulder|side\s+view|bird'?s[- ]eye\s+view|top[- ]down\s+view)"
+    r"(?:\s+(?:shot|view))?\b[ ,]*(?:(?:looking|gazing)\s+(?:up|down)\s+(?:at|toward|towards)\s+)?", re.I)
+
+
+def doi_bo_cuc(prompt: str, vong: int = 1) -> str:
+    """Cùng nội dung, khác bố cục: thay cụm góc máy ở đầu lời nhắc (không có thì thêm vào đầu). Luôn trả bản KHÁC
+    bản gốc (khi gốc không rỗng)."""
+    goc = str(prompt or "").strip()
+    if not goc:
+        return goc
+    for i in range(len(_BO_CUC)):
+        bo = _BO_CUC[(max(1, int(vong)) - 1 + i) % len(_BO_CUC)]
+        if _MAU_GOC_MAY.match(goc):
+            moi = _MAU_GOC_MAY.sub(bo + ", ", goc, count=1)
+        else:
+            moi = bo + ": " + goc
+        if moi.strip() != goc:
+            return moi
+    return goc + " (alternate composition)"
+
+
 def viet_lai_prompt(goi: Optional[Callable[[str], str]], prompt: str, ly_do: str = "",
                     loai: str = "image") -> str:
     """Viết lại prompt bị từ chối. `goi(loi_nhac) -> str` là AI; None thì thay từ thô.
