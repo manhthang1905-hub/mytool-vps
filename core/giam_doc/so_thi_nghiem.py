@@ -196,16 +196,28 @@ def ghi_du_doan(goc: str, ma: str, ds: List[Dict[str, Any]], *,
 
 def cham_du_doan(goc: str, ma: str, ket_luan_cua: Dict[str, str], *,
                  bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
-    """TỰ CHẤM: dự đoán nào mà video nay đã có kết luận ("thang" | "truot") thì ghi đúng/sai.
-    `ket_luan_cua` = {video_id: kết luận hiện tại}. Trả {tong, dung, moi} trên mọi dự đoán đã chấm."""
+    """TỰ CHẤM: dự đoán nào mà video nay đã có kết luận ("thang" | "truot", THƯỚC CHUNG `core.thuoc_thang`) thì
+    ghi đúng/sai. `ket_luan_cua` = {video_id: kết luận hiện tại}. Trả {tong, dung, moi} trên mọi dự đoán đã chấm.
+
+    12/10/2026: dự đoán đã chấm bằng thước CŨ (ngưỡng 48h — không có khoá `thuoc` hoặc khác `PHIEN_BAN`) được chấm
+    LẠI theo thước chung; thước chung chưa phán được thì gỡ điểm cũ (nhãn 48h không còn là sự thật). Kết luận đổi
+    (chỉ có thể trước khi nhãn đông cứng ở 168h) → chấm lại theo nhãn mới."""
+    from ..thuoc_thang import PHIEN_BAN  # noqa: PLC0415
+
     ds = doc_du_doan(goc, ma)
     moi = 0
     for d in ds:
         kl = ket_luan_cua.get(str(d.get("video_id")))
-        if "dung" in d or kl not in ("thang", "truot"):
-            continue
-        d.update(ket_that=kl, dung=(d.get("ket") == kl), cham_luc=_luc(bay_gio))
-        moi += 1
+        if kl in ("thang", "truot"):
+            if "dung" in d and d.get("thuoc") == PHIEN_BAN and d.get("ket_that") == kl:
+                continue
+            d.update(ket_that=kl, dung=(d.get("ket") == kl), cham_luc=_luc(bay_gio), thuoc=PHIEN_BAN)
+            moi += 1
+        elif "dung" in d and d.get("thuoc") != PHIEN_BAN:
+            for k in ("ket_that", "dung", "cham_luc"):
+                d.pop(k, None)
+            d["thuoc"] = PHIEN_BAN
+            moi += 1
     if moi:
         _ghi_json(os.path.join(thu_muc_giam_doc(goc, ma), TEP_DU_DOAN), {"kenh": ma, "du_doan": ds})
     da = [d for d in ds if "dung" in d]

@@ -14,11 +14,13 @@ def _kenh(goc, ma, nhom="n1"):
         f.write('nhom: "{0}"\n'.format(nhom))
 
 
-def _van(goc, ma, ma_goi, cum, kl48="", kl7=""):
+def _van(goc, ma, ma_goi, cum, ket="", kl7="", lui=False):
+    """`ket` = nhãn THƯỚC CHUNG (core.thuoc_thang) — kết quả chính duy nhất vào bảng điểm; `kl7` chỉ để đọc."""
     tu_hoc.ghi_van(goc, ma, ma_goi, {"cum": cum, "cong_thuc": "v7"}, {})
     v = tu_hoc.doc_van(goc, ma)
-    if kl48:
-        v[ma_goi]["ket48"] = kl48
+    if ket:
+        v[ma_goi]["ket"] = ket
+        v[ma_goi]["ket_lui"] = lui
     if kl7:
         v[ma_goi]["ket7"] = kl7
     tu_hoc._luu_van(goc, ma, v)
@@ -31,10 +33,10 @@ def test_do_dai():
 def test_ghi_van_giu_ket_qua(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
-    _van(g, "A", "A-1", "x", kl48="thang")
+    _van(g, "A", "A-1", "x", ket="thang")
     tu_hoc.ghi_van(g, "A", "A-1", {"cum": "y"}, {"ctr_so": 5})
     v = tu_hoc.doc_van(g, "A")["A-1"]
-    assert v["ket48"] == "thang" and v["nuoc"] == {"cum": "y"} and v["du_doan"]["ctr_so"] == 5
+    assert v["ket"] == "thang" and v["nuoc"] == {"cum": "y"} and v["du_doan"]["ctr_so"] == 5
 
 
 def test_cham_van_hs(tmp_path):
@@ -52,18 +54,19 @@ def test_cham_van_hs(tmp_path):
     v = tu_hoc.doc_van(g, "A")
     assert v["A-4"]["ket7"] == "thang" and v["A-0"]["ket7"] == "truot"  # trung vị 30
     assert v["A-0"]["nuoc"] == {"cong_thuc": "vph", "kieu_bia": "k1", "do_dai": "15-20"}
-    assert "cum" not in v["A-0"]["nuoc"] and "ket48" not in v["A-0"]  # thiếu số thì để trống
+    assert "cum" not in v["A-0"]["nuoc"] and "ket48" not in v["A-0"] and "ket" not in v["A-0"]  # thiếu số: để trống
 
 
 def test_beta_trong_so(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
-    _van(g, "A", "1", "x", kl7="thang")          # nặng 1
-    _van(g, "A", "2", "x", kl48="thang")         # nặng 0,5
-    _van(g, "A", "3", "x", kl48="truot")         # nặng 0,5
-    _van(g, "A", "4", "x")                       # chưa kết luận
+    _van(g, "A", "1", "x", ket="thang")                 # a += 1
+    _van(g, "A", "2", "x", ket="trung_binh")            # a, b += 0,5
+    _van(g, "A", "3", "x", ket="truot", lui=True)       # phán bằng bản 72–96h: b += 0,75
+    _van(g, "A", "4", "x", kl7="thang")                 # chỉ có giờ xem 7d: KHÔNG vào bảng điểm (một thước)
+    _van(g, "A", "5", "x")                              # chưa kết luận
     o = tu_hoc.bang_diem(g, "A")["cum"]["x"]
-    assert (o["a"], o["b"], o["n"]) == (2.5, 1.5, 3)
+    assert (o["a"], o["b"], o["n"], o["thang"]) == (2.5, 2.25, 3, 1)
 
 
 def test_tien_nghiem_nhom(tmp_path):
@@ -71,9 +74,9 @@ def test_tien_nghiem_nhom(tmp_path):
     _kenh(g, "A")
     _kenh(g, "B")
     _kenh(g, "C", nhom="khac")
-    _van(g, "B", "B1", "x", kl7="thang")
-    _van(g, "B", "B2", "x", kl7="thang")
-    _van(g, "C", "C1", "x", kl7="thang")         # khác nhóm: không tính
+    _van(g, "B", "B1", "x", ket="thang")
+    _van(g, "B", "B2", "x", ket="thang")
+    _van(g, "C", "C1", "x", ket="thang")         # khác nhóm: không tính
     o = tu_hoc.bang_diem(g, "A")["cum"]["x"]
     assert abs(o["a"] - 1.6) < 1e-9 and o["b"] == 1 and o["n"] == 0
 
@@ -82,8 +85,8 @@ def test_thompson_co_dinh(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
     for i in range(8):
-        _van(g, "A", "m%d" % i, "manh", kl7="thang")
-        _van(g, "A", "y%d" % i, "yeu", kl7="truot")
+        _van(g, "A", "m%d" % i, "manh", ket="thang")
+        _van(g, "A", "y%d" % i, "yeu", ket="truot")
     r1 = tu_hoc.rut(g, "A", "cum", ["manh", "yeu", "moi"], random.Random(7))
     r2 = tu_hoc.rut(g, "A", "cum", ["manh", "yeu", "moi"], random.Random(7))
     assert r1 == r2 and set(r1) == {"manh", "yeu", "moi"}
@@ -98,8 +101,8 @@ def test_he_so_xep_hang_trong_khoang(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
     for i in range(4):
-        _van(g, "A", "m%d" % i, "manh", kl7="thang")
-        _van(g, "A", "y%d" % i, "yeu", kl7="truot")
+        _van(g, "A", "m%d" % i, "manh", ket="thang")
+        _van(g, "A", "y%d" % i, "yeu", ket="truot")
     nc = ngu_canh.dung(g, "A", co_v7=False)
     bang = {"vph": [{"ma": "1", "diem": 100, "cum": ["manh"], "ly_do": []},
                     {"ma": "2", "diem": 100, "cum": ["yeu"]},
@@ -114,8 +117,9 @@ def test_he_so_xep_hang_trong_khoang(tmp_path):
 def test_bang_diem_md(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
-    _van(g, "A", "1", "x", kl7="thang")
-    assert os.path.isfile(tu_hoc.ghi_bang_diem_md(g, "A"))
+    _van(g, "A", "1", "x", ket="thang")
+    md = open(tu_hoc.ghi_bang_diem_md(g, "A"), encoding="utf-8").read()
+    assert "thước chung" in md and "| x | 1/1 |" in md
 
 
 # ── Đợt 2: kieu_tieu_de / hook ──────────────────────────────────────────────
@@ -123,7 +127,7 @@ def test_bang_diem_md(tmp_path):
 def _van_nhan(goc, ma, ma_goi, truc, gt, kl):
     tu_hoc.ghi_van(goc, ma, ma_goi, {truc: gt}, {})
     v = tu_hoc.doc_van(goc, ma)
-    v[ma_goi]["ket7"] = kl
+    v[ma_goi]["ket"] = kl
     tu_hoc._luu_van(goc, ma, v)
 
 
@@ -214,8 +218,8 @@ def test_ba_nhan_cu_tu_tieu_de_that_va_bang_diem_md(tmp_path):
     assert "hook" not in v["A-0"]["nuoc"]
     assert v["A-1"]["nuoc"]["kieu_tieu_de"] == "bi_mat" and not v["A-1"]["nuoc"].get("nhan_doan")
     assert v["A-1"]["nuoc"]["hook"] == "cau_hoi"
-    for ma in ("A-0", "A-1"):  # buộc có kết luận 7d để vào bảng điểm
-        v[ma]["ket7"] = "thang"
+    for ma in ("A-0", "A-1"):  # buộc có kết luận (thước chung) để vào bảng điểm
+        v[ma]["ket"] = "thang"
     tu_hoc._luu_van(g, "A", v)
     md = open(tu_hoc.ghi_bang_diem_md(g, "A"), encoding="utf-8").read()
     assert "## kieu_tieu_de" in md and "## hook" in md

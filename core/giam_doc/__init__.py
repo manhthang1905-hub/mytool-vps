@@ -209,7 +209,7 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
     kq.tu_cham = stn.cham_du_doan(goc, ma, {v["id"]: v.get("ket_luan") or "" for v in bs.video}, bay_gio=bs.bay_gio)
     if qd is not None and not qd.loi and qd.du_doan:
         kq.tu_cham["moi_doan"] = stn.ghi_du_doan(goc, ma, qd.du_doan, bay_gio=bs.bay_gio)
-    if goi_chat is not None and not kq.bao_dong:  # KHÁM NGHIỆM video qua mốc 48h / 7 ngày (≤ 4 video/lượt)
+    if goi_chat is not None and not kq.bao_dong:  # KHÁM NGHIỆM video qua mốc 96h / 7 ngày (≤ 4 video/lượt)
         from . import kham_nghiem  # noqa: PLC0415
 
         try:

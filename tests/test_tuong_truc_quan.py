@@ -37,7 +37,7 @@ def _gia(tmp_path):
     _ghi(os.path.join(k, "ho-so-video", "anh", "KA-B-0001.jpg"), b"\xff\xd8jpg", True)
     _ghi(os.path.join(k, "thiet-lap", "logo.png"), b"\x89PNG", True)
     _ghi(os.path.join(g, "CHANNEL", "bi-mat.jpg"), b"x", True)
-    _ghi(os.path.join(k, "tu-hoc", "van.json"), json.dumps({"KA-B-0001": {"ket48": "thang"}, "KA-B-0002": {"ket48": "truot"},
+    _ghi(os.path.join(k, "tu-hoc", "van.json"), json.dumps({"KA-B-0001": {"ket": "thang"}, "KA-B-0002": {"ket": "truot"},
                                                            "KA-B-0003": {"khong_do": "2026-10-06"}}))
     _ghi(os.path.join(k, "chi-so", "kenh-theo-ngay.csv"),
          "Lúc chụp,Lượt xem,Giờ xem,Đăng ký,Lượt hiển thị,Tỷ lệ bấm\n2026-10-05 02:00,100,10,5,900,3.1\n2026-10-06 02:00,150,12.5,7,1200,3.4\n")

@@ -407,24 +407,28 @@ def _tu_ket_qua(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
             phu.append("AVD tv {0}".format(_mmss(o["avd_giay_tv"])))
         if o.get("sub_1k") is not None:
             phu.append("{0:g} sub/1k view".format(o["sub_1k"]))
-        cau = "Công thức {0} (28 ngày): {1}/{2} video đã có kết luận thắng @48h theo ngưỡng kênh{3}; " \
-              "{4} video chưa đủ mốc (n={2}).".format(ct, o["thang"], o["n"],
+        cau = "Công thức {0} (28 ngày): {1}/{2} video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h){3}; " \
+              "{4} video chưa phán (n={2}).".format(ct, o["thang"], o["n"],
                                                     " — " + ", ".join(phu) if phu else "", o["cho"])
         ra.append(_bh("kenh", "cong_thuc", cau, o["n"], ["chon"], cum=ct))
     return ra
 
 
 def _cum_thang_truot_kenh(ds: List[Any], nguong: Optional[float]) -> List[Dict[str, Any]]:
-    theo: Dict[str, List[bool]] = {}
+    """Cụm × video ĐÃ PHÁN của kênh theo THƯỚC CHUNG (`core.thuoc_thang`, `VideoMinh.nhan_thang`) — không còn "đủ
+    48h + ngưỡng 48h". `nguong` giữ cho chữ ký cũ, không dùng."""
+    theo: Dict[str, List[str]] = {}
     for v in ds:
-        if v.hien_thi_48h is None and not v.thang:
+        nhan = getattr(v, "nhan_thang", "")
+        if nhan not in ("thang", "trung_binh", "truot"):
             continue
         for c in v.cum or []:
-            theo.setdefault(c, []).append(bool(v.thang))
+            theo.setdefault(c, []).append(nhan)
     ra = []
     for c, xs in sorted(theo.items()):
-        ra.append(_bh("kenh", "cum_thang_truot", "cụm {0}: {1}/{2} video thắng @48h (ngưỡng kênh {3} hiển "
-                      "thị).".format(c, sum(xs), len(xs), "{0:,.0f}".format(nguong).replace(",", ".") if nguong else "?"),
+        ra.append(_bh("kenh", "cum_thang_truot", "cụm {0}: {1}/{2} video thắng, {3} trung bình, {4} trượt (thước "
+                      "chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).".format(
+                          c, xs.count("thang"), len(xs), xs.count("trung_binh"), xs.count("truot")),
                       len(xs), ["chon", "bien_tap"], cum=c))
     return ra
 
@@ -440,7 +444,7 @@ def _muc_tieu_ctr(goc: str, ma_kenh: str, ds: List[Any]) -> List[Dict[str, Any]]
         if ctr is None:
             continue
         tat_ca.append(ctr)
-        if v.thang:
+        if getattr(v, "nhan_thang", "") == "thang":   # THẮNG theo thước chung (không tính cờ "nóng")
             thang.append(ctr)
     if len(thang) >= NGUONG_VUA:
         mt, n, nhan = statistics.median(thang), len(thang), "trung vị video thắng"

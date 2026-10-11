@@ -102,9 +102,14 @@ def test_tom_tat_doc_kenh_mau(tmp_path):
     bs = du_lieu.tom_tat(goc, "GD1")
     assert len(bs.video) == 6 and bs.video[0]["id"] == "GDvideo0006"  # mới → cũ
     v6 = bs.video_theo_id("GDvideo0006")
-    assert v6["ket_luan"] == "truot" and v6["ma_goi"] == "GD1-0006" and "vat-chat" in v6["cum"]
+    # Thước chung (core.thuoc_thang): video 60h CHƯA được phán (không bao giờ phán ở 48h) — chỉ có tín hiệu sớm.
+    assert v6["ket_luan"] == "" and v6["nhan"] == "" and v6["tin_hieu_som"] == 0.0
+    assert v6["ma_goi"] == "GD1-0006" and "vat-chat" in v6["cum"]
     assert du_lieu.ctr_trang_chu(v6)["ctr_browse"] == 2.0
-    assert bs.video_theo_id("GDvideo0001")["thang"] and bs.nguong_thang_48h == 7200
+    v1, v3 = bs.video_theo_id("GDvideo0001"), bs.video_theo_id("GDvideo0003")
+    assert v1["thang"] and v1["ket_luan"] == "thang" and v1["nhan"] == "thang" and v1["tuoi_do"] == 120
+    assert v3["nhan"] == "trung_binh" and v3["ket_luan"] == "truot"     # trung bình = đã phán, không thắng
+    assert bs.nguong_thang_48h == 6000  # mức THAM KHẢO 48h (chỉ để in)
     b = du_lieu.moc_52(bs.video_theo_id("GDvideo0001"))
     assert b["moc"] == "48h" and abs(b["gx_1k"] - 6.5) < 0.01
     assert abs(bs.video_theo_id("GDvideo0001")["sub_1k"] - 18 / 1.9) < 0.01
@@ -177,16 +182,38 @@ def test_cuu_ctr_ngoai_khung_khong_chay():
 # ── dan_cum ────────────────────────────────────────────────────────────────
 
 def test_dan_cum_don_va_tam_bo_cum_va_kep_ti_trong():
-    video = ([_v("a%d" % i, cum=["iq"], ket_luan="thang", thang=True, hien_thi_48h=20000) for i in range(2)]
-             + [_v("b%d" % i, cum=["mot"], ket_luan="truot", hien_thi_48h=900) for i in range(3)])
+    """Thước chung: dồn cụm khi ≥ 2 thắng và ≥ 50%; tạm bỏ CHỈ khi ≥ 6 video đã phán VÀ P(cụm kém hơn nền) > 0,9.
+    12/10/2026: "0/3 thắng @48h" từng đủ để cấm cụm (TL2 tep-tuoi-tac chứa video 30k hiển thị) — giờ không."""
+    video = ([_v("a%d" % i, cum=["iq"], ket_luan="thang", nhan="thang", thang=True) for i in range(2)]
+             + [_v("b%d" % i, cum=["mot"], ket_luan="truot", nhan="truot") for i in range(3)]
+             + [_v("c%d" % i, cum=["khac2"], ket_luan="thang" if i < 2 else "truot",
+                   nhan="thang" if i < 2 else "trung_binh") for i in range(4)])
     bs = _bs(video, cai={"chien_luoc": "v7:0.5, vph:0.5"},
              chien_luoc_tep={"ti_trong_goi_y": {"v7": 0.9, "vph": 0.1}, "ly_do_goi_y": "test"})
     dx = dan_cum.de_xuat(bs, dan_cum.quan_sat(bs))
     viec = {d["viec"]: d for d in dx}
-    assert "iq" in viec["don_cum"]["noi_dung"] and "mot" in viec["bo_cum"]["noi_dung"]
-    assert viec["bo_cum"]["han_ngay"] == 21 and viec["luat_chon_tuan"]["loai"] == "tham_so"
+    assert "iq" in viec["don_cum"]["noi_dung"] and "bo_cum" not in viec   # 0/3 trượt: chưa đủ để cấm
+    assert viec["luat_chon_tuan"]["loai"] == "tham_so" and "mot" not in viec["luat_chon_tuan"]["gia_tri"]
     assert viec["ti_trong"]["gia_tri"] == "v7:0.7, vph:0.3"  # gợi ý 0,9 bị kẹp bước ±0,2
     assert "tu_hoc" not in viec  # chưa đủ n
+    # 7 video cụm "mot" đều trượt, phần còn lại của kênh tốt → P(kém hơn nền) > 0,9 → tạm bỏ 3 tuần
+    video += [_v("d%d" % i, cum=["mot"], ket_luan="truot", nhan="truot") for i in range(4)]
+    bs = _bs(video, cai={"chien_luoc": "v7:0.5, vph:0.5"}, chien_luoc_tep={})
+    qs = dan_cum.quan_sat(bs)
+    q = next(x for x in qs if x.get("cum") == "mot")
+    assert q["n"] == 7 and q["p_kem"] > 0.9
+    viec = {d["viec"]: d for d in dan_cum.de_xuat(bs, qs)}
+    assert "mot" in viec["bo_cum"]["noi_dung"] and viec["bo_cum"]["han_ngay"] == 21 and "P(kém" in viec["bo_cum"]["noi_dung"]
+
+
+def test_dan_cum_khong_bo_cum_khi_nen_cung_yeu():
+    """Cả kênh đều trượt (kênh mới) → cụm không "kém hơn nền" → không cấm, dù 0/8 thắng."""
+    video = ([_v("b%d" % i, cum=["mot"], ket_luan="truot", nhan="truot") for i in range(8)]
+             + [_v("c%d" % i, cum=["khac2"], ket_luan="truot", nhan="truot") for i in range(6)])
+    bs = _bs(video, cai={}, chien_luoc_tep={})
+    qs = dan_cum.quan_sat(bs)
+    assert next(x for x in qs if x.get("cum") == "mot")["p_kem"] < 0.9
+    assert not any(d["viec"] == "bo_cum" for d in dan_cum.de_xuat(bs, qs))
 
 
 def test_dan_cum_ket_luan_ti_le_thang():
@@ -311,7 +338,9 @@ def test_chay_kenh_tu_ap_ghi_so_va_kenh_yaml(tmp_path, monkeypatch):
     from core.kenh import doc_yaml
 
     cai = doc_yaml(os.path.join(goc, "CHANNEL", "GD1", "kenh.yaml"))
-    assert "luat_chon_tuan" in cai and "mot-minh" in str(cai["luat_chon_tuan"])
+    # thước chung: cụm IQ 2/2 thắng → dồn; cụm một mình (3 video) KHÔNG bị cấm theo một mẫu nhỏ
+    assert "luat_chon_tuan" in cai and "tri-tue" in str(cai["luat_chon_tuan"])
+    assert "mot-minh" not in str(cai["luat_chon_tuan"])
     tm = os.path.join(goc, "CHANNEL", "GD1", "giam-doc")
     for ten in ("thi-nghiem.json", "nhat-ky.jsonl", "trang-thai.json", "chi-dao.json", "BAO-CAO-TUAN.md"):
         assert os.path.isfile(os.path.join(tm, ten)), ten

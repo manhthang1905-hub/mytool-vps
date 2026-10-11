@@ -205,8 +205,9 @@ class TrangCongThucV7(QWidget):
         v3.setContentsMargins(18, 14, 18, 14)
         v3.setSpacing(6)
         v3.addWidget(nhan("3. Sổ dự đoán", "h2"))
-        huong = nhan("Đăng xong, dán mã video của bạn vào cột “Mã video của mình”. Đủ 48 giờ bấm “Kiểm 48 giờ”: "
-                     "Thắng ≥ 20.000 hiển thị · Trượt < 6.000.", "phu")
+        huong = nhan("Đăng xong, dán mã video của bạn vào cột “Mã video của mình”, rồi bấm kiểm: kết quả theo THƯỚC "
+                     "CHUNG — Thắng = top 25% hiển thị của chính kênh ở cùng tuổi, phán từ ≥ 96h (chưa đủ thì “chờ”).",
+                     "phu")
         huong.setWordWrap(True)
         v3.addWidget(huong)
         from core.cong_thuc_v7 import COT_SO_CHON  # noqa: PLC0415
@@ -554,8 +555,8 @@ class TrangCongThucV7(QWidget):
         hang = v7.kiem_du_doan(self._app.base_dir, kenh)
         xong = [r for r in hang if r.get("Kết quả") in ("Thắng", "Trung bình", "Trượt")]
         thang = sum(1 for r in xong if r["Kết quả"] == "Thắng")
-        self._nhan_so.setText("đã kiểm: {0} video đủ 48 giờ, {1} thắng".format(len(xong), thang)
-                              if xong else "chưa video nào có mã + đủ 48 giờ")
+        self._nhan_so.setText("đã kiểm: {0} video đã phán (≥96h), {1} thắng".format(len(xong), thang)
+                              if xong else "chưa video nào có mã + đã phán (≥96h)")
         self._ve_so()
 
     # ── cấu hình / báo cáo ──

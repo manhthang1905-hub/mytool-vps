@@ -22,9 +22,10 @@ K = "K1"
 #: Ngày tương đối với HÔM NAY — `NguCanh.ket_qua` (đường trạm/vòng chọn) đọc theo giờ thật.
 BAY_GIO = dt.datetime.now().replace(microsecond=0)
 NGAY_CU, NGAY_1, NGAY_2 = ((BAY_GIO.date() - dt.timedelta(days=d)).isoformat() for d in (20, 7, 1))
-#: video_id → hiển thị 48h. Trung vị 5.000 × 3 = 15.000 > 6.000 → ngưỡng kênh 15.000.
-VIDEO = {"AAAAAAAAAA1": 3000, "AAAAAAAAAA2": 4000, "AAAAAAAAAA3": 5000,
-         "AAAAAAAAAA4": 25000, "AAAAAAAAAA5": 18000}
+#: video_id → (hiển thị 48h, hiển thị 120h). Mức tham khảo 48h: trung vị 5.000 × 3 = 15.000. Thắng = THƯỚC CHUNG
+#: (`core.thuoc_thang`) ở 120h: A5 30.000 (phân vị 75) và A4 40.000 thắng; A3 6.000 trung bình (= "truot" hai mức).
+VIDEO = {"AAAAAAAAAA1": (3000, 3500), "AAAAAAAAAA2": (4000, 4500), "AAAAAAAAAA3": (5000, 6000),
+         "AAAAAAAAAA4": (25000, 40000), "AAAAAAAAAA5": (18000, 30000)}
 
 
 def _ghi(duong, du):
@@ -51,10 +52,12 @@ def _run(ma_luot, link, *, nguon="mot_nut", cong_thuc=None, tham_do=None, ma_goi
 def dung_kenh(goc, yaml_them=""):
     kd = os.path.join(goc, "CHANNEL", K)
     _ghi(os.path.join(kd, "kenh.yaml"), 'ma: "{0}"\n{1}'.format(K, yaml_them))
-    for vid, imp in VIDEO.items():
+    for vid, (imp, imp120) in VIDEO.items():
         _ghi(os.path.join(kd, "chi-so", vid, "48h", "tong-quan.json"),
              {"video_id": vid, "impressions": imp, "thoi_luong_giay": 900})
         _ghi(os.path.join(kd, "chi-so", vid, "48h", "_thong-tin.json"), {"tieu_de": "video " + vid})
+        _ghi(os.path.join(kd, "chi-so", vid, "120h", "tong-quan.json"),
+             {"video_id": vid, "impressions": imp120, "thoi_luong_giay": 900})
     _ghi(os.path.join(kd, "chi-so", "AAAAAAAAAA5", "48h", "traffic-type.csv"),
          "Traffic source,Impressions,Impressions click-through rate (%)\nBrowse features,9000,6.5\n")
     _ghi(os.path.join(kd, "chi-so", "bang-tom-tat.csv"),
@@ -74,8 +77,9 @@ def dung_kenh(goc, yaml_them=""):
     hs = {"K1-0001": ("AAAAAAAAAA5", {"48h": {"impressions": 18000, "avd_giay": 300}}),
           "K1-0002": ("AAAAAAAAAA4", {"48h": {"impressions": 25000, "avd_giay": 200}}),
           "K1-0003": ("AAAAAAAAAA3", {"72h": {"impressions": 5000, "avd_giay": 100}}),
-          # video chưa có trong chi-so (V7 không thấy) — lùi về mốc hồ sơ, so cùng ngưỡng kênh
-          "K1-0004": ("BBBBBBBBBB4", {"48h": {"impressions": 16000, "avd_giay": 400}})}
+          # video chưa có trong chi-so (V7 không thấy) — chuỗi từ mốc hồ sơ (tuổi thật), chấm so cùng tập video kênh
+          "K1-0004": ("BBBBBBBBBB4", {"48h": {"impressions": 16000, "avd_giay": 400},
+                                      "ngay5": {"impressions": 32000, "moc_gio_that": 118}})}
     for ma_goi, (vid, cs) in hs.items():
         _ghi(hv.duong_tep_ho_so(goc, K, ma_goi), {"ma_goi": ma_goi, "video_id": vid, "chi_so": cs})
     return kd
@@ -106,10 +110,10 @@ def test_thong_ke_thang_theo_trung_vi_kenh_khong_theo_20000(tmp_path):
     dung_kenh(goc)
     tk = ket_qua.thong_ke(goc, K, 0, bay_gio=BAY_GIO)
     mn = tk["mot_nut"]
-    # 0001 → 18.000 hiển thị: THẮNG vì ngưỡng kênh là 15.000 (dưới 20.000 cứng vẫn thắng)
+    # 0001 → A5 30.000 @120h = phân vị 75 của kênh cùng tuổi: THẮNG; 0003 → A3 trung bình = không thắng
     assert (mn["lam"], mn["n"], mn["thang"], mn["truot"], mn["cho"]) == (2, 2, 1, 1, 0)
     vph = tk["vph"]
-    # 0002 (V7 thấy, 25.000) thắng; 0004 không có trong chi-so → mốc hồ sơ 16.000 ≥ 15.000 thắng
+    # 0002 (V7 thấy, A4) thắng; 0004 không có trong chi-so → chuỗi hồ sơ 32.000 @118h so cùng tập kênh: thắng
     assert (vph["lam"], vph["n"], vph["thang"], vph["tham_do"]) == (2, 2, 2, 1)
     assert tk["v7"]["lam"] == 1 and tk["v7"]["n"] == 0 and tk["v7"]["cho"] == 1
     assert "K1-0005" not in sum((o["goi"] for o in tk.values()), [])  # lượt bỏ không tính

@@ -152,7 +152,8 @@ def cac_tran(goc: str, kenh: str, bay: _dt.datetime, toi_da: int = 40) -> List[D
         m7 = cs.get("7d") or {}
         moc = moc or str(m48.get("moc") or "")
         v = van.get(ma) or {}
-        ket = {"thang": "thang", "truot": "thua"}.get(v.get("ket48") or "", "")
+        # Thước chung (`core.thuoc_thang`): trung bình = không thắng → "thua" ở bảng hai mức này.
+        ket = {"thang": "thang", "trung_binh": "thua", "truot": "thua"}.get(v.get("ket") or "", "")
         if not ket:
             ket = "khong_do" if v.get("khong_do") else "cho"
         ra.append({

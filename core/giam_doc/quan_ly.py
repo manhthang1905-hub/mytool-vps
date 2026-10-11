@@ -23,6 +23,8 @@ from typing import Any, Callable, Dict, List, Optional
 TOI_DA_TOKEN = 3000
 SO_LUOT_TOI_DA = 3
 KET_HOP_LE = ("giu", "bo", "mo_rong", "chua_du")
+#: Giám đốc chỉ được đoán thắng/trượt cho video dưới ngần này giờ tuổi (cùng mức thông tin như trước 12/10/2026).
+GIO_DOAN_TOI_DA = 48.0
 TOI_DA_KY_TU_CHU = 200
 
 TIEU_CHI = """\
@@ -32,8 +34,10 @@ TIEU_CHI = """\
 - Mỗi thay đổi là một thí nghiệm đo được; không đổi hai thứ lên cùng một chỉ số; đừng lặp một khuôn.
 - Việc chỉ chủ làm được (Studio, tiền, đăng nhập) → "viec_cua_ban", câu người thường hiểu. CHỈ việc người phải TỰ
   TAY làm — "đợi số / chờ video qua 48h" không phải việc của ai (máy tự đợi), không ghi vào đó.
-- Với MỖI video đang "chờ" (chưa đủ 48h) trong bảng số: đoán "thang" | "truot" theo ngưỡng của kênh — máy tự
-  chấm khi video qua 48h (tỉ lệ đoán đúng là thước đo giám đốc có đọc đúng kênh không)."""
+- "thắng" = THƯỚC CHUNG: top 25% hiển thị của CHÍNH kênh ở CÙNG tuổi, phán từ ≥ 96h (không bao giờ ở 48h —
+  video kênh mình hay nổ ngày 3–5); "truot" = đã phán mà không thắng. Với MỖI video đang "chờ" còn non (< 48h)
+  trong bảng số: đoán "thang" | "truot" — máy tự chấm khi video được phán (tỉ lệ đoán đúng HƠN tỉ lệ nền là
+  thước đo giám đốc có đọc đúng kênh không)."""
 
 DANG_TRA_LOI = """\
 Chỉ trả MỘT khối JSON:
@@ -181,7 +185,10 @@ def nghi(bs: Any, quan_sat: Dict[str, List[Dict[str, Any]]], thuc_don: List[Dict
     toi_da = min(int(ngan_sach.get("tham_so_con") or 0), 2 if tuan else 1)
     khoa = "giam-doc-{0}-{1}-{2}".format(bs.ma_kenh, bs.bay_gio.strftime("%Y%m%d%H"),
                                         hashlib.sha1(ln.encode("utf-8")).hexdigest()[:10])
-    cho = {v["id"] for v in getattr(bs, "video", []) or [] if not v.get("ket_luan")}
+    # Chỉ cho đoán video còn NON (< GIO_DOAN_TOI_DA): video 48–96h chưa phán nhưng đã lộ số sớm — đoán lúc ấy dễ hơn
+    # thật, làm thổi phồng "kỹ năng" (quyền tự áp tính từ tỉ lệ đoán đúng).
+    cho = {v["id"] for v in getattr(bs, "video", []) or []
+           if not v.get("ket_luan") and (v.get("tuoi_gio") is None or float(v["tuoi_gio"]) < GIO_DOAN_TOI_DA)}
     try:
         from .hoi_dong import so_lieu_kenh  # noqa: PLC0415
 

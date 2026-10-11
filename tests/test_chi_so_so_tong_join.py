@@ -216,15 +216,17 @@ def test_moc_do_duoc_lui_xap_xi_khi_48h_72h_trong():
     assert "xap_xi" not in tu_hoc._moc_do_duoc(chuan)  # noqa: SLF001
 
 
-def test_ket_luan_48h_xap_xi_chi_tin_chieu_an_toan():
-    kq = SimpleNamespace(ket_luan=lambda vm, hs, ng: "thang" if hs["chi_so"]["48h"]["impressions"] >= ng else "truot")
+def test_thuoc_chung_khong_phan_o_moc_som_chi_phan_tu_96h():
+    """12/10/2026 — `_ket_luan_48h` (phán ở 48h, lùi mốc xấp xỉ) bỏ: thước chung `core.thuoc_thang` phán từ ≥ 96h
+    (bản 72–96h chỉ khi video đã qua 96h); mốc sớm hơn chỉ là tín hiệu sớm, không bao giờ là kết luận."""
+    from core import thuoc_thang
 
-    def kl(moc_gio, imp):
-        hs = {"chi_so": {"ngayX": {"impressions": imp, "moc_gio_that": moc_gio}}}
-        return tu_hoc._ket_luan_48h(kq, None, hs, 1000.0)  # noqa: SLF001
-    assert kl(30, 1500) == "thang" and kl(30, 200) == ""      # mốc sớm: chỉ "thắng" là chắc
-    assert kl(100, 200) == "truot" and kl(100, 5000) == ""    # mốc muộn: chỉ "trượt" là chắc
-    assert kl(50, 1500) == "thang" and kl(50, 200) == "truot"  # 48–60h coi như cùng tuổi
+    def kl(moc_gio, imp, tuoi_nay=None):
+        c = thuoc_thang.chuoi_ho_so({"chi_so": {"ngayX": {"impressions": imp, "moc_gio_that": moc_gio}}}, "x")
+        return thuoc_thang.danh_gia_them(c, {}, tuoi_nay).nhan
+    assert kl(30, 9000) == "chua_du" and kl(50, 9000) == "chua_du"      # 30h/50h: không phán dù số lớn
+    assert kl(80, 9000) == "chua_du" and kl(80, 9000, tuoi_nay=200) == "thang"   # 72–96h: chỉ khi đã qua 96h
+    assert kl(110, 9000) == "thang" and kl(110, 200) == "truot" and kl(110, 1000) == "trung_binh"
 
 
 def test_cham_van_chot_khong_do_duoc_sau_7_ngay_va_tin_hieu_tach_doi(tmp_path):
@@ -258,11 +260,11 @@ def test_khong_do_duoc_go_co_khi_so_ve_sau(tmp_path, monkeypatch):
     tu_hoc._luu_van(g, "A", {"A-CU": {"ma_goi": "A-CU", "nuoc": {"cum": "x"}, "ngay": cu}})  # noqa: SLF001
     tu_hoc.cham_van(g, "A")
     assert tu_hoc.doc_van(g, "A")["A-CU"]["khong_do"]
-    # số về muộn ở mốc ~50h (cùng tuổi 48h) → có kết luận, cờ "không đo được" tự gỡ
-    _hs(g, "A", "A-CU", ngay_dang=cu, video_id="vidgia", chi_so={"ngay2": {"impressions": 90000, "moc_gio_that": 50}})
+    # số về muộn ở mốc ~110h (thước chung phán từ ≥ 96h) → có kết luận, cờ "không đo được" tự gỡ
+    _hs(g, "A", "A-CU", ngay_dang=cu, video_id="vidgia", chi_so={"ngay5": {"impressions": 90000, "moc_gio_that": 110}})
     tu_hoc.cham_van(g, "A")
     v = tu_hoc.doc_van(g, "A")["A-CU"]
-    assert v["ket48"] == "thang" and "khong_do" not in v
+    assert v["ket"] == "thang" and v["ket48"] == "thang" and "khong_do" not in v
 
 
 def test_muc_hoc_tach_studio_rong_voi_chua_toi_moc(tmp_path, monkeypatch):

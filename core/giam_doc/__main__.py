@@ -104,7 +104,7 @@ def _kham(goc: str, vid: str, kenh: List[str], llm: bool) -> str:
     if v is None or not v.get("chup"):
         return "{0}/{1}: video chưa có bản chụp số".format(ma, vid)
     m = kn.moc_cua(v)
-    moc, b = m if m else ("7d" if (v.get("tuoi_gio") or 0) >= 144 else "48h", moi_nhat(v))
+    moc, b = m if m else ("7d" if (v.get("tuoi_gio") or 0) >= 144 else "96h", moi_nhat(v))
     if not llm:
         hs = kn.ho_so_kham(goc, ma, bs, v, moc, ban_chup=b)
         return "=== KHÁM {0}/{1} @{2} (bản chụp {3}) — THỬ, không gọi AI ===\n{4}".format(

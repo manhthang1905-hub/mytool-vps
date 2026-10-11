@@ -11,9 +11,10 @@ Tệp này CHỈ ĐỌC (không ghi gì vào `CHANNEL/`, `nao/`), không gọi m
 
 ═══ QUY TẮC (bảo thủ — thà thiếu còn hơn gợi ý bừa) ═══
 
-* "Video thắng lớn": video của kênh đăng ≤ `NGAY_GAN_DAY` ngày, hiển thị ở MỐC MỚI NHẤT (`chi-so/bang-tom-tat.csv`)
-  ≥ `HE_SO_THANG_LON` × ngưỡng thắng 48h của kênh (`cong_thuc_v7.nguong_thang_48h` — cùng công thức mọi nơi).
-  Số hiển thị cộng dồn chỉ tăng, nên vượt ngưỡng ở mốc sớm thì chắc chắn vượt ở 48h.
+* "Video thắng lớn": video của kênh đăng ≤ `NGAY_GAN_DAY` ngày mà THƯỚC CHUNG (`core.thuoc_thang`, qua
+  `cong_thuc_v7.video_cua_kenh` — cùng nhãn mọi bộ phận) phán THẮNG (top 25% hiển thị của kênh CÙNG tuổi, phán ≥ 96h),
+  hoặc chưa phán mà ĐANG NÓNG (tín hiệu sớm 24–72h ở top 10% kênh và ≥ 2.500 hiển thị — nhân bản khi còn nóng).
+  12/10/2026: trước đây so số MỚI NHẤT (có khi 227h) với ngưỡng 48h → "thắng lớn 1,29×" cho video chỉ 0,30× lúc 48h.
 * Nguồn nhân bản: video đối thủ trong `nghien-cuu/content.csv` CÙNG CỤM (`cum_cua_tieu_de`) với video thắng, chưa ai
   trong nhóm kênh làm, không phải video của chính mình (`nhom_kenh.video_da_lam_ca_nhom` + cột "Đã làm"), chưa được đề cử. Xếp: trùng ≥ 2 cặp chữ
   Hán/Katakana với tiêu đề thắng trước (cùng chủ đề hẹp, vd 年金), rồi tăng/ngày, rồi view.
@@ -38,8 +39,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 GOC_MAC_DINH = os.environ.get("MYTOOL_GOC") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 NGAY_GAN_DAY = 10            # chỉ xét video đăng trong ngần này ngày
-HE_SO_THANG_LON = 1.0        # hiển thị mốc mới nhất ≥ hệ số × ngưỡng thắng 48h của kênh
-HE_SO_RAT_LON = 1.4          # nhãn "RẤT LỚN" khi ≥ hệ số này
+HE_SO_THANG_LON = 1.0        # KHÔNG còn dùng (12/10/2026 — thắng = thước chung `core.thuoc_thang`); giữ cho chữ ký cũ
+PV_RAT_LON = 95.0            # nhãn "THẮNG RẤT LỚN" khi phân vị cùng tuổi ≥ ngần này
 NGAY_NGUON_TOI_DA = 120      # video đối thủ đăng quá ngần này ngày thì không nhân bản
 VIEW_NGUON_TOI_THIEU = 5000
 SO_NGUON_TOI_DA = 3
@@ -91,16 +92,24 @@ def _f(x: Any) -> str:
 
 # ── ngưỡng + cụm của kênh (tách riêng để test thay được) ─────────────────────
 
-def _nguong_kenh(goc: str, kenh: str, bay_gio: _dt.datetime) -> Tuple[float, Callable[[str], List[str]], Dict[str, List[str]]]:
-    """`(ngưỡng thắng 48h, hàm tiêu đề→cụm, {mã video: cụm})` của kênh — cùng công thức V7 mọi nơi.
-    Không ghi gì ra đĩa (`ghi_neu_thieu=False`). Ném lỗi nếu không tính được (nơi gọi bắt)."""
+def _ket_kenh(goc: str, kenh: str, bay_gio: _dt.datetime) -> Tuple[Dict[str, Dict[str, Any]], Callable[[str], List[str]],
+                                                                    Dict[str, List[str]]]:
+    """`({mã video: kết quả thước chung}, hàm tiêu đề→cụm, {mã video: cụm})` của kênh — cùng nhãn V7 mọi nơi.
+    Kết quả mỗi video: `{nhan, phan_vi, tuoi, gia_tri, nong, som_phan_vi}`. Không ghi gì ra đĩa
+    (`ghi_neu_thieu=False`). Ném lỗi nếu không tính được (nơi gọi bắt)."""
     from . import cong_thuc_v7 as v7  # noqa: PLC0415
 
     ch, _ = v7.nap_cau_hinh(goc, kenh, ghi_neu_thieu=False)
-    ds = v7.video_cua_kenh(goc, kenh, ch, bay_gio)
-    nguong = float(v7.nguong_thang_48h(ds, ch))
+    # `video_cua_kenh` dùng giờ UTC (không múi) như mọi nơi khác của V7; `bay_gio` của bộ não là giờ máy.
+    try:
+        bg_utc = bay_gio.astimezone(_dt.timezone.utc).replace(tzinfo=None) if bay_gio is not None else None
+    except (OverflowError, OSError, ValueError):
+        bg_utc = None
+    ds = v7.video_cua_kenh(goc, kenh, ch, bg_utc)
+    ket = {v.ma: {"nhan": v.nhan_thang, "phan_vi": v.phan_vi, "tuoi": v.tuoi_do, "gia_tri": v.hien_thi_do,
+                  "nong": bool(v.nong), "som_phan_vi": getattr(v.ket, "som_phan_vi", None)} for v in ds}
     cum_video = {v.ma: list(v.cum or []) for v in ds}
-    return nguong, (lambda td: list(v7.cum_cua_tieu_de(td, ch) or [])), cum_video
+    return ket, (lambda td: list(v7.cum_cua_tieu_de(td, ch) or [])), cum_video
 
 
 def _kiem_ngay(goc: str, kenh: str, bay_gio: _dt.datetime) -> str:
@@ -238,18 +247,20 @@ def nguon_nhan_ban(goc: str, kenh: str, tieu_de: str, cum: List[str], cum_cua: C
 
 def _video_thang_tho(goc: str, kenh: str, bay_gio: _dt.datetime, ngay: int, he_so: float) -> Tuple[List[Dict[str, Any]], float,
                                                                                                Callable[[str], List[str]]]:
-    """Video đăng ≤ `ngay` ngày có hiển thị mốc mới nhất ≥ `he_so` × ngưỡng, từ `chi-so/bang-tom-tat.csv`."""
-    nguong, cum_cua, cum_video = _nguong_kenh(goc, kenh, bay_gio)
+    """Video đăng ≤ `ngay` ngày (`chi-so/bang-tom-tat.csv`) mà thước chung phán THẮNG hoặc đang NÓNG (chưa phán).
+    `he_so` giữ cho chữ ký cũ (không dùng). Phần tử thứ hai trả về giữ chỗ cho ngưỡng cũ: luôn 0."""
+    ket, cum_cua, cum_video = _ket_kenh(goc, kenh, bay_gio)
     han = bay_gio.date() - _dt.timedelta(days=ngay)
     ra: List[Dict[str, Any]] = []
     for r in _doc_csv(os.path.join(goc, "CHANNEL", kenh, "chi-so", "bang-tom-tat.csv")):
         ma, nd = str(r.get("Mã video") or "").strip(), _ngay(r.get("Ngày đăng"))
         hien_thi = _so(r.get("Lượt hiển thị"))
-        if not ma or nd is None or nd < han or hien_thi is None or nguong <= 0:
+        k = ket.get(ma) or {}
+        if not ma or nd is None or nd < han:
             continue
-        ti_so = hien_thi / nguong
-        if ti_so < he_so:
+        if not (k.get("nhan") == "thang" or (k.get("nhan") in (None, "", "chua_du") and k.get("nong"))):
             continue
+        pv = k.get("phan_vi") if k.get("nhan") == "thang" else k.get("som_phan_vi")
         td = str(r.get("Tiêu đề") or "").strip()
         cum = cum_video.get(ma)
         if not cum:
@@ -258,26 +269,42 @@ def _video_thang_tho(goc: str, kenh: str, bay_gio: _dt.datetime, ngay: int, he_s
             except Exception:  # noqa: BLE001
                 cum = []
         ra.append({"kenh": kenh, "video_id": ma, "tieu_de": td, "ngay_dang": nd.isoformat(), "cum": list(cum or []),
-                   "hien_thi": hien_thi, "ctr": str(r.get("Tỷ lệ bấm") or ""), "xem": _so(r.get("Lượt xem")),
-                   "moc": str(r.get("Mốc mới nhất") or ""), "nguong": nguong, "ti_so": round(ti_so, 2)})
-    ra.sort(key=lambda v: -v["ti_so"])
-    return ra, nguong, cum_cua
+                   "hien_thi": k.get("gia_tri") if k.get("gia_tri") is not None else hien_thi,
+                   "ctr": str(r.get("Tỷ lệ bấm") or ""), "xem": _so(r.get("Lượt xem")),
+                   "moc": ("{0:.0f}h".format(k["tuoi"]) if k.get("tuoi") is not None
+                           else str(r.get("Mốc mới nhất") or "")),
+                   "nhan": "thang" if k.get("nhan") == "thang" else "nong",
+                   "phan_vi": round(float(pv), 1) if pv is not None else None,
+                   # `ti_so` (tên cũ) = phân vị / 100 — để xếp/so như trước
+                   "ti_so": round(float(pv) / 100.0, 2) if pv is not None else 0.0})
+    ra.sort(key=lambda v: (v["nhan"] != "thang", -v["ti_so"], -(v["hien_thi"] or 0)))
+    return ra, 0.0, cum_cua
+
+
+def _mo_ta_thang(v: Dict[str, Any]) -> str:
+    """"thắng 28.624 hiển thị @94h = phân vị 100 kênh cùng tuổi" / "nóng … (chưa phán ≥96h)"."""
+    return "{0} {1} hiển thị @{2} = phân vị {3} kênh cùng tuổi{4}".format(
+        "thắng" if v.get("nhan") == "thang" else "nóng", _f(v["hien_thi"]), v["moc"] or "?",
+        "?" if v.get("phan_vi") is None else "{0:.0f}".format(v["phan_vi"]),
+        "" if v.get("nhan") == "thang" else " (chưa phán ≥96h)")
 
 
 def _lenh_nguon(kenh: str, u: Dict[str, Any], v: Dict[str, Any], kiem_ngay: str) -> str:
-    ly_do = "{0} ({1}) thắng lớn: {2} hiển thị @{3} = {4:.2f}x ngưỡng {5}, CTR {6}; nguồn {7} {8} view +{9}/ngày cùng cụm".format(
-        v["video_id"], _nho(v["tieu_de"], 24), _f(v["hien_thi"]), v["moc"] or "?", v["ti_so"], _f(v["nguong"]), v["ctr"] or "?",
+    ly_do = "{0} ({1}) {2}, CTR {3}; nguồn {4} {5} view +{6}/ngày cùng cụm".format(
+        v["video_id"], _nho(v["tieu_de"], 24), _mo_ta_thang(v), v["ctr"] or "?",
         u["ma"], _f(u["view"]), _f(u["tang_ngay"]))
-    du_doan = "video kế của {0} làm từ nguồn này có hiển thị 48h >= {1} (ngưỡng thắng của kênh)".format(kenh, _f(v["nguong"]))
+    du_doan = ("video kế của {0} làm từ nguồn này THẮNG theo thước chung (top 25% hiển thị của kênh cùng tuổi, "
+               "phán >= 96h)").format(kenh)
     return 'python -m core.nao uu-tien-nguon --kenh {0} --link {1} --ly-do "{2}" --du-doan "{3}" --kiem-ngay {4}'.format(
         kenh, u["link"], ly_do.replace('"', "'"), du_doan, kiem_ngay)
 
 
 def video_thang_lon(goc: str, kenh: str, bay_gio: Optional[_dt.datetime] = None, *, ngay: int = NGAY_GAN_DAY,
                     he_so: float = HE_SO_THANG_LON, toi_da_nguon: int = SO_NGUON_TOI_DA) -> List[Dict[str, Any]]:
-    """Video của kênh đăng ≤ `ngay` ngày mà hiển thị ở mốc mới nhất ≥ `he_so` × ngưỡng thắng 48h của kênh.
+    """Video của kênh đăng ≤ `ngay` ngày mà thước chung phán THẮNG hoặc đang NÓNG (`_video_thang_tho`).
 
-    Mỗi phần tử: `{kenh, video_id, tieu_de, ngay_dang, cum, hien_thi, ctr, moc, nguong, ti_so, da_xu_ly, nguon, kiem_ngay}`.
+    Mỗi phần tử: `{kenh, video_id, tieu_de, ngay_dang, cum, hien_thi, ctr, moc, nhan, phan_vi, ti_so, da_xu_ly, nguon,
+    kiem_ngay}` (`hien_thi`/`moc` = số ở tuổi phán, hoặc mới nhất khi đang nóng).
     `nguon` = ứng viên nhân bản (xem `nguon_nhan_ban`) kèm `lenh` = lệnh `uu-tien-nguon` chạy được ngay;
     `da_xu_ly` = id hành động của não đã nhắc video này (rỗng nếu chưa). Hỏng → []."""
     bay_gio = bay_gio or _dt.datetime.now()
@@ -357,8 +384,8 @@ def bai_hoc_bi_bac_bo(goc: str, kenh: str, bay_gio: Optional[_dt.datetime] = Non
                 loai = "tru" if b["huong"] == "-" else "cong"
                 if _hanh_dong_nhac(goc, "bai-hoc", v["video_id"], kenh, noi_dung_id=b["id"]):
                     continue
-                ly = "{0} {1} hiển thị @{2} = {3:.2f}x ngưỡng {4}, CTR {5}: {6} — {7} bài \"{8}\"".format(
-                    v["video_id"], _nho(v["tieu_de"], 20), v["moc"] or "?", v["ti_so"], _f(v["nguong"]), v["ctr"] or "?", dd,
+                ly = "{0} {1} {2}, CTR {3}: {4} — {5} bài \"{6}\"".format(
+                    v["video_id"], _nho(v["tieu_de"], 20), _mo_ta_thang(v), v["ctr"] or "?", dd,
                     "bác bỏ" if loai == "tru" else "xác nhận", _nho(b.get("cau"), 50))
                 ra.append({"kenh": kenh, "id": b["id"], "loai": loai, "video_id": v["video_id"], "dac_diem": dd,
                            "bai": str(b.get("cau") or ""),
@@ -398,9 +425,10 @@ def dong_bat_buoc(goc: str, kenh_ds: Optional[List[str]] = None, bay_gio: Option
         for v in vs:
             if v["da_xu_ly"]:
                 continue
-            thang_dong.append("  [THẮNG {0}] {1} {2} {3} | {4} | {5} hiển thị @{6} = {7:.2f}x ngưỡng {8}, CTR {9} | cụm {10}".format(
-                "RẤT LỚN" if v["ti_so"] >= HE_SO_RAT_LON else "LỚN", k, v["video_id"], v["ngay_dang"][5:], _nho(v["tieu_de"], 34),
-                _f(v["hien_thi"]), v["moc"] or "?", v["ti_so"], _f(v["nguong"]), v["ctr"] or "?", ",".join(v["cum"]) or "?"))
+            thang_dong.append("  [{0}] {1} {2} {3} | {4} | {5}, CTR {6} | cụm {7}".format(
+                ("THẮNG RẤT LỚN" if (v.get("phan_vi") or 0) >= PV_RAT_LON else "THẮNG") if v.get("nhan") == "thang"
+                else "ĐANG NÓNG", k, v["video_id"], v["ngay_dang"][5:], _nho(v["tieu_de"], 34),
+                _mo_ta_thang(v), v["ctr"] or "?", ",".join(v["cum"]) or "?"))
             if not v["nguon"]:
                 thang_dong.append("      (không có nguồn cùng cụm chưa làm trong content.csv — tự tìm ở `ĐỐI THỦ ĐANG NỔ`, "
                                   "hoặc ghi rõ vì sao bỏ qua)")

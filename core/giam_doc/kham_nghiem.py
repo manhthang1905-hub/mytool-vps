@@ -1,4 +1,10 @@
-"""Khám nghiệm video — mốc 48h và 7 ngày (`workspace/THIET-KE-CONG-TY.md`, BẢN GỌN mục 1–2).
+"""Khám nghiệm video — mốc PHÁN (96h) và 7 ngày (`workspace/THIET-KE-CONG-TY.md`, BẢN GỌN mục 1–2).
+
+12/10/2026 — THƯỚC CHUNG `core.thuoc_thang`: khám đầu tiên dời từ "48h" (52h, khung 36–100h) sang "96h" (khung
+72–168h; bản 72–96h chỉ khi video đã qua 96h) — bài học rút lúc 48h gắn "trượt" cho chính video nổ ngày 3–5. Hồ sơ
+khám mang nhãn thước chung (ba mức + phân vị cùng tuổi) thay ngưỡng 48h; video CHƯA PHÁN thì khám chỉ chẩn đoán,
+KHÔNG ghi bài học / delta (sổ bài học chỉ nhận bằng chứng đã phán). Tệp khám "<vid>-48h.json" đời trước vẫn đọc
+được (`doc_kham`), nhưng không còn tính là mốc đã khám.
 
 KHÔNG phải plugin (nằm trong `_KHONG_PHAI_VIEC`). Mã chỉ gom số, đặt giới hạn và ghi sổ; phần suy luận
 (cổng nào hỏng, vì sao, nhãn theo NGHĨA, bài học) là của MỘT lượt LLM qua `quan_ly.goi_quyet`.
@@ -39,7 +45,7 @@ N_BOM = 3
 #: mốc → (giờ chuẩn, khung tuổi bản chụp). Studio không chụp đúng giờ nên khung rộng hơn 44–85 / 144–240.
 #: 01/10/2026: mốc 48h nhận bản chụp từ 36h (48 ± 12, cùng `cong_thuc_v7.CUA_SO_48H_RONG`) nhưng chỉ khi
 #: video đã qua 48h (`moc_cua`) — Chrome mở mỗi ngày một lần nên có video chỉ có bản 38h rồi 125h.
-MOC = {"48h": (52.0, 36.0, 100.0), "7d": (168.0, 120.0, 260.0)}
+MOC = {"96h": (96.0, 72.0, 168.0), "7d": (168.0, 120.0, 260.0)}
 CONG = ("hien_thi", "ctr", "giu_chan", "khong")
 KIEU_TIEU_DE = ("so_dem", "hai_ve", "to_mo", "chan_dung", "cau_hoi", "khang_dinh", "khac")
 KIEU_HOOK = ("nghich_ly", "cau_hoi", "so_lieu", "chan_dung", "ke_chuyen", "khac")
@@ -142,12 +148,12 @@ def da_kham(goc: str, ma: str) -> Dict[str, List[str]]:
 
 
 def moc_cua(v: Dict[str, Any]) -> Optional[Tuple[str, Dict[str, Any]]]:
-    """Mốc MUỘN nhất mà video có bản chụp hợp lệ: ("7d"|"48h", bản chụp) | None."""
-    for moc in ("7d", "48h"):
+    """Mốc MUỘN nhất mà video có bản chụp hợp lệ: ("7d"|"96h", bản chụp) | None."""
+    for moc in ("7d", "96h"):
         gio, lo, hi = MOC[moc]
         b = ban_chup_gan(v, gio, lo, hi)
-        if b is not None and moc == "48h" and b["tuoi"] < 44 and (v.get("tuoi_gio") or 0) < 48:
-            continue  # video chưa qua 48h: chưa khám ở mốc 48h bằng bản chụp sớm
+        if b is not None and moc == "96h" and b["tuoi"] < 96 and (v.get("tuoi_gio") or 0) < 96:
+            continue  # video chưa qua 96h: chưa khám bằng bản 72–96h (thước chung chỉ phán bản ấy khi đã qua 96h)
         if b is not None:
             return moc, b
     return None
@@ -249,6 +255,18 @@ def binh_luan_that(goc: str, ma: str, vid: str, lang: str = "") -> int:
     return len(ds)
 
 
+def _ket_luan_chu(v: Dict[str, Any]) -> str:
+    """Kết luận thước chung cho LLM đọc: "thang|trung_binh|truot (phân vị P cùng tuổi @Th)" hoặc "chờ"."""
+    nhan = v.get("nhan") or v.get("ket_luan") or ""
+    if not nhan:
+        som = v.get("tin_hieu_som")
+        return "chờ (chưa đủ tuổi phán ≥96h{0})".format(
+            "; tín hiệu sớm phân vị {0:.0f}".format(float(som)) if som is not None else "")
+    pv, tuoi = v.get("phan_vi"), v.get("tuoi_do")
+    return "{0} (phân vị {1} so kênh cùng tuổi{2})".format(
+        nhan, "?" if pv is None else "{0:.0f}".format(float(pv)), " @{0:.0f}h".format(float(tuoi)) if tuoi else "")
+
+
 def ho_so_kham(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str,
                ban_chup: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Mọi thứ LLM cần về MỘT video ở `moc` — chỉ đọc đĩa. `so_lieu` = {khoá nguồn: số} (bảng LLM được trích)."""
@@ -271,8 +289,10 @@ def ho_so_kham(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str,
         if tv is not None:
             so_lieu["kenh/tv@{0}/{1}".format(moc, k)] = round(tv, 2)
     so_lieu["kenh/tv@{0}/n".format(moc)] = len(khac)
-    for k, x in (("kenh/nguong_thang_48h", bs.nguong_thang_48h), ("kenh/ctr_trang_chu_muc_tieu", bs.ctr_muc_tieu),
-                 ("v:{0}/hien_thi_48h".format(vid), v.get("hien_thi_48h")), ("v:{0}/sub_1k_view".format(vid), v.get("sub_1k"))):
+    for k, x in (("kenh/muc_thang_96h", getattr(bs, "muc_thang_96h", None)),
+                 ("kenh/ctr_trang_chu_muc_tieu", bs.ctr_muc_tieu),
+                 ("v:{0}/hien_thi_48h".format(vid), v.get("hien_thi_48h")), ("v:{0}/sub_1k_view".format(vid), v.get("sub_1k")),
+                 ("v:{0}/phan_vi_kenh".format(vid), v.get("phan_vi")), ("v:{0}/tuoi_phan".format(vid), v.get("tuoi_do"))):
         if x is not None:
             so_lieu[k] = round(x, 2)
     tmv = os.path.join(thu_muc_kenh(goc, ma), "chi-so", vid)
@@ -302,7 +322,7 @@ def ho_so_kham(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str,
         "tieu_de": v.get("tieu_de"), "ngay_dang": v.get("ngay_dang"),
         "phut": round((v.get("dai_giay") or 0) / 60.0, 1) if v.get("dai_giay") else None,
         "cum": [bs.cum(c) for c in v.get("cum") or []], "cong_thuc": v.get("cong_thuc"),
-        "ket_luan": v.get("ket_luan") or "chờ", "chu_bia": hs_v.get("chu_bia"),
+        "ket_luan": _ket_luan_chu(v), "chu_bia": hs_v.get("chu_bia"),
         "bia": {"nhom": th.get("nhom"), "kieu": th.get("kieu"), "ly_do": _gon(th.get("ly_do"), 200)} if th else {},
         "kich_ban": {"ban_chon": kb.get("ban_chon"), "hook_chon": kb.get("hook_chon"), "ky_tu": kb.get("ky_tu_ban_chon")}
         if kb else {},
@@ -361,7 +381,9 @@ def loi_nhac(hs: Dict[str, Any], muc_tieu: str = "", ma: str = "",
     dong = [
         "Bạn khám nghiệm MỘT video YouTube của kênh {0} ở mốc {1} (bản chụp {2}). View = Hiển thị × CTR × Giữ chân: "
         "so với trung vị kênh CÙNG TUỔI, tìm cổng hỏng và vì sao, rồi rút ĐÚNG MỘT bài học có số cho video sau "
-        "(chọn content · tiêu đề/bìa · kịch bản giữ chân).".format(ma, hs["moc"], hs.get("ban_chup")),
+        "(chọn content · tiêu đề/bìa · kịch bản giữ chân). \"Thắng\" theo thước chung của tool: top 25% hiển thị "
+        "của chính kênh ở cùng tuổi, phán từ ≥ 96h (ket_luan + kenh/muc_thang_96h); KHÔNG phán theo số 48h.".format(
+            ma, hs["moc"], hs.get("ban_chup")),
         "MỤC TIÊU KÊNH\n" + (muc_tieu or "(không khai)"),
         "SỐ LIỆU (khoá = giá trị; mỗi số bạn dùng phải ghi lại kèm khoá trong so_dan; tv@ = trung vị kênh cùng tuổi; "
         "ctr = CTR mọi nguồn, ctr_browse = CTR trang chủ, gx_1k = giờ xem/1.000 hiển thị, giu_30s/giu_2p = % người "
@@ -557,6 +579,12 @@ def kham_mot(goc: str, ma: str, bs: BangSo, v: Dict[str, Any], moc: str, goi_cha
            "bong": gioi_han.che_do(bs) != "tu_ap", "ket_luan": v.get("ket_luan") or "",
            "hien_thi_48h": v.get("hien_thi_48h"), "ket": ket,
            "nhan": dict(ket["nhan"], **hs["nhan_ma"]) if ket else {}, "ho_so": hs, "loi_nhac": ln, "_hoi_dong": hd}
+    # Sổ bài học chỉ nhận bằng chứng ĐÃ PHÁN (thước chung) — video chưa phán: giữ chẩn đoán, bỏ bài học + delta.
+    if ket is not None and not v.get("ket_luan"):
+        ban["bai_hoc_bo"] = "video chưa được thước chung phán (≥96h) — chỉ chẩn đoán, không ghi bài học"
+        ket = dict(ket, bai_hoc=None)
+        ket.pop("delta", None)
+        ban["ket"] = ket
     if ghi_tep and ket is not None:
         _ghi_json(os.path.join(thu_muc(goc, ma), "{0}-{1}.json".format(v["id"], moc)),
                   {k: x for k, x in ban.items() if k != "loi_nhac" and not k.startswith("_")})

@@ -54,6 +54,11 @@ def _video(goc, kenh, ma, tieu_de, i48, *, related=None):
     if related is not None:
         tq["traffic"] = {"related": related, "browse": 100 - related}
     _ghi(os.path.join(d, "48h", "tong-quan.json"), json.dumps(tq))
+    # 12/10/2026 — thước chung (`core.thuoc_thang`) chỉ PHÁN từ ≥ 96h: video (đăng 10/09, đủ tuổi) có thêm bản
+    # 120h (+20% — số cộng dồn đứng im ≥ 12h ở mức lớn bị coi là bản chép cũ) — để nhãn thắng/trượt của bài kiểm
+    # giữ nguyên nghĩa (kênh ≤ 3 video: phán bằng sàn tuyệt đối).
+    _ghi(os.path.join(d, "120h", "tong-quan.json"), json.dumps(dict(tq, impressions=round(i48 * 1.2) + 1,
+                                                                    gio_sau_dang=120)))
 
 
 def _bang_de_xuat(goc, kenh, ma_minh, dong):

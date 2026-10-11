@@ -1,5 +1,6 @@
 """Tests `core/nao_goi_y.py` — gợi ý bắt buộc cho bộ não (video thắng lớn + nguồn nhân bản, bài học bị bác bỏ).
-Không mạng; dữ liệu giả trong `tmp_path`; ngưỡng/cụm thay bằng hàm giả (không dựng thư mục chi-so thật)."""
+Không mạng; dữ liệu giả trong `tmp_path`; nhãn thước chung (`core.thuoc_thang`) / cụm thay bằng hàm giả (không
+dựng thư mục chi-so thật). 12/10/2026: "thắng" = nhãn thước chung (hoặc đang nóng), không còn ngưỡng 48h."""
 
 import csv
 import datetime as dt
@@ -11,7 +12,17 @@ import pytest
 from core import nao, nao_goi_y
 
 BAY_GIO = dt.datetime(2026, 10, 6, 4, 10)
-NGUONG = 6000.0
+
+
+def _k(nhan, pv, gia_tri=None, tuoi=None, nong=False, som=None):
+    return {"nhan": nhan, "phan_vi": pv, "gia_tri": gia_tri, "tuoi": tuoi, "nong": nong, "som_phan_vi": som}
+
+
+KET = {"WIN00000001": _k("thang", 92.0, 8497.0, 110.0),
+       "LOSE0000001": _k("truot", 10.0, 300.0, 120.0),
+       "OLD00000001": _k("thang", 99.0, 9000.0, 130.0),
+       "HOT00000001": _k("chua_du", 70.0, nong=True, som=95.0),      # chưa phán, đang nóng → vẫn nhân bản
+       "MID00000001": _k("chua_du", 60.0, som=60.0)}                 # chưa phán, không nóng → bỏ
 
 CUM_THEO_CHU = {"年金": "vat-chat", "IQ": "tri-tue"}
 
@@ -22,7 +33,7 @@ def _cum_cua(td):
 
 @pytest.fixture(autouse=True)
 def _ngưỡng_giả(monkeypatch):
-    monkeypatch.setattr(nao_goi_y, "_nguong_kenh", lambda goc, kenh, bg: (NGUONG, _cum_cua, {}))
+    monkeypatch.setattr(nao_goi_y, "_ket_kenh", lambda goc, kenh, bg: (KET, _cum_cua, {}))
 
 
 def _viet_csv(duong, cot, hang):
@@ -74,9 +85,21 @@ CONTENT = [
 def test_video_thang_lon_loc_ngay_va_nguong(tmp_path):
     goc = _goc(tmp_path, TOM_TAT, CONTENT)
     vs = nao_goi_y.video_thang_lon(goc, "KA", BAY_GIO)
-    assert [v["video_id"] for v in vs] == ["WIN00000001"]     # LOSE dưới ngưỡng, OLD quá 10 ngày
+    assert [v["video_id"] for v in vs] == ["WIN00000001"]     # LOSE trượt, OLD quá 10 ngày
     v = vs[0]
-    assert v["ti_so"] == pytest.approx(1.42, abs=0.01) and v["cum"] == ["vat-chat"] and v["nguong"] == NGUONG
+    assert v["nhan"] == "thang" and v["phan_vi"] == 92.0 and v["ti_so"] == pytest.approx(0.92)
+    assert v["cum"] == ["vat-chat"] and v["hien_thi"] == 8497.0 and v["moc"] == "110h"
+
+
+def test_video_dang_nong_chua_phan_van_duoc_nhan_ban(tmp_path):
+    tt = TOM_TAT + [("年金の新しい動画", "HOT00000001", "2026-10-05", "3000"),
+                    ("年金の普通の動画", "MID00000001", "2026-10-05", "900")]
+    vs = nao_goi_y.video_thang_lon(_goc(tmp_path, tt, CONTENT), "KA", BAY_GIO)
+    assert [(v["video_id"], v["nhan"]) for v in vs] == [("WIN00000001", "thang"), ("HOT00000001", "nong")]
+    assert vs[1]["phan_vi"] == 95.0 and vs[1]["hien_thi"] == 3000.0   # số mới nhất của bảng tóm tắt
+    dong = nao_goi_y.dong_bat_buoc(_goc(tmp_path / "b", tt, CONTENT), ["KA"], BAY_GIO)
+    assert any("ĐANG NÓNG" in d and "HOT00000001" in d for d in dong)
+    assert any("[THẮNG" in d and "WIN00000001" in d and "phân vị 92" in d for d in dong)
 
 
 def test_nguon_nhan_ban_cung_cum_chua_lam_xep_theo_tang_ngay(tmp_path):
@@ -145,6 +168,6 @@ def test_xem_co_muc_bat_buoc_o_dau_va_khong_vo(tmp_path):
 
 def test_hong_thi_im_lang(tmp_path, monkeypatch):
     goc = _goc(tmp_path, TOM_TAT, CONTENT)
-    monkeypatch.setattr(nao_goi_y, "_nguong_kenh", lambda *a: (_ for _ in ()).throw(RuntimeError("hỏng")))
+    monkeypatch.setattr(nao_goi_y, "_ket_kenh", lambda *a: (_ for _ in ()).throw(RuntimeError("hỏng")))
     assert nao_goi_y.video_thang_lon(goc, "KA", BAY_GIO) == []
     assert nao_goi_y.bai_hoc_bi_bac_bo(goc, "KA", BAY_GIO) == []

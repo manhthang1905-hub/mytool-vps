@@ -124,7 +124,7 @@ def test_luat_studio():
                 _video("sua", lich_su_sua=[{"luc": "x"}]), _video("ngoai", ma_goi="")]
     sv = lambda vid: {"loai": "viec_studio", "video_id": vid, "noi_dung": "tiêu đề"}  # noqa: E731
     assert gh.kiem(sv("ok"), _so(), bs)[0]
-    for vid, chu in (("thang", "thắng"), ("cho", "chưa bị phán trượt"), ("sua", "một lần"), ("ngoai", "hồ sơ"),
+    for vid, chu in (("thang", "thắng"), ("cho", "chưa bị phán không thắng"), ("sua", "một lần"), ("ngoai", "hồ sơ"),
                      ("khong", "không có video")):
         ok, ly = gh.kiem(sv(vid), _so(), bs)
         assert not ok and chu in ly, (vid, ly)

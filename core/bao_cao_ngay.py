@@ -137,7 +137,8 @@ def _muc_chien_truong() -> List[str]:
 
 def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
     """Vòng tự học có còn KÍN không (06/10/2026): tín hiệu đo → điểm → quyết định bị đứt ở đâu. Chỉ đọc đĩa.
-    Mỗi loại một dòng, gộp mọi kênh (10 kênh vẫn gọn): thiếu số 48h, ván không nhãn cụm, vòng học không chạy,
+    Mỗi loại một dòng, gộp mọi kênh (10 kênh vẫn gọn): thiếu kết quả (thước chung `core.thuoc_thang` cần số ≥ 96h),
+    ván không nhãn cụm, vòng học không chạy,
     lệnh chiến trường cũ, cảnh báo của các đường học 24h (`tu_hoc.canh_bao`)."""
     from core import tu_hoc  # noqa: PLC0415
     ts = bay_gio.timestamp()
@@ -159,13 +160,13 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
             cu.append("{0} {1}".format(k, "chưa chấm" if t["van_cu_gio"] is None else "{0:.0f}h".format(t["van_cu_gio"])))
     ra = []
     if thieu:
-        ra.append("- Thiếu số 48h — Studio rỗng (đăng ≥{0} ngày, không mốc nào có số; sau {1} ngày chốt "
+        ra.append("- Thiếu kết quả (thước chung, phán từ ≥96h) — Studio rỗng (đăng ≥{0} ngày, không mốc nào có số; sau {1} ngày chốt "
                   "«không đo được»): {2}".format(tu_hoc.NGAY_CHO_48H, tu_hoc.NGAY_KHONG_DO, ", ".join(thieu)))
     if cho_moc:
-        ra.append("- Thiếu số 48h — chưa tới mốc (có số mốc khác nhưng chưa đủ chắc kết luận, chờ chụp lại): "
+        ra.append("- Thiếu kết quả — chưa tới mốc (có số mốc sớm nhưng chưa có bản ≥72–96h để phán, chờ chụp lại): "
                   + ", ".join(cho_moc))
     if khong_do:
-        ra.append("- Đã chốt «không đo được» (Studio rỗng ≥{0} ngày, thôi chờ): {1}".format(
+        ra.append("- Đã chốt «không đo được» (≥{0} ngày không có số muộn để phán, thôi chờ): {1}".format(
             tu_hoc.NGAY_KHONG_DO, ", ".join(khong_do)))
     if khong_cum:
         ra.append("- Ván không nhãn cụm (trục cụm không học được): " + ", ".join(khong_cum))

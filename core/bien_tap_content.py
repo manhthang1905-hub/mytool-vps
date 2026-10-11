@@ -600,10 +600,21 @@ def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
     return ra
 
 
-#: Video của kênh được gắn ★ (THẮNG CỦA KÊNH theo số MUỘN) khi hiển thị muộn ≥ ngần này × trung vị hiển thị muộn
-#: của kênh (cần ≥ `N_TOI_THIEU_SAO` video có số muộn) VÀ ≥ `SAO_SAN` hiển thị (vài trăm hiển thị chưa là bằng chứng),
-#: tối đa `SAO_TOI_DA` video.
+#: Video của kênh được gắn ★ = THẮNG theo THƯỚC CHUNG (`core.thuoc_thang`, nhãn `ket` của ván tự học — cùng nhãn
+#: V7/giám đốc/bộ não: top 25% hiển thị của kênh cùng tuổi, phán ≥ 96h), tối đa `SAO_TOI_DA` video. 12/10/2026: trước
+#: đây ★ có luật riêng (≥ 2 × trung vị số muộn) — một bộ phận nữa tự chế "thắng". `HE_SO_SAO`/`N_TOI_THIEU_SAO`/`SAO_SAN`
+#: không còn dùng (giữ tên cho bộ đọc cũ).
 HE_SO_SAO, N_TOI_THIEU_SAO, SAO_TOI_DA, SAO_SAN = 2.0, 4, 3, 1000.0
+
+
+def _ket_van(goc: str, ma_kenh: str) -> Dict[str, Dict[str, Any]]:
+    """`{mã gói: ván}` (tự học) — để đọc nhãn thước chung `ket`; hỏng → {}."""
+    try:
+        from .tu_hoc import doc_van  # noqa: PLC0415
+
+        return doc_van(goc, ma_kenh)
+    except Exception:  # noqa: BLE001 — bối cảnh phụ
+        return {}
 
 
 def _so_muon(hs: Dict[str, Any]) -> Dict[str, Any]:
@@ -626,11 +637,12 @@ def _video_cua_minh(goc: str, ma_kenh: str) -> str:
         hang.append((hs, muon, _so(muon.get("impressions")) if muon else None))
     # Xếp theo số MUỘN (video chưa có số muộn đứng sau, giữ thứ tự cũ) — video thắng thật của kênh lên đầu.
     hang.sort(key=lambda x: -(x[2] if x[2] is not None else -1.0))
-    muon_ds = [x[2] for x in hang if x[2] is not None]
-    sao: set = set()
-    if len(muon_ds) >= N_TOI_THIEU_SAO:
-        nguong_sao = max(SAO_SAN, HE_SO_SAO * statistics.median(muon_ds))
-        sao = {id(x[0]) for x in hang[:SAO_TOI_DA] if x[2] is not None and x[2] >= nguong_sao}
+    van = _ket_van(goc, ma_kenh)
+    ket_cua = {id(hs): (van.get(str(hs.get("ma_goi") or "")) or {}) for hs, _m, _i in hang}
+    sao: set = {i for i, v in ket_cua.items() if v.get("ket") == "thang"}
+    if len(sao) > SAO_TOI_DA:   # giữ ★ cho các video thắng có phân vị cao nhất
+        sao = set(sorted(sao, key=lambda i: -(ket_cua[i].get("ket_pv") or 0.0))[:SAO_TOI_DA])
+    chu_ket = {"thang": "THẮNG", "trung_binh": "trung bình", "truot": "trượt"}
     dong = []
     for hs, muon, imp_muon in hang:
         moc, s = _so_moc(hs)
@@ -651,6 +663,11 @@ def _video_cua_minh(goc: str, ma_kenh: str) -> str:
             them_muon = " → MUỘN {0}h: {1} hiển thị · CTR {2}% · {3} view".format(
                 muon.get("moc_gio_that", "?"), _ngan_so(imp_muon or 0.0), muon.get("ctr", "?"),
                 _ngan_so(_so(muon.get("views"))))
+        kv = ket_cua.get(id(hs)) or {}
+        if kv.get("ket"):
+            them_muon += " · KẾT QUẢ (thước chung): {0} — phân vị {1} so kênh cùng tuổi @{2}h".format(
+                chu_ket.get(kv["ket"], kv["ket"]), "?" if kv.get("ket_pv") is None else "{0:.0f}".format(kv["ket_pv"]),
+                "?" if kv.get("ket_tuoi") is None else "{0:.0f}".format(kv["ket_tuoi"]))
         dong.append("- {11}{0} · bìa “{1}” · {2}: {3} hiển thị · CTR {4}%{5} · {6} view · AVD {7}s ({8}%)"
                     " · sub/1k view {9}{12}{10}".format(
                         _gon(hs.get("tieu_de"), 90) or "?", _gon(hs.get("chu_bia"), 30) or "—",
@@ -663,10 +680,11 @@ def _video_cua_minh(goc: str, ma_kenh: str) -> str:
     if not dong:
         return "(kênh chưa có video nào có số Studio)"
     if sao:
-        dong.insert(0, "(Xếp theo hiển thị MUỘN ≥96h — kênh non thường chỉ có ~1/3 số cuối ở mốc 48h, ĐỪNG coi video "
-                       "48h thấp là trượt khi số muộn cao. ★ = THẮNG CỦA CHÍNH KÊNH (≥ ×{0:g} trung vị số muộn): ứng "
-                       "viên là 'anh em theo NGHĨA' của một video ★ — cùng tệp người + cùng lời hứa, khác luận điểm — "
-                       "là hướng có bằng chứng mạnh nhất; ứng viên khác hẳn mọi ★ cần lý do rõ.)".format(HE_SO_SAO))
+        dong.insert(0, "(Xếp theo hiển thị MUỘN ≥72h — kênh non thường chỉ có ~1/3 số cuối ở mốc 48h, ĐỪNG coi video "
+                       "48h thấp là trượt khi số muộn cao. ★ = THẮNG CỦA CHÍNH KÊNH theo thước chung (top 25% hiển thị "
+                       "của kênh cùng tuổi, phán ≥96h): ứng viên là 'anh em theo NGHĨA' của một video ★ — cùng tệp "
+                       "người + cùng lời hứa, khác luận điểm — là hướng có bằng chứng mạnh nhất; ứng viên khác hẳn mọi "
+                       "★ cần lý do rõ.)")
     return "\n".join(dong)
 
 

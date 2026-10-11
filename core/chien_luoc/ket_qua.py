@@ -8,18 +8,18 @@ Nối SỔ LƯỢT `CHANNEL/<k>/tu-chay/*.json` (công thức = `run.nguon.cong_
 được cho video cũ) qua mã gói với HỒ SƠ VIDEO (`ho-so-video/<mã gói>.json`: `video_id`, mốc
 48h/72h), rồi với danh sách video của kênh theo V7.
 
-═══ "THẮNG" ĐO THEO CHÍNH KÊNH ═══
+═══ "THẮNG" ĐO THEO CHÍNH KÊNH — THƯỚC CHUNG `core.thuoc_thang` (12/10/2026) ═══
 
-Cờ thắng lấy nguyên của `cong_thuc_v7.video_cua_kenh` → `_danh_dau_thang`: hiển thị 48h ≥
-`cong_thuc_v7.nguong_thang_48h` = max(`toi_thieu_48h`, `boi_so_trung_vi` × TRUNG VỊ 48h của kênh)
-khi kênh có ≥ 5 video có số 48h; ít hơn thì ngưỡng NGÁCH (`ngach.yaml: nguong_thang_48h`, chưa khai
-= `toi_thieu_48h`) trộn dần sang ngưỡng riêng (01/10/2026). KHÔNG phải 20.000 cứng. Video chưa có
-trong danh sách V7 nhưng hồ sơ đã có mốc 48h/72h thì so cùng ngưỡng ấy (`_nguong_thang`).
+Kết luận lấy nhãn `VideoMinh.nhan_thang` của `cong_thuc_v7.video_cua_kenh` (= `thuoc_thang`): phân vị hiển thị
+so video của CHÍNH kênh ở CÙNG tuổi, phán từ ≥ 96h (chốt 168h), không bao giờ ở 48h. "thang" = nhãn thắng;
+"truot" = đã phán mà KHÔNG thắng (trung bình hoặc trượt — `ket_luan_3` trả đủ ba mức); "" = chưa phán. Bỏ hẳn
+đường lùi "so mốc 48h/72h của hồ sơ với ngưỡng 48h" (chính nó gắn TRƯỢT cho video nổ ngày 3–5).
+`nguong_thang_48h` trả kèm ở `video_kenh` chỉ còn là MỨC THAM KHẢO để in.
 
 Nghĩa các số:
   * `lam`  — số gói (video) công thức này đã ra trong cửa sổ `ngay` (theo ngày của tệp sổ; lượt
     đã đánh dấu `bo` không tính);
-  * `n`    — số video ĐÃ CÓ KẾT LUẬN = `thang + truot`; `cho` = chưa đủ mốc 48h;
+  * `n`    — số video ĐÃ CÓ KẾT LUẬN = `thang + truot`; `cho` = chưa phán (thước chung, < 96h hoặc thiếu số);
   * `ctr_trang_chu_tv` — trung vị CTR "Browse features" @48h; `avd_giay_tv` — trung vị AVD (giây)
     ở mốc 48h (lùi 72h); `sub_1k` — tổng sub / tổng view × 1000 (bảng tóm tắt, trọn đời video),
     tất cả chỉ trên video đã có kết luận (so cùng tuổi).
@@ -94,17 +94,39 @@ def _moc_ho_so(hs: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def ket_luan(vm: Any, hs: Dict[str, Any], nguong: Optional[float]) -> str:
-    """"thang" | "truot" | "" (chưa kết luận). Ưu tiên cờ V7; lùi về mốc 48h/72h của hồ sơ."""
-    if vm is not None:
-        if getattr(vm, "thang", False):
-            return "thang"
-        if getattr(vm, "hien_thi_48h", None) is not None:
-            return "truot"
-    imp = _so(_moc_ho_so(hs).get("impressions"))
-    if imp is None or nguong is None:
-        return ""
-    return "thang" if imp >= nguong else "truot"
+def ket_thuoc(vm: Any, hs: Optional[Dict[str, Any]] = None,
+              vm_theo_id: Optional[Dict[str, Any]] = None, ngay_du_phong: str = "") -> Any:
+    """`thuoc_thang.KetQua` của một video: nhãn V7 (`VideoMinh.ket`) nếu video có trong `chi-so/`; không thì —
+    khi có `vm_theo_id` (cả danh sách V7 của kênh) — chuỗi dựng từ mốc của HỒ SƠ (`moc_gio_that`) chấm so với cùng
+    tập video kênh (`thuoc_thang.danh_gia_them`, không làm đổi nhãn video khác). Không có gì → None."""
+    k = getattr(vm, "ket", None) if vm is not None else None
+    if k is not None or vm_theo_id is None or not (hs or {}).get("chi_so"):
+        return k
+    from .. import thuoc_thang  # noqa: PLC0415
+
+    c = thuoc_thang.chuoi_ho_so(hs, str((hs or {}).get("video_id") or (hs or {}).get("ma_goi") or ""))
+    if not c.diem:
+        return None
+    chuoi = {vid: v.chuoi for vid, v in vm_theo_id.items() if isinstance(getattr(v, "chuoi", None), thuoc_thang.Chuoi)}
+    return thuoc_thang.danh_gia_them(c, chuoi, thuoc_thang.tuoi_ho_so(hs, ngay_du_phong))
+
+
+def ket_luan_3(vm: Any, hs: Optional[Dict[str, Any]] = None, vm_theo_id: Optional[Dict[str, Any]] = None) -> str:
+    """"thang" | "trung_binh" | "truot" | "" (chưa phán) — nhãn thước chung của video (`VideoMinh.nhan_thang`;
+    video ngoài `chi-so/` mà có `vm_theo_id` thì chấm từ hồ sơ, xem `ket_thuoc`)."""
+    nhan = str(getattr(vm, "nhan_thang", "") or "") if vm is not None else ""
+    if not nhan and vm is None and vm_theo_id is not None:
+        k = ket_thuoc(None, hs, vm_theo_id)
+        nhan = str(getattr(k, "nhan", "") or "") if k is not None else ""
+    return nhan if nhan in ("thang", "trung_binh", "truot") else ""
+
+
+def ket_luan(vm: Any, hs: Dict[str, Any], nguong: Optional[float], *,
+             vm_theo_id: Optional[Dict[str, Any]] = None) -> str:
+    """"thang" | "truot" | "" (chưa kết luận) — thước chung (`ket_luan_3`), hai mức: trung bình tính là "truot"
+    (đã phán, KHÔNG thắng). `nguong` giữ cho chữ ký cũ: không còn phán bằng ngưỡng 48h."""
+    k = ket_luan_3(vm, hs, vm_theo_id)
+    return "" if not k else ("thang" if k == "thang" else "truot")
 
 
 def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
@@ -189,7 +211,7 @@ def thong_ke(goc: str, ma_kenh: str, ngay: int = NGAY_MAC_DINH, *,
         vid = str(hs.get("video_id") or "")
         if vm_theo_id is None:  # đọc danh sách V7 lười — kênh chưa làm video nào thì khỏi đọc
             vm_theo_id, nguong = video_kenh(goc, ma_kenh)
-        kl = ket_luan(vm_theo_id.get(vid) if vid else None, hs, nguong) if (vid or hs) else ""
+        kl = ket_luan(vm_theo_id.get(vid) if vid else None, hs, nguong, vm_theo_id=vm_theo_id) if (vid or hs) else ""
         if not kl:
             o["cho"] += 1
             continue
@@ -291,12 +313,18 @@ def ghi_tep(goc: str, ma_kenh: str, *, bay_gio: Optional[_dt.datetime] = None,
     hien_tai, nguon_ts = _ti_trong_hien_tai(goc, ma_kenh, tk)
     goi_y, ly_do = goi_y_ti_trong(tk, hien_tai)
     _vm, nguong = video_kenh(goc, ma_kenh) if tk_het else ({}, None)
+    from .. import thuoc_thang  # noqa: PLC0415
+    try:
+        from .. import cong_thuc_v7 as v7  # noqa: PLC0415
+
+        muc = v7.muc_thang_kenh(list(_vm.values())) if _vm else None
+    except Exception:  # noqa: BLE001
+        muc = None
     du = {
         "kenh": ma_kenh, "cap_nhat_luc": bay_gio.replace(microsecond=0).isoformat(),
         "cua_so_ngay": NGAY_MAC_DINH,
-        "cach_do_thang": "cong_thuc_v7.nguong_thang_48h — hiển thị 48h ≥ max(toi_thieu_48h, "
-                         "boi_so_trung_vi × trung vị 48h của CHÍNH kênh); kênh < 5 video có số 48h: "
-                         "ngưỡng ngách trộn dần sang ngưỡng kênh",
+        "cach_do_thang": "core.thuoc_thang v{0}: {1}".format(thuoc_thang.PHIEN_BAN, thuoc_thang.MO_TA),
+        "muc_thang_96h": round(muc) if muc is not None else None,
         "nguong_thang_48h": round(nguong) if nguong is not None else None,
         "thong_ke": tk, "thong_ke_toan_bo": tk_het,
         "ti_trong_hien_tai": {t: round(w / sum(hien_tai.values()), 3) for t, w in hien_tai.items()}

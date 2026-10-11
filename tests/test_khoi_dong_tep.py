@@ -240,21 +240,24 @@ def test_danh_dau_thang_n1_khong_can_ba_lan_trung_vi(tmp_path):
     _tong_quan(os.path.join(d, "_thong-tin.json"), tieu_de="x", ngay_dang="2026-09-10T00:00:00.000Z")
 
     vids = v7.video_cua_kenh(goc, kenh, v7.CAU_HINH_MAC_DINH, bay_gio=dt.datetime(2026, 9, 13))
-    assert len(vids) == 1 and vids[0].thang is True
+    # 12/10/2026 — thước chung: chưa phán ở 48h, nhưng 6.200 hiển thị (kênh chưa có tham chiếu: ≥ sàn 5.000) là
+    # tín hiệu NÓNG → V7 coi là cụm đang thắng (để nhân bản khi còn nóng).
+    assert len(vids) == 1 and vids[0].thang is True and vids[0].nong and vids[0].nhan_thang == "chua_du"
 
-    # ép so_video_toi_thieu=1 (bắt lại số hạng x3 trung vị) — cùng 1 video thì tự vượt CHÍNH NÓ x3 là bất khả.
+    # so_video_toi_thieu=1 chỉ còn đổi MỨC THAM KHẢO 48h (x3 chính nó) — không còn đổi được nhãn.
     ch = copy.deepcopy(v7.CAU_HINH_MAC_DINH)
     ch["thang"]["so_video_toi_thieu"] = 1
     vids2 = v7.video_cua_kenh(goc, kenh, ch, bay_gio=dt.datetime(2026, 9, 13))
-    assert vids2[0].thang is False
+    assert vids2[0].thang is True and v7.nguong_thang_48h(vids2, ch) == 3 * 6200
 
 
 def test_danh_dau_thang_du_5_video_khong_doi_hanh_vi():
-    """TL4-T7 có ≥5 video — số hạng x3 trung vị vẫn áp y như trước khi có việc này."""
+    """VideoMinh dựng tay chỉ có số 48h: KHÔNG phán (thước chung phán từ ≥ 96h); video top kênh ở 48h và ≥ 2.500
+    hiển thị chỉ là "đang nóng"."""
     ds = [v7.VideoMinh(ma="v{0}".format(i), hien_thi_48h=h) for i, h in enumerate([100, 100, 100, 100, 7000])]
     v7._danh_dau_thang(ds, v7.CAU_HINH_MAC_DINH)
-    # trung vị = 100 -> nguong = max(6000, 300) = 6000; chỉ video 7000 thắng.
     assert [v.thang for v in ds] == [False, False, False, False, True]
+    assert all(v.nhan_thang == "chua_du" for v in ds) and ds[4].nong and ds[4].suc == 0.5
 
 
 def test_da_co_video_thang_dat_du_ba_nguong_va_co_pool(tmp_path):

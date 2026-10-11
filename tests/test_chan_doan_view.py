@@ -1,8 +1,8 @@
 """Chẩn đoán view 07/10/2026 (`workspace/chan-doan/2026-10-07.md`) — ba sửa:
 
-1. `tu_hoc`: kết quả MUỘN (`ket_muon`, hiển thị mốc ≥ 96h so trung vị kênh) thay chỗ 48h làm kết quả chính;
+1. `tu_hoc`: kết quả chính = THƯỚC CHUNG `core.thuoc_thang` (12/10/2026 — thay `ket_muon`/`ket48`);
    hai trục ĐO mới `chu_bia_dai`, `mo_dau`.
-2. `bien_tap_content._video_cua_minh`: xếp theo số muộn, gắn ★ video thắng của chính kênh.
+2. `bien_tap_content._video_cua_minh`: xếp theo số muộn, gắn ★ video thắng (nhãn thước chung) của chính kênh.
 3. `auto_khau`: khung ký tự chữ bìa 10–20 (viết lại một lượt khi lệch khung).
 
 Dữ liệu giả hoàn toàn (tmp_path), không mạng, không gọi AI thật.
@@ -46,44 +46,54 @@ def test_moc_muon_lay_moc_muon_nhat_trong_cua_so():
     assert tu_hoc.moc_muon({}) == {}
 
 
-def test_ket_muon_lat_video_no_muon_thanh_thang(tmp_path):
-    """Ca thật (số giả): 48h chỉ 300 hiển thị → 'trượt' theo 48h, nhưng @119h nổ 30.000 → phải là 'thắng'."""
+def test_ket_thuoc_chung_lat_video_no_muon_thanh_thang(tmp_path):
+    """Ca thật (số giả): 48h chỉ 300 hiển thị → 'trượt' theo thước 48h cũ, nhưng @110h nổ 30.000 → THẮNG theo thước
+    chung (`core.thuoc_thang`, 12/10/2026). Video chỉ có hồ sơ (không có `chi-so/`) → chuỗi từ mốc hồ sơ; kênh chưa
+    có tham chiếu → sàn tuyệt đối (≥ 5.000 thắng, < 300 trượt)."""
     g = str(tmp_path)
     d = _kenh(g, "A")
-    so = [(1500, 55), (200, 50), (120, 60), (300, 30000), (900, 400), (80, 70)]   # (48h, muộn)
+    so = [(40, 55), (20, 50), (30, 60), (300, 30000), (200, 400), (35, 70)]   # (48h, @110h) — số cộng dồn
     for i, (h48, muon) in enumerate(so):
         _ho_so(d, "A-%02d" % i, {"48h": _moc(h48, 48), "ngay4": _moc(muon, 110)})
     r = tu_hoc.cham_van(g, "A")
-    assert r["ket_muon"] == 6
+    assert r["da_phan"] == 6 and r["thang"] == 1
     v = tu_hoc.doc_van(g, "A")
-    # trung vị muộn = (60+70)/2 = 65 → 70, 400, 30000 thắng; video 1.500 hiển thị @48h (55 muộn) trượt
-    assert v["A-03"]["ket_muon"] == "thang" and v["A-04"]["ket_muon"] == "thang"
-    assert v["A-00"]["ket_muon"] == "truot"
-    # 48h nói ngược với A-03 (300 @48h): kết quả chính bây giờ là ket_muon, không phải ket48/ket_tv.
-    v["A-03"]["ket48"], v["A-03"]["ket_tv"] = "truot", "truot"
+    assert v["A-03"]["ket"] == "thang" and v["A-03"]["ket48"] == "thang" and v["A-03"]["ket_tuoi"] == 110
+    assert v["A-04"]["ket"] == "trung_binh" and v["A-04"]["ket48"] == "truot"     # bí danh hai mức
+    assert v["A-00"]["ket"] == "truot", "55 hiển thị @110h: YouTube không phát — trượt"
     o = tu_hoc._dem({"A-03": dict(v["A-03"], nuoc={"cum": "x"})})["cum"]["x"]
-    assert (o["a"], o["b"], o["n"], o["n_tv"]) == (tu_hoc.TRONG_SO_MUON, 0.0, 1, 0)
+    assert (o["a"], o["b"], o["n"]) == (tu_hoc.TRONG_SO_KET, 0.0, 1)
 
 
-def test_ket7_van_dung_tren_ket_muon():
-    van = {"1": {"nuoc": {"cum": "x"}, "ket7": "truot", "ket_muon": "thang", "ket48": "thang"}}
+def test_ket7_khong_con_vao_bang_diem():
+    """Một thước cho mọi bộ phận: giờ xem 7d (`ket7`) chỉ để đọc — kết quả chính là `ket` (thước chung)."""
+    van = {"1": {"nuoc": {"cum": "x"}, "ket7": "truot", "ket": "thang"}}
     o = tu_hoc._dem(van)["cum"]["x"]
-    assert (o["a"], o["b"]) == (0.0, tu_hoc.TRONG_SO_7D)
+    assert (o["a"], o["b"]) == (tu_hoc.TRONG_SO_KET, 0.0)
 
 
-def test_chua_co_ket_muon_thi_giu_duong_48h():
-    van = {"1": {"nuoc": {"cum": "x"}, "ket48": "thang", "ket_tv": "truot"}}
-    o = tu_hoc._dem(van)["cum"]["x"]
-    assert (o["a"], o["b"], o["n_tv"]) == (tu_hoc.TRONG_SO_48H, tu_hoc.TRONG_SO_TV, 1)
-
-
-def test_ket_muon_can_du_video(tmp_path):
+def test_nhan_48h_doi_truoc_khong_vao_bang_diem_va_bi_xoa(tmp_path):
+    van = {"1": {"nuoc": {"cum": "x"}, "ket48": "thang", "ket_tv": "truot", "ket_muon": "thang"}}
+    assert "cum" not in tu_hoc._dem(van)
     g = str(tmp_path)
     d = _kenh(g, "A")
-    for i in range(tu_hoc.N_TOI_THIEU_TV - 1):
-        _ho_so(d, "A-%02d" % i, {"ngay4": _moc(100 * (i + 1), 110)})
+    _ho_so(d, "A-01", {"48h": _moc(9000, 48)})        # chỉ có số 48h → chưa phán được
+    tu_hoc._luu_van(g, "A", {"A-01": dict(van["1"], ma_goi="A-01")})
     tu_hoc.cham_van(g, "A")
-    assert not any("ket_muon" in v for v in tu_hoc.doc_van(g, "A").values())
+    v = tu_hoc.doc_van(g, "A")["A-01"]
+    assert not any(k in v for k in ("ket", "ket48", "ket_tv", "ket_muon")), v
+
+
+def test_bang_diem_md_co_thuoc_chung(tmp_path):
+    g = str(tmp_path)
+    _kenh(g, "A")
+    tu_hoc.ghi_van(g, "A", "1", {"cum": "x"}, {})
+    v = tu_hoc.doc_van(g, "A")
+    v["1"]["ket"] = "thang"
+    tu_hoc._luu_van(g, "A", v)
+    with open(tu_hoc.ghi_bang_diem_md(g, "A"), encoding="utf-8") as f:
+        chu = f.read()
+    assert "1 đã phán theo thước chung (thắng 1" in chu and "| x | 1/1" in chu
 
 
 def test_truc_do_chu_bia_va_mo_dau():
@@ -108,18 +118,6 @@ def test_cham_van_bu_truc_do_cho_van_cu(tmp_path):
     assert nuoc["chu_bia_dai"] == "<10" and nuoc["mo_dau"] == ">90" and nuoc["cum"] == "x"
 
 
-def test_bang_diem_md_co_ket_muon(tmp_path):
-    g = str(tmp_path)
-    _kenh(g, "A")
-    tu_hoc.ghi_van(g, "A", "1", {"cum": "x"}, {})
-    v = tu_hoc.doc_van(g, "A")
-    v["1"]["ket_muon"] = "thang"
-    tu_hoc._luu_van(g, "A", v)
-    with open(tu_hoc.ghi_bang_diem_md(g, "A"), encoding="utf-8") as f:
-        chu = f.read()
-    assert "1 có kết quả muộn" in chu and "| x | 1/1" in chu
-
-
 # ── 2. biên tập viên đọc số muộn ────────────────────────────────────────────
 
 def test_video_cua_minh_xep_theo_so_muon_va_gan_sao(tmp_path):
@@ -130,21 +128,24 @@ def test_video_cua_minh_xep_theo_so_muon_va_gan_sao(tmp_path):
     _ho_so(d, "A-03", {"48h": _moc(100, 48), "ngay4": _moc(150, 110)})
     _ho_so(d, "A-04", {"48h": _moc(90, 48), "ngay4": _moc(120, 110)})
     _ho_so(d, "A-05", {"48h": _moc(50, 48)})                                   # chưa có số muộn
+    tu_hoc.cham_van(g, "A")   # ★ = nhãn thước chung của ván (cùng nhãn V7 / giám đốc / bộ não)
     chu = bien_tap_content._video_cua_minh(g, "A")
     dong = [x for x in chu.splitlines() if x.startswith("- ")]
     assert "A-01" in dong[0] and dong[0].startswith("- ★ ")
     assert "MUỘN 119h: 30.000 hiển thị" in dong[0] and "48h: 300 hiển thị" in dong[0]
     assert "A-05" in dong[-1]
-    # trung vị muộn = 875 → ngưỡng ★ = max(1000, 1750): A-02 (1.600) không ★
-    assert not any("★" in x for x in dong[1:])
+    assert "KẾT QUẢ (thước chung): THẮNG" in dong[0]
+    # A-02 (1.600 @110h) chỉ trung bình → không ★
+    assert not any("★" in x for x in dong[1:]) and "trung bình" in dong[1]
     assert chu.splitlines()[0].startswith("(Xếp theo hiển thị MUỘN")
 
 
 def test_video_cua_minh_khong_sao_khi_so_nho(tmp_path):
     g = str(tmp_path)
     d = _kenh(g, "A")
-    for i, x in enumerate((400, 50, 60, 70)):   # 400 ≥ 2 × trung vị nhưng < sàn 1.000
+    for i, x in enumerate((400, 50, 60, 70)):   # cao nhất kênh nhưng 400 hiển thị: chưa phải thắng
         _ho_so(d, "A-%02d" % i, {"48h": _moc(x // 2, 48), "ngay4": _moc(x, 110)})
+    tu_hoc.cham_van(g, "A")
     chu = bien_tap_content._video_cua_minh(g, "A")
     assert "★" not in chu and not chu.startswith("(Xếp")
 

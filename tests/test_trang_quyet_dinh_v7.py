@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("PyQt5.QtWidgets", reason="máy chạy test không có giao diện")
 
-from test_cong_thuc_v7 import A, KENH, W1, _ghi, _raw_join, dung_kenh  # noqa: E402 — tests/ nằm sẵn trong sys.path
+from test_cong_thuc_v7 import A, KENH, W1, W2, _ghi, _raw_join, dung_kenh  # noqa: E402 — tests/ nằm sẵn trong sys.path
 
 _APP_GIU = None
 
@@ -118,8 +118,8 @@ def test_chot_ghi_so_va_kiem(trang):
     t._chot()
     assert t._bang_so.rowCount() == 1
     cot = v7.COT_SO_CHON.index("Mã video của mình")
-    t._bang_so.item(0, cot).setText(W1)          # khách dán mã → tự lưu
-    assert v7.doc_so_chon(goc, KENH)[0]["Mã video của mình"] == W1
+    t._bang_so.item(0, cot).setText(W2)          # khách dán mã → tự lưu (W2 đã phán THẮNG theo thước chung)
+    assert v7.doc_so_chon(goc, KENH)[0]["Mã video của mình"] == W2
     t._kiem()
     assert "1 thắng" in t._nhan_so.text()
 

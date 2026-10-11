@@ -26,7 +26,13 @@ _s = chu_so
 def _dong_video(v: Dict[str, Any]) -> str:
     b = moi_nhat(v) or {}
     tc = ctr_trang_chu(v) or {}
-    kl = {"thang": "THẮNG", "truot": "trượt", "": "chờ"}.get(v.get("ket_luan") or "", v.get("ket_luan"))
+    # Kết luận THƯỚC CHUNG (`core.thuoc_thang`): ba mức + phân vị cùng tuổi; chưa phán → "chờ" + tín hiệu sớm.
+    nhan = v.get("nhan") or v.get("ket_luan") or ""
+    kl = {"thang": "THẮNG", "trung_binh": "trung bình", "truot": "trượt", "": "chờ"}.get(nhan, nhan)
+    if nhan and v.get("phan_vi") is not None:
+        kl += " (phân vị {0:.0f} @{1}h)".format(float(v["phan_vi"]), _s(v.get("tuoi_do")))
+    elif not nhan and v.get("tin_hieu_som") is not None:
+        kl += " (sớm: phân vị {0:.0f}{1})".format(float(v["tin_hieu_som"]), ", NÓNG" if v.get("nong") else "")
     return ("- {id} {ngay} · {phut} phút · cụm {cum} · công thức {ct} → {kl} · 48h: {h48} hiển thị\n"
             "  @{tuoi}h: {imp} hiển thị, CTR {ctr} (CTR trang chủ {ctrb}), trang chủ {pb} / đề xuất {pd} view, "
             "AVD {avd}, {gx} giờ xem/1k hiển thị, sub/1k view {s1k} — “{td}”").format(
@@ -49,11 +55,10 @@ def bang_so_chu(bs: BangSo, toi_da: int = TOI_DA_KY_TU_BANG) -> str:
             bs.cai.get("cong_thuc_chon") or "tu_dong", _s(bs.phut_muc_tieu), bs.cai.get("chien_luoc_tu_hoc", False)),
         "YPP (trọn đời): {0} sub · {1} giờ xem — ràng buộc: {2}".format(
             _s(y.get("sub")), _s(y.get("gio_xem")), y.get("rang_buoc") or "?"),
-        "Ngưỡng thắng 48h của kênh: {0} hiển thị (tính từ {1} video có số 48h) · mục tiêu CTR trang chủ {2} ({3})".format(
-            _s(bs.nguong_thang_48h), bs.n_48h,
-            _s(bs.ctr_muc_tieu, 1, "%"), bs.nhan_ctr_muc_tieu)
-        + (" — kênh < 5 video có số 48h: ngưỡng = ngưỡng NGÁCH trộn dần sang trung vị kênh "
-           "(cong_thuc_v7.nguong_thang_48h), nhãn thắng/trượt còn non" if bs.n_48h < 5 else ""),
+        "Thước thắng (chung mọi bộ phận): top 25% hiển thị của CHÍNH kênh ở CÙNG tuổi, phán từ ≥ 96h (chốt 168h), "
+        "không phán ở 48h · mức thắng ~96h của kênh ≈ {0} hiển thị · mức tham khảo 48h {1} · mục tiêu CTR trang chủ "
+        "{2} ({3})".format(_s(getattr(bs, "muc_thang_96h", None)), _s(bs.nguong_thang_48h),
+                           _s(bs.ctr_muc_tieu, 1, "%"), bs.nhan_ctr_muc_tieu),
     ]
     cuoi_k = [d for d in bs.kenh_ngay if d.get("hien_thi") is not None]
     if cuoi_k:

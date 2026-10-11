@@ -248,8 +248,10 @@ def kiem(de_xuat: Dict[str, Any], so_: Dict[str, Any], bs: BangSo, *,
             return False, "không có video này trong số của kênh"
         if v.get("thang"):
             return False, "video đang thắng — không bao giờ đụng"
-        if v.get("ket_luan") != "truot":
-            return False, "video chưa bị phán trượt"
+        from .cuu_ctr import khong_thang  # noqa: PLC0415 — thước chung: đã phán không thắng / tín hiệu sớm yếu
+
+        if not khong_thang(v):
+            return False, "video chưa bị phán không thắng (thước chung) và tín hiệu sớm không yếu"
         if v.get("tuoi_gio") is not None and not STUDIO_TUOI[0] <= float(v["tuoi_gio"]) <= STUDIO_TUOI[1]:
             return False, "video {0:.0f}h tuổi — chỉ cứu video {1:.0f}–{2:.0f}h".format(
                 float(v["tuoi_gio"]), STUDIO_TUOI[0], STUDIO_TUOI[1])

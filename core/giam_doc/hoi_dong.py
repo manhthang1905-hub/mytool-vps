@@ -657,7 +657,9 @@ def so_lieu_kenh(bs: Any, toi_da_video: int = 12) -> Dict[str, Any]:
         if isinstance(x, (int, float)) and not isinstance(x, bool):
             ra[k] = round(float(x), 2) if isinstance(x, float) else x
 
-    dat("kenh/nguong_thang_48h", bs.nguong_thang_48h)
+    # Thước chung (`core.thuoc_thang`): mức thắng ~96h của kênh + phân vị cùng tuổi từng video — KHÔNG đưa ngưỡng
+    # 48h cũ (LLM so số muộn với ngưỡng 48h là đúng lỗi 12/10/2026).
+    dat("kenh/muc_thang_96h", getattr(bs, "muc_thang_96h", None))
     dat("kenh/ctr_trang_chu_muc_tieu", bs.ctr_muc_tieu)
     dat("kenh/phut_muc_tieu", getattr(bs, "phut_muc_tieu", None))
     for k in ("sub", "gio_xem"):
@@ -677,6 +679,8 @@ def so_lieu_kenh(bs: Any, toi_da_video: int = 12) -> Dict[str, Any]:
         tc = ctr_trang_chu(v) or {}
         dat("v:{0}/{1}/ctr_browse".format(v["id"], tc.get("moc", "?")), tc.get("ctr_browse"))
         dat("v:{0}/hien_thi_48h".format(v["id"]), v.get("hien_thi_48h"))
+        dat("v:{0}/phan_vi_kenh".format(v["id"]), v.get("phan_vi"))
+        dat("v:{0}/tuoi_phan".format(v["id"]), v.get("tuoi_do"))
         dat("v:{0}/sub_1k_view".format(v["id"]), v.get("sub_1k"))
     return ra
 

@@ -53,35 +53,40 @@ _DO_SAN_CONG_BAT_BUOC = pytest.mark.skip(
 KENH = "TL4-T7"
 BAY_GIO = dt.datetime(2026, 9, 17, 11, 0)
 
-# Video của kênh mình: (mã, tiêu đề, ngày đăng, hiển thị 13h, hiển thị 48h)
+# Video của kênh mình: (mã, tiêu đề, ngày đăng, hiển thị 13h, hiển thị 48h, hiển thị 120h)
+# 12/10/2026 — THƯỚC CHUNG (`core.thuoc_thang`): thắng phán ở ≥ 96h theo phân vị cùng tuổi, nên video đủ tuổi có thêm
+# bản 120h. W1 (V11) mới ~63h tuổi lúc BAY_GIO → chưa phán, nhưng 48h top kênh → "đang nóng" (vẫn là cụm thắng của
+# V7). "v3f5d7a3e9f" là video NỔ MUỘN: 1.268 @48h (thước 48h cũ: trượt) → 5.000 @120h (top 2/7 → thắng).
 W1 = "v2b628f09d6"   # thắng lớn — cụm người giàu
 W2 = "vcaeaef0bcf"   # thắng — cụm trí tuệ × một mình
 L1 = "v5ffd1c9290"   # thua
 L2 = "v04f0e44df3"   # thua
 Y1 = "v3a980e0763"   # mới 20 giờ, seed cao
 VIDEO_MINH = [
-    (W1, "【心理学】なぜかお金持ちに見えない人の「恐ろしい特徴」｜脳科学が証明した", "2026-09-14T19:29:37.000Z", 5120, 158896),
-    (W2, "この5つのことを一人で行っているなら、あなたの知能は思っている以上に特別", "2026-09-05T14:30:07.000Z", 3911, 20717),
-    (L1, "友達が少ない人の、本当の理由", "2026-09-07T14:00:00.000Z", 1015, 2604),
-    (L2, "一人が好きな人だけに現れる5つの知的特徴", "2026-09-09T14:00:00.000Z", 306, 3502),
-    (Y1, "【心理学】高級ブランドに興味がない人ほど持っている", "2026-09-16T15:00:00.000Z", 7420, None),
-    # V2, V4, V5, V6 — các video đầu kênh. Thiếu chúng thì trung vị 48h bị đẩy lên 12.000 và V7
-    # (20.717) không còn là video thắng — khác hẳn kênh thật.
-    ("v3f5d7a3e9f", "1人の時間を好む人ほどメンタルが強い", "2026-08-25T14:00:00.000Z", 300, 1268),
-    ("v9f174df199", "一人で旅行に行ける人に隠されたすごい特徴", "2026-08-30T14:00:00.000Z", 200, 634),
-    ("v65e55584ed", "休日に一歩も外に出ない人の脳", "2026-09-01T14:00:00.000Z", 50, 104),
-    ("v94a9288a26", "一人でいるのが好きな人の多くは子供時代", "2026-09-03T14:00:00.000Z", 67, 158),
+    (W1, "【心理学】なぜかお金持ちに見えない人の「恐ろしい特徴」｜脳科学が証明した", "2026-09-14T19:29:37.000Z", 5120, 158896,
+     None),
+    (W2, "この5つのことを一人で行っているなら、あなたの知能は思っている以上に特別", "2026-09-05T14:30:07.000Z", 3911, 20717,
+     35000),
+    (L1, "友達が少ない人の、本当の理由", "2026-09-07T14:00:00.000Z", 1015, 2604, 2900),
+    (L2, "一人が好きな人だけに現れる5つの知的特徴", "2026-09-09T14:00:00.000Z", 306, 3502, 3300),
+    (Y1, "【心理学】高級ブランドに興味がない人ほど持っている", "2026-09-16T15:00:00.000Z", 7420, None, None),
+    # V2, V4, V5, V6 — các video đầu kênh (tham chiếu cùng tuổi của kênh).
+    ("v3f5d7a3e9f", "1人の時間を好む人ほどメンタルが強い", "2026-08-25T14:00:00.000Z", 300, 1268, 5000),
+    ("v9f174df199", "一人で旅行に行ける人に隠されたすごい特徴", "2026-08-30T14:00:00.000Z", 200, 634, 900),
+    ("v65e55584ed", "休日に一歩も外に出ない人の脳", "2026-09-01T14:00:00.000Z", 50, 104, 150),
+    ("v94a9288a26", "一人でいるのが好きな人の多くは子供時代", "2026-09-03T14:00:00.000Z", 67, 158, 230),
 ]
+NO_MUON = "v3f5d7a3e9f"
 
 # Ứng viên trong sổ content: (mã, kênh, tiêu đề, view, tăng/ngày, dài, tuyến)
-A = "GXNctv0oVSM"   # cụm thắng + có trong bảng đề xuất, bấm & xem tốt
-B = "qxffZf5K2OY"   # cụm thắng, gốc nổ ×56, KHÔNG có trong bảng
-C = "dtMGDnZTdaE"   # cụm thắng, dạng "cách làm", kênh yếu, xem kém
-D = "kpYpeG2ILoE"   # đã làm ở bản -v2
-E = "sy0ZaUdyOSM"   # nhắm người lớn tuổi
-F = "sU61y5HN4qc"   # 【雑学】 + tuyến khac nhưng đúng cụm → KHÔNG được loại
+A = "vidGiafa100"   # cụm thắng + có trong bảng đề xuất, bấm & xem tốt
+B = "vidGia3fa11"   # cụm thắng, gốc nổ ×56, KHÔNG có trong bảng
+C = "vidGiada154"   # cụm thắng, dạng "cách làm", kênh yếu, xem kém
+D = "vidGia7d19c"   # đã làm ở bản -v2
+E = "vidGia33b30"   # nhắm người lớn tuổi
+F = "vidGia84ab3"   # 【雑学】 + tuyến khac nhưng đúng cụm → KHÔNG được loại
 G = "newsNEWS001"   # tin tức → loại
-H = "i2EAnLd8Duo"   # kênh nguồn đã bỏ
+H = "vidGiaee003"   # kênh nguồn đã bỏ
 N = "noiNAOnao01"   # 【脳科学】 ngoài cụm — không được ăn điểm cụm nhờ chữ 脳
 UNG_VIEN = [
     (A, "カップ麺を待つ間に見たい雑学", "【雑学】昔より物欲が減った人の心理", "127000", "2953", "19:53", "khac"),
@@ -152,12 +157,14 @@ def dung_kenh(tmp_path) -> str:
     goc = str(tmp_path)
     kenh_dir = os.path.join(goc, "CHANNEL", KENH)
     # số liệu Studio
-    for ma, td, ngay, i13, i48 in VIDEO_MINH:
+    for ma, td, ngay, i13, i48, i120 in VIDEO_MINH:
         d = os.path.join(kenh_dir, "chi-so", ma)
         _ghi(os.path.join(d, "13h", "_thong-tin.json"), json.dumps({"tieu_de": td, "ngay_dang": ngay}))
         _ghi(os.path.join(d, "13h", "tong-quan.json"), json.dumps({"impressions": i13}))
         if i48 is not None:
             _ghi(os.path.join(d, "48h", "tong-quan.json"), json.dumps({"impressions": i48}))
+        if i120 is not None:
+            _ghi(os.path.join(d, "120h", "tong-quan.json"), json.dumps({"impressions": i120}))
     # bảng đề xuất của W1 — bản CSV Studio xuất
     _ghi(os.path.join(kenh_dir, "chi-so", W1, "48h", "traffic-related.csv"), "\n".join([
         "Traffic source,Source type,Source title,Thumbnail impressions,Thumbnail click-through rate (%),Views,"
@@ -204,9 +211,16 @@ def _cham(tmp_path):
 def test_nhan_ra_video_thang_va_video_moi_seed_cao(tmp_path):
     _goc, kq = _cham(tmp_path)
     thang = {v.ma for v in kq.video_minh if v.thang}
-    assert thang == {W1, W2, Y1}, "V11/V7 thắng theo 48h; video 20 giờ tuổi thắng theo seed 13h"
-    w1 = next(v for v in kq.video_minh if v.ma == W1)
-    assert w1.suc == 1.0 and "vat-chat" in w1.cum
+    assert thang == {W1, W2, Y1, NO_MUON}, (
+        "W2 + video nổ muộn thắng theo thước chung @120h; W1 đang nóng (48h top kênh); video 20 giờ tuổi seed 13h")
+    vm = {v.ma: v for v in kq.video_minh}
+    w1, w2 = vm[W1], vm[W2]
+    assert w1.nhan_thang == "chua_du" and w1.nong and w1.suc == 0.5 and "vat-chat" in w1.cum
+    assert w2.nhan_thang == "thang" and w2.suc == 1.0 and w2.tuoi_do == 120 and w2.hien_thi_do == 35000
+    assert vm[NO_MUON].nhan_thang == "thang", "1.268 @48h nhưng 5.000 @120h: thước 48h cũ gọi là trượt"
+    assert vm[L1].nhan_thang == "trung_binh" and vm[L2].nhan_thang == "trung_binh"
+    assert vm["v65e55584ed"].nhan_thang == "truot"
+    assert vm[Y1].nhan_thang == "chua_du"   # cờ thắng của Y1 chỉ là seed 13h, không phải kết luận
 
 
 @_DO_SAN_CONG_BAT_BUOC
@@ -322,11 +336,11 @@ def test_chot_roi_kiem_48_gio(tmp_path):
     assert not v7.chot(goc, KENH, a), "chốt lại cùng nguồn không được ghi thêm dòng"
     hang = v7.doc_so_chon(goc, KENH)
     assert len(hang) == 1 and hang[0]["Điểm"] == str(a.diem)
-    hang[0]["Mã video của mình"] = "https://youtu.be/" + W1
+    hang[0]["Mã video của mình"] = "https://youtu.be/" + W2
     v7.luu_so_chon(goc, KENH, hang)
     kiem = v7.kiem_du_doan(goc, KENH, bay_gio=BAY_GIO)
-    assert kiem[0]["Mã video của mình"] == W1
-    assert kiem[0]["Hiển thị 48h"] == "158896" and kiem[0]["Kết quả"] == "Thắng"
+    assert kiem[0]["Mã video của mình"] == W2
+    assert kiem[0]["Hiển thị 48h"] == "20717" and kiem[0]["Kết quả"] == "Thắng"
 
 
 def test_kiem_video_chua_du_48_gio(tmp_path):
@@ -335,7 +349,7 @@ def test_kiem_video_chua_du_48_gio(tmp_path):
     hang = v7.doc_so_chon(goc, KENH)
     hang[0]["Mã video của mình"] = Y1
     v7.luu_so_chon(goc, KENH, hang)
-    assert v7.kiem_du_doan(goc, KENH, bay_gio=BAY_GIO)[0]["Kết quả"] == "chờ 48 giờ"
+    assert v7.kiem_du_doan(goc, KENH, bay_gio=BAY_GIO)[0]["Kết quả"] == "chờ ≥96h"
 
 
 # ── tiện ích ─────────────────────────────────────────────────────────────────
@@ -352,11 +366,11 @@ def test_kenh_trong_khong_vo(tmp_path):
 
 def test_da_lam_nhan_ban_thu_v2_va_giu_nhan_khuon_goc(tmp_path):
     goc = str(tmp_path)
-    for thu, luot, ma in ((KENH, "0004", "P5Qp0OlJSgc"), (KENH + "-v2", "0004", "sU61y5HN4qc"),
-                          (KENH + "-v2", "0009", "P5Qp0OlJSgc"), (KENH + "-vx", "0001", "aaaaaaaaaaa")):
+    for thu, luot, ma in ((KENH, "0004", "vidGia1920b"), (KENH + "-v2", "0004", "vidGia84ab3"),
+                          (KENH + "-v2", "0009", "vidGia1920b"), (KENH + "-vx", "0001", "aaaaaaaaaaa")):
         _ghi(os.path.join(goc, "PROJECTS", "AUTO", thu, luot, "0-doi-thu.txt"), "VIDEO_ID: " + ma + "\n")
     kq = da_lam.doc_ma_da_lam(goc, KENH)
-    assert kq == {"P5Qp0OlJSgc": "0004", "sU61y5HN4qc": "v2/0004"}, kq
+    assert kq == {"vidGia1920b": "0004", "vidGia84ab3": "v2/0004"}, kq
 
 
 # ── tuổi THẬT thay vì tin nhãn thư mục (VPS chỉ mở trình duyệt 1 lần/ngày, báo thức mốc

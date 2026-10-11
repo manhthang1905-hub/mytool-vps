@@ -40,6 +40,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from . import danh_ba_doi_thu as db
 from . import doi_thu_kenh as so
 from . import phan_cum_ai as _pca
+from . import thuoc_thang as _tt
 from .chi_so_ytb import gom as _gom
 from .chi_so_ytb import kho_raw as _kho
 from .chi_so_ytb import loc_video as _loc
@@ -52,7 +53,7 @@ __all__ = ["CAU_HINH_MAC_DINH", "TEP_CAU_HINH", "TEP_SO_CHON", "VideoMinh", "Don
            "nap_cau_hinh", "doc_bang_de_xuat", "video_cua_kenh", "cham", "luu_bao_cao",
            "doc_so_chon", "chot", "kiem_du_doan", "COT_SO_CHON",
            "cau_hinh_cho_tep", "da_co_video_thang", "CUA_SO_TUOI_THAT", "CUA_SO_NHAN",
-           "cum_cua_tieu_de", "thanh_tich_cum"]
+           "cum_cua_tieu_de", "thanh_tich_cum", "muc_thang_kenh"]
 
 TEP_CAU_HINH = "cong-thuc-v7.json"
 TEP_SO_CHON = "so-chon-v7.csv"
@@ -100,8 +101,10 @@ CAU_HINH_MAC_DINH: Dict = {
     "tu_ghep_khong_phai_nguoi": ["人生", "日本人", "大人", "他人", "人間", "人類", "人気", "人口",
                                  "個人", "恋人", "本人", "芸人", "人材", "人数"],
     "trong_so": {"cum": 30, "pool": 25, "no": 20, "len": 15, "khuon": 10},
-    #: Video của mình THẮNG khi hiển thị 48h ≥ max(toi_thieu, boi_so × trung vị video mình);
-    #: video chưa đủ 48 giờ thắng khi 13h ≥ moi_13h. `so_video_toi_thieu` — kênh CHƯA đủ ngần
+    #: 12/10/2026: THẮNG phán bằng thước chung `core.thuoc_thang` (phân vị cùng tuổi, ≥ 96h). Khối này chỉ còn:
+    #: `moi_13h` (video < 48h có 13h ≥ ngần này = "đang nóng") và công thức MỨC THAM KHẢO 48h `nguong_thang_48h`
+    #: (in ra cho người đọc, không phán). Cũ: thắng khi hiển thị 48h ≥ max(toi_thieu, boi_so × trung vị video
+    #: mình); video chưa đủ 48 giờ thắng khi 13h ≥ moi_13h. `so_video_toi_thieu` — kênh CHƯA đủ ngần
     #: này video thì bỏ số hạng "boi_so × trung vị": kênh 1-2 video lấy trung vị của chính
     #: 1-2 video ấy rồi nhân 3 thì GẦN NHƯ CHẮC CHẮN không video nào tự vượt nổi chính nó —
     #: một kênh mới trong nhóm (xem `nhom_kenh`) sẽ không bao giờ có video thắng đầu tiên.
@@ -190,6 +193,7 @@ CAU_HINH_MAC_DINH: Dict = {
            "san_view": 50000, "loai_kenh_yeu": True},
     "khuon": {"tot": [12, 21], "tam": [8, 30], "loai_duoi": 8, "loai_tren": 40},
     "loai": {"lam_ngay": 75, "nen_lam": 60, "du_bi": 45},
+    #: KHÔNG còn dùng (12/10/2026 — sổ chọn `kiem_du_doan` phán bằng `core.thuoc_thang`); giữ khoá cho tệp cũ.
     "ket_qua_48h": {"thang": 20000, "truot": 6000},
     #: Thẩm định bằng AI (`core/cong_thuc_v7_ai.py`): chỉ nhóm đầu bảng đáng tiền gọi.
     "ai": {"so_dong_tham_dinh": 60, "nguong_trung": 70, "tru_trung": 20},
@@ -501,7 +505,9 @@ def ngach_kenh_tu_so(ten_kenh: str, tieu_de_kenh: Sequence[str], ch: Dict) -> Op
 
 
 def thanh_tich_cum(videos: Sequence["VideoMinh"], ch: Dict) -> Dict[str, float]:
-    """`{mã cụm: tỷ lệ thắng}` đo trên chính video của kênh đã đủ mốc 48 giờ.
+    """`{mã cụm: tỷ lệ thắng}` đo trên chính video của kênh ĐÃ CÓ KẾT LUẬN theo thước chung (`thuoc_thang`, phán ở
+    ≥ 96h) — cộng video đang nóng (đếm là thắng). Trước 12/10/2026 mẫu số là "video đủ mốc 48h" → video còn đang lên
+    ở ngày 3–5 bị đếm là trượt.
 
     Cách cũ chỉ hỏi "cụm này CÓ video thắng không" nên cụm một mình — 1 thắng, 5 trượt — vẫn được
     trọn 30 điểm ngang cụm vật chất 3 thắng/1 trượt. Làm mượt kiểu Laplace để một video thắng đơn
@@ -510,7 +516,7 @@ def thanh_tich_cum(videos: Sequence["VideoMinh"], ch: Dict) -> Dict[str, float]:
     tt = ch.get("cum_thanh_tich") or {}
     dem: Dict[str, List[int]] = {}
     for v in videos:
-        if v.hien_thi_48h is None:
+        if not (v.da_phan or v.thang):
             continue
         for c in v.cum:
             o = dem.setdefault(c, [0, 0])
@@ -683,10 +689,27 @@ class VideoMinh:
     cach_48h: str = ""
     lech_48h: Optional[float] = None
     cum: List[str] = field(default_factory=list)
+    #: "Đang thắng" theo V7 = nhãn THẮNG của thước chung (`core.thuoc_thang`) HOẶC tín hiệu sớm đang nóng (chưa
+    #: phán — để nhân bản khi còn nóng). Nhãn KẾT LUẬN (giám đốc, tự học, bộ não) đọc `nhan_thang`, KHÔNG đọc cờ này.
     thang: bool = False
-    #: Sức thắng 0..1 (thang log giữa ngưỡng thắng và video mạnh nhất).
+    #: Sức thắng 0..1: phân vị trên ngưỡng thắng (75 → 0, 100 → 1); thắng nhờ sàn tuyệt đối ≥ 0,5; nóng sớm 0,5.
     suc: float = 0.0
     so_dong_de_xuat: int = 0
+    #: Thước chung (12/10/2026): thang | trung_binh | truot | chua_du — phán ở ≥ 96h theo phân vị cùng tuổi.
+    nhan_thang: str = "chua_du"
+    phan_vi: Optional[float] = None
+    tuoi_do: Optional[float] = None
+    hien_thi_do: Optional[float] = None
+    do_tin: float = 0.0
+    nong: bool = False
+    #: `thuoc_thang.KetQua` đầy đủ + chuỗi số đã làm sạch (`thuoc_thang.Chuoi`) — None với VideoMinh dựng tay.
+    ket: Optional[object] = None
+    chuoi: Optional[object] = None
+
+    @property
+    def da_phan(self) -> bool:
+        """Đã có KẾT LUẬN theo thước chung (thắng / trung bình / trượt)."""
+        return self.nhan_thang in ("thang", "trung_binh", "truot")
 
 
 def _gio_moc(ten: str) -> Optional[int]:
@@ -887,14 +910,22 @@ def video_cua_kenh(goc: str, kenh: str, ch: Optional[Dict] = None,
         if 48 in ung_vien:
             vm.hien_thi_48h = min(ung_vien[48], key=lambda x: x[0])[1]
         vm.cum = _cum_cua(vm.tieu_de, ch)
+        # Thước chung: chuỗi MỌI bản chụp hợp lệ (tuổi thật, bỏ bản rỗng/trùng/hỏng) — xem `core.thuoc_thang`.
+        try:
+            vm.chuoi = _tt.doc_chuoi(duong, ma)
+        except Exception:  # noqa: BLE001 — thư mục hỏng: video này chưa phán được, không làm hỏng cả danh sách
+            vm.chuoi = _tt.Chuoi(ma=ma)
         ra.append(vm)
-    _danh_dau_thang(ra, ch)
+    _danh_dau_thang(ra, ch, bay_gio=bay_gio)
     return ra
 
 
 def nguong_thang_48h(ds: List[VideoMinh], ch: Dict) -> float:
-    """Ngưỡng hiển thị 48h để một video của kênh là THẮNG — MỘT công thức cho mọi nơi
-    (`_danh_dau_thang`, `chien_luoc.ket_qua`, biên tập viên, giám đốc kênh).
+    """MỨC THAM KHẢO hiển thị 48h ("cú nổ sớm") của kênh — CHỈ để hiển thị/so sánh, KHÔNG còn là thước thắng.
+
+    12/10/2026: "thắng" phán bằng `core.thuoc_thang` (phân vị cùng tuổi, từ ≥ 96h) — ngưỡng 48h này dán nhãn TRƯỢT
+    cho chính các video nổ muộn (vidGia685d6 2.303 @46h → 28.624 @94h). Giữ tên + công thức vì báo cáo/bảng điều
+    khiển còn in nó; mức thắng mới để hiển thị là `muc_thang_kenh`.
 
     * Kênh đủ `so_video_toi_thieu` (5) video CÓ SỐ 48h: max(`toi_thieu_48h`, `boi_so_trung_vi`
       × trung vị 48h của chính kênh) — y như trước (TL4-T7 không đổi).
@@ -922,23 +953,50 @@ def nguong_thang_48h(ds: List[VideoMinh], ch: Dict) -> float:
     return (1.0 - w) * ngach + w * rieng
 
 
-def _danh_dau_thang(ds: List[VideoMinh], ch: Dict) -> None:
+def _chuoi_cua(v: VideoMinh) -> "_tt.Chuoi":
+    """Chuỗi số của video cho thước chung. VideoMinh dựng tay (không đọc đĩa) chỉ có số 13h/48h → chuỗi 2 điểm đó
+    (tuổi theo nhãn): chưa đủ tuổi phán, chỉ cho được tín hiệu sớm — đúng luật "không bao giờ phán ở 48h"."""
+    if isinstance(v.chuoi, _tt.Chuoi):
+        return v.chuoi
+    diem = [_tt.Diem(tuoi=float(t), hien_thi=float(x), xem=None, tuoi_that=False)
+            for t, x in ((13, v.hien_thi_13h), (48, v.hien_thi_48h)) if x is not None]
+    return _tt.Chuoi(ma=v.ma, diem=diem)
+
+
+def _danh_dau_thang(ds: List[VideoMinh], ch: Dict, *, bay_gio: Optional[_dt.datetime] = None) -> None:
+    """Gắn nhãn thước chung (`core.thuoc_thang`) + cờ "đang thắng" của V7 cho mọi video của kênh.
+
+    `thang` = nhãn THẮNG (phân vị cùng tuổi ≥ 75 từ ≥ 96h, xem `thuoc_thang`) HOẶC — chỉ khi CHƯA phán — tín hiệu
+    nóng: tín hiệu sớm 24–72h ở top 10% kênh và ≥ 2.500 hiển thị (`thuoc_thang.PV_NONG`), hay video < 48h có 13h ≥
+    `thang.moi_13h`. Cờ nóng là để V7/bộ não nhân bản KHI CÒN NÓNG; video sau đó phán trượt thì tự tắt."""
     th = ch["thang"]
-    so48 = [v.hien_thi_48h for v in ds if v.hien_thi_48h is not None]
-    # Ngưỡng: `nguong_thang_48h` — kênh ít video có số 48h dùng ngưỡng NGÁCH trộn dần sang trung
-    # vị của chính kênh (1–2 video × 3 là mốc không video nào tự vượt nổi CHÍNH NÓ). Kênh ≥ 5
-    # video có số 48h (TL4-T7) không đổi hành vi.
-    nguong = nguong_thang_48h(ds, ch)
-    manh = max(so48) if so48 else nguong
+    chuoi = {v.ma: _chuoi_cua(v) for v in ds}
+    ket = _tt.danh_gia(chuoi, bay_gio=bay_gio) if chuoi else {}
     for v in ds:
-        if v.hien_thi_48h is not None and v.hien_thi_48h >= nguong:
+        k = ket.get(v.ma)
+        v.thang, v.suc = False, 0.0
+        if k is None:
+            continue
+        v.ket = k
+        v.nhan_thang, v.phan_vi, v.do_tin, v.nong = k.nhan, k.phan_vi, k.do_tin, k.nong
+        if k.da_phan:
+            v.tuoi_do, v.hien_thi_do = k.tuoi, k.gia_tri
+        if k.nhan == _tt.THANG:
             v.thang = True
-            v.suc = 1.0 if manh <= nguong else max(0.0, min(1.0, math.log(v.hien_thi_48h / nguong)
-                                                              / math.log(manh / nguong)))
-        elif (v.hien_thi_48h is None and v.tuoi_gio is not None and v.tuoi_gio < 48
-              and (v.hien_thi_13h or 0) >= th["moi_13h"]):
+            pv = k.phan_vi if k.phan_vi is not None else _tt.PV_THANG
+            v.suc = max(0.0, min(1.0, (pv - _tt.PV_THANG) / (100.0 - _tt.PV_THANG)))
+            if pv < _tt.PV_THANG or k.n_tham_chieu < _tt.SO_THAM_CHIEU_TOI_THIEU:
+                v.suc = max(v.suc, 0.5)   # thắng nhờ sàn tuyệt đối (≥ 20.000 / kênh chưa đủ tham chiếu)
+        elif not k.da_phan and (k.nong or (v.hien_thi_48h is None and v.tuoi_gio is not None and v.tuoi_gio < 48
+                                           and (v.hien_thi_13h or 0) >= th["moi_13h"])):
             v.thang = True
             v.suc = 0.5
+
+
+def muc_thang_kenh(ds: Sequence[VideoMinh], tuoi: float = _tt.GIO_PHAN_QUYET) -> Optional[float]:
+    """Hiển thị cần có ở tuổi `tuoi` (mặc định 96h) để vào nhóm THẮNG của kênh — số để HIỂN THỊ ("thắng ≈ ≥ X lúc
+    ~4 ngày"); None khi kênh chưa đủ video có số ở tuổi đó. Phán thắng vẫn là `thuoc_thang` từng video."""
+    return _tt.muc_thang({v.ma: _chuoi_cua(v) for v in ds}, tuoi)
 
 
 def _href_join(f: str) -> str:
@@ -1212,7 +1270,7 @@ def thanh_tich_nhom(goc: str, kenh: str, ch: Dict, videos_minh: Sequence[VideoMi
         tt = thanh_tich_cum(vs, ch) if bat_tt else {}
         dem: Dict[str, List[int]] = {}
         for v in vs:
-            if v.hien_thi_48h is None:
+            if not (v.da_phan or v.thang):
                 continue
             for c in v.cum:
                 o = dem.setdefault(c, [0, 0])
@@ -1383,11 +1441,13 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         thua_huong, gc = {}, ["Thừa hưởng nhóm hỏng, bỏ qua: {0}".format(str(loi)[:100])]
     ghi_chu += gc
     th_cfg = ch.get("thua_huong_nhom") or {}
-    # Số video RIÊNG đã đủ 48h trong từng cụm — số riêng thắng dần số thừa hưởng.
+    # Số video RIÊNG đã có kết luận (thước chung, ≥ 96h) trong từng cụm — số riêng thắng dần số thừa hưởng.
+    # "Trượt riêng" = đã phán mà không thắng (trước 12/10: đủ 48h mà chưa vượt ngưỡng 48h — video nổ ngày 3–5 bị
+    # đếm là trượt và tắt luôn phần mượn của cụm).
     da_thu_rieng: Dict[str, int] = {}
     truot_rieng: Dict[str, int] = {}
     for v in videos:
-        if v.hien_thi_48h is not None:
+        if v.da_phan or v.thang:
             for c in v.cum:
                 da_thu_rieng[c] = da_thu_rieng.get(c, 0) + 1
                 if not v.thang:
@@ -1858,12 +1918,18 @@ def luu_bao_cao(goc: str, kenh: str, kq: KetQua, *, hom_nay: Optional[_dt.date] 
         dong.append("> ⚠ " + cb)
     if kq.ghi_chu:
         dong += ["", "## Đường lùi và tín hiệu nhóm", ""] + ["- " + g for g in kq.ghi_chu]
-    dong += ["", "## Video thắng của kênh", "", "| Video | 13h | 48h | Cụm |", "|---|---|---|---|"]
+    dong += ["", "## Video thắng của kênh", "",
+             "Thước chung (`core.thuoc_thang`): " + _tt.MO_TA + ". \"nóng\" = chưa phán, tín hiệu sớm top 10%.", "",
+             "| Video | 13h | 48h | Phán | Cụm |", "|---|---|---|---|---|"]
     for v in kq.video_minh:
         if v.thang:
-            dong.append("| {0} | {1} | {2} | {3} |".format(
+            phan = ("thắng @{0:.0f}h: {1} (phân vị {2})".format(
+                v.tuoi_do, "{0:,.0f}".format(v.hien_thi_do).replace(",", "."),
+                "?" if v.phan_vi is None else "{0:.0f}".format(v.phan_vi))
+                if v.nhan_thang == _tt.THANG and v.tuoi_do is not None and v.hien_thi_do is not None else "nóng (chưa phán)")
+            dong.append("| {0} | {1} | {2} | {3} | {4} |".format(
                 (v.tieu_de or v.ma)[:50], "{0:,.0f}".format(v.hien_thi_13h or 0).replace(",", "."),
-                "{0:,.0f}".format(v.hien_thi_48h).replace(",", ".") if v.hien_thi_48h else "chưa đủ",
+                "{0:,.0f}".format(v.hien_thi_48h).replace(",", ".") if v.hien_thi_48h else "chưa đủ", phan,
                 ", ".join(kq.cau_hinh["cum"][c]["ten"] for c in v.cum) or "—"))
     dong += ["", "## Nên làm tiếp (top 20)", "",
              "| # | Điểm | Loại | Tiêu đề | Kênh | Gấp | Tăng/ngày | Lý do |", "|---|---|---|---|---|---|---|---|"]
@@ -1923,13 +1989,16 @@ def chot(goc: str, kenh: str, d: DongV7, *, hom_nay: Optional[_dt.date] = None) 
 
 
 def kiem_du_doan(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[str, str]]:
-    """Điền hiển thị 13h/48h + Kết quả cho dòng đã có "Mã video của mình". Ghi lại sổ, trả các dòng."""
+    """Điền hiển thị 13h/48h + Kết quả cho dòng đã có "Mã video của mình". Ghi lại sổ, trả các dòng.
+
+    "Kết quả" theo THƯỚC CHUNG (`core.thuoc_thang`, 12/10/2026): Thắng / Trung bình / Trượt khi đã phán (≥ 96h, phân
+    vị cùng tuổi), không thì "chờ ≥96h" — trước đây so hiển thị 48h với 20.000/6.000 cứng (`ket_qua_48h`, giờ bỏ)."""
     ch, _ = nap_cau_hinh(goc, kenh, ghi_neu_thieu=False)
     hang = doc_so_chon(goc, kenh)
     if not hang:
         return hang
     theo_ma = {v.ma: v for v in video_cua_kenh(goc, kenh, ch, bay_gio)}
-    kq = ch["ket_qua_48h"]
+    chu = {_tt.THANG: "Thắng", _tt.TRUNG_BINH: "Trung bình", _tt.TRUOT: "Trượt"}
     for r in hang:
         ma = so.ma_video(r.get("Mã video của mình", "")) or r.get("Mã video của mình", "").strip()
         v = theo_ma.get(ma)
@@ -1940,13 +2009,9 @@ def kiem_du_doan(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None)
             r["Hiển thị 13h"] = "{0:.0f}".format(v.hien_thi_13h)
         if v.hien_thi_48h is not None:
             r["Hiển thị 48h"] = "{0:.0f}".format(v.hien_thi_48h)
-            if v.hien_thi_48h >= kq["thang"]:
-                r["Kết quả"] = "Thắng"
-            elif v.hien_thi_48h < kq["truot"]:
-                r["Kết quả"] = "Trượt"
-            else:
-                r["Kết quả"] = "Trung bình"
+        if v.da_phan:
+            r["Kết quả"] = chu[v.nhan_thang]   # đúng ba chữ trang V7 tô màu (ui_qt/trang_cong_thuc_v7)
         else:
-            r["Kết quả"] = "chờ 48 giờ"
+            r["Kết quả"] = "chờ ≥{0:g}h".format(_tt.GIO_PHAN_QUYET)
     luu_so_chon(goc, kenh, hang)
     return hang

@@ -211,7 +211,7 @@ def test_bang_diem_hoc_canh_tay_khac(tmp_path):
     _kenh(g)
     tu_hoc.ghi_van(g, "A", "A-1", {"cum": cyn.CUM_KHAC, "cum_nguon": "y_nghia"}, {})
     v = tu_hoc.doc_van(g, "A")
-    v["A-1"]["ket7"] = "thang"
+    v["A-1"]["ket"] = "thang"
     tu_hoc._luu_van(g, "A", v)  # noqa: SLF001
     assert tu_hoc.bang_diem(g, "A")["cum"][cyn.CUM_KHAC]["n"] == 1
 

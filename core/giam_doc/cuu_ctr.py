@@ -1,7 +1,8 @@
 """Cứu video hỏng cổng CTR ở giờ 52–120 (View = Hiển thị × CTR × Giữ chân — sửa ĐÚNG cổng hỏng).
 
-Điều kiện: video tuổi 52–120h, đã phán TRƯỢT, hiển thị ≥ 500, CTR trang chủ (Browse) < 0,8 × mục tiêu
-CTR của kênh. Hiển thị thấp mà CTR ổn → lỗi ở cổng HIỂN THỊ (chủ đề / nguồn): không sửa, chỉ ghi quan
+Điều kiện: video tuổi 52–120h, KHÔNG THẮNG theo thước chung `core.thuoc_thang` (đã phán không thắng ở ≥ 96h, hoặc
+chưa phán mà tín hiệu sớm dưới phân vị 40 của kênh cùng tuổi — `khong_thang`), hiển thị ≥ 500, CTR trang chủ
+(Browse) < 0,8 × mục tiêu CTR của kênh. Hiển thị thấp mà CTR ổn → lỗi ở cổng HIỂN THỊ (chủ đề / nguồn): không sửa, chỉ ghi quan
 sát. Video thắng không bao giờ bị đụng.
 
 Hai chế độ (khoá kenh.yaml `giam_doc_studio`):
@@ -59,6 +60,20 @@ _RE_NHAN = re.compile(r"^\s*(【[^】]{1,12}】)")
 
 # ── plugin (thuần, 0 đồng) ─────────────────────────────────────────────────
 
+def khong_thang(v: Dict[str, Any]) -> bool:
+    """Video KHÔNG thắng theo thước chung: đã phán (≥ 96h) mà không thắng, HOẶC chưa phán mà tín hiệu sớm (phân vị
+    24–72h so kênh cùng tuổi) dưới `thuoc_thang.PV_TRUOT` và không nóng. 12/10/2026: trước đây "đã phán TRƯỢT @48h"
+    theo ngưỡng 48h — chặn cả video sẽ nổ ngày 3–5, lại cho sửa video đang lên."""
+    from .. import thuoc_thang  # noqa: PLC0415
+
+    if v.get("thang") or v.get("nong"):
+        return False
+    if v.get("ket_luan") == "truot":
+        return True
+    som = v.get("tin_hieu_som")
+    return not v.get("ket_luan") and som is not None and float(som) < thuoc_thang.PV_TRUOT
+
+
 def _trong_khung(bs: Any) -> List[Dict[str, Any]]:
     return [v for v in bs.video if v.get("tuoi_gio") is not None and TUOI[0] <= v["tuoi_gio"] <= TUOI[1]
             and (moi_nhat(v) or {}).get("tuoi", 0) >= 36]
@@ -84,13 +99,14 @@ def _chan_doan(bs: Any, v: Dict[str, Any]) -> Dict[str, Any]:
     if imp < HIEN_THI_TOI_THIEU or ctr is None:
         return dict(q, cau=dau + " — chưa đủ hiển thị để phán cổng CTR.", cong="chua_du")
     if ctr < HE_SO_CTR * muc:
-        tr = " và đã phán TRƯỢT" if v.get("ket_luan") == "truot" else " (chưa phán trượt)"
+        tr = (" và đã phán KHÔNG THẮNG (thước chung)" if v.get("ket_luan") == "truot"
+              else " (tín hiệu sớm yếu: phân vị {0})".format(chu_so(v.get("tin_hieu_som"))) if khong_thang(v)
+              else " (chưa phán, tín hiệu sớm không yếu)")
         return dict(q, cau=dau + " < {0:.0%} mục tiêu {1} — HỎNG CỔNG CTR{2}.".format(HE_SO_CTR, chu_so(muc, 1, "%"), tr),
                     cong="ctr")
     if v.get("ket_luan") == "truot":
-        vung = "" if bs.n_48h >= 5 else " (lưu ý: ngưỡng thắng {0} tính từ {1} video có số 48h — chưa vững)".format(
-            chu_so(bs.nguong_thang_48h), bs.n_48h)
-        return dict(q, cau=dau + " ≥ {0:.0%} mục tiêu {1} mà vẫn trượt — lỗi ở cổng HIỂN THỊ (chủ đề/nguồn), "
+        vung = " (phân vị {0} so kênh cùng tuổi @{1}h)".format(chu_so(v.get("phan_vi")), chu_so(v.get("tuoi_do")))
+        return dict(q, cau=dau + " ≥ {0:.0%} mục tiêu {1} mà vẫn không thắng — lỗi ở cổng HIỂN THỊ (chủ đề/nguồn), "
                     "đổi tiêu đề không cứu được{2}.".format(HE_SO_CTR, chu_so(muc, 1, "%"), vung), cong="hien_thi")
     return dict(q, cau=dau + " — CTR ổn, chưa có kết luận trượt.", cong="on")
 
@@ -118,7 +134,7 @@ def de_xuat(bs: Any, qs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     ra = []
     for q in qs:
         v = bs.video_theo_id(q["video_id"])
-        if q.get("cong") != "ctr" or not v or v.get("ket_luan") != "truot":
+        if q.get("cong") != "ctr" or not v or not khong_thang(v):
             continue
         da_cham = [u.get("tieu_de") for u in v.get("tieu_de_da_cham") or []
                    if u.get("tieu_de") and u.get("tieu_de") != v["tieu_de"]][:5]
@@ -264,8 +280,11 @@ def so_lieu_video(bs: Any, v: Dict[str, Any]) -> Dict[str, Any]:
     tc = ctr_trang_chu(v, 36.0, 1e9)
     if tc and tc.get("moc") != b.get("moc"):
         sl["v:{0}/{1}/ctr_browse".format(v["id"], tc["moc"])] = tc["ctr_browse"]
-    for k, x in (("kenh/ctr_trang_chu_muc_tieu", bs.ctr_muc_tieu), ("kenh/nguong_thang_48h", bs.nguong_thang_48h),
-                 ("v:{0}/hien_thi_48h".format(v["id"]), v.get("hien_thi_48h"))):
+    for k, x in (("kenh/ctr_trang_chu_muc_tieu", bs.ctr_muc_tieu),
+                 ("kenh/muc_thang_96h", getattr(bs, "muc_thang_96h", None)),
+                 ("v:{0}/hien_thi_48h".format(v["id"]), v.get("hien_thi_48h")),
+                 ("v:{0}/phan_vi_kenh".format(v["id"]), v.get("phan_vi")),
+                 ("v:{0}/tin_hieu_som".format(v["id"]), v.get("tin_hieu_som"))):
         if x is not None:
             sl[k] = round(float(x), 2)
     for o in bs.video:
@@ -283,11 +302,13 @@ def loi_nhac_tieu_de(bs: Any, v: Dict[str, Any], d: Dict[str, Any], so_lieu: Dic
     khung = khung_tieu_de(bs.goc) if bs.goc else ""
     ngach = _thang_ngach(bs.goc, bs.ma_kenh) if bs.goc else []
     dong = [
-        "CỨU VIDEO CTR THẤP — kênh YouTube {0}. Video {1} đã TRƯỢT (dưới ngưỡng thắng {2} hiển thị @48h). {3} {4} "
+        "CỨU VIDEO CTR THẤP — kênh YouTube {0}. Video {1} KHÔNG THẮNG (thước chung: phân vị hiển thị {2} so video của "
+        "kênh cùng tuổi; thắng = top 25%). {3} {4} "
         "với {5} hiển thị < {6:.0%} mục tiêu {7}: cổng hỏng là CTR (người thấy mà không bấm), không phải hiển thị. "
         "Việc: viết MỘT tiêu đề mới cho CHÍNH video này (cùng nội dung — không hứa điều video không nói) để người "
         "lướt trang chủ bấm vào.".format(
-            bs.ma_kenh, v["id"], chu_so(bs.nguong_thang_48h), "CTR trang chủ" if cd.get("trang_chu") else "CTR chung",
+            bs.ma_kenh, v["id"], chu_so(v.get("phan_vi") if v.get("phan_vi") is not None else v.get("tin_hieu_som")),
+            "CTR trang chủ" if cd.get("trang_chu") else "CTR chung",
             chu_so(cd.get("ctr"), 1, "%"), chu_so(cd.get("hien_thi")), HE_SO_CTR, chu_so(bs.ctr_muc_tieu, 1, "%")),
         "TIÊU ĐỀ HIỆN TẠI: “{0}”".format(v.get("tieu_de")),
         "MỤC TIÊU KÊNH\n" + str(bs.muc_tieu or "").strip(),

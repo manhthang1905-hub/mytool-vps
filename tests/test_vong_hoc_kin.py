@@ -49,9 +49,9 @@ def test_chuan_gia_tri_gop_bien_the_bia():
 def test_bang_diem_gop_bien_the_va_he_so_theo_nhan_tho(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
-    _ghi_van(g, "A", {"1": {"nuoc": {"kieu_bia": "khuon_thang"}, "ket48": "truot"},
-                      "2": {"nuoc": {"kieu_bia": "khuon_thang_2"}, "ket48": "truot"},
-                      "3": {"nuoc": {"kieu_bia": "portrait_main"}, "ket48": "thang"}})
+    _ghi_van(g, "A", {"1": {"nuoc": {"kieu_bia": "khuon_thang"}, "ket": "truot"},
+                      "2": {"nuoc": {"kieu_bia": "khuon_thang_2"}, "ket": "truot"},
+                      "3": {"nuoc": {"kieu_bia": "portrait_main"}, "ket": "thang"}})
     bd = tu_hoc.bang_diem(g, "A")["kieu_bia"]
     assert set(bd) == {"khuon_thang", "portrait_main"} and bd["khuon_thang"]["n"] == 2
     he = tu_hoc.he_so_chon(g, "A", "kieu_bia", ["khuon_thang_2", "khuon_thang_3", "portrait_main"], "hat")
@@ -72,20 +72,21 @@ def test_nhan_cum_uu_tien_nhan_luc_chon():
     assert tu_hoc.nhan_cum({"tieu_de": "x"}, lambda td: ["c"]) == "c"
 
 
-# ── kết luận 48h ────────────────────────────────────────────────────────────
+# ── kết luận = thước chung (12/10/2026) ────────────────────────────────────
 
-def test_ket48_bo_co_thang_som_va_lui_72h():
-    vm_som = SimpleNamespace(thang=True, hien_thi_48h=None)  # cờ "thắng sớm" theo mốc 13h
-    assert tu_hoc._ket_luan_48h(ket_qua, vm_som, {"chi_so": {}}, 6000.0) == ""  # noqa: SLF001
-    vm_that = SimpleNamespace(thang=True, hien_thi_48h=9000.0)
-    assert tu_hoc._ket_luan_48h(ket_qua, vm_that, {"chi_so": {}}, 6000.0) == "thang"  # noqa: SLF001
-    hs = {"chi_so": {"48h": {"impressions": None, "views": 6}, "72h": {"impressions": 7000}}}
-    assert tu_hoc._ket_luan_48h(ket_qua, None, hs, 6000.0) == "thang"  # noqa: SLF001
+def test_ket_luan_doc_nhan_thuoc_chung_khong_doc_co_nong():
+    """Cờ `thang` của V7 gồm cả "đang nóng" (chưa phán) — kết luận chỉ đọc nhãn thước chung `nhan_thang`."""
+    assert ket_qua.ket_luan(SimpleNamespace(thang=True, nhan_thang="chua_du", hien_thi_48h=90000.0), {}, 6000.0) == ""
+    assert ket_qua.ket_luan(SimpleNamespace(thang=True, nhan_thang="thang"), {}, None) == "thang"
+    assert ket_qua.ket_luan(SimpleNamespace(thang=False, nhan_thang="trung_binh"), {}, None) == "truot"
+    assert ket_qua.ket_luan_3(SimpleNamespace(nhan_thang="trung_binh")) == "trung_binh"
+    hs = {"chi_so": {"48h": {"impressions": 70000, "moc_gio_that": 48}}}      # ngưỡng 48h không còn phán gì
+    assert ket_qua.ket_luan(None, hs, 6000.0) == "" and ket_qua.ket_luan(None, hs, 6000.0, vm_theo_id={}) == ""
 
 
 # ── kết quả tương đối ───────────────────────────────────────────────────────
 
-def test_ket_tv_va_ket_ctr_so_trung_vi_kenh(tmp_path):
+def test_ket_ctr_so_trung_vi_kenh_va_khong_con_ket_tv(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
     hien = [50, 120, 300, 800, 2000]
@@ -94,28 +95,27 @@ def test_ket_tv_va_ket_ctr_so_trung_vi_kenh(tmp_path):
     for i, (h, c) in enumerate(zip(hien, ctr)):
         ma = "A-%d" % i
         _ho_so(g, "A", ma, chi_so={"48h": {"impressions": h, "ctr": c}})
-        van[ma] = {"ma_goi": ma, "nuoc": {"kieu_bia": "k%d" % (i % 2), "cum": "x"}}
+        van[ma] = {"ma_goi": ma, "nuoc": {"kieu_bia": "k%d" % (i % 2), "cum": "x"}, "ket_tv": "thang"}
     _ghi_van(g, "A", van)
     r = tu_hoc.cham_van(g, "A")
-    assert r["ket_tv"] == 5
+    assert r["ket_ctr"] == 4 and r["xoa_cu"] == 5 and r["ket"] == 0   # chỉ có số 48h: thước chung chưa phán
     v = tu_hoc.doc_van(g, "A")
-    assert [v["A-%d" % i]["ket_tv"] for i in range(5)] == ["truot", "truot", "thang", "thang", "thang"]  # tv = 300
+    assert not any("ket_tv" in x or "ket" in x for x in v.values())   # khoá 48h đời trước bị xoá
     assert "ket_ctr" not in v["A-0"]                     # 50 hiển thị < 100: CTR còn nhiễu
     assert v["A-1"]["ket_ctr"] == "truot" and v["A-4"]["ket_ctr"] == "thang"  # tv CTR(120..2000) = 3,5
     bd = tu_hoc.bang_diem(g, "A")
-    assert bd["cum"]["x"]["n_tv"] == 5 and bd["cum"]["x"]["thang_tv"] == 3
-    assert "n_ctr" not in bd["cum"]["x"]                 # CTR chỉ chấm trục bao bì
+    assert "x" not in bd.get("cum", {})                  # CTR chỉ chấm trục bao bì; kết quả chính chưa có
     assert bd["kieu_bia"]["k0"]["n_ctr"] + bd["kieu_bia"]["k1"]["n_ctr"] == 4
     # chấm lại không đổi gì thì không ghi lại
-    assert tu_hoc.cham_van(g, "A")["ket_tv"] == 0
+    assert tu_hoc.cham_van(g, "A")["ket_ctr"] == 0
 
 
-def test_ket_tv_khong_cong_khi_da_co_7d(tmp_path):
+def test_trung_binh_la_nua_thang_nua_truot(tmp_path):
     g = str(tmp_path)
     _kenh(g, "A")
-    _ghi_van(g, "A", {"1": {"nuoc": {"cum": "x"}, "ket7": "thang", "ket_tv": "truot"}})
+    _ghi_van(g, "A", {"1": {"nuoc": {"cum": "x"}, "ket7": "thang", "ket": "trung_binh"}})
     o = tu_hoc.bang_diem(g, "A")["cum"]["x"]
-    assert (o["a"], o["b"], o["n"]) == (2.0, 1.0, 1) and "n_tv" not in o
+    assert (o["a"], o["b"], o["n"], o["thang"]) == (1.5, 1.5, 1, 0) and "n_tv" not in o
 
 
 # ── cảnh báo học ────────────────────────────────────────────────────────────
@@ -232,12 +232,11 @@ def test_tru_luot_ghi_goi_va_bao_cao_in_ket_qua(tmp_path):
     ts = nao.doc_hanh_dong(g)[0]["tham_so"]
     assert ts["da_dung"] == 1 and ts["goi"] == ["A-0001"]
     v = tu_hoc.doc_van(g, "A")
-    v["A-0001"]["ket48"] = "truot"
-    v["A-0001"]["ket_tv"] = "thang"
+    v["A-0001"].update(ket="truot", ket_pv=20.0, ket_tuoi=110.0)
     _ghi_van(g, "A", v)
     _ho_so(g, "A", "A-0001", chi_so={"48h": {"impressions": 4321, "ctr": 4.2}})
     bc = "\n".join(nao.bao_cao_hanh_dong(g, _dt.datetime(2026, 10, 11), chi_can_chu_y=True))
-    assert "TỚI HẠN KIỂM" in bc and "A-0001: 48h trượt" in bc and "4.321" in bc
+    assert "TỚI HẠN KIỂM" in bc and "A-0001: kết quả trượt (phân vị 20 @110h)" in bc and "4.321" in bc
 
 
 def test_thu_kieu_bia_khop_bien_the(tmp_path):
@@ -286,7 +285,7 @@ def test_tin_hieu_thieu_va_muc_hoc(tmp_path, monkeypatch):
     _kenh(g, "A")
     _ghi_van(g, "A", {"A-1": {"nuoc": {"kieu_bia": "k"}, "ngay": "2026-09-20"},
                       "A-2": {"nuoc": {"cum": "x"}, "ngay": "2026-10-05"},
-                      "A-3": {"nuoc": {"cum": "x"}, "ket48": "truot", "ngay": "2026-09-20"}})
+                      "A-3": {"nuoc": {"cum": "x"}, "ket": "truot", "ngay": "2026-09-20"}})
     _ho_so(g, "A", "A-1", lich_dang="21/09/2026 05:00")
     bay = _dt.datetime(2026, 10, 6, 7, 0)
     t = tu_hoc.tin_hieu_thieu(g, "A", bay.timestamp())
@@ -295,7 +294,7 @@ def test_tin_hieu_thieu_va_muc_hoc(tmp_path, monkeypatch):
     tu_hoc.canh_bao(g, "bo_cum", "không có bộ cụm", "A")
     monkeypatch.setattr(bc, "_cac_kenh", lambda goc: ["A", "B"])
     ra = "\n".join(bc._muc_hoc(g, _dt.datetime.now()))  # noqa: SLF001
-    assert "Thiếu số 48h" in ra and ("A 1" in ra or "A 2" in ra)   # 1 hay 2 tuỳ ngày chạy (mốc ≥4 ngày)
+    assert "Thiếu kết quả" in ra and ("A 1" in ra or "A 2" in ra)   # 1 hay 2 tuỳ ngày chạy (mốc ≥5 ngày)
     assert "chưa chấm" in ra and "Lệnh chiến trường" in ra and "Cảnh báo học 24h: 1" in ra
     assert "B" not in ra.replace("bo_cum", "")               # kênh chưa có ván: không báo
 
@@ -305,7 +304,7 @@ def test_muc_hoc_vong_kin(tmp_path, monkeypatch):
 
     g = str(tmp_path)
     _kenh(g, "A")
-    _ghi_van(g, "A", {"A-1": {"nuoc": {"cum": "x"}, "ket48": "truot", "ngay": "2026-09-20"}})
+    _ghi_van(g, "A", {"A-1": {"nuoc": {"cum": "x"}, "ket": "truot", "ngay": "2026-09-20"}})
     tu_hoc.ghi_bang_diem_md(g, "A")
     tan_cong.ghi(g, {"de_xuat_tan_cong": []}, _dt.date.today().isoformat())
     monkeypatch.setattr(bc, "_cac_kenh", lambda goc: ["A"])

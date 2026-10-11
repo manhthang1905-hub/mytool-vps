@@ -472,7 +472,7 @@ def _tru_luot_g(goc: str, kenh: str, nuoc: Dict[str, Any], ma_goi: str = "") -> 
 
 def ket_qua_goi(goc: str, kenh: str, goi: Any) -> List[str]:
     """Kết quả ĐO ĐƯỢC của các video một hành động `thu` đã sinh ra (`tham_so.goi`), từ ván tự học + hồ sơ video:
-    `["<mã gói>: 48h THẮNG/trượt/chờ, 7d …, CTR … — hiển thị @48h …"]`. Không đọc được → []."""
+    `["<mã gói>: kết quả THẮNG/trung bình/trượt/chờ (thước chung), CTR … — hiển thị @48h …"]`. Không đọc được → []."""
     try:
         from . import tu_hoc  # noqa: PLC0415
         from .chien_luoc import ket_qua  # noqa: PLC0415
@@ -482,13 +482,19 @@ def ket_qua_goi(goc: str, kenh: str, goi: Any) -> List[str]:
     except Exception as loi:  # noqa: BLE001
         _canh_bao(goc, "nao.ket_qua_goi", loi, kenh)
         return []
-    chu = {"thang": "THẮNG", "truot": "trượt"}
+    chu = {"thang": "THẮNG", "trung_binh": "trung bình", "truot": "trượt"}
     ra = []
     for ma in goi or []:
         v, hs = van.get(ma) or {}, hs_ds.get(ma) or {}
         m = tu_hoc._moc_do_duoc(hs)  # noqa: SLF001
-        ra.append("{0}: 48h {1}, 7d {2}, CTR-so-kênh {3} — hiển thị @48h {4}, CTR {5}".format(
-            ma, chu.get(v.get("ket48"), "chờ"), chu.get(v.get("ket7"), "chờ"), chu.get(v.get("ket_ctr"), "chờ"),
+        # Kết quả = THƯỚC CHUNG (`core.thuoc_thang`: phân vị cùng tuổi, phán ≥ 96h) — không còn "thắng @48h".
+        ket = chu.get(v.get("ket"), "chờ")
+        if v.get("ket"):
+            ket += " (phân vị {0} @{1}h)".format(_f(v.get("ket_pv")), _f(v.get("ket_tuoi")))
+        elif v.get("ket_som") is not None:
+            ket += " (tín hiệu sớm: phân vị {0})".format(_f(v.get("ket_som")))
+        ra.append("{0}: kết quả {1}, CTR-so-kênh {2} — hiển thị @48h {3}, CTR {4}".format(
+            ma, ket, chu.get(v.get("ket_ctr"), "chờ"),
             _f(m.get("impressions")) + (" (~{0})".format(m.get("moc_dung")) if m.get("xap_xi") else ""),
             _f(m.get("ctr"), 2, "%")))
     return ra
@@ -702,7 +708,7 @@ def dong_bang_diem(goc: str, kenh: str, toi_da: int = 0) -> List[str]:
             ra.append("    {0}: thắng {1}/{2}{5}{6}, TB Beta {3:.2f}{4}".format(
                 _cat(gt, 40), o["thang"], o["n"], o["a"] / (o["a"] + o["b"]),
                 " [{0}]".format(nao[(kenh, truc, _chuan(gt))]) if (kenh, truc, _chuan(gt)) in nao else "",
-                ", hiển thị48h≥tv {0}/{1}".format(o["thang_tv"], o["n_tv"]) if o.get("n_tv") else "",
+                "",
                 ", CTR≥tv {0}/{1}".format(o["thang_ctr"], o["n_ctr"]) if o.get("n_ctr") else ""))
     return ra or ["  (bảng điểm trống — chưa có ván nào có kết luận)"]
 
@@ -737,12 +743,13 @@ def _video_gan_day(goc: str, kenh: str, ngay: int, bay_gio: Optional[_dt.datetim
         ma, hs = theo_vid.get(vid, ("", {}))
         v = van.get(ma) or {}
         nuoc = v.get("nuoc") or {}
-        kl = v.get("ket7") or v.get("ket48") or ""
+        kl = v.get("ket") or ""   # thước chung (`core.thuoc_thang`) — cùng nhãn V7/giám đốc/tự học
         ra.append((d, "  {0} {1} | {2} | cụm {3} | tiêu đề {4} | @{5}: hiển thị {6}, CTR {7}, xem {8}, AVD {9} ({10}), sub {11} | giờ xem 7d {12} | {13}".format(
             vid + ("/" + ma if ma else ""), d[5:], _cat(r.get("Tiêu đề"), 34), _cat(nuoc.get("cum"), 22) or "?", nuoc.get("kieu_tieu_de") or "?",
             r.get("Mốc mới nhất") or "?", r.get("Lượt hiển thị") or "?", r.get("Tỷ lệ bấm") or "?", r.get("Lượt xem") or "?",
             r.get("Xem TB") or "?", r.get("% độ dài") or "?", r.get("Đăng ký") or "?", _f(tu_hoc._gio_7d(hs), 1),
-            {"thang": "THẮNG", "truot": "trượt"}.get(kl, "chờ"))))
+            ({"thang": "THẮNG", "trung_binh": "trung bình", "truot": "trượt"}.get(kl, "chờ")
+             + (" pv {0}".format(_f(v.get("ket_pv"))) if kl else "")))))
     return [x[1] for x in sorted(ra, key=lambda x: x[0], reverse=True)]
 
 

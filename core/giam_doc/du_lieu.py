@@ -2,8 +2,9 @@
 
 CHỈ ĐỌC ĐĨA, 0 đồng, không gọi mạng. Tái dùng các bộ đọc sẵn có, không viết lại:
 
-  * video + ngưỡng thắng ..... `chien_luoc.ket_qua.video_kenh` (→ `cong_thuc_v7.video_cua_kenh`, đã lọc
-                               `ngay_bat_dau` qua `loc_video`), kết luận `ket_qua.ket_luan`
+  * video + kết luận ......... `chien_luoc.ket_qua.video_kenh` (→ `cong_thuc_v7.video_cua_kenh`, đã lọc
+                               `ngay_bat_dau` qua `loc_video`), kết luận THƯỚC CHUNG `core.thuoc_thang`
+                               (`ket_qua.ket_luan` hai mức, `ket_luan_3` ba mức — phán ≥ 96h, phân vị cùng tuổi)
   * bản chụp từng mốc ........ `chi-so/<vid>/<N>h/tong-quan.json` + `traffic-type.csv` (dòng Browse),
                                tuổi thật `chi_so_ytb.gom.tuoi_that_gio`
   * sub trọn đời / video ..... `ket_qua._sub_theo_video` (`bang-tom-tat.csv`)
@@ -91,7 +92,10 @@ class BangSo:
     thi_truong: Dict[str, Any] = field(default_factory=dict)
     ctr_muc_tieu: Optional[float] = None
     nhan_ctr_muc_tieu: str = ""
+    #: Mức tham khảo hiển thị 48h (`cong_thuc_v7.nguong_thang_48h`) — CHỈ để in, không phán.
     nguong_thang_48h: Optional[float] = None
+    #: Hiển thị cần có lúc ~96h để vào nhóm thắng của kênh (`cong_thuc_v7.muc_thang_kenh`) — để in cho người đọc.
+    muc_thang_96h: Optional[float] = None
     video: List[Dict[str, Any]] = field(default_factory=list)
     kenh_ngay: List[Dict[str, Any]] = field(default_factory=list)  # cộng dồn trọn đời, cũ → mới
     cong_thuc: Dict[str, Any] = field(default_factory=dict)        # ket_qua.thong_ke 28 ngày
@@ -312,6 +316,12 @@ def _video(goc: str, ma: str, bs: BangSo) -> None:
     from ..chien_luoc import ket_qua  # noqa: PLC0415
 
     vm_theo_id, bs.nguong_thang_48h = ket_qua.video_kenh(goc, ma)
+    try:
+        from .. import cong_thuc_v7 as v7  # noqa: PLC0415
+
+        bs.muc_thang_96h = v7.muc_thang_kenh(list(vm_theo_id.values()))
+    except Exception:  # noqa: BLE001
+        bs.muc_thang_96h = None
     ho_so_goi = ket_qua.ho_so_theo_goi(goc, ma)
     try:
         from .. import ho_so_video  # noqa: PLC0415
@@ -335,7 +345,13 @@ def _video(goc: str, ma: str, bs: BangSo) -> None:
             "tuoi_gio": round(vm.tuoi_gio, 1) if vm.tuoi_gio is not None else None,
             "dai_giay": dai, "cum": list(vm.cum or []), "cong_thuc": str(n.get("cong_thuc") or ""),
             "tham_do": bool(n.get("tham_do")), "thang": bool(vm.thang),
+            # Thước chung (`core.thuoc_thang`): ket_luan hai mức (thang | truot = đã phán không thắng | "" chờ),
+            # nhan ba mức + phân vị cùng tuổi + tuổi phán; tin_hieu_som = phân vị lúc 24–72h (chưa phải kết luận).
             "ket_luan": ket_qua.ket_luan(vm, hs, bs.nguong_thang_48h),
+            "nhan": ket_qua.ket_luan_3(vm), "phan_vi": getattr(vm, "phan_vi", None),
+            "tuoi_do": getattr(vm, "tuoi_do", None), "hien_thi_do": getattr(vm, "hien_thi_do", None),
+            "do_tin": getattr(vm, "do_tin", None), "nong": bool(getattr(vm, "nong", False)),
+            "tin_hieu_som": getattr(getattr(vm, "ket", None), "som_phan_vi", None),
             "hien_thi_13h": vm.hien_thi_13h, "hien_thi_48h": vm.hien_thi_48h,
             "cach_48h": getattr(vm, "cach_48h", ""), "lech_48h": getattr(vm, "lech_48h", None),
             "sub_tron_doi": su, "xem_tron_doi": xem,
