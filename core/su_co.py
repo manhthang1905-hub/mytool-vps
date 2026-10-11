@@ -43,7 +43,7 @@ __all__ = [
     "KHOA_DA_DUNG", "KHOA_LECH", "TAM_NGHI", "MAT_MANG", "CHAM_LAI", "NOI_DUNG", "HET_KHO", "HET_TIEN",
     "CHET", "NHA_MAY_NGHI", "HET_HAN_MUC", "LoiNoiDung", "LoiTaiVe",
     "phan_loai", "nen_thu_lai", "nhip_cho", "mo_ta", "goi_kien_nhan",
-    "dat_tran_moi_phut", "DAU_KET_QUA_MAT",
+    "dat_tran_moi_phut", "DAU_KET_QUA_MAT", "CHO_ENGINE", "DAU_CHO_ENGINE", "LoiChoEngine",
 ]
 
 # ── Bảy loại sự cố ───────────────────────────────────────────────────────────
@@ -171,6 +171,32 @@ class LoiNoiDung(RuntimeError):
     """Nội dung máy chủ trả về không dùng được (JSON đứt, thiếu trường…)."""
 
 
+#: **Engine phía máy chủ sập/đóng/hàng chờ quá dài — lượt NHẢ LÀN, chờ NGOÀI tiến trình** (12/10/2026).
+#:
+#: Sự cố 10/10/2026: TTS của cổng tắt rồi xếp hàng ~8 giờ ("Dịch vụ "tts" đang tạm đóng…", "Hàng chờ
+#: giọng nói đang quá dài… ước tính phải chờ khoảng 6 giờ"). Bốn lượt ngồi ở khâu giọng giữ cả 4 làn API
+#: suốt mấy giờ, hai kênh khác không viết nổi kịch bản. Loại này do `core/cho_engine.py` dựng (KHÔNG phải
+#: câu máy chủ nói): khâu ghi dấu `workspace/tu-chay/cho-engine/<engine>/<kênh>.json`, thoát gọn; bộ điều
+#: phối sinh lại lượt sau giờ thăm dò. Nhịp rỗng: `goi_kien_nhan` ném lên NGAY, không ai ngồi đợi.
+CHO_ENGINE = "cho-engine"
+
+#: Mở đầu câu của `LoiChoEngine` — sổ ngày chỉ lưu CHUỖI, `phan_loai` nhận lại qua mẩu này.
+DAU_CHO_ENGINE = "[chờ engine "
+
+
+class LoiChoEngine(RuntimeError):
+    """Engine `engine` phía máy chủ không phục vụ được trong một lúc lâu — chờ ngoài tiến trình.
+
+    `ly_do`: câu thật của máy chủ (hoặc câu tool tóm lại); `uoc_giay`: ước tính hàng chờ máy chủ khai
+    (giây, `None` nếu không có). Xem `CHO_ENGINE` và `core/cho_engine.py`."""
+
+    def __init__(self, engine: str, ly_do: str, uoc_giay: Optional[float] = None):
+        self.engine = str(engine or "?")
+        self.ly_do = str(ly_do or "")
+        self.uoc_giay = uoc_giay
+        super().__init__("{0}{1}] {2}".format(DAU_CHO_ENGINE, self.engine, self.ly_do))
+
+
 #: Bảng nhận dạng. Xếp theo thứ tự **hẹp trước, rộng sau** — câu lỗi thật hay
 #: chứa nhiều dấu hiệu cùng lúc, và cái hẹp mới là cái đúng.
 #:
@@ -277,6 +303,8 @@ _NHIP = {
     NHA_MAY_NGHI: (60, 120, 180, 300, 300),
     # Rỗng: đợi từng lời gọi không giúp gì — khâu clip tự thăm dò thưa (xem trên).
     HET_HAN_MUC: (),
+    # Rỗng: lượt nhả làn và chờ NGOÀI tiến trình (`core/cho_engine.py`) — không ai ngồi đợi trong lượt.
+    CHO_ENGINE: (),
     HET_KHO: (60, 120, 300, 600),
     NOI_DUNG: (0, 0, 0),
     HET_TIEN: (),
@@ -306,6 +334,7 @@ _MO_TA = {
                    "chờ bên vận hành bật lại"),
     HET_HAN_MUC: "kho tài khoản của cổng đã hết hạn mức hôm nay — chưa bị trừ tiền",
     HET_KHO: "kho tệp tạm đã đầy",
+    CHO_ENGINE: "engine của cổng đang sập/đóng/hàng chờ quá dài — lượt nhả làn, thăm dò lại sau",
     HET_TIEN: "ví hết tiền",
     CHET: "hỏng thật, thử lại không đổi gì",
 }
@@ -326,6 +355,8 @@ class LoiTaiVe(RuntimeError):
 
 def phan_loai(loi: BaseException) -> str:
     """Sự cố này thuộc loại nào."""
+    if isinstance(loi, LoiChoEngine):
+        return CHO_ENGINE
     if isinstance(loi, LoiNoiDung):
         return NOI_DUNG
     if isinstance(loi, (ValueError, TypeError, KeyError)):
@@ -335,6 +366,8 @@ def phan_loai(loi: BaseException) -> str:
     if _la_loi_mang(loi):
         return MAT_MANG
     chu = str(loi).lower()
+    if DAU_CHO_ENGINE in chu:
+        return CHO_ENGINE   # câu `LoiChoEngine` đọc lại từ sổ — đứng trước mọi dấu hiệu khác nó trích
     if any(d in chu for d in _DAU_HET_HAN_MUC):
         return HET_HAN_MUC
     ma_code = str(getattr(loi, "code", "") or "").strip().lower()

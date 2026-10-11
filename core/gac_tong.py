@@ -733,6 +733,10 @@ def chup_trang_thai(
         "khe": khe_trang_thai,
         "lan_api": khe.so_lan_api(goc),
         "so_cho_clip": len(khe.doc_cho_clip(goc)),     # 06/10: lượt chờ kho clip KHÔNG chiếm làn API
+        # 12/10: lượt chờ engine phía máy chủ (tts…) đã THOÁT, nhả làn — `core/cho_engine.py`
+        "so_cho_engine": len(khe.doc_cho_engine(goc)),
+        "cho_engine": {k: {"engine": d.get("engine"), "tham_do": d.get("tham_do"), "tu": d.get("tu")}
+                       for k, d in khe.doc_cho_engine(goc).items()},
         "tran_luot_tong": khe.tran_luot_tong(goc),
         "so_tien_trinh_tu_chay": _dem_tien_trinh_tu_chay(chay_lenh),
         "chi_tieu_hom_qua_vnd": _chi_tieu_ngay_gan_nhat_vnd(goc),

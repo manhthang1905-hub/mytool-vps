@@ -615,7 +615,8 @@ _LOAI_LOI_KHONG_TU_HET = (su_co.HET_TIEN, su_co.CHET, su_co.NOI_DUNG)
 #: lượt kẹt. ShopAPI tắt TTS cả buổi trưa → mỗi giờ điều phối nhặt lại một lần, TL1/TL6 chạm trần 3 lần và suýt
 #: bị BỎ HẲN (mất kịch bản/ảnh/clip). Loại này MIỄN trần số lần; trần 48 giờ vẫn giữ.
 _LOAI_LOI_CHO_NGOAI = tuple(getattr(su_co, ten) for ten in
-                            ("NHA_MAY_NGHI", "TAM_NGHI", "HET_KHO", "CHAM_LAI", "MAT_MANG", "CHO_TIEP")
+                            ("NHA_MAY_NGHI", "TAM_NGHI", "HET_KHO", "CHAM_LAI", "MAT_MANG", "CHO_TIEP",
+                             "CHO_ENGINE")
                             if hasattr(su_co, ten))
 
 
@@ -637,6 +638,32 @@ def _dung_vi_phia_shopapi(run: Dict[str, Any]) -> bool:
     return False
 
 
+def _dang_cho_engine(run: Dict[str, Any]) -> bool:
+    """12/10/2026 — lần chạy trước của lượt dừng vì CHỜ ENGINE phía máy chủ (`core/cho_engine.py`):
+    lượt đã nhả làn và thoát gọn chờ giờ thăm dò, KHÔNG phải lượt kẹt. Lần nhặt lại để thăm dò không
+    tính vào trần tự phục hồi L3 (không tăng `so_lan`, không tính giờ chờ vào trần 48 giờ)."""
+    sx = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else {}
+    return bool(sx.get("cho_engine"))
+
+
+def _ghi_nhan_tham_do_engine(run: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] = None) -> None:
+    """Nhặt lại lượt CHỜ ENGINE: không tăng `so_lan`; cộng quãng đã chờ (từ lúc lượt trước thoát)
+    vào `phuc_hoi.giay_cho_engine` để trần 48 giờ chỉ đo thời gian lượt THẬT SỰ kẹt."""
+    ph = run.get("phuc_hoi") if isinstance(run.get("phuc_hoi"), dict) else None
+    sx = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else {}
+    ce = sx.get("cho_engine") if isinstance(sx.get("cho_engine"), dict) else {}
+    if not ph or not ph.get("lan_dau_luc"):
+        return
+    bay_gio_dt = bay_gio or _dt.datetime.now()
+    try:
+        tu = float(ce.get("luc") or 0.0)
+    except (TypeError, ValueError):
+        tu = 0.0
+    if tu > 0:
+        ph["giay_cho_engine"] = float(ph.get("giay_cho_engine") or 0.0) + max(
+            0.0, bay_gio_dt.timestamp() - tu)
+
+
 def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
                               ngay_luot_str: str, *,
                               bay_gio: Optional[_dt.datetime] = None,
@@ -649,18 +676,21 @@ def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
     thể bị quên im lặng ngay sau khi rơi khỏi `so_ngay_cua_so`.
     """
     ph = run.get("phuc_hoi") if isinstance(run.get("phuc_hoi"), dict) else {}
+    cho_engine = _dang_cho_engine(run)
 
     so_lan = int(ph.get("so_lan") or 0)
-    if so_lan >= TRAN_SO_LAN_PHUC_HOI and not _dung_vi_phia_shopapi(run):
+    if so_lan >= TRAN_SO_LAN_PHUC_HOI and not cho_engine and not _dung_vi_phia_shopapi(run):
         return ("đã tự phục hồi (nhặt lại) {0} lần mà vẫn chưa xong — chạm trần {1} lần, "
                 "khả năng nguồn hoặc khâu nào đó kẹt vĩnh viễn.").format(
                     so_lan, TRAN_SO_LAN_PHUC_HOI)
 
     lan_dau_luc = ph.get("lan_dau_luc")
-    if lan_dau_luc:
+    if lan_dau_luc and not cho_engine:
         bay_gio_dt = bay_gio or _dt.datetime.now()
         try:
-            gio_da_troi = (bay_gio_dt.timestamp() - float(lan_dau_luc)) / 3600.0
+            # 12/10/2026: quãng lượt CHỜ ENGINE (đã nhả làn) không tính là kẹt.
+            gio_da_troi = (bay_gio_dt.timestamp() - float(lan_dau_luc)
+                           - float(ph.get("giay_cho_engine") or 0.0)) / 3600.0
         except (TypeError, ValueError):
             gio_da_troi = 0.0
         if gio_da_troi > TRAN_GIO_PHUC_HOI:
@@ -669,7 +699,8 @@ def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
 
     loai_hien_tai = _loai_loi_san_xuat(run)
     loai_truoc = str(ph.get("loai_loi_truoc") or "")
-    if loai_hien_tai and loai_hien_tai == loai_truoc and loai_hien_tai in _LOAI_LOI_KHONG_TU_HET:
+    if (not cho_engine and loai_hien_tai and loai_hien_tai == loai_truoc
+            and loai_hien_tai in _LOAI_LOI_KHONG_TU_HET):
         return ("lỗi “{0}” lặp lại liên tiếp — loại lỗi này thử lại không tự hết."
                 ).format(su_co.mo_ta(loai_hien_tai))
 
@@ -712,6 +743,39 @@ def _ghi_nhan_phuc_hoi(run: Dict[str, Any], *, bay_gio: Optional[_dt.datetime] =
         "lan_dau_luc": float(ph.get("lan_dau_luc") or bay_gio_dt.timestamp()),
         "loai_loi_truoc": _loai_loi_san_xuat(run),
     }
+
+
+def _ghi_cho_engine_vao_so(goc: str, ma_kenh: str, ma_luot: str, run: Dict[str, Any],
+                           log: Callable[[str], None]) -> None:
+    """Sau `auto.chay`: lượt vừa dừng vì CHỜ ENGINE (dấu `workspace/tu-chay/cho-engine/…` của đúng
+    lượt này) → ghi `run.san_xuat.cho_engine` cho L3 + sổ ngày; không thì gỡ ô đó (lượt đã đi tiếp)."""
+    try:
+        from . import khe  # noqa: PLC0415
+
+        dau = khe.doc_cho_engine(goc).get(ma_kenh) or {}
+    except Exception:  # noqa: BLE001
+        dau = {}
+    sx = run.setdefault("san_xuat", {})
+    if dau and str(dau.get("ma_luot") or "") == str(ma_luot or "") and not sx.get("xong_het"):
+        sx["cho_engine"] = {k: dau.get(k) for k in ("engine", "khau", "tu", "tham_do", "so_lan", "luc")}
+        sx["cho_engine"]["ly_do"] = str(dau.get("ly_do") or "")[:200]
+        log("[CHỜ ENGINE] lượt {0}: engine {1} chưa phục vụ được — đã nhả làn, điều phối thăm dò "
+            "lại lúc {2}. Không tính là hỏng.".format(
+                ma_luot, dau.get("engine", "?"), str(dau.get("tham_do") or "?")[:16].replace("T", " ")))
+    else:
+        sx.pop("cho_engine", None)
+
+
+def _go_dau_cho_engine(goc: str, ma_kenh: str, run: Dict[str, Any]) -> None:
+    """Lượt bị bỏ → gỡ dấu chờ engine của nó (dấu cũ không được chặn lượt KHÁC của kênh)."""
+    try:
+        from . import khe  # noqa: PLC0415
+
+        dau = khe.doc_cho_engine(goc).get(ma_kenh) or {}
+        if dau and str(dau.get("ma_luot") or "") == str(run.get("ma_luot") or ""):
+            khe.xoa_cho_engine(goc, str(dau.get("engine") or ""), ma_kenh)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _ten_tep_an_toan(chuoi: str, do_dai: int = 60) -> str:
@@ -2077,6 +2141,11 @@ def _tom_tat_dong(ma_kenh: str, run: Optional[Dict[str, Any]], che_do: str) -> s
             phan_bg = "CHƯA bàn giao ({0})".format(bg.get("ly_do_trong") or bg.get("loi") or "?")
         return "{0}: xong video lượt {1} (“{2}”), {3}.".format(
             ma_kenh, run.get("ma_luot", ""), tieu_de, phan_bg)
+    ce = sx.get("cho_engine") if isinstance(sx.get("cho_engine"), dict) else None
+    if ce:
+        return "{0}: lượt {1} chờ engine {2} của cổng — đã nhả làn, thăm dò lại lúc {3}.".format(
+            ma_kenh, run.get("ma_luot", ""), ce.get("engine", "?"),
+            str(ce.get("tham_do") or "?")[:16].replace("T", " "))
     return "{0}: lượt {1} chưa xong hết ({2}).".format(
         ma_kenh, run.get("ma_luot", ""), ", ".join(sx.get("khau_hong") or []) or "đang chạy")
 
@@ -2546,7 +2615,16 @@ def _chay_mot_ngay_trong_khoa(
             ly_do_bo = _ly_do_vuot_tran_phuc_hoi(run, ngay, ngay_goc_str, bay_gio=bay_gio)
             if ly_do_bo:
                 _bo_luot_qua_han(goc, ma_kenh, run, bao_cao_goc, ngay_goc_str, ly_do_bo, log)
+                _go_dau_cho_engine(goc, ma_kenh, run)
                 run = None
+            elif _dang_cho_engine(run):
+                # 12/10/2026: lượt trước nhả làn CHỜ ENGINE — lần này là THĂM DÒ, không phải phục hồi.
+                ce = run["san_xuat"]["cho_engine"]
+                log("[CHỜ ENGINE] lượt {0} thăm dò lại engine {1} (chờ từ {2}) — không tính vào trần "
+                    "tự phục hồi.".format(run.get("ma_luot", ""), ce.get("engine", "?"),
+                                         str(ce.get("tu") or "?")[:16].replace("T", " ")))
+                _ghi_nhan_tham_do_engine(run, bay_gio=bay_gio)
+                _ghi_bao_cao_ngay(goc, ma_kenh, ngay_goc_str, bao_cao_goc)
             else:
                 _ghi_nhan_phuc_hoi(run, bay_gio=bay_gio)
                 _ghi_bao_cao_ngay(goc, ma_kenh, ngay_goc_str, bao_cao_goc)
@@ -2916,6 +2994,7 @@ def _chay_mot_ngay_trong_khoa(
                             tom_tat="{0}: sản xuất hỏng — {1}".format(ma_kenh, run["san_xuat"]["loi"]))
         run["san_xuat"]["xong_het"] = bool(luot.xong_het)
         run["san_xuat"]["khau_hong"] = list(luot.khau_dang_hong)
+        _ghi_cho_engine_vao_so(goc, ma_kenh, ma_luot, run, log)
         if not luot.xong_het:
             tom_luot = auto.tom_tat(luot)
             # 10/10/2026: ô RIÊNG (không phải `loi`) — L3 chỉ dùng để MIỄN trần số lần khi lỗi ở phía ShopAPI;

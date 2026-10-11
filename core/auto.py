@@ -584,6 +584,17 @@ def chay(
                 return luot
             except Exception as loi:  # noqa: BLE001 — khâu nào cũng có thể hỏng
                 loi_cuoi = str(loi)[:400]
+                if _la_cho_engine(loi):
+                    # 12/10/2026: engine phía máy chủ sập/đóng/hàng chờ quá dài — khâu đã ghi dấu
+                    # chờ (`core/cho_engine.py`). Không đốt lượt thử khâu nào: dừng lượt gọn, tiến
+                    # trình thoát và NHẢ LÀN; điều phối sinh lại sau giờ thăm dò.
+                    tt.trang_thai = HONG
+                    tt.loi = loi_cuoi
+                    tt.ket_thuc = time.time()
+                    ghi("[CHỜ ENGINE] Dừng ở “{0}”: {1} — giữ nguyên phần đã làm, lượt nhả làn; "
+                        "điều phối tự chạy tiếp sau giờ thăm dò.".format(ten_khau(ma), loi_cuoi[:200]))
+                    bao_doi()
+                    return luot
                 if lan < max(1, so_lan_thu):
                     cho = (cho_giua_lan[min(lan - 1, len(cho_giua_lan) - 1)]
                            if cho_giua_lan else 0)
@@ -629,6 +640,16 @@ def chay(
             ghi("Video đã dựng xong. Còn “{0}” chưa được — bấm “Làm lại khâu "
                 "này” lúc nào cũng được.".format(ten_khau(bo_dở[0])))
     return luot
+
+
+def _la_cho_engine(loi: BaseException) -> bool:
+    """`su_co.LoiChoEngine` — lượt chờ engine NGOÀI tiến trình (không thử lại khâu)."""
+    try:
+        from .su_co import LoiChoEngine  # noqa: PLC0415
+
+        return isinstance(loi, LoiChoEngine)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _ngu_ngat_duoc(ngu: Callable[[float], None], giay: float,

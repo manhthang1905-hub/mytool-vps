@@ -315,10 +315,11 @@ function xuong() {
     const daXong = iDang >= 0 ? iDang : (nXong === ks.length ? ks.length - 1 : Math.max(0, nXong - 1));
     const thung = v.da_hen ? "hen" : v.co ? "co" : "";
     const cho = ((SK && SK.kho_clip && SK.kho_clip.kenh_cho) || []).find(x => x.kenh === k.ma);
-    const iKet = cho ? ks.findIndex(x => x.ma === "clip") : ks.findIndex(x => x.tt === "loi");
-    const lyKet = cho ? `Chờ kho clip tới ${(cho.han || "").slice(11, 16) || "?"}` : iKet >= 0 ? `${ks[iKet].ten} lỗi` : "";
+    const choE = !cho && ((SK && SK.cho_engine) || []).find(x => x.kenh === k.ma);
+    const iKet = cho ? ks.findIndex(x => x.ma === "clip") : choE ? ks.findIndex(x => x.ma === (choE.engine === "tts" ? "giong-doc" : "clip")) : ks.findIndex(x => x.tt === "loi");
+    const lyKet = cho ? `Chờ kho clip tới ${(cho.han || "").slice(11, 16) || "?"}` : choE ? `Chờ engine ${choE.engine} của cổng (đã nhả làn) — thăm dò lại ${(choE.tham_do || "").slice(11, 16) || "?"}` : iKet >= 0 ? `${ks[iKet].ten} lỗi` : "";
     let vt, lopXe, nhanXe;
-    if (iKet >= 0) { vt = iKet; lopXe = "do"; nhanXe = cho ? "chờ clip" : "kẹt"; }
+    if (iKet >= 0) { vt = iKet; lopXe = "do"; nhanXe = cho ? "chờ clip" : choE ? (choE.engine === "tts" ? "chờ giọng" : "chờ engine") : "kẹt"; }
     else if (iDang >= 0) { vt = iDang; lopXe = "chay"; nhanXe = ks[iDang].ten; }
     else if (nXong === ks.length) { vt = ks.length - 1; lopXe = ""; nhanXe = v.da_hen ? "đã hẹn" : "xong"; }
     else { vt = 0; lopXe = "cho"; nhanXe = k.tram === "khac" ? "máy khác" : "đỗ"; }
@@ -370,7 +371,8 @@ function khoDan() {
     <div class="mo rat-nho hud" style="letter-spacing:.14em">KHO ĐẠN · CLIP CỦA CỔNG</div>
     <div class="so-lon" style="color:${k.can ? "var(--hong)" : "var(--tot)"}">${k.can ? (k.tu ? `Cạn từ ${gio(k.tu)}` : "Đang cạn") : "Sẵn sàng"}</div>
     <div class="dan">${Array.from({length: 12}, () => "<i></i>").join("")}</div>
-    <div class="mo rat-nho" style="margin-top:4px;max-width:260px">${k.kenh_cho && k.kenh_cho.length ? k.kenh_cho.map(x => `${esc(NGAN(x.kenh))} chờ tới ${gio(x.han)}`).join(" · ") : k.can ? `báo cạn lần cuối ${gio(k.cuoi)}` : "hôm nay chưa báo hết hạn mức"}</div></div>`;
+    <div class="mo rat-nho" style="margin-top:4px;max-width:260px">${k.kenh_cho && k.kenh_cho.length ? k.kenh_cho.map(x => `${esc(NGAN(x.kenh))} chờ tới ${gio(x.han)}`).join(" · ") : k.can ? `báo cạn lần cuối ${gio(k.cuoi)}` : "hôm nay chưa báo hết hạn mức"}</div>
+    ${((SK && SK.cho_engine) || []).length ? `<div class="mo rat-nho" style="margin-top:4px;max-width:260px">Chờ engine (đã nhả làn): ${SK.cho_engine.map(x => `${esc(NGAN(x.kenh))} ${esc(x.engine)} → ${gio(x.tham_do)}`).join(" · ")}</div>` : ""}</div>`;
 }
 let KT = null, DH = null, DD = null;
 /* ---------- kinh tế + kho đạn ---------- */

@@ -78,6 +78,8 @@ __all__ = [
     "so_job_dang_giu", "dat_co_cho_tai_len", "co_cho_tai_len",
     "TUOI_CHO_CLIP_GIAY", "TRAN_LUOT_TONG_MAC_DINH", "duong_cho_clip", "ghi_cho_clip",
     "xoa_cho_clip", "doc_cho_clip", "dang_cho_clip", "tran_luot_tong", "dem_lan_api",
+    "TUOI_TOI_DA_CHO_ENGINE_GIAY", "duong_cho_engine", "ghi_cho_engine", "xoa_cho_engine",
+    "doc_cho_engine",
 ]
 
 LOP_NANG = "nang"
@@ -569,6 +571,95 @@ def dang_cho_clip(cho: Dict[str, Dict[str, Any]], pid: Any, kenh: Any) -> bool:
         return int(du.get("pid") or 0) == int(pid or 0)
     except (TypeError, ValueError):
         return False
+
+
+# ── Lượt CHỜ ENGINE phía máy chủ: NHẢ LÀN, chờ NGOÀI tiến trình (12/10/2026) ──
+#
+# Sự cố 10/10/2026: TTS của cổng sập/đóng/xếp hàng ~8 giờ; bốn lượt ngồi ở khâu
+# giọng giữ cả 4 làn API, hai kênh khác không viết nổi kịch bản. Khác chờ kho clip
+# (tiến trình còn SỐNG, ngồi thăm dò): ở đây lượt LƯU tiến độ, ghi dấu rồi THOÁT —
+# không giữ tệp làn, không giữ RAM. Bộ điều phối đọc dấu: chưa tới `tham_do_luc`
+# thì không sinh kênh đó; tới giờ thì sinh lại như lượt dở (khâu nhặt đúng chỗ
+# dừng, đoạn đã xong vẫn còn trên đĩa). Dấu gỡ khi khâu qua được (`core/
+# cho_engine.py`) hoặc khi lượt bị bỏ. Tổng quát cho mọi engine (tts, image, video…).
+#
+# `workspace/tu-chay/cho-engine/<engine>/<kênh>.json` =
+#   {engine, kenh, ma_luot, khau, ly_do, tu, tu_luc, tham_do, tham_do_luc,
+#    so_lan, uoc_hang_cho_giay, da_bao, luc, pid}
+
+#: Dấu chờ engine không làm tươi quá ngần này (giây) → coi như rác, dọn.
+TUOI_TOI_DA_CHO_ENGINE_GIAY = 7 * 86400.0
+
+
+def duong_cho_engine(goc: str, engine: str = "", kenh: str = "") -> str:
+    """`workspace/tu-chay/cho-engine[/<engine>[/<kenh>.json]]`."""
+    thu_muc = os.path.join(goc, "workspace", "tu-chay", "cho-engine")
+    if not engine:
+        return thu_muc
+    thu_muc = os.path.join(thu_muc, _ten_kenh_an_toan(engine))
+    if not kenh:
+        return thu_muc
+    return os.path.join(thu_muc, _ten_kenh_an_toan(kenh) + ".json")
+
+
+def ghi_cho_engine(goc: str, engine: str, kenh: str, du: Dict[str, Any]) -> None:
+    """Ghi dấu "lượt kênh này chờ engine, thăm dò lại lúc `du['tham_do_luc']`".
+    Không bao giờ ném lỗi."""
+    try:
+        ra = dict(du)
+        ra.update(engine=str(engine or ""), kenh=str(kenh or ""), luc=time.time(), pid=os.getpid())
+        _ghi_json_nguyen_tu(duong_cho_engine(goc, engine, kenh), ra)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def xoa_cho_engine(goc: str, engine: str, kenh: str) -> None:
+    """Gỡ dấu chờ engine (người ghi đã thoát — ai gỡ cũng được). Không ném lỗi."""
+    try:
+        _xoa_tep(duong_cho_engine(goc, engine, kenh))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def doc_cho_engine(goc: str, engine: str = "", *,
+                   bay_gio: Optional[float] = None) -> Dict[str, Dict[str, Any]]:
+    """`{kenh: dấu}` của các lượt đang CHỜ ENGINE (mọi engine, hoặc riêng `engine`).
+
+    Một kênh chờ nhiều engine (hiếm) → giữ dấu có `tham_do_luc` MUỘN nhất. Dấu
+    quá `TUOI_TOI_DA_CHO_ENGINE_GIAY` kể từ lần ghi cuối bị dọn."""
+    goc_thu = duong_cho_engine(goc)
+    bay_gio = time.time() if bay_gio is None else bay_gio
+    try:
+        cac_engine = [engine] if engine else sorted(os.listdir(goc_thu))
+    except OSError:
+        return {}
+    ra: Dict[str, Dict[str, Any]] = {}
+    for e in cac_engine:
+        thu_muc = duong_cho_engine(goc, e)
+        try:
+            ten_tep = os.listdir(thu_muc)
+        except OSError:
+            continue
+        for ten in ten_tep:
+            if not ten.endswith(".json"):
+                continue
+            duong = os.path.join(thu_muc, ten)
+            du = _doc_json(duong)
+            if du is None:
+                continue
+            try:
+                luc = float(du.get("luc") or 0.0)
+                tham = float(du.get("tham_do_luc") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if bay_gio - luc >= TUOI_TOI_DA_CHO_ENGINE_GIAY:
+                _xoa_tep(duong)
+                continue
+            kenh = str(du.get("kenh") or ten[:-5])
+            cu = ra.get(kenh)
+            if cu is None or tham > float(cu.get("tham_do_luc") or 0.0):
+                ra[kenh] = dict(du, engine=str(du.get("engine") or e), tham_do_luc=tham)
+    return ra
 
 
 def tran_luot_tong(goc: str) -> int:

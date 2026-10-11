@@ -480,6 +480,19 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
         uoc = 0
     ra.update(uoc_vnd=uoc, da_chi_hom_nay=da_chi, so_luot_hom_nay=so_luot)
     if _co_luot_do(goc, ma, bay_gio.date()):
+        # 12/10/2026: lượt dở đang CHỜ ENGINE phía máy chủ (đã nhả làn, tiến trình đã thoát —
+        # `core/cho_engine.py`) → chưa tới giờ thăm dò thì KHÔNG sinh; tới giờ thì sinh như lượt dở.
+        cho = _cho_engine_kenh(goc, ma)
+        if cho:
+            tham = float(cho.get("tham_do_luc") or 0.0)
+            ra.update(engine_cho=str(cho.get("engine") or "?"))
+            if tham > bay_gio.timestamp():
+                ra.update(cho_engine=True, ly_do="chờ engine {0} tới {1} (đã nhả làn)".format(
+                    ra["engine_cho"], _dt.datetime.fromtimestamp(tham).strftime("%H:%M")))
+                return ra
+            ra.update(chay=True, diem=-1000.0,
+                      ly_do="lượt dở — thăm dò lại engine {0}".format(ra["engine_cho"]))
+            return ra
         ra.update(chay=True, diem=-1000.0, ly_do="lượt dở — chạy tiếp")
         return ra
     if so_luot >= xep_lich.tran_video_ngay(k):
@@ -578,6 +591,14 @@ def _dang_giu_api(goc: str, cho: Optional[Dict[str, Dict[str, Any]]] = None) -> 
                if x and not khe.dang_cho_clip(cho, x.get("pid"), x.get("kenh")))
 
 
+def _cho_engine_kenh(goc: str, ma: str) -> Dict[str, Any]:
+    """Dấu chờ engine của kênh (`khe.doc_cho_engine`), rỗng nếu không có/đọc hỏng."""
+    try:
+        return dict(khe.doc_cho_engine(goc).get(ma) or {})
+    except Exception:  # noqa: BLE001 — đọc dấu hỏng không được chặn điều phối
+        return {}
+
+
 def _gio_han(du: Dict[str, Any]) -> str:
     """'23:00' từ `han` ISO của dấu chờ clip ('?' nếu hỏng)."""
     try:
@@ -642,6 +663,8 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
             c.update(cho_clip=True, ly_do="chờ kho clip tới {0} (không tính làn)".format(
                 _gio_han(cho_clip[c["ma"]])))
     so_dang = sum(1 for c in cac if c.get("dang_chay") and not c.get("cho_clip"))
+    # 12/10/2026: lượt CHỜ ENGINE đã thoát (không giữ làn, không giữ RAM) — chỉ đếm để báo.
+    so_cho_engine = sum(1 for c in cac if c.get("cho_engine"))
     # lượt vừa sinh nhưng chưa kịp giữ khoá kênh (khởi động Python mất vài giây)
     for ma, m in sinh_cu.items():
         if not any(c["ma"] == ma and c.get("dang_chay") for c in cac):
@@ -655,7 +678,8 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
     tran_tong = max(lan, min(khe.tran_luot_tong(goc), len(danh_sach)))
     ra: Dict[str, Any] = {"bat": True, "luc": bay_gio.isoformat(timespec="seconds"),
                           "ram_trong_gb": ram_trong, "lan_api": lan, "so_dang": so_dang,
-                          "so_cho_clip": so_cho_clip, "tran_tong": tran_tong,
+                          "so_cho_clip": so_cho_clip, "so_cho_engine": so_cho_engine,
+                          "tran_tong": tran_tong,
                           "dang_giu_api": _dang_giu_api(goc, cho_clip), "kenh": cac,
                           "sinh_moi": []}
 
@@ -697,6 +721,8 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
     trong = max(0, min(lan - max(so_dang, ra["dang_giu_api"]), tran_tong - so_tong))
     ra["lan_trong"] = trong
     them_cho = ", +{0} chờ kho clip".format(so_cho_clip) if so_cho_clip else ""
+    if so_cho_engine:
+        them_cho += ", {0} chờ engine (đã nhả làn)".format(so_cho_engine)
     chan = ""
     if trong <= 0 and so_tong >= tran_tong and lan - max(so_dang, ra["dang_giu_api"]) > 0:
         chan = "trần tổng {0}/{1} lượt ({2} đang chạy{3})".format(

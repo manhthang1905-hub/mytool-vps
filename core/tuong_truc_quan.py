@@ -444,6 +444,18 @@ def dong_ho(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) -
                 ev.append({"gio": _hhmm(han[11:16]), "dai": 0, "loai": "han_clip", "ten": "Hạn chót chờ kho clip", "kenh": d.get("kenh") or ""})
         return True
     _muc("clip", _clip, tam, loi)
+
+    def _engine():
+        # 12/10/2026: lượt CHỜ ENGINE của cổng (đã nhả làn) — mốc điều phối thăm dò lại hôm nay.
+        for p in sorted(glob.glob(os.path.join(goc, "workspace", "tu-chay", "cho-engine", "*", "*.json"))):
+            d = _json(p) or {}
+            tham = str(d.get("tham_do") or "")
+            if tham[:10] == bay.strftime("%Y-%m-%d"):
+                ev.append({"gio": _hhmm(tham[11:16]), "dai": 0, "loai": "han_clip",
+                           "ten": "Thăm dò lại engine {0} (lượt đã nhả làn)".format(d.get("engine") or "?"),
+                           "kenh": d.get("kenh") or ""})
+        return True
+    _muc("engine", _engine, tam, loi)
     ev = [e for e in ev if e.get("gio")]
     ev.sort(key=lambda e: (e["gio"], e["loai"], e.get("kenh") or ""))
     lap = [{"ten": "Gác tổng: kiểm cả máy, tự sửa, báo động", "moi_phut": 15}, {"ten": "Điều phối sinh lượt sản xuất", "moi_phut": 10}]

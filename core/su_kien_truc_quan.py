@@ -6,6 +6,7 @@ Nguồn (mỗi nguồn bọc try riêng — một nguồn hỏng chỉ ghi vào 
   * `workspace/loi-chay-max.md`    → sự cố sản xuất (bỏ mục **nhac**)
   * `workspace/tu-chay/tu-chay.log` + `workspace/tu-chay/cho-clip/*.json` → «kho đạn» (kho clip của cổng cạn từ lúc nào,
     kênh nào đang chờ tới hạn nào)
+  * `workspace/tu-chay/cho-engine/<engine>/*.json` → kênh nào đang CHỜ ENGINE của cổng (tts…, đã nhả làn) tới giờ thăm dò nào
 
 Sự kiện đối thủ nổ / thị phần đổi theo ngày thì trang tự suy từ `/chien-truong.json` + `/chien-truong-lich-su.json`.
 """
@@ -23,6 +24,7 @@ GOC = os.environ.get("MYTOOL_GOC") or os.path.dirname(os.path.dirname(os.path.ab
 SO_NGAY = 14             # chỉ lấy sự kiện trong ngần này ngày
 TOI_DA = 120             # tối đa số sự kiện trả về (mới → cũ)
 TUOI_CHO_CLIP = 45 * 60  # dấu chờ clip không làm tươi quá ngần này giây → coi như đã thôi chờ
+TUOI_CHO_ENGINE = 7 * 86400  # khớp `core.khe.TUOI_TOI_DA_CHO_ENGINE_GIAY`
 NHO_DEM_GIAY = 300.0
 _DAU_HET_CLIP = ("kho clip của cổng hết hạn mức", "engine clip hết hạn mức", "engine_unavailable")
 
@@ -171,6 +173,36 @@ def kho_clip(goc: str, bay: _dt.datetime) -> Dict[str, Any]:
     return {"can": bool(cuoi) or bool(cho), "tu": dau, "cuoi": cuoi, "dong": _che(dong_cuoi)[:200], "kenh_cho": cho}
 
 
+def cho_engine(goc: str, bay: _dt.datetime) -> List[Dict[str, Any]]:
+    """Kênh đang CHỜ ENGINE của cổng (12/10/2026, `core/cho_engine.py`): lượt đã nhả làn, thoát; điều phối
+    sinh lại sau giờ thăm dò. Mỗi mục: {kenh, engine, tham_do, tu, so_lan, ly_do}."""
+    thu = os.path.join(goc, "workspace", "tu-chay", "cho-engine")
+    ra: List[Dict[str, Any]] = []
+    try:
+        cac_engine = sorted(os.listdir(thu))
+    except OSError:
+        return ra
+    for e in cac_engine:
+        try:
+            tep = sorted(x for x in os.listdir(os.path.join(thu, e)) if x.endswith(".json"))
+        except OSError:
+            continue
+        for t in tep:
+            d = _json(os.path.join(thu, e, t))
+            if not isinstance(d, dict):
+                continue
+            try:
+                tuoi = bay.timestamp() - float(d.get("luc") or 0)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= tuoi <= TUOI_CHO_ENGINE:
+                ra.append({"kenh": str(d.get("kenh") or t[:-5]), "engine": str(d.get("engine") or e),
+                           "tham_do": str(d.get("tham_do") or "")[:16].replace("T", " "),
+                           "tu": str(d.get("tu") or "")[:16].replace("T", " "),
+                           "so_lan": int(d.get("so_lan") or 0), "ly_do": _che(d.get("ly_do"))[:160]})
+    return ra
+
+
 def _phan_cum_mac_dinh(goc: str) -> Optional[Callable[[str], str]]:
     """Gán đề tài (vùng chiến trường) cho tiêu đề — cùng bộ cụm `core.chien_truong` dùng. Không có → None."""
     try:
@@ -205,8 +237,18 @@ def tinh(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None,
     if kho.get("tu"):
         ds.append({"luc": kho["tu"][:16], "loai": "het_clip", "kenh": "", "tieu_de": "Kho clip của cổng cạn hạn mức hôm nay",
                    "chi_tiet": kho.get("dong", "")})
+    try:
+        ce = cho_engine(goc, bay)
+    except Exception as e:  # noqa: BLE001
+        ce, loi["cho_engine"] = [], "{0}: {1}".format(type(e).__name__, str(e)[:120])
+    for x in ce:
+        if x.get("tu"):
+            ds.append({"luc": x["tu"], "loai": "cho_engine", "kenh": x["kenh"],
+                       "tieu_de": "Chờ engine {0} của cổng — đã nhả làn, thăm dò lại {1}".format(
+                           x["engine"], x.get("tham_do", "")[11:16] or "?"), "chi_tiet": x.get("ly_do", "")})
     ds.sort(key=lambda x: (x.get("luc") or "", x.get("loai") or ""), reverse=True)
-    return {"luc": bay.strftime("%Y-%m-%d %H:%M:%S"), "kenh": kenh, "su_kien": ds[:TOI_DA], "kho_clip": kho, "loi_nguon": loi}
+    return {"luc": bay.strftime("%Y-%m-%d %H:%M:%S"), "kenh": kenh, "su_kien": ds[:TOI_DA], "kho_clip": kho,
+            "cho_engine": ce, "loi_nguon": loi}
 
 
 _NHO: Dict[str, Any] = {"luc": 0.0, "du": None}

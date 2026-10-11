@@ -4663,13 +4663,42 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
 
 def _khau_giong_doc(bc: BoiCanh):
     def lam(luot: LuotChay, tt: TrangThaiKhau):
+        from . import cho_engine  # noqa: PLC0415
+
         d = luot.thu_muc
+        ma_kenh = str(getattr(bc.kenh, "ma", "") or "")
         dich = os.path.join(d, "2-giong-doc.mp3")
         if os.path.exists(dich):
+            cho_engine.xoa(getattr(bc, "goc", ""), cho_engine.ENGINE_TTS, ma_kenh)
             return {"da_co": True}
         kich_ban = _doc_chu(os.path.join(d, "1-kich-ban.txt")).strip()
         if not kich_ban:
             raise RuntimeError("chưa có kịch bản để đọc")
+        # ═══ ENGINE GIỌNG SẬP/ĐÓNG/HÀNG CHỜ DÀI → CHỜ NGOÀI TIẾN TRÌNH (12/10/2026) ═══
+        # Sự cố 10/10: TTS của cổng tắt ~8 giờ, 4 lượt ngồi ở khâu này giữ cả 4 làn API. Giờ: gặp
+        # engine không phục vụ được lâu thì ghi dấu chờ + thoát (nhả làn); điều phối sinh lại sau giờ
+        # thăm dò. Lượt sinh lại để thăm dò thì hỏi `/v1/me` trước (miễn phí). KHÔNG đổi giọng khác.
+        try:
+            return _doc_giong_canh_engine(bc, luot, d, dich, kich_ban, ma_kenh)
+        except cho_engine.LoiChoEngine as loi:
+            cho_engine.bao_cho(getattr(bc, "goc", ""), ma_kenh, loi, ma_luot=str(getattr(luot, "ma_luot", "") or ""),
+                               khau="giong-doc", ghi=bc.ghi)
+            raise
+
+    def _doc_giong_canh_engine(bc: BoiCanh, luot: LuotChay, d: str, dich: str, kich_ban: str,
+                               ma_kenh: str):
+        from . import cho_engine  # noqa: PLC0415
+
+        tham_do = bool(cho_engine.dau_cua(getattr(bc, "goc", ""), cho_engine.ENGINE_TTS, ma_kenh))
+        if tham_do:
+            ly_do = cho_engine.tham_do_nhanh(bc.client, cho_engine.ENGINE_TTS)
+            if ly_do:
+                raise cho_engine.LoiChoEngine(cho_engine.ENGINE_TTS, ly_do)
+            bc.ghi("  thăm dò engine giọng: cổng đã nhận việc lại — đọc tiếp phần còn thiếu.")
+        canh = cho_engine.CanhEngine(
+            cho_engine.ENGINE_TTS, dong_ho=_gio_may,
+            cho_ngan=(cho_engine.GIAY_CHO_NGAN_KHI_THAM_DO if tham_do else cho_engine.GIAY_CHO_NGAN))
+        tao_tts = canh.boc(lambda **kw: bc.client.tts.create(**kw))
         # ═══ CHÈN THẺ CẢM XÚC — ĐÚNG CHỖ NÀY, KHÔNG SỚM HƠN KHÔNG MUỘN HƠN ═══
         #
         # Trước khâu cắt đoạn: thẻ tính vào trần 1.000 ký tự của cổng, nên nó
@@ -4703,6 +4732,17 @@ def _khau_giong_doc(bc: BoiCanh):
             ffmpeg_doc = ""
 
         def mot_doan(muc):
+            from .auto import Cancelled  # noqa: PLC0415
+
+            try:
+                return mot_doan_than(muc)
+            except (Cancelled, cho_engine.LoiChoEngine):
+                raise
+            except Exception as loi:  # noqa: BLE001 — job hỏng lúc chờ kết quả cũng xét engine
+                canh.xet(loi)
+                raise
+
+        def mot_doan_than(muc):
             so, chu = muc
             tep = manh[so - 1]
             if os.path.exists(tep):
@@ -4724,7 +4764,7 @@ def _khau_giong_doc(bc: BoiCanh):
                 # máy chủ CHƯA dùng đến trường này — audio không đổi — nên đừng
                 # trông vào đây để sửa cách đọc; xem `kenh.ma_ngon_ngu_tts`.
                 job = _tao_job(
-                    bc, bc.client.tts.create,
+                    bc, tao_tts,
                     text=(chu_doc if chu_doc is not None else chu),
                     voice_id=bc.kenh.voice_id, format="mp3",
                     language_code=ma_ngon_ngu_tts(
@@ -4810,6 +4850,8 @@ def _khau_giong_doc(bc: BoiCanh):
                             chiu_thieu=False)
         finally:
             theo_doi.dong()
+        # Đủ mọi đoạn → engine đã phục vụ: gỡ dấu chờ (nếu lượt này từng chờ engine giọng).
+        cho_engine.xoa(getattr(bc, "goc", ""), cho_engine.ENGINE_TTS, ma_kenh)
         _noi_mp3(bc, manh, dich, nghi=nghi_doan)
         doi = _doi_cao_do_giong(bc, dich)
         _lam_sach_ket_qua(bc, dich)
@@ -6189,7 +6231,13 @@ def _chay_song_song(bc: BoiCanh, muc: List[Dict[str, Any]], lam, ten: str,
     # lỗi thường: nó giữ nguyên mọi thứ và không đốt lượt thử lại nào. Nên phải
     # lôi nó ra trước, đừng để một lỗi cảnh nào đó nói thay.
     from .auto import Cancelled  # noqa: PLC0415
+    from .su_co import LoiChoEngine  # noqa: PLC0415
 
+    # Chờ engine (12/10/2026) gạt chốt → các luồng đang đợi tỉnh dậy bằng `Cancelled` (qua
+    # `bc.kiem_dung`). Đó KHÔNG phải người bấm Dừng — trừ khi nút Dừng thật đang bật.
+    cho_eng = [_l for _l in loi_dau if isinstance(_l, LoiChoEngine)]
+    if cho_eng and not (bc.cancel is not None and bc.cancel.is_set()):
+        raise cho_eng[0]
     for _l in loi_dau:
         if isinstance(_l, Cancelled):
             raise _l
@@ -6251,7 +6299,7 @@ def _boc(bc: BoiCanh, lam, c, loi_dau: List[BaseException],
     Dừng sớm ở đây **không mất gì**: ảnh đã tải về vẫn nằm trên đĩa, và khâu
     nào cũng nhìn đĩa trước.
     """
-    from .su_co import HET_TIEN, NHA_MAY_NGHI, phan_loai as _phan  # noqa: PLC0415
+    from .su_co import CHO_ENGINE, HET_TIEN, NHA_MAY_NGHI, phan_loai as _phan  # noqa: PLC0415
 
     def chay_mot():
         if nha_may_tat is not None and nha_may_tat.is_set():
@@ -6271,7 +6319,7 @@ def _boc(bc: BoiCanh, lam, c, loi_dau: List[BaseException],
             # thì 113 lời gọi còn lại chắc chắn cũng hết tiền, gửi tiếp chỉ làm
             # màn hình đầy chữ giống hệt nhau.
             loai = _phan(loi)
-            if loai in (NHA_MAY_NGHI, HET_TIEN) and nha_may_tat is not None:
+            if loai in (NHA_MAY_NGHI, HET_TIEN, CHO_ENGINE) and nha_may_tat is not None:
                 nha_may_tat.set()
             loi_dau.append(loi)
             return None
@@ -8375,6 +8423,11 @@ def _bao_canh_khong_lam_duoc(bc: BoiCanh, luot: LuotChay, canh: Sequence[int], l
                 time.strftime("%Y-%m-%d %H:%M"), ma, chuyen, str(ly_do or "?")[:160]))
     except OSError:
         pass
+
+
+def _gio_may() -> float:
+    """Giờ máy (epoch giây) — tách riêng để bài kiểm đặt được giờ (chờ ngắn engine giọng)."""
+    return time.time()
 
 
 def _bay_gio() -> "_dt.datetime":
