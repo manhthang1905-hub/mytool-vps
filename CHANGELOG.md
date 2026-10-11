@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.180.15** — 2026-10-12 — `vps-jp1` — fix(dang-dom): hop 'van dang kiem tra noi dung' -> Da hieu; loc the rac; lam not nhap da tai thay vi tai ban moi; lenh --hoan-tat
 - **2.180.14** — 2026-10-12 — `vps-jp1` — fix(clip): canh treo 2 lan cung anh+loi nhac thi vao thang duong cuu (viet lai loi nhac, ve lai anh doi bo cuc) — anh bo cuc moi ~48' thay vi ~100'
 - **2.180.13** — 2026-10-11 — `vps-jp1` — fix(su-co): 'may chu van chua tra ket qua' (job treo phia may chu) la cho tiep, khong phai CHET
 - **2.180.12** — 2026-10-11 — `vps-jp1` — fix(job): ket qua job mat (download 400/404/410) — dat lai bang khoa moi toi da 2 lan; het lan thi bao loi phia may chu (mien tran L3)
