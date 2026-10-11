@@ -105,7 +105,8 @@ def test_tu_dong_theo_giai_doan(tmp_path):
     goc = str(tmp_path)
     _kenh(goc, "A", 'chien_luoc: "tu_dong"', "chien_luoc_tham_do: 0")
     kh = chien_luoc.ke_hoach(ngu_canh.dung(goc, "A", co_v7=False))
-    assert not kh.cu and kh.trong_so == {"vph": 0.8, "mot_nut": 0.2}
+    # 12/10/2026: V7 chọn theo HẠNG dùng được cả khi kênh chưa có video thắng (cột Nổ + Khuôn) — đứng thứ hai.
+    assert not kh.cu and kh.trong_so == {"vph": 0.8, "v7": 0.2}
     kh = chien_luoc.ke_hoach(ngu_canh.dung(goc, "A", co_v7=True))
     assert list(kh.trong_so) == ["v7", "vph"] and abs(kh.trong_so["v7"] - 0.8) < 1e-9
 
@@ -115,7 +116,14 @@ def test_bo_ten_la_va_cong_thuc_chua_dung_duoc(tmp_path):
     _kenh(goc, "A", 'chien_luoc: "vph:0.7, v7:0.3, khong_co:1"')
     log = []
     kh = chien_luoc.ke_hoach(ngu_canh.dung(goc, "A", co_v7=False, log=log.append))
-    assert kh.trong_so == {"vph": 1.0} and any("khong_co" in g for g in kh.ghi_chu)
+    assert kh.trong_so == {"vph": 0.7, "v7": 0.3} and any("khong_co" in g for g in kh.ghi_chu)
+    # Cấu hình V7 giữ luật cũ (chỉ "Nên làm" ≥ 60) + kênh chưa có video thắng → V7 chưa dùng được, như trước.
+    tm = os.path.join(goc, "CHANNEL", "A", "nghien-cuu")
+    os.makedirs(tm, exist_ok=True)
+    with io.open(os.path.join(tm, "cong-thuc-v7.json"), "w", encoding="utf-8") as tep:
+        json.dump({"phien_ban": 5, "chon": {"theo_hang": False}}, tep)
+    kh = chien_luoc.ke_hoach(ngu_canh.dung(goc, "A", co_v7=False, log=log.append))
+    assert kh.trong_so == {"vph": 1.0}
     assert any("v7" in g and "chưa dùng được" in g for g in kh.ghi_chu)
 
 
@@ -132,7 +140,7 @@ def test_mot_cong_thuc_trong_chien_luoc_trung_thu_tu_bang_cu(tmp_path):
 
 def test_tron_theo_thu_hang_khu_trung_va_ghi_cong_thuc_khac(tmp_path):
     goc = str(tmp_path)
-    _kenh(goc, "A", 'chien_luoc: "vph:0.5, mot_nut:0.5"', "chien_luoc_tham_do: 0")
+    _kenh(goc, "A", 'chien_luoc: "vph:0.5, mot_nut:0.5"', "chien_luoc_tham_do: 0", 'chien_luoc_chia: "tron"')
     log = []
     ds = _xep(goc, "A", log=log.append)
     assert [(d["ma"], d["cong_thuc"]) for d in ds] == [
@@ -146,7 +154,7 @@ def test_tron_theo_thu_hang_khu_trung_va_ghi_cong_thuc_khac(tmp_path):
 
 def test_trong_so_lech_thi_cong_thuc_nang_ra_nhieu_hon(tmp_path):
     goc = str(tmp_path)
-    _kenh(goc, "A", 'chien_luoc: "vph:3, mot_nut:1"', "chien_luoc_tham_do: 0")
+    _kenh(goc, "A", 'chien_luoc: "vph:3, mot_nut:1"', "chien_luoc_tham_do: 0", 'chien_luoc_chia: "tron"')
     ds = _xep(goc, "A")
     assert [d["cong_thuc"] for d in ds[:4]].count("vph") == 3
 

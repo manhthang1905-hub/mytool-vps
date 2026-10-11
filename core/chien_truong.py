@@ -182,13 +182,24 @@ def tinh_co_hoi(ds: List[Dict[str, Any]]) -> None:
 PHAT_TRUNG_VUNG = 15.0   # mỗi kênh ta khác đã được lệnh đánh cùng vùng → trừ chừng này (mục tiêu: PHỦ cả ngách, không giành đất nhau)
 
 
-def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vung: int = 2) -> List[Dict[str, Any]]:
+#: Vùng mà kênh làm CHỦ (bản đồ chủ quyền `core/chu_quyen_vung`) được cộng chừng này khi chia lệnh tấn công.
+CONG_CHU_VUNG = 15.0
+
+
+def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vung: int = 2,
+                     chu_quyen: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """Mỗi kênh ta đang sản xuất (có video) → `so_vung` vùng theo co_hoi, ưu tiên vùng kênh đó (+12) hoặc kênh anh em (+6)
     đã có video (cùng tệp khán giả). Bỏ vùng «khac».
 
     Chia đất: cấp lệnh THAM LAM theo cặp (kênh, vùng) điểm cao nhất trước; vùng đã cấp cho kênh khác bị trừ
     `PHAT_TRUNG_VUNG` mỗi kênh — nên 8 kênh không cùng dồn vào 1 vùng mà toả ra phủ cả ngách (chỉ trùng khi vùng
-    đó vượt trội tới mức chịu được phạt)."""
+    đó vượt trội tới mức chịu được phạt).
+
+    12/10/2026 (P7b — không giao một vùng cho hai kênh): có bản đồ chủ quyền `chu_quyen` thì vùng của kênh anh em
+    KHÁC bị bỏ khỏi lệnh của kênh này (trừ khi chủ nhường / kênh có tên trong `chia_se`), vùng kênh này làm chủ +15."""
+    from core import chu_quyen_vung as _cq  # noqa: PLC0415
+
+    chu_quyen = chu_quyen or {}
     kenh_ds = [q for q in quan if q.get("so_video")]
     ung_theo_kenh: Dict[str, List[Dict[str, Any]]] = {}
     for q in kenh_ds:
@@ -196,14 +207,19 @@ def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vu
         for z in ds:
             if z["ma"] == KHAC or "co_hoi" not in z:
                 continue
+            duoc, la_chu = _cq.duoc_danh(chu_quyen, q["ma"], z["ma"])
+            if not duoc:
+                continue
             own = q["ma"] in (z.get("ta_kenh") or [])
             anh_em = bool(z.get("ta_kenh")) and not own
-            diem = z["co_hoi"] + (12 if own else 6 if anh_em else 0)
+            diem = z["co_hoi"] + (12 if own else 6 if anh_em else 0) + (CONG_CHU_VUNG if la_chu else 0)
             cd = z.get("co_hoi_chi_tiet") or {}
             dm = (z.get("dich_manh") or [{}])[0]
             ly = "cầu {0}, địch dẫn đầu {1} giữ {2}%".format(
                 _gon(z["dich"]), dm.get("kenh") or "—", round(100 * (1 - cd.get("yeu", 0))))
             ly += "; kênh này đã có video ở đây" if own else ("; kênh anh em đã có mặt" if anh_em else "; đất trống, chưa ai của ta")
+            if la_chu:
+                ly += "; kênh này là CHỦ vùng"
             if z.get("nong"):
                 ly += "; đà +{0}/ngày".format(_gon(z["nong"]))
             ung.append({"ma": z["ma"], "ten": z["ten"], "co_hoi": z["co_hoi"], "diem": round(diem, 1),
@@ -366,7 +382,14 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
                  "so_video_dt": sum(z["so_dt"] for z in ds), "so_kenh_dt": len({k for z in vung.values() for k in z["kenh_dich"]})},
         "vung": ds, "nong": nong[:8], "quan": quan, "dich_top": dich_top,
     }
-    ra["de_xuat_tan_cong"] = de_xuat_tan_cong(ds, quan)
+    chu_quyen: Dict[str, Any] = {}
+    try:  # 12/10/2026: bản đồ chủ quyền vùng (sinh lại ≤ 1 lần/ngày, giữ dòng sửa tay) — `core/chu_quyen_vung`
+        from core import chu_quyen_vung  # noqa: PLC0415
+        chu_quyen = chu_quyen_vung.cap_nhat_neu_cu(GOC, cac, thi_truong={z["ma"]: float(z["dich"]) for z in ds})
+    except Exception:  # noqa: BLE001
+        chu_quyen = {}
+    ra["chu_quyen"] = {v: m.get("chu") for v, m in (chu_quyen.get("vung") or {}).items() if isinstance(m, dict)}
+    ra["de_xuat_tan_cong"] = de_xuat_tan_cong(ds, quan, chu_quyen=chu_quyen)
     _ghi_tan_cong(hom, ra)
     ra["lich_su"] = _lich_su_gon(hom, ra)
     return ra

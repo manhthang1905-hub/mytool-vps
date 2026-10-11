@@ -516,9 +516,85 @@ def _de_cu_mo(goc: str, kenh: str) -> List[Dict[str, Any]]:
             and (d.get("tham_so") or {}).get("kenh") == kenh]
 
 
+#: Lý do cổng V7 mà nguồn bộ não đề cử vẫn được ÉP qua (12/10/2026): các cổng MỀM — trên số của ta chúng loại cả video
+#: thắng (nguồn < sàn view, kênh nguồn trung vị thấp, bảng đề xuất mỏng). Cổng cứng (đã làm, lạc ngách, kênh bỏ, độ
+#: dài ngoài khuôn, nhắm tệp khác) vẫn chặn — ép chọn chỉ bỏ qua XẾP HẠNG, không bỏ qua chất lượng.
+CONG_MEM_EP = ("nguồn quá nhỏ", "kênh nguồn quá yếu", "bảng đề xuất", "không có trong bảng đề xuất",
+               "cổng bảng đề xuất")
+#: Đề cử đã được CHỌN vào một lượt mà quá ngần này ngày chưa bàn giao → đóng (không tính), não tự quyết lại.
+NGAY_CHO_BAN_GIAO = 10
+
+
+def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """ĐƯỜNG ÉP CHỌN (12/10/2026, `workspace/chan-doan/nao-vong-hoc-2026-10-12.md` #6): đề cử còn mở của kênh mà bảng
+    trộn `ds` KHÔNG có (ngoài top hạng V7 / bị cổng MỀM) → tra trong bảng V7 ĐẦY ĐỦ (`nc._kq_v7`, chưa có thì chấm
+    lại — chỉ đọc đĩa) và NỐI vào cuối `ds` (qua `nc.loc`: trùng đã làm/đang giữ thì vẫn bị bỏ); `ap_uu_tien` sau đó
+    đưa nó lên đầu. Nguồn không có trong sổ content hoặc vướng cổng cứng → chỉ log lý do. Không ghi đĩa (trạm
+    `/loi-thoai/can-lay` cũng gọi đường này — để trình duyệt hút đúng lời thoại của nguồn bị ép). Hỏng → `ds`."""
+    try:
+        mo = _de_cu_mo(nc.goc, nc.ma_kenh)
+    except Exception:  # noqa: BLE001
+        return ds
+    if not mo:
+        return ds
+    co = {_khoa_link(d.get("link")) for d in ds} | {str(d.get("ma") or "") for d in ds}
+    thieu = [d for d in mo if _khoa_link((d.get("tham_so") or {}).get("link")) not in co]
+    if not thieu:
+        return ds
+    from . import cong_thuc_v7 as v7  # noqa: PLC0415
+    from . import doi_thu_kenh as so  # noqa: PLC0415
+    from .chien_luoc import v7 as ct_v7  # noqa: PLC0415
+
+    kq = getattr(nc, "_kq_v7", None)
+    if kq is None:
+        try:
+            kq = (getattr(nc, "cham_v7", None) or v7.cham)(nc.goc, nc.ma_kenh)
+            nc._kq_v7 = kq  # noqa: SLF001
+        except Exception as loi:  # noqa: BLE001
+            nc.ghi("  [bộ não] không chấm được bảng V7 để ép đề cử ({0}).".format(str(loi)[:100]))
+            return ds
+    bang: Dict[str, Tuple[Any, str]] = {}
+    for d in getattr(kq, "ung_vien", None) or []:
+        bang[str(getattr(d, "ma", "") or "")] = (d, "")
+    for d in getattr(kq, "bi_loai", None) or []:
+        bang.setdefault(str(getattr(d, "ma", "") or ""), (d, str(getattr(d, "bi_loai", "") or "")))
+    them: List[Dict[str, Any]] = []
+    for hd in thieu:
+        khoa = _khoa_link((hd.get("tham_so") or {}).get("link"))
+        if khoa in (getattr(nc, "loai_tru", None) or ()):
+            nc.ghi("  [bộ não] đề cử {0}: nguồn đã làm / đang được kênh anh em giữ — không ép.".format(hd.get("id")))
+            continue
+        x = bang.get(khoa)
+        if x is None:
+            nc.ghi("  [bộ não] đề cử {0}: nguồn chưa có trong sổ content của kênh — không ép được (cần quét/thêm vào "
+                   "hộp thư trước).".format(hd.get("id")))
+            continue
+        d, ly = x
+        if ly and not any(m in ly for m in CONG_MEM_EP):
+            nc.ghi("  [bộ não] đề cử {0}: vướng cổng chất lượng “{1}” — không ép.".format(hd.get("id"), ly[:80]))
+            continue
+        hang = next((i + 1 for i, u in enumerate(getattr(kq, "ung_vien", None) or [])
+                     if str(getattr(u, "ma", "") or "") == khoa), 0)
+        u = ct_v7._dong(d, v7, so, hang or 999)
+        u.update(cong_thuc="v7", tham_do=False, tin_hieu={"ep_chon_nao": hd.get("id")}, ep_chon=True)
+        u["ly_do"] = list(u.get("ly_do") or []) + ["bộ não ÉP CHỌN {0}{1}: {2}".format(
+            hd.get("id"), " (bỏ qua cổng mềm “{0}”)".format(ly[:60]) if ly else
+            " (hạng V7 {0}, ngoài top)".format(hang) if hang else "", (hd.get("ly_do") or "")[:160])]
+        them.append(u)
+    if not them:
+        return ds
+    them = nc.loc(them)
+    for u in them:
+        nc.ghi("  [bộ não] ép chọn: nối “{0}” vào bảng (đề cử {1}).".format(
+            str(u.get("tieu_de") or "")[:60], (u.get("tin_hieu") or {}).get("ep_chon_nao")))
+    return list(ds) + them
+
+
 def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -> List[Dict[str, Any]]:
-    """Ứng viên có link được bộ não đề cử → cộng điểm mạnh và đưa lên đầu bảng. Link không có trong bảng
-    thì không làm gì ở đây (chỉ còn lời nhắc biên tập, xem `dong_de_cu`). Hỏng → trả `ds` nguyên."""
+    """Ứng viên có link được bộ não đề cử → cộng điểm mạnh và đưa lên đầu bảng, gắn `bo_nao` (lý do) + `ep_chon`
+    (12/10/2026: dòng ép chọn được GHIM — biên tập AI chỉ được phủ quyết, cửa kho lời thoại không đổi nó, kiểm trùng ý
+    không loại vì gần video thắng của chính kênh; xem `tu_chay._chon_nguon_goc`). Link không có trong bảng thì không
+    làm gì ở đây (`ep_chon` của bộ điều phối đã thử nối nó vào). Hỏng → trả `ds` nguyên."""
     try:
         cu = {_khoa_link((d.get("tham_so") or {}).get("link")): d for d in _de_cu_mo(goc, kenh)}
         if not cu or not ds:
@@ -535,7 +611,9 @@ def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -
                 u["diem"] = round(float(u.get("diem") or 0) + DIEM_CONG_UU_TIEN, 2)
             except (TypeError, ValueError):
                 u["diem"] = DIEM_CONG_UU_TIEN
-            u["bo_nao"] = d.get("ly_do") or ""
+            u["bo_nao"] = d.get("ly_do") or "đề cử của bộ não"
+            u["ep_chon"] = True
+            u["de_cu_nao"] = d.get("id")
             dau.append(u)
             _DE_CU_THAY.setdefault(kenh, set()).add(d["id"])
             if log:
@@ -570,22 +648,55 @@ _DE_CU_THAY: Dict[str, set] = {}
 DE_CU_VANG_TOI_DA = 3
 
 
-def _dung_xong_de_cu_g(goc: str, kenh: str) -> int:
-    """Lần chọn content thật đã chạy → đề cử nào ĐÃ có mặt trong danh sách ứng viên thì `xong` (dùng MỘT lần).
-    04/10/2026: trước đây mọi đề cử mở đều `xong` dù link không có trong bảng (TL3 n001: nguồn đề cử bị lọc,
-    lượt chọn nguồn khác, hành động "xong" mà không có hiệu lực). Vắng mặt → giữ lại, quá
-    `DE_CU_VANG_TOI_DA` lượt thì đóng `khong_tinh` kèm lý do để não tự quyết lại."""
+def _dung_xong_de_cu_g(goc: str, kenh: str, chon: str = "", bay_gio: Optional[_dt.datetime] = None) -> int:
+    """Lần chọn content thật đã chạy (`chon` = link nguồn lượt này lấy) → cập nhật đề cử mở của kênh.
+
+    12/10/2026 (`workspace/chan-doan/nao-vong-hoc-2026-10-12.md` #6): trước đây đề cử CÓ MẶT trong bảng là `xong` ngay
+    — 3 đề cử có mặt, bị biên tập AI xếp xuống, lượt chọn nguồn khác mà vẫn ghi đã dùng. Giờ CHỈ `ghi_ban_giao` (gói
+    bàn giao dùng ĐÚNG link) mới đóng `xong`. Ở đây:
+      * link == `chon` → ghi `chon_luc` (đang sản xuất), vẫn mở chờ bàn giao; quá `NGAY_CHO_BAN_GIAO` ngày không bàn
+        giao → đóng `khong_tinh`;
+      * có trong bảng mà lượt chọn nguồn khác (bị phủ quyết / trùng ý) → đếm `lan_bo_qua`; vắng khỏi bảng → đếm
+        `lan_vang`; mỗi loại tới `DE_CU_VANG_TOI_DA` lượt thì đóng `khong_tinh` kèm lý do để não tự quyết lại."""
     try:
         ds = doc_hanh_dong(goc)
         thay = _DE_CU_THAY.pop(kenh, set())
         n = 0
-        luc = _dt.datetime.now().replace(microsecond=0).isoformat()
+        bg = bay_gio or _dt.datetime.now()
+        luc = bg.replace(microsecond=0).isoformat()
+        khoa_chon = _khoa_link(chon) if chon else ""
         for d in ds:
             if d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo" and (d.get("tham_so") or {}).get("kenh") == kenh:
                 ts = d.setdefault("tham_so", {})
-                if d.get("id") in thay:
+                if khoa_chon and _khoa_link(ts.get("link")) == khoa_chon:
+                    ts["chon_luc"] = luc
+                    ts["lan_chon"] = int(ts.get("lan_chon") or 0) + 1
+                    n += 1
+                    continue
+                if ts.get("chon_luc"):
+                    try:
+                        cho = (bg - _dt.datetime.fromisoformat(str(ts["chon_luc"]))).days
+                    except (TypeError, ValueError):
+                        cho = 0
+                    if cho <= NGAY_CHO_BAN_GIAO:
+                        continue  # đang sản xuất (nguồn nằm trong "đã làm" nên vắng khỏi bảng) — chờ bàn giao
                     d["trang_thai"] = "xong"
-                    ts["da_dung_luc"] = luc
+                    d["khong_tinh"] = True
+                    d["ghi_chu_cham"] = ("đã chọn {0} nhưng {1} ngày chưa bàn giao được video — không có hiệu lực, "
+                                         "không tính điểm").format(str(ts["chon_luc"])[:10], cho)
+                    n += 1
+                    continue
+                if d.get("id") in thay:
+                    ts["lan_bo_qua"] = int(ts.get("lan_bo_qua") or 0) + 1
+                    ts["bo_qua_luc"] = luc
+                    if ts["lan_bo_qua"] >= DE_CU_VANG_TOI_DA:
+                        d["trang_thai"] = "xong"
+                        d["khong_tinh"] = True
+                        d["ghi_chu_cham"] = ("có trong bảng ứng viên nhưng không được chọn {0} lượt (biên tập phủ "
+                                             "quyết / trùng ý / thiếu lời thoại) — không có hiệu lực, không tính "
+                                             "điểm").format(ts["lan_bo_qua"])
+                    n += 1
+                    continue
                 else:
                     ts["lan_vang"] = int(ts.get("lan_vang") or 0) + 1
                     if ts["lan_vang"] < DE_CU_VANG_TOI_DA:
@@ -601,6 +712,37 @@ def _dung_xong_de_cu_g(goc: str, kenh: str) -> int:
         return n
     except Exception:  # noqa: BLE001
         return 0
+
+
+def ghi_ban_giao(goc: str, kenh: str, ma_goi: str, link: str, bay_gio: Optional[_dt.datetime] = None) -> List[str]:
+    """Gói `ma_goi` vừa BÀN GIAO với nguồn `link` (gọi từ `tu_chay` ngay sau bàn giao) → mọi đề cử `uu-tien-nguon` còn
+    mở của kênh có ĐÚNG link ấy thành `xong`, ghi `tham_so.goi` (để `xem` in "n0xx → <mã gói> → kết quả"). Trả id các
+    đề cử vừa đóng. Hỏng → [] (có cảnh báo), không ném."""
+    if not (ma_goi and link):
+        return []
+    try:
+        with _khoa_hd(goc):
+            ds = doc_hanh_dong(goc)
+            khoa = _khoa_link(link)
+            luc = (bay_gio or _dt.datetime.now()).replace(microsecond=0).isoformat()
+            ra: List[str] = []
+            for d in ds:
+                ts = d.get("tham_so") or {}
+                if (d.get("lenh") != "uu-tien-nguon" or d.get("trang_thai") != "mo" or ts.get("kenh") != kenh
+                        or _khoa_link(ts.get("link")) != khoa):
+                    continue
+                if ma_goi not in (ts.get("goi") or []):
+                    ts["goi"] = list(ts.get("goi") or []) + [ma_goi]
+                ts["da_dung_luc"] = luc
+                d["tham_so"] = ts
+                d["trang_thai"] = "xong"
+                ra.append(str(d.get("id")))
+            if ra:
+                ghi_hanh_dong(goc, ds)
+            return ra
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.ghi_ban_giao", loi, kenh)
+        return []
 
 
 # ── đề xuất cho chủ ──────────────────────────────────────────────────────────
@@ -644,7 +786,12 @@ def dong_hanh_dong(d: Dict[str, Any]) -> str:
     chi = {"thu": lambda: "{0}/{1}={2} x{3} (đã {4})".format(ts.get("kenh"), ts.get("truc"), ts.get("gia_tri"),
                                                            ts.get("so_video"), ts.get("da_dung")),
            "tranh": lambda: "{0}/{1}={2} tới {3}".format(ts.get("kenh"), ts.get("truc"), ts.get("gia_tri"), ts.get("het_han")),
-           "uu-tien-nguon": lambda: "{0} {1}".format(ts.get("kenh"), _cat(ts.get("link"), 60)),
+           "uu-tien-nguon": lambda: "{0} {1}{2}".format(
+               ts.get("kenh"), _cat(ts.get("link"), 60),
+               " → " + ", ".join(ts["goi"]) if ts.get("goi") else
+               " (đang sản xuất từ {0})".format(str(ts.get("chon_luc"))[:10]) if ts.get("chon_luc") else
+               " (có trong bảng, chưa được chọn {0} lượt)".format(ts.get("lan_bo_qua")) if ts.get("lan_bo_qua")
+               else ""),
            "bai-hoc": lambda: "{0} {1} {2}".format(ts.get("kenh"), ts.get("thao_tac"), _cat(ts.get("noi_dung") or ts.get("id"), 70)),
            "de-xuat": lambda: _cat(ts.get("noi_dung"), 90)}.get(d.get("lenh"), lambda: "")()
     cham = ""
@@ -677,6 +824,12 @@ def bao_cao_hanh_dong(goc: str, bay_gio: Optional[_dt.datetime] = None, chi_can_
             kq = ket_qua_goi(goc, str(ts.get("kenh") or ""), ts.get("goi"))
             hien += ["    ↳ " + x for x in kq] or (["    ↳ chưa ra video nào khớp lần thử — huỷ hoặc chấm `sai` kèm lý do"]
                                                 if toi_han else [])
+        elif d.get("lenh") == "uu-tien-nguon" and (toi_han or ts.get("goi")):
+            # 12/10/2026: "n0xx → TLx-00yy → kết quả" — chỉ gói bàn giao dùng ĐÚNG link đề cử (`ghi_ban_giao`).
+            kq = ket_qua_goi(goc, str(ts.get("kenh") or ""), ts.get("goi"))
+            hien += ["    ↳ {0} → {1}".format(d.get("id"), x) for x in kq] or (
+                ["    ↳ {0} → chưa có video nào làm từ đúng link này — chấm `sai`/huỷ kèm lý do".format(d.get("id"))]
+                if toi_han else [])
     if not hien:
         dong.append("  (không có hành động mở / tới hạn kiểm)" if chi_can_chu_y else "  (chưa có hành động nào)")
     return dong + ["  " + h for h in hien[-40:]]

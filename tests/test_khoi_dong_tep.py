@@ -223,7 +223,10 @@ def test_cau_hinh_cho_tep_trung_nien_bo_tu_cach_lam_va_rut_tu_tuoi():
     ra = v7.cau_hinh_cho_tep(v7.CAU_HINH_MAC_DINH, pt.MA_TRUNG_NIEN)
     assert ra["tu_cach_lam"] == [], "tệp trung niên = 'một việc làm được ngay' — khuôn cách làm hết là điểm trừ"
     assert "40代" not in ra["tu_tuoi"] and "50代" not in ra["tu_tuoi"], "40-60 là NHÂN VẬT CHÍNH của tệp này"
-    assert any("老後" in t or "70代" in t for t in ra["tu_tuoi"]), "vẫn giữ mốc GIÀ HƠN cả tệp này (70+/hưu trí sâu)"
+    # 12/10/2026 (P3a chẩn đoán chọn content): 老後/年金/定年/還暦/シニア/70代 là chính insight của tệp (3/3 hit lớn
+    # của kênh trung niên bị cổng này loại) — chỉ giữ mốc GIÀ HƠN HẲN tệp.
+    assert "老後" not in ra["tu_tuoi"] and "70代" not in ra["tu_tuoi"]
+    assert any("80代" in t or "介護" in t for t in ra["tu_tuoi"]), "vẫn giữ mốc GIÀ HƠN HẲN tệp này (80+/chăm sóc)"
 
 
 def _tong_quan(duong, **kv):
@@ -500,16 +503,19 @@ def test_cham_tep_trung_nien_dung_tu_tuoi_cua_cau_hinh_khong_dau_moc_cung(tmp_pa
 
     cot, dong1 = _dong_content(**{"Tiêu đề video": "50代から暮らしを整える方法",
                                  "Link video": "https://www.youtube.com/watch?v=aaaaaaaaaaa"})
-    _cot2, dong2 = _dong_content(**{"Tiêu đề video": "70代からの穏やかな暮らし方",
+    _cot2, dong2 = _dong_content(**{"Tiêu đề video": "80代からの穏やかな暮らし方",
                                     "Link video": "https://www.youtube.com/watch?v=bbbbbbbbbbb"})
-    luu_bang(goc, kenh, cot, [dong1, dong2])
+    _cot3, dong3 = _dong_content(**{"Tiêu đề video": "70代からの穏やかな暮らし方",
+                                    "Link video": "https://www.youtube.com/watch?v=ddddddddddd"})
+    luu_bang(goc, kenh, cot, [dong1, dong2, dong3])
 
     kq = v7.cham(goc, kenh)
     theo_ma = {d.ma: d for d in (kq.ung_vien + kq.bi_loai)}
     assert theo_ma["aaaaaaaaaaa"].bi_loai == "", \
         "tệp trung niên: '50代' KHÔNG bị loại — đúng insight của tệp (40-60 tuổi là nhân vật chính)"
     assert theo_ma["bbbbbbbbbbb"].bi_loai == "nhắm người lớn tuổi", \
-        "vẫn loại mốc GIÀ HƠN cả tệp (70代, có trong tu_tuoi của cấu hình)"
+        "vẫn loại mốc GIÀ HƠN HẲN tệp (80代, có trong tu_tuoi của cấu hình)"
+    assert theo_ma["ddddddddddd"].bi_loai == "", "12/10/2026 (P3a): 70代 là đề tài thường xanh của tệp — không loại"
 
 
 def test_cham_khong_co_tep_van_loai_moc_tuoi_nhu_cu(tmp_path):

@@ -10,6 +10,8 @@ kenh.yaml (phẳng — `kenh.doc_yaml` tối giản không đọc khoá lồng):
     chien_luoc: "vph:0.7, v7:0.3"   # hoặc "tu_dong"; KHÔNG khai → luật cũ `cong_thuc_chon`, y hệt trước
     chien_luoc_tham_do: 20          # % lượt thăm dò (mặc định 20)
     chien_luoc_tu_hoc: false        # true → dồn tỉ trọng theo kết quả thật (cần ≥ 6 video đã đo)
+    chien_luoc_chia: "khe"          # "khe" (mặc định 12/10/2026): mỗi lượt công thức THIẾU KHE nhất so tỉ trọng dẫn
+                                    # đầu (cả bảng của nó trước); "tron" = vòng xoay theo thứ hạng như cũ
 
 Tất định: cùng đĩa + cùng ngày + cùng số lượt đã mở → cùng bảng, để trạm `/loi-thoai/can-lay` và
 vòng chọn nguồn thấy MỘT bảng (không dùng số ngẫu nhiên, không dùng `hash()` của Python — hàm ấy
@@ -18,6 +20,7 @@ vòng chọn nguồn thấy MỘT bảng (không dùng số ngẫu nhiên, khôn
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import importlib
 import logging
@@ -35,6 +38,9 @@ _THU_TU_GOC = ("v7", "vph", "mot_nut")
 KHOA_CHIEN_LUOC = "chien_luoc"
 KHOA_THAM_DO = "chien_luoc_tham_do"
 KHOA_TU_HOC = "chien_luoc_tu_hoc"
+KHOA_CHIA = "chien_luoc_chia"
+#: 12/10/2026 — chia KHE: số ngày nhìn lại để đo tỉ phần lượt mỗi công thức đã thật sự ra.
+KHE_SO_NGAY = 14
 THAM_DO_MAC_DINH = 20
 TU_DONG_TRONG_SO = (0.8, 0.2)
 TU_HOC_KEP = (0.1, 0.9)
@@ -97,6 +103,8 @@ class KeHoach:
     cu: bool = True
     tham_do: str = ""
     ghi_chu: List[str] = field(default_factory=list)
+    #: Tỉ trọng KHAI (kenh.yaml, đã chuẩn hoá) TRƯỚC khi tự học dồn — sàn tỉ phần khe của V7 (xem `muc_tieu_khe`).
+    khai: Dict[str, float] = field(default_factory=dict)
 
 
 def _phan_tich(chuoi: str) -> List[Tuple[str, float]]:
@@ -162,6 +170,7 @@ def ke_hoach(nc: Any, *, tham_do: Optional[bool] = None) -> KeHoach:
         ghi_chu.append("chiến lược “{0}” không còn công thức dùng được — luật cũ".format(cau))
         return KeHoach({ten: 1.0}, ly_cu, cu=True, ghi_chu=ghi_chu)
 
+    khai = dict(ts)
     if nc.cai(KHOA_TU_HOC, False) is True and len(ts) >= 2:
         kq = nc.ket_qua_cong_thuc
         n_tong = sum(int((kq.get(t) or {}).get("n") or 0) for t in ts)
@@ -172,7 +181,7 @@ def ke_hoach(nc: Any, *, tham_do: Optional[bool] = None) -> KeHoach:
             ts = _chuan_hoa({t: min(TU_HOC_KEP[1], max(TU_HOC_KEP[0], w * he[t] / tb)) for t, w in ts.items()})
             ghi_chu.append("tự học trên {0} video đã đo".format(n_tong))
 
-    kh = KeHoach(ts, ly, cu=False, ghi_chu=ghi_chu)
+    kh = KeHoach(ts, ly, cu=False, ghi_chu=ghi_chu, khai=khai)
     if len(ts) >= 2 and tham_do is not False:
         try:
             ty_le = int(float(nc.cai(KHOA_THAM_DO, THAM_DO_MAC_DINH)))
@@ -259,7 +268,7 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
     if kh.cu:
         ten = next(iter(kh.trong_so))
         nc.ghi("  đang dùng công thức {0} vì {1}.".format(ten.upper(), kh.ly_do))
-        return _bang(nc, ten)[0]
+        return _ep_de_cu_nao(nc, _bang(nc, ten)[0])
 
     ts = kh.trong_so
     nc.ghi("  đang dùng chiến lược {0} ({1}){2}.".format(
@@ -284,25 +293,109 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
 
     _ap_he_so_cum(nc, bang)
     _ap_tan_cong(nc, bang)
+    _ap_chu_quyen(nc, bang)
 
     if kh.tham_do and nc.giai_doan == "moi":
         bang[kh.tham_do] = _uu_tien_cum_chua_thu(nc, bang[kh.tham_do])
 
     da: set = set()
-    if kh.tham_do:
+    dau = kh.tham_do
+    if not dau and str(nc.cai(KHOA_CHIA, "khe") or "khe").strip().lower() != "tron":
+        dau = _khe_dan_dau(nc, kh, bang)
+    if dau:
         ra = []
-        for d in bang[kh.tham_do]:
+        for d in bang[dau]:
             if d["ma"] not in da:
                 da.add(d["ma"])
                 ra.append(d)
-        ra += _tron({t: b for t, b in bang.items() if t != kh.tham_do},
-                    {t: w for t, w in ts.items() if t != kh.tham_do}, da)
+        ra += _tron({t: b for t, b in bang.items() if t != dau},
+                    {t: w for t, w in ts.items() if t != dau}, da)
     else:
         ra = _tron(bang, ts, da)
     ra = nc.loc(ra)  # khử trùng TIÊU ĐỀ giữa các bảng (mã khác, cùng bài)
     nc.ghi("  chiến lược: {0} ứng viên sau trộn ({1}).".format(
         len(ra), ", ".join("{0} {1}".format(t, len(bang[t])) for t in ts)))
+    return _ep_de_cu_nao(nc, ra)
+
+
+# ── chia khe (12/10/2026) ───────────────────────────────────────────────────
+
+def so_luot_theo_cong_thuc(nc: Any, ngay: int = KHE_SO_NGAY) -> Dict[str, int]:
+    """`{công thức: số lượt đã mở}` trong `ngay` ngày gần nhất (sổ lượt qua `ho_so_video.nguon_cua_goi`; lượt
+    đánh dấu bỏ không tính). Chỉ đọc đĩa, rẻ (không chấm kết quả). Hỏng → {}."""
+    try:
+        from .. import ho_so_video  # noqa: PLC0415
+
+        so_luot = ho_so_video.nguon_cua_goi(nc.goc, nc.ma_kenh)
+    except Exception:  # noqa: BLE001
+        return {}
+    tu = (nc.bay_gio.date() - _dt.timedelta(days=int(ngay))).isoformat()
+    ra: Dict[str, int] = {}
+    for g in so_luot.values():
+        ct = str(g.get("cong_thuc") or "")
+        if not ct or g.get("bo") or str(g.get("ngay") or "") < tu:
+            continue
+        ra[ct] = ra.get(ct, 0) + 1
     return ra
+
+
+def muc_tieu_khe(kh: KeHoach) -> Dict[str, float]:
+    """Tỉ phần khe mục tiêu: tỉ trọng của kế hoạch (sau tự học), nhưng V7 không dưới tỉ trọng KHAI trong kenh.yaml
+    (chủ dự án: "V7 nhận ≥ tỉ phần đã khai khi có ứng viên đủ điều kiện, VPH lấp phần còn lại")."""
+    ts = dict(kh.trong_so)
+    san = float((kh.khai or {}).get("v7") or 0)
+    if "v7" in ts and san > ts["v7"]:
+        con = sum(w for t, w in ts.items() if t != "v7")
+        ts = {t: (san if t == "v7" else (w * (1 - san) / con if con > 0 else 0.0)) for t, w in ts.items()}
+    return ts
+
+
+def _khe_dan_dau(nc: Any, kh: KeHoach, bang: Dict[str, List[Dict[str, Any]]]) -> str:
+    """Công thức THIẾU KHE nhất (mục tiêu − tỉ phần lượt thật trong `KHE_SO_NGAY` ngày) trong số công thức có bảng
+    không rỗng → bảng của nó đứng TRƯỚC (cả bảng, không xoay) để lượt này lấy nguồn của nó trừ khi mọi dòng bị phủ
+    quyết. Bằng nhau → tỉ trọng lớn hơn, rồi thứ tự khai. Một công thức (hoặc không bảng nào) → ""."""
+    co = [t for t in kh.trong_so if bang.get(t)]
+    if len(kh.trong_so) < 2 or not co:
+        return ""
+    muc = muc_tieu_khe(kh)
+    dem = so_luot_theo_cong_thuc(nc)
+    tong = sum(dem.get(t, 0) for t in kh.trong_so)
+    thuc = {t: (dem.get(t, 0) / float(tong) if tong else 0.0) for t in kh.trong_so}
+    thu_tu = list(kh.trong_so)
+    dau = max(co, key=lambda t: (round(muc[t] - thuc[t], 9), muc[t], -thu_tu.index(t)))
+    nc.ghi("  chiến lược: khe lượt này dành cho {0} (14 ngày: {1}; mục tiêu {2}).".format(
+        dau.upper(), ", ".join("{0} {1}/{2}".format(t, dem.get(t, 0), tong) for t in thu_tu),
+        ", ".join("{0} {1:.0%}".format(t, muc[t]) for t in thu_tu)))
+    return dau
+
+
+def _ap_chu_quyen(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Chủ quyền vùng đề tài (`core/chu_quyen_vung`): ứng viên thuộc vùng do kênh anh em KHÁC làm chủ → nhân hệ số
+    phạt (mặc định 0,6) hoặc loại (vùng khai `chan`), trừ khi kênh chủ đã nhường. Hỏng → bỏ qua + cảnh báo."""
+    try:
+        from .. import chu_quyen_vung  # noqa: PLC0415
+
+        chu_quyen_vung.ap_he_so(nc, bang)
+    except Exception as loi:  # noqa: BLE001
+        nc.ghi("  (chủ quyền vùng: bỏ qua — {0})".format(str(loi)[:100]))
+        try:
+            from .. import tu_hoc  # noqa: PLC0415
+
+            tu_hoc.canh_bao(nc.goc, "chu_quyen_vung", loi, nc.ma_kenh)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _ep_de_cu_nao(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """ÉP CHỌN (12/10/2026): nguồn bộ não đề cử (`uu-tien-nguon`) mà bảng trộn không có (ngoài top hạng / bị cổng
+    MỀM) được tra lại trong bảng V7 đầy đủ và nối vào bảng (`nao.ap_uu_tien` sau đó đưa lên đầu). Hỏng → giữ `ds`."""
+    try:
+        from .. import nao  # noqa: PLC0415
+
+        return nao.ep_chon(nc, ds)
+    except Exception as loi:  # noqa: BLE001
+        nc.ghi("  (bộ não: bỏ qua ép chọn — {0})".format(str(loi)[:100]))
+        return ds
 
 
 def _ap_he_so_cum(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> None:

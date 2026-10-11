@@ -35,7 +35,10 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
    - **Ngày kiểm**: video đã hẹn lịch KHÔNG đổi được — hành động chỉ ảnh hưởng video làm SAU đó. Xem "lịch đăng
      tới" của kênh trong `xem`: ngày kiểm = ngày đăng của video cuối chịu ảnh hưởng + 2 (mốc 48h).
      CLI tự từ chối ngày quá sớm.
-   - Chỉ dùng trục mà CLI nhận (`cum`, `kieu_tieu_de`, `kieu_bia`, `hook`). `uu-tien-nguon` dùng MỘT lần (1 video).
+   - Chỉ dùng trục mà CLI nhận (`cum`, `kieu_tieu_de`, `kieu_bia`, `hook`). `uu-tien-nguon` dùng MỘT lần (1 video):
+     nguồn đề cử được ÉP CHỌN (ghim đầu bảng, biên tập chỉ được phủ quyết, cổng mềm như "nguồn nhỏ/kênh nguồn yếu"
+     được bỏ qua; cổng cứng như đã làm/lạc ngách vẫn chặn) và chỉ thành `xong` khi một gói BÀN GIAO dùng đúng link —
+     `xem` in "n0xx → <mã gói> → kết quả" để chấm.
    - **Bài học bị số mới bác bỏ / xác nhận → GHI NGAY** bằng `bai-hoc --kenh K tru <id>` / `cong <id>` (bằng chứng
      = video_id). Lệnh này KHÔNG tính vào 3 hành động/ngày — đừng để sổ bài học sai nằm đó (vd 05/10: video 【雑学】
      10.202 hiển thị bác bỏ bài "tránh 雑学" mà não chỉ ghi nhật ký).

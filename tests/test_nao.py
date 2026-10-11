@@ -210,8 +210,47 @@ def test_uu_tien_nguon(tmp_path):
     assert [u["ma"] for u in ra] == ["m2", "m1"] and ra[0]["diem"] > 1000 and ds[1]["diem"] == 10   # không đổi bản gốc
     assert nao.ap_uu_tien(goc, "KB", ds) == ds                         # kênh khác: không đổi
     assert "Bộ não đề cử" in nao.dong_de_cu(goc, "KA")[0] and "view 120k" in nao.dong_de_cu(goc, "KA")[0]
-    assert nao.dung_xong_de_cu(goc, "KA") == 1                         # dùng một lần rồi xong
+    assert ra[0]["ep_chon"] is True and ra[0]["de_cu_nao"] == "n001"
+    # 12/10/2026: CÓ MẶT trong bảng mà lượt chọn nguồn khác → KHÔNG xong (chỉ đếm bỏ qua).
+    assert nao.dung_xong_de_cu(goc, "KA") == 1
+    assert nao.dong_de_cu(goc, "KA")
+    # Được chọn → đang sản xuất, vẫn mở; chỉ gói BÀN GIAO dùng đúng link mới đóng `xong`.
+    nao.ap_uu_tien(goc, "KA", ds)
+    nao.dung_xong_de_cu(goc, "KA", chon="https://youtu.be/AAAAAAAAAAA")
+    d = [x for x in nao.doc_hanh_dong(goc) if x.get("lenh") == "uu-tien-nguon"][0]
+    assert d["trang_thai"] == "mo" and d["tham_so"]["chon_luc"]
+    assert nao.ghi_ban_giao(goc, "KA", "KA-0007", "https://youtu.be/BBBBBBBBBBB") == []    # link khác: không đóng
+    assert nao.ghi_ban_giao(goc, "KA", "KA-0007", "https://www.youtube.com/watch?v=AAAAAAAAAAA") == ["n001"]
+    d = [x for x in nao.doc_hanh_dong(goc) if x.get("lenh") == "uu-tien-nguon"][0]
+    assert d["trang_thai"] == "xong" and d["tham_so"]["goi"] == ["KA-0007"] and not d.get("khong_tinh")
+    assert "→ KA-0007" in nao.dong_hanh_dong(d)
     assert nao.ap_uu_tien(goc, "KA", ds) == ds and nao.dong_de_cu(goc, "KA") == []
+
+
+def test_de_cu_bi_bo_qua_3_luot_thi_dong_khong_tinh(tmp_path):
+    goc = _goc(tmp_path)
+    assert _chay(goc, "uu-tien-nguon", "--kenh", "KA", "--link", "https://youtu.be/DDDDDDDDDDD", "--ly-do",
+                 "view 120k trong 5 ngày, đúng cụm tiền bạc", "--du-doan", "video này vào top 3 hiển thị 48h của kênh",
+                 "--kiem-ngay", NGAY_KIEM) == 0
+    ds = [{"ma": "m1", "link": "https://www.youtube.com/watch?v=DDDDDDDDDDD", "diem": 50}]
+    for _ in range(nao.DE_CU_VANG_TOI_DA):
+        nao.ap_uu_tien(goc, "KA", ds)
+        nao.dung_xong_de_cu(goc, "KA", chon="https://youtu.be/EEEEEEEEEEE")
+    d = [x for x in nao.doc_hanh_dong(goc) if x.get("lenh") == "uu-tien-nguon"][0]
+    assert d["trang_thai"] == "xong" and d.get("khong_tinh") and "không được chọn" in d["ghi_chu_cham"]
+    assert not d["tham_so"].get("goi")
+
+
+def test_xem_in_chuoi_de_cu_goi_ket_qua(tmp_path, monkeypatch):
+    goc = _goc(tmp_path)
+    assert _chay(goc, "uu-tien-nguon", "--kenh", "KA", "--link", "https://youtu.be/FFFFFFFFFFF", "--ly-do",
+                 "view 120k trong 5 ngày, đúng cụm tiền bạc", "--du-doan", "video này vào top 3 hiển thị 48h của kênh",
+                 "--kiem-ngay", NGAY_KIEM) == 0
+    nao.ghi_ban_giao(goc, "KA", "KA-0009", "https://youtu.be/FFFFFFFFFFF")
+    monkeypatch.setattr(nao, "ket_qua_goi", lambda _g, _k, goi: ["{0}: kết quả THẮNG (phân vị 90 @100h)".format(g)
+                                                                for g in goi or []])
+    bc = "\n".join(nao.bao_cao_hanh_dong(goc))
+    assert "→ KA-0009: kết quả THẮNG" in bc and "n001 →" in bc
 
 
 def test_de_cu_vang_mat_khoi_bang_khong_bi_tinh_la_da_dung(tmp_path):

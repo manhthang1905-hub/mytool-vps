@@ -6,7 +6,7 @@
 `core.trung_tieu_de` so hai tiêu đề bằng `difflib.SequenceMatcher` (ngưỡng
 0,80, xác nhận trên dữ liệu thật — xem docstring đầu tệp đó) — bắt tốt ca chép
 GẦN NGUYÊN VĂN, nhưng bỏ lọt ca CÙNG Ý, KHÁC DIỄN ĐẠT. Ca thật đo được
-28→29/09/2026: ứng viên nguồn `SL94HyyuLXs`
+28→29/09/2026: ứng viên nguồn `vidGia1428b`
 
     IQが低い人の頭の中で起きていること
     ("Những gì xảy ra trong đầu người có IQ thấp")
@@ -42,12 +42,13 @@ Không gọi mạng ở TẦNG NÀY (việc đó là của `goi_chat`, do nơi g
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from .goi_van_ban import loc_json
 from .trung_tieu_de import diem_giong_tieu_de
 
-__all__ = ["SO_UNG_VIEN_GOI_Y_MAC_DINH", "KHUON_HOI_MAC_DINH", "kiem_trung_y"]
+__all__ = ["SO_UNG_VIEN_GOI_Y_MAC_DINH", "KHUON_HOI_MAC_DINH", "kiem_trung_y", "khoa_video_thang",
+           "la_cua_video_thang", "bo_video_thang"]
 
 #: Số tiêu đề ĐÃ LÀM gửi kèm cho AI — không gửi cả bảng (có thể hàng trăm dòng,
 #: tốn token vô ích), chỉ gửi những cái GẦN ỨNG VIÊN NHẤT theo điểm chữ (dùng
@@ -70,6 +71,83 @@ KHUON_HOI_MAC_DINH = (
     "Trả về DUY NHẤT một JSON, không giải thích ngoài JSON:\n"
     "{\"trung\": true hoặc false, \"voi\": \"<tiêu đề đã làm nếu trung=true, để trống nếu "
     "false>\", \"ly_do\": \"một câu ngắn\"}")
+
+
+# ── biến thể của video THẮNG (12/10/2026) ───────────────────────────────────
+#
+# `workspace/chan-doan/nao-vong-hoc-2026-10-12.md` mục 2: lớp này loại cả nguồn GẦN GIỐNG video THẮNG của chính kênh —
+# triệt tiêu đúng luật số 1 của TL4 ("làm tiếp cụm vừa thắng": cùng chủ ngữ hẹp, góc mới; V10 thắng rồi V11·V12 cùng
+# cụm cũng thắng). Giờ: tiêu đề ĐÃ LÀM thuộc video THẮNG (thước chung `core.thuoc_thang`) hoặc đang NÓNG của CHÍNH
+# kênh được bỏ khỏi danh sách so trùng ý. Vẫn chặn: trùng thứ kênh đã làm/đã lên kế hoạch mà KHÔNG thắng, mọi thứ của
+# kênh anh em (mô tả mang tiền tố "<kênh>: "), cùng link nguồn (`da_lam`/khoá nhóm) và tiêu đề gần nguyên văn (so chữ
+# ≥ 0,80 ở `NguCanh.loc` — chép lại đúng góc cũ không phải "góc mới").
+
+#: Bộ nhớ trong tiến trình: `(goc, kenh) → (lúc, (khoá, tiêu đề))` — video_cua_kenh đọc cả chi-so, không đọc lại mỗi lượt.
+_NHO_THANG: Dict[Tuple[str, str], Tuple[float, Tuple[Set[str], Set[str]]]] = {}
+NHO_THANG_GIAY = 600.0
+
+
+def khoa_video_thang(goc: str, ma_kenh: str) -> Tuple[Set[str], Set[str]]:
+    """`(khoá mô tả, tiêu đề)` của các video THẮNG / đang nóng của CHÍNH kênh: khoá = mô tả mà
+    `trung_tieu_de.doc_tieu_de_da_lam` gắn cho chúng ("đã đăng <mã video>", "kế hoạch <mã gói>", tiền tố
+    "lượt <kênh>/<lượt> ("); tiêu đề = tiêu đề kênh đã đăng + tiêu đề hồ sơ. Đọc đĩa, có nhớ `NHO_THANG_GIAY`.
+    Hỏng → hai tập rỗng (= hành vi cũ: không miễn gì)."""
+    import time as _time  # noqa: PLC0415
+
+    nho = _NHO_THANG.get((goc, ma_kenh))
+    if nho is not None and _time.time() - nho[0] < NHO_THANG_GIAY:
+        return nho[1]
+    khoa: Set[str] = set()
+    tieu_de: Set[str] = set()
+    try:
+        from . import cong_thuc_v7 as v7  # noqa: PLC0415
+
+        ch, _ = v7.nap_cau_hinh(goc, ma_kenh, ghi_neu_thieu=False)
+        thang = [v for v in v7.video_cua_kenh(goc, ma_kenh, ch) if getattr(v, "thang", False)]
+        vid = {v.ma for v in thang}
+        tieu_de |= {str(v.tieu_de).strip() for v in thang if str(v.tieu_de or "").strip()}
+        khoa |= {"đã đăng " + m for m in vid}
+        if vid:
+            from .chien_luoc import ket_qua  # noqa: PLC0415
+
+            for ma_goi, hs in ket_qua.ho_so_theo_goi(goc, ma_kenh).items():
+                if str(hs.get("video_id") or "") not in vid:
+                    continue
+                khoa.add("kế hoạch " + ma_goi)
+                if ma_goi.startswith(ma_kenh + "-"):
+                    khoa.add("lượt {0}/{1} (".format(ma_kenh, ma_goi[len(ma_kenh) + 1:]))
+                if str(hs.get("tieu_de") or "").strip():
+                    tieu_de.add(str(hs["tieu_de"]).strip())
+    except Exception:  # noqa: BLE001 — không đọc được thì không miễn (an toàn: như trước)
+        khoa, tieu_de = set(), set()
+    _NHO_THANG[(goc, ma_kenh)] = (_time.time(), (khoa, tieu_de))
+    return khoa, tieu_de
+
+
+def la_cua_video_thang(tieu_de: str, mo_ta: str, khoa: Tuple[Set[str], Set[str]], ma_kenh: str = "") -> bool:
+    """Một dòng ĐÃ LÀM `(tiêu đề, mô tả)` có thuộc video THẮNG của CHÍNH kênh không. Dòng của kênh anh em (mô tả có
+    tiền tố "<kênh>: " hoặc "<kênh khác> đã đăng") không bao giờ được miễn."""
+    k_mo_ta, k_td = khoa
+    mo_ta = str(mo_ta or "")
+    if any(mo_ta == k or (k.endswith("(") and mo_ta.startswith(k)) for k in k_mo_ta):
+        return True
+    if str(tieu_de or "").strip() not in k_td:
+        return False
+    dau = mo_ta.split(": ", 1)[0] if ": " in mo_ta else ""
+    if dau and " " not in dau:  # "TL2-T7: lượt …" — của kênh anh em
+        return False
+    if " đã đăng" in mo_ta and ma_kenh and not mo_ta.startswith(ma_kenh + " đã đăng"):
+        return False
+    return True
+
+
+def bo_video_thang(da_lam: Sequence[Tuple[str, str]], khoa: Tuple[Set[str], Set[str]],
+                   ma_kenh: str = "") -> Tuple[List[Tuple[str, str]], int]:
+    """`(danh sách đã làm BỎ các dòng của video thắng của chính kênh, số dòng đã bỏ)` — xem đầu mục."""
+    if not (khoa[0] or khoa[1]):
+        return list(da_lam), 0
+    giu = [(t, m) for t, m in da_lam if not la_cua_video_thang(t, m, khoa, ma_kenh)]
+    return giu, len(da_lam) - len(giu)
 
 
 def _ung_vien_gan_nhat(ung_vien: str, da_lam: Sequence[Tuple[str, str]],

@@ -396,6 +396,16 @@ def _lam_giau(goc: str, ma_kenh: str, uv: List[Dict[str, Any]], bay_gio: _dt.dat
     content = _chi_muc_content(goc, ma_kenh)
     danh_ba = _chi_muc_danh_ba(goc, ma_kenh)
     da_co = _tieu_de_nhom_da_co(goc, ma_kenh)
+    thang_cua_kenh: List[Tuple[str, str]] = []
+    try:  # 12/10/2026: dòng của video THẮNG của chính kênh không gắn cờ "⚠ GẦN GIỐNG" — gắn cờ "gần video THẮNG"
+        from . import kiem_trung_y  # noqa: PLC0415
+
+        khoa_th = kiem_trung_y.khoa_video_thang(goc, ma_kenh)
+        thang_cua_kenh = [(t, m) for t, m in da_co if kiem_trung_y.la_cua_video_thang(t, m, khoa_th, ma_kenh)]
+        if thang_cua_kenh:
+            da_co = [(t, m) for t, m in da_co if (t, m) not in set(thang_cua_kenh)]
+    except Exception:  # noqa: BLE001
+        thang_cua_kenh = []
     for d in uv:
         c = content.get(d["ma"], {})
         d["tieu_de"] = d["tieu_de"] or str(c.get("Tiêu đề video") or "")
@@ -423,6 +433,9 @@ def _lam_giau(goc: str, ma_kenh: str, uv: List[Dict[str, Any]], bay_gio: _dt.dat
         d["nhan_noi_dung"], d["noi_dung"] = _noi_dung(goc, ma_kenh, d["ma"], c)
         s, t, m = _gan_giong(d["tieu_de"], da_co) if d["tieu_de"] else (0.0, "", "")
         d["gan_giong"] = ({"diem": round(s, 2), "tieu_de": t, "noi": m} if s >= NGUONG_GAN_GIONG else None)
+        s2, t2, _m2 = (_gan_giong(d["tieu_de"], thang_cua_kenh) if d["tieu_de"] and thang_cua_kenh
+                       else (0.0, "", ""))
+        d["gan_thang"] = ({"diem": round(s2, 2), "tieu_de": t2} if s2 >= NGUONG_GAN_GIONG else None)
 
 
 # ── bối cảnh kênh ─────────────────────────────────────────────────────────────
@@ -1122,17 +1135,19 @@ thức không làm được. Với TỪNG ứng viên, nghĩ kỹ:
  7. Chỉ là TÂM LÝ / CHÂN DUNG CON NGƯỜI mới đúng ngách. Sức khoẻ, ăn uống, thuốc, mẹo vặt, tiền hưu/thuế
     thuần "cách làm", tin tức, người nổi tiếng, truyện đọc → lệch ngách dù cùng khán giả 55+.
 
-Rồi CHẤM TỪNG ứng viên một hạng — đây là CỔNG CHẤT LƯỢNG, máy chỉ sản xuất nguồn TOT:
+Rồi CHẤM TỪNG ứng viên một hạng — đây là CỔNG PHỦ QUYẾT. THỨ TỰ SẢN XUẤT DO CÔNG THỨC QUYẾT (thứ tự công thức đã
+dự báo đúng trên số thật của ta: nguồn top-10 thành hit 5/7, hạng > 10 là 0/14); bạn KHÔNG xếp lại — máy sản xuất
+nguồn ĐẦU TIÊN theo thứ tự công thức mà bạn không loại (TOT hoặc TAM):
  - "TOT": đúng ngách tâm lý, hợp tệp kênh + khán giả thật, nổ thật vì NỘI DUNG (chép được), không trùng ý
    thứ nhóm đã làm, không thuộc cụm đã trượt, giúp lấp đúng chỗ thiếu ở MỤC TIÊU KÊNH; bạn tin CTR trang chủ
-   ≥ 5%. Nguồn phải ĐÃ CHỨNG MINH nổ (≥ ×3 view trung vị kênh nguồn, hoặc đột biến cùng tuổi ≥ ×3): đề tài hay
-   mà nguồn chưa nổ (vd 2 ngày tuổi, dưới mức thường của kênh) tối đa là TAM. ĐÀ TĂNG lúc chọn (view/ngày)
-   là thước SỐ 1, không phải tổng view: nguồn "NGUỘI" (đà ≈ 0) nghĩa là máy đã thôi phát chủ đề đó → không
-   được TOT (máy tự hạ). Đủ để bỏ tiền sản xuất hôm nay.
+   ≥ 5%. Nguồn phải ĐÃ CHỨNG MINH nổ (≥ ×3 view trung vị kênh nguồn, hoặc đột biến cùng tuổi ≥ ×3).
  - "TAM": dùng được nhưng có một điểm yếu rõ (tệp hơi lệch, nguồn nổ yếu/cũ, dạng "cách làm", thiếu lời thoại…).
- - "TE": lệch ngách, lệch tệp, trùng ý, cụm đã trượt, nổ nhờ thứ không chép được, kênh nguồn rác/không phải Nhật.
- kèm "điểm" 0–100 = xác suất bạn tin nó thắng × 100. Hãy khắt khe: thà ít TOT còn hơn TOT giả — không
- có TOT thì máy mở thêm ứng viên kế cho bạn đọc. Được đảo hoàn toàn thứ tự của máy.
+ - "TE" = PHỦ QUYẾT, chỉ khi có lý do cụ thể: lệch ngách, lệch tệp, không an toàn, trùng ý thứ kênh/nhóm đã làm,
+   nổ nhờ thứ không chép được, kênh nguồn rác/không phải Nhật. Biến thể góc mới của video ★ THẮNG của CHÍNH
+   kênh KHÔNG phải trùng ý — đó là luật làm tiếp video thắng.
+ kèm "điểm" 0–100 = XÁC SUẤT bạn tin nguồn này thành video THẮNG × 100 (thắng = top 25% hiển thị của chính kênh ở
+ cùng tuổi, phán ≥ 96h — tức tỉ lệ nền ≈ 25%: hãy hiệu chuẩn quanh mức đó, điểm được chấm Brier với kết quả thật).
+ Không có TOT thì máy mở thêm ứng viên kế cho bạn đọc.
 
 ═══ ĐỊNH VỊ KÊNH MÌNH ═══
 {dinh_vi}
@@ -1360,12 +1375,16 @@ Với TỪNG ứng viên (máy đã xếp {so_uv} dòng theo công thức số):
  7. Bài học có số của CHÍNH kênh (n ≥ 3) — đứng trên mọi tiên nghiệm nhóm:
 {bai_hoc_kenh}
 
-Chấm TỪNG ứng viên (cổng chất lượng, máy chỉ sản xuất TOT):
+Chấm TỪNG ứng viên — CỔNG PHỦ QUYẾT: thứ tự sản xuất do CÔNG THỨC quyết, bạn KHÔNG xếp lại; máy làm nguồn đầu
+tiên theo thứ tự công thức mà bạn không loại (TOT hoặc TAM):
  - "TOT": đúng ngách, hợp tệp + khán giả thật, nổ thật vì NỘI DUNG, không trùng ý, không thuộc cụm đã trượt,
    lấp đúng chỗ thiếu ở MỤC TIÊU; bạn tin CTR trang chủ ≥ {ctr_tot}. Nguồn phải ĐÃ CHỨNG MINH nổ (≥ ×3 view
-   trung vị kênh nguồn, hoặc đột biến cùng tuổi ≥ ×3); ĐÀ TĂNG lúc chọn là thước số 1 — nguồn NGUỘI không TOT.
- - "TAM": dùng được nhưng có một điểm yếu rõ. "TE": lệch ngách/tệp, trùng ý, cụm đã trượt, không chép được.
- kèm "điểm" 0–100 = xác suất thắng × 100. Khắt khe: thà ít TOT còn hơn TOT giả. Được đảo thứ tự của máy.
+   trung vị kênh nguồn, hoặc đột biến cùng tuổi ≥ ×3).
+ - "TAM": dùng được nhưng có một điểm yếu rõ. "TE" = PHỦ QUYẾT, chỉ khi có lý do cụ thể: lệch ngách/tệp, không an
+   toàn, trùng ý thứ kênh/nhóm đã làm, không chép được. Biến thể góc mới của video ★ THẮNG của chính kênh KHÔNG
+   phải trùng ý.
+ kèm "điểm" 0–100 = XÁC SUẤT thành video THẮNG × 100 (top 25% của kênh cùng tuổi → tỉ lệ nền ≈ 25%; điểm được chấm
+ Brier với kết quả thật — hãy hiệu chuẩn).
 
 ═══ DỮ LIỆU ═══
 ĐỊNH VỊ KÊNH:
@@ -1464,6 +1483,10 @@ def _khoi_ung_vien(uv: Sequence[Dict[str, Any]]) -> str:
             dong.append("  ⚠ {0}GẦN GIỐNG thứ nhóm đã làm/đăng ({1:.0%} theo chữ): “{2}” — {3}. Có thể là "
                         "CÙNG NGUỒN hoặc cùng luận điểm; nếu trùng ý thì loại.".format(
                             "RẤT " if g["diem"] >= 0.7 else "", g["diem"], _gon(g["tieu_de"], 80), _gon(g["noi"], 60)))
+        if d.get("gan_thang"):
+            dong.append("  ★ GẦN video THẮNG của chính kênh ({0:.0%} theo chữ): “{1}” — biến thể góc mới là LÀM TIẾP CÁI "
+                        "THẮNG (được phép, không phải trùng ý).".format(d["gan_thang"]["diem"],
+                                                                     _gon(d["gan_thang"]["tieu_de"], 80)))
         dong.append("  {0}: {1}".format(d.get("nhan_noi_dung") or "NỘI DUNG", d.get("noi_dung") or ""))
         khoi.append("\n".join(dong))
     return "\n\n".join(khoi)
@@ -1711,6 +1734,14 @@ def _da_lam_de_kiem(goc: str, ma_kenh: str) -> List[Tuple[str, str]]:
 
         ra += list(trung_tieu_de.doc_tieu_de_da_lam(goc, ma_kenh))
         ra += list(nhom_kenh.tieu_de_da_lam_ca_nhom(goc, ma_kenh) or ())
+    except Exception:  # noqa: BLE001
+        pass
+    # 12/10/2026: CÙNG luật miễn với lớp cuối (`tu_chay._chon_khong_trung_y`): biến thể của video THẮNG của chính kênh
+    # không phải trùng ý (luật làm tiếp video thắng).
+    try:
+        from . import kiem_trung_y  # noqa: PLC0415
+
+        ra, _n = kiem_trung_y.bo_video_thang(ra, kiem_trung_y.khoa_video_thang(goc, ma_kenh), ma_kenh)
     except Exception:  # noqa: BLE001
         pass
     return ra

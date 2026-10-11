@@ -42,6 +42,9 @@ Bộ máy này là vòng học của từng kênh, bọc quanh các công thức
 | `chien_luoc` | *(không khai)* | trộn nhiều công thức, ví dụ `"vph:0.8, v7:0.2"`, hoặc `"tu_dong"` |
 | `chien_luoc_tham_do` | `20` | % lượt thăm dò khi có ≥ 2 công thức |
 | `chien_luoc_tu_hoc` | `false` | `true` = tự dồn tỉ trọng theo thắng/trượt thật |
+| `chien_luoc_chia` | `khe` | `khe` = mỗi lượt công thức THIẾU KHE nhất (14 ngày, so tỉ trọng; V7 không dưới tỉ trọng khai) đặt cả bảng của nó lên trước; `tron` = vòng xoay theo thứ hạng cũ |
+| `bien_tap_xep_lai` | `false` | `false` = biên tập AI CHỈ PHỦ QUYẾT (giữ thứ tự công thức, TỆ bị loại, dự đoán ghi sổ Brier `core/du_doan_bien_tap.py`); `true` = luật cũ (được đảo thứ tự) |
+| `v7_nang_cap` | *(theo `chien_luoc`)* | `false` giữ `cong-thuc-v7.json` cũ y nguyên; `true` ép nâng lên phiên bản 5 (chọn theo HẠNG top-10, Nổ 30 · Khuôn 15 · Đang lên 0, kênh yếu chỉ trừ điểm, sàn view 10.000, cổng tuổi theo tệp) — mặc định chỉ kênh khai `chien_luoc` được nâng |
 | `de_bai_bien_tap` | *(không khai)* | `"gon"` = đề bài gọn: MỤC TIÊU 3 dòng + `luat_chon` + bài học kênh |
 | `luat_chon` | từ ngach.yaml | luật riêng của kênh, đè luật nhóm |
 | `bac_view_manh`, `tran_vuot` | 100000, 25 | ngưỡng bảng Một nút theo cỡ thị trường |

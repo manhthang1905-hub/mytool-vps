@@ -59,8 +59,17 @@ TEP_CAU_HINH = "cong-thuc-v7.json"
 TEP_SO_CHON = "so-chon-v7.csv"
 
 #: Bản mặc định — ghi ra đĩa lần đầu chấm, sau đó khách sửa tệp JSON.
+#:
+#: 12/10/2026 — PHIÊN BẢN 5 (`workspace/chan-doan/v7-chon-content-2026-10-12.md` mục 7, P2/P3/P4/P9). Trên 77 video có
+#: số của ta: thứ tự V7 dự báo đúng (top-10 hôm trước 5/7 hit, hạng > 10 0/14, p ≈ 0,001) nhưng mốc tuyệt đối 60 điểm
+#: gần như không bao giờ đạt (80/100 lượt chạy bằng VPH); cột "Nổ" (gấp trung vị kênh nguồn) là tín hiệu mạnh nhất
+#: (ρ +0,62; ≥ 8× → 44% hit, < 8× → 14%), độ dài 12–21 phút có 9/10 hit lớn, "Đang lên" NGƯỢC chiều (ρ −0,26); cổng
+#: tuổi / "kênh nguồn yếu" / sàn 50.000 view loại 7/10 hit lớn. Nên: chọn theo HẠNG (`chon`), Nổ 20 → 30, Khuôn 10 → 15
+#: (phần độ dài 12–21 nặng hơn), Đang lên 15 → 0 (vẫn ghi lý do để xem), "kênh yếu" chỉ trừ điểm, sàn view 10.000,
+#: cổng tuổi theo tệp (`tuoi`). Tệp cũ (phiên bản < 5) được NÂNG trong bộ nhớ ở đúng các khoá còn giá trị mặc định cũ
+#: (`_NANG_CAP_V5`, xem `nap_cau_hinh`) — khoá khách đã tự sửa thì giữ.
 CAU_HINH_MAC_DINH: Dict = {
-    "phien_ban": 3,
+    "phien_ban": 5,
     #: Cụm chủ đề nhận bằng từ khoá (tiếng của kênh nguồn). Một tiêu đề có thể thuộc nhiều cụm.
     "cum": {
         "vat-chat": {"ten": "Người giàu / không ham vật chất", "tu": [
@@ -100,7 +109,8 @@ CAU_HINH_MAC_DINH: Dict = {
     # không có 人 làm chủ ngữ nào khác để bám.
     "tu_ghep_khong_phai_nguoi": ["人生", "日本人", "大人", "他人", "人間", "人類", "人気", "人口",
                                  "個人", "恋人", "本人", "芸人", "人材", "人数"],
-    "trong_so": {"cum": 30, "pool": 25, "no": 20, "len": 15, "khuon": 10},
+    #: 12/10/2026 (phiên bản 5): Nổ 20 → 30, Khuôn 10 → 15, Đang lên 15 → 0 — xem chú thích đầu khối.
+    "trong_so": {"cum": 30, "pool": 25, "no": 30, "len": 0, "khuon": 15},
     #: 12/10/2026: THẮNG phán bằng thước chung `core.thuoc_thang` (phân vị cùng tuổi, ≥ 96h). Khối này chỉ còn:
     #: `moi_13h` (video < 48h có 13h ≥ ngần này = "đang nóng") và công thức MỨC THAM KHẢO 48h `nguong_thang_48h`
     #: (in ra cho người đọc, không phán). Cũ: thắng khi hiển thị 48h ≥ max(toi_thieu, boi_so × trung vị video
@@ -189,10 +199,26 @@ CAU_HINH_MAC_DINH: Dict = {
     # Kênh yếu < 1.500 view trung vị: nguồn V9 (kênh 429) chậm; 全部脳のせい。 (1.100) bị nhật ký 12/09
     # xếp cùng hồ sơ ấy. Kênh nguồn của các video thắng đều từ 3.150 trở lên.
     # `san_view`: sàn view TUYỆT ĐỐI của nguồn. "Gấp" là số tương đối nên nó một mình không đủ.
+    # 12/10/2026 (phiên bản 5): `loai_kenh_yeu` True → False (chỉ trừ `tru_kenh_yeu` như bản gốc: nhóm "kênh nguồn
+    # yếu" có 4/8 hit trên số của ta) · `san_view` 50.000 → 10.000 (view nguồn không đơn điệu với kết quả; cổng 50k
+    # loại hit lớn nhất của TL1 và TL3) · `boi_so_15` = mốc "gấp ≥ 8×" — cột Nổ đạt 75% trần ở đó.
     "no": {"san": 3, "boi_so_15": 8, "tran": 25, "kenh_yeu_duoi": 1500, "tru_kenh_yeu": 5,
-           "san_view": 50000, "loai_kenh_yeu": True},
-    "khuon": {"tot": [12, 21], "tam": [8, 30], "loai_duoi": 8, "loai_tren": 40},
+           "san_view": 10000, "loai_kenh_yeu": False},
+    # `phan` (12/10/2026): cột Khuôn chia cho độ dài (12–21 phút `dai_tot`, 8–30 `dai_tam`) và dạng (chân dung người
+    # `chan_dung`, dạng khác `dang_khac`) — PHẦN của trọng số Khuôn. Bản cũ ngầm là 0,5 / 0,2 / 0,5 / 0,2; 9/10 hit lớn
+    # của ta có nguồn 12–21 phút nên phần độ dài nặng hơn.
+    "khuon": {"tot": [12, 21], "tam": [8, 30], "loai_duoi": 8, "loai_tren": 40,
+              "phan": {"dai_tot": 0.6, "dai_tam": 0.15, "chan_dung": 0.4, "dang_khac": 0.15}},
+    #: Nhãn hiển thị (Làm ngay / Nên làm / Dự bị / Bỏ). KHÔNG còn là cổng sản xuất khi `chon.theo_hang` bật.
     "loai": {"lam_ngay": 75, "nen_lam": 60, "du_bi": 45},
+    #: 12/10/2026 — CHỌN THEO HẠNG (P2): sản xuất nhận `top_n` dòng đầu bảng V7 của ngày (sau mọi cổng và bộ lọc đã
+    #: làm/trùng), giữ đúng thứ tự điểm, thay cho mốc tuyệt đối "Nên làm" ≥ 60. Sàn chất lượng tối thiểu: điểm ≥
+    #: `diem_san` VÀ (khi biết) gấp trung vị kênh nguồn ≥ `vuot_san`. `theo_hang: false` = luật cũ (chỉ Làm ngay/Nên làm).
+    "chon": {"theo_hang": True, "top_n": 10, "diem_san": 20, "vuot_san": 3},
+    #: 12/10/2026 — CỔNG TUỔI THEO TỆP (P3a). `tu_khoa` (từ mốc tuổi trong tiêu đề) và `ai_lon_tuoi` (nhãn AI "lon-tuoi")
+    #: mỗi cái "loai" (cổng, như cũ) hoặc "tru" (trừ `tru` điểm, không loại). Tệp trung niên: nhãn AI chỉ trừ điểm —
+    #: đề tài tuổi tác thường xanh là chính insight của tệp (3/3 hit lớn của kênh trung niên bị cổng này loại).
+    "tuoi": {"tu_khoa": "loai", "ai_lon_tuoi": "loai", "tru": 10},
     #: KHÔNG còn dùng (12/10/2026 — sổ chọn `kiem_du_doan` phán bằng `core.thuoc_thang`); giữ khoá cho tệp cũ.
     "ket_qua_48h": {"thang": 20000, "truot": 6000},
     #: Thẩm định bằng AI (`core/cong_thuc_v7_ai.py`): chỉ nhóm đầu bảng đáng tiền gọi.
@@ -295,18 +321,141 @@ def _cho_phep_tep_gia(goc: str, kenh: str) -> bool:
         return False
 
 
+#: Bộ mốc tuổi cũ của tệp TRUNG NIÊN (`cau_hinh_cho_tep` trước 12/10/2026) và bộ mới (P3a: chỉ giữ mốc GIÀ HƠN hẳn tệp —
+#: 3/3 hit lớn của kênh trung niên bị 老後/年金 loại).
+_TU_TUOI_TRUNG_NIEN_CU = ["70代", "80代", "老後", "定年", "シニア", "高齢", "還暦", "年金", "介護", "晩年"]
+TU_TUOI_TRUNG_NIEN = ["80代", "高齢", "介護", "晩年"]
+#: Giá trị MẶC ĐỊNH CŨ (phiên bản ≤ 4) của các khoá phiên bản 5 đổi — `(đường khoá, giá trị cũ, giá trị mới | None =
+#: mặc định mới)`. Tệp cũ mà khoá còn ĐÚNG giá trị cũ (chưa ai sửa tay) thì nhận giá trị mới; khoá đã sửa tay thì giữ.
+_NANG_CAP_V5: Tuple[Tuple[Tuple[str, ...], object, object], ...] = (
+    (("trong_so",), {"cum": 30, "pool": 25, "no": 20, "len": 15, "khuon": 10}, None),
+    (("no", "san_view"), 50000, None),
+    (("no", "loai_kenh_yeu"), True, None),
+    (("tu_tuoi",), _TU_TUOI_TRUNG_NIEN_CU, TU_TUOI_TRUNG_NIEN),
+)
+#: Hành vi CŨ của các khoá MỚI (khi tệp cũ KHÔNG được nâng): chọn theo loại ≥ 60, phần khuôn 0,5/0,2/0,5/0,2.
+_CU_KHI_KHONG_NANG: Dict = {"chon": {"theo_hang": False},
+                            "khuon": {"phan": {"dai_tot": 0.5, "dai_tam": 0.2, "chan_dung": 0.5, "dang_khac": 0.2}}}
+PHIEN_BAN_CAU_HINH = 5
+DUOI_SAO_LUU_V5 = ".truoc-v5"
+
+
+def _lay(d: Dict, duong: Sequence[str]) -> object:
+    o: object = d
+    for k in duong:
+        if not isinstance(o, dict) or k not in o:
+            return None
+        o = o[k]
+    return o
+
+
+def _cho_nang_cap(goc: str, kenh: str) -> bool:
+    """Tệp cấu hình cũ của kênh có được NÂNG lên phiên bản 5 không: kenh.yaml `v7_nang_cap` (true/false) quyết nếu có
+    khai; không khai thì CHỈ kênh chạy bộ máy chiến lược (`chien_luoc` khai trong kenh.yaml) — kênh gốc tự tay khai V7
+    và không trộn công thức (vd. kênh làm ở máy khác) giữ y hệt trước, đúng luật "không đổi cách bản gốc làm video"."""
+    try:
+        from .kenh import TEP_KENH, doc_yaml  # noqa: PLC0415
+
+        cai = doc_yaml(os.path.join(duong_kenh(goc, kenh), TEP_KENH)) or {}
+    except Exception:  # noqa: BLE001
+        return False
+    gt = cai.get("v7_nang_cap")
+    if isinstance(gt, bool):
+        return gt
+    if isinstance(gt, str) and gt.strip():
+        return gt.strip().lower() not in ("false", "0", "khong", "không", "no", "off")
+    return bool(str(cai.get("chien_luoc") or "").strip())
+
+
+def nang_cap_v5(tep: Dict, mac_dinh: Dict) -> Tuple[Dict, List[str]]:
+    """`(tệp đã nâng lên phiên bản 5, các thay đổi)` — hàm thuần. Tệp đã ≥ 5 → trả nguyên, `[]`."""
+    try:
+        pb = int((tep or {}).get("phien_ban") or 0)
+    except (TypeError, ValueError):
+        pb = 0
+    if pb >= PHIEN_BAN_CAU_HINH:
+        return tep, []
+    from .phan_tuyen import MA_TRUNG_NIEN  # noqa: PLC0415
+
+    moi = copy.deepcopy(tep or {})
+    doi: List[str] = []
+    for duong, cu, gt_moi in _NANG_CAP_V5:
+        cha = _lay(moi, duong[:-1]) if len(duong) > 1 else moi
+        if not isinstance(cha, dict) or duong[-1] not in cha or cha[duong[-1]] != cu:
+            continue
+        gt = copy.deepcopy(gt_moi if gt_moi is not None else _lay(mac_dinh, duong))
+        if gt is None or gt == cu:
+            continue
+        cha[duong[-1]] = gt
+        doi.append("{0}: {1} → {2}".format(".".join(duong), json.dumps(cu, ensure_ascii=False),
+                                          json.dumps(gt, ensure_ascii=False)))
+    if str(moi.get("tep") or "").strip() == MA_TRUNG_NIEN and "tuoi" not in moi:
+        moi["tuoi"] = dict(copy.deepcopy(mac_dinh.get("tuoi") or CAU_HINH_MAC_DINH["tuoi"]), ai_lon_tuoi="tru")
+        doi.append("tuoi.ai_lon_tuoi: loai → tru (tệp trung niên)")
+    moi["phien_ban"] = PHIEN_BAN_CAU_HINH
+    return moi, doi
+
+
+def _mac_dinh_cu(mac_dinh: Dict) -> Dict:
+    """Mặc định với giá trị CŨ ở các khoá phiên bản 5 đổi — nền cho tệp cũ KHÔNG được nâng (xem `_cho_nang_cap`)."""
+    ra = copy.deepcopy(mac_dinh)
+    for duong, cu, gt_moi in _NANG_CAP_V5:
+        if gt_moi is not None:
+            continue  # bộ tuổi trung niên chỉ đổi khi tệp mang đúng bộ cũ — nền mặc định không có nó
+        cha = _lay(ra, duong[:-1]) if len(duong) > 1 else ra
+        if isinstance(cha, dict):
+            cha[duong[-1]] = copy.deepcopy(cu)
+    return _tron(ra, _CU_KHI_KHONG_NANG)
+
+
 def nap_cau_hinh(goc: str, kenh: str, *, ghi_neu_thieu: bool = True) -> Tuple[Dict, str]:
     """`(cấu hình, đường dẫn tệp)`. Chưa có tệp thì ghi bản mặc định ra để khách sửa.
 
     Bản mặc định là `_cau_hinh_mac_dinh_cho_kenh` (theo hồ sơ ngách của nhóm; không có hồ sơ thì
-    đúng `CAU_HINH_MAC_DINH`)."""
+    đúng `CAU_HINH_MAC_DINH`).
+
+    12/10/2026 — tệp phiên bản < 5: kênh được nâng (`_cho_nang_cap`) nhận luật phiên bản 5 ở mọi khoá còn giá trị mặc
+    định cũ (`nang_cap_v5`; `ghi_neu_thieu=True` thì ghi lại tệp, bản cũ sao lưu `…json.truoc-v5`); kênh không được
+    nâng giữ y hệt hành vi cũ (`_mac_dinh_cu`). Khoá `_nang_cap` (trong bộ nhớ) liệt kê thay đổi để báo cáo in ra."""
     duong = os.path.join(so.thu_muc_nghien_cuu(goc, kenh), TEP_CAU_HINH)
     mac_dinh = _cau_hinh_mac_dinh_cho_kenh(goc, kenh)
     try:
         with io.open(duong, encoding="utf-8") as tep:
-            return _tron(mac_dinh, json.load(tep)), duong
+            tho = json.load(tep)
     except (OSError, ValueError):
-        pass
+        tho = None
+    if isinstance(tho, dict):
+        try:
+            pb = int(tho.get("phien_ban") or 0)
+        except (TypeError, ValueError):
+            pb = 0
+        if pb >= PHIEN_BAN_CAU_HINH:
+            return _tron(mac_dinh, tho), duong
+        if not _cho_nang_cap(goc, kenh):
+            return _tron(_mac_dinh_cu(mac_dinh), tho), duong
+        moi, doi = nang_cap_v5(tho, mac_dinh)
+        if ghi_neu_thieu:
+            try:
+                sao = duong + DUOI_SAO_LUU_V5
+                if not os.path.exists(sao):
+                    with io.open(sao, "w", encoding="utf-8") as tep:
+                        json.dump(tho, tep, ensure_ascii=False, indent=2)
+                ghi = dict(moi)
+                for khoa in ("chon", "tuoi"):
+                    ghi.setdefault(khoa, copy.deepcopy(mac_dinh.get(khoa) or CAU_HINH_MAC_DINH[khoa]))
+                if isinstance(ghi.get("khuon"), dict):
+                    ghi["khuon"] = dict(ghi["khuon"])
+                    ghi["khuon"].setdefault("phan", copy.deepcopy(CAU_HINH_MAC_DINH["khuon"]["phan"]))
+                tam = duong + ".tmp"
+                with io.open(tam, "w", encoding="utf-8") as tep:
+                    json.dump(ghi, tep, ensure_ascii=False, indent=2)
+                os.replace(tam, duong)
+            except OSError:
+                pass  # không ghi được thì vẫn dùng bản đã nâng trong bộ nhớ
+        ra = _tron(mac_dinh, moi)
+        if doi:
+            ra["_nang_cap"] = doi
+        return ra, duong
     if ghi_neu_thieu:
         os.makedirs(os.path.dirname(duong), exist_ok=True)
         with io.open(duong, "w", encoding="utf-8") as tep:
@@ -373,8 +522,25 @@ def cau_hinh_cho_tep(ch_goc: Dict, ma_tep: str) -> Dict:
     ra["tep"] = ma_tep
 
     ra["tu_chan_dung"] = copy.deepcopy(ch_goc.get("tu_chan_dung") or CAU_HINH_MAC_DINH["tu_chan_dung"])
+    # 12/10/2026: kênh em luôn mang luật phiên bản 5 (chọn theo hạng, cổng tuổi theo tệp) — không chép `chon` của kênh
+    # gốc (kênh gốc có thể đang giữ luật cũ, xem `_cho_nang_cap`); khoá nào của kênh gốc còn giá trị mặc định CŨ thì
+    # kênh em nhận giá trị mới.
+    for duong, cu, gt_moi in _NANG_CAP_V5:
+        if gt_moi is not None:
+            continue
+        cha = _lay(ra, duong[:-1]) if len(duong) > 1 else ra
+        if isinstance(cha, dict) and cha.get(duong[-1]) == cu:
+            cha[duong[-1]] = copy.deepcopy(_lay(CAU_HINH_MAC_DINH, duong))
+    if isinstance(ra.get("khuon"), dict):
+        ra["khuon"]["phan"] = copy.deepcopy(CAU_HINH_MAC_DINH["khuon"]["phan"])
+    ra["phien_ban"] = PHIEN_BAN_CAU_HINH
+    ra["chon"] = copy.deepcopy(CAU_HINH_MAC_DINH["chon"])
+    ra["tuoi"] = copy.deepcopy(CAU_HINH_MAC_DINH["tuoi"])
     if ma_tep == MA_TRUNG_NIEN:
-        ra["tu_tuoi"] = ["70代", "80代", "老後", "定年", "シニア", "高齢", "還暦", "年金", "介護", "晩年"]
+        # P3a (12/10/2026): chỉ loại mốc già HƠN hẳn tệp (80代/介護/晩年/高齢); 老後/年金/定年/還暦/シニア/70代 là chính
+        # insight của tệp 40–60 (3/3 hit lớn của kênh trung niên). Nhãn AI "lon-tuoi" chỉ trừ điểm.
+        ra["tu_tuoi"] = list(TU_TUOI_TRUNG_NIEN)
+        ra["tuoi"]["ai_lon_tuoi"] = "tru"
         ra["tu_cach_lam"] = []
     else:
         ra["tu_tuoi"] = copy.deepcopy(ch_goc.get("tu_tuoi") or CAU_HINH_MAC_DINH["tu_tuoi"])
@@ -1188,6 +1354,45 @@ def _quy_no(vuot: Optional[float], view_tv: Optional[float], ch: Dict, tran: flo
     return round(max(0.0, d), 1)
 
 
+def _gt(d: object, khoa: str) -> object:
+    return d.get(khoa) if isinstance(d, dict) else getattr(d, khoa, None)
+
+
+def chon_theo_hang(ds: Sequence[object], ch: Dict) -> Tuple[List[object], List[Tuple[object, str]]]:
+    """12/10/2026 (P2) — `(dòng được sản xuất, [(dòng không đạt, lý do)])` từ bảng V7 ĐÃ XẾP (sau mọi cổng và bộ lọc
+    đã làm/trùng): `chon.theo_hang` bật → `top_n` dòng đầu, giữ thứ tự điểm, mỗi dòng còn phải qua sàn chất lượng
+    (`diem_san`; gấp trung vị kênh nguồn ≥ `vuot_san` khi biết). Tắt → luật cũ: chỉ "Làm ngay"/"Nên làm". Nhận dict
+    (dòng chuẩn) hay `DongV7`. Hàm thuần."""
+    cf = dict(CAU_HINH_MAC_DINH["chon"], **(ch.get("chon") or {}))
+    if not cf.get("theo_hang"):
+        nhan, bo = [], []
+        for d in ds:
+            (nhan if str(_gt(d, "loai") or "") in (LAM_NGAY, NEN_LAM) else bo).append(d)
+        return nhan, [(d, "dưới “{0}”".format(NEN_LAM)) for d in bo]
+    try:
+        top_n = max(1, int(cf.get("top_n") or 10))
+        san = float(cf.get("diem_san") or 0)
+        vuot_san = float(cf.get("vuot_san") or 0)
+    except (TypeError, ValueError):
+        top_n, san, vuot_san = 10, 0.0, 0.0
+    nhan, bo = [], []
+    for i, d in enumerate(ds):
+        try:
+            diem = float(_gt(d, "diem") or 0)
+        except (TypeError, ValueError):
+            diem = 0.0
+        vuot = _gt(d, "vuot")
+        if i >= top_n:
+            bo.append((d, "ngoài top {0} của ngày (hạng {1})".format(top_n, i + 1)))
+        elif diem < san:
+            bo.append((d, "dưới sàn {0:g} điểm ({1:g})".format(san, diem)))
+        elif vuot_san and isinstance(vuot, (int, float)) and vuot < vuot_san:
+            bo.append((d, "nguồn chỉ gấp {0:.1f}× trung vị kênh nguồn (sàn {1:g}×)".format(float(vuot), vuot_san)))
+        else:
+            nhan.append(d)
+    return nhan, bo
+
+
 def _xep_loai(diem: float, ch: Dict) -> str:
     lo = ch["loai"]
     if diem >= lo["lam_ngay"]:
@@ -1434,6 +1639,9 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
             suc_cum[c] = max(suc_cum.get(c, 0.0), v.suc)
 
     ghi_chu: List[str] = []
+    if ch.get("_nang_cap"):
+        ghi_chu.append("Cấu hình V7 nâng lên phiên bản {0} (chẩn đoán 12/10/2026): {1}.".format(
+            PHIEN_BAN_CAU_HINH, "; ".join(ch["_nang_cap"])))
     # Thừa hưởng cụm thắng của kênh anh em (kênh em chưa đủ video thắng riêng).
     try:
         thua_huong, gc = thanh_tich_nhom(goc, kenh, ch, videos, bay_gio)
@@ -1570,7 +1778,18 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         tu_tuoi = list(ch.get("tu_tuoi", []))
     else:
         tu_tuoi = tu_tuoi_nen + list(ch.get("tu_tuoi", []))
+    # 12/10/2026 — cổng tuổi THEO TỆP (`tuoi`): "tru" = không loại, trừ `tru` điểm (lý do ghi rõ).
+    tuoi_cf = ch.get("tuoi") or CAU_HINH_MAC_DINH["tuoi"]
+    tuoi_tk_tru = str(tuoi_cf.get("tu_khoa") or "loai").strip().lower() == "tru"
+    tuoi_ai_tru = str(tuoi_cf.get("ai_lon_tuoi") or "loai").strip().lower() == "tru"
+    try:
+        diem_tru_tuoi = float(tuoi_cf.get("tru", 10) or 0)
+    except (TypeError, ValueError):
+        diem_tru_tuoi = 10.0
+    tru_tuoi: Dict[int, str] = {}
+    thang_ma = {v.ma for v in thang}
     kh = ch["khuon"]
+    phan_kh = dict(CAU_HINH_MAC_DINH["khuon"]["phan"], **(kh.get("phan") or {}))
     ung: List[DongV7] = []
     loai: List[DongV7] = []
     for d in hang:
@@ -1605,9 +1824,9 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
             dong.bi_loai = "kênh nguồn đã bỏ"
         elif tt == getattr(db, "HET", "hết"):
             dong.bi_loai = "kênh nguồn đã hết (không còn làm / không còn phát triển)"
-        elif any(t and t in td for t in tu_tuoi):
+        elif any(t and t in td for t in tu_tuoi) and not tuoi_tk_tru:
             dong.bi_loai = "nhắm người lớn tuổi"
-        elif ket_ai and ket_ai.get("tep") == "lon-tuoi" and not tep_gia:
+        elif ket_ai and ket_ai.get("tep") == "lon-tuoi" and not tep_gia and not tuoi_ai_tru:
             dong.bi_loai = "AI: nhắm người lớn tuổi"
         # Soát từ loại trừ trên tiêu đề ĐÃ BỎ nhãn ngoặc: kênh カップ麺 đóng nhãn 【雑学】 cho cả video
         # tâm lý, và chính kênh ấy đã cho nguồn của V12 (thắng). Nhãn tuyến `khac` cũng do luật đó
@@ -1636,6 +1855,10 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         if dong.bi_loai:
             loai.append(dong)
             continue
+        if any(t and t in td for t in tu_tuoi):
+            tru_tuoi[id(dong)] = "nhắm người lớn tuổi (từ mốc tuổi)"
+        elif ket_ai and ket_ai.get("tep") == "lon-tuoi" and not tep_gia:
+            tru_tuoi[id(dong)] = "AI: nhắm người lớn tuổi"
 
         # 1. Cụm đang thắng — nhân THÀNH TÍCH THẬT của cụm (thắng/tổng), xem `thanh_tich_cum`.
         suc = max([suc_cum.get(c, -1.0) for c in dong.cum] or [-1.0])
@@ -1718,31 +1941,38 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         # 3. Nguồn nổ thật
         dong.diem_no = _quy_no(dong.vuot, tv, ch, ts["no"])
         if dong.vuot:
-            dong.ly_do.append("gấp {0} lần mức thường của kênh nguồn{1}".format(
-                _vn(dong.vuot, 1), " (kênh yếu)" if tv is not None and tv < ch["no"]["kenh_yeu_duoi"] else ""))
+            dong.ly_do.append("gấp {0} lần mức thường của kênh nguồn{1}{2}".format(
+                _vn(dong.vuot, 1),
+                " (≥ {0:g}× — tín hiệu mạnh nhất trên số của ta)".format(float(ch["no"]["boi_so_15"]))
+                if dong.vuot >= float(ch["no"]["boi_so_15"]) else "",
+                " (kênh yếu, −{0:g})".format(float(ch["no"]["tru_kenh_yeu"]))
+                if tv is not None and tv < ch["no"]["kenh_yeu_duoi"] else ""))
 
-        # 5. Khuôn
+        # 5. Khuôn — phần độ dài / phần dạng theo `khuon.phan` (12/10/2026; cũ ngầm 0,5/0,2/0,5/0,2).
         if phut is not None:
             if kh["tot"][0] <= phut <= kh["tot"][1]:
-                dong.diem_khuon += ts["khuon"] / 2
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["dai_tot"])
+                dong.ly_do.append("dài {0} — khuôn {1}–{2} phút của video thắng".format(
+                    _mmss(dong.dai_giay), kh["tot"][0], kh["tot"][1]))
             elif kh["tam"][0] <= phut <= kh["tam"][1]:
-                dong.diem_khuon += ts["khuon"] / 5
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["dai_tam"])
         if ket_ai:
             if dong.dang == "chan-dung":
-                dong.diem_khuon += ts["khuon"] / 2
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["chan_dung"])
             elif dong.dang == "cach-lam":
                 dong.ly_do.append("AI: dạng “cách làm”, khác dạng video thắng")
             else:
-                dong.diem_khuon += ts["khuon"] / 5
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["dang_khac"])
                 dong.ly_do.append("AI: dạng “{0}”".format(dong.dang or "khác"))
         else:
             cd = la_chan_dung(td, ch)
             if cd is False:
                 dong.ly_do.append("dạng “cách làm”, khác dạng video thắng")
             elif cd is True:
-                dong.diem_khuon += ts["khuon"] / 2
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["chan_dung"])
             else:
-                dong.diem_khuon += ts["khuon"] / 5
+                dong.diem_khuon += ts["khuon"] * float(phan_kh["dang_khac"])
+        dong.diem_khuon = round(dong.diem_khuon, 2)
         if ket_ai and ket_ai.get("ly_do"):
             dong.ly_do.append("AI: " + str(ket_ai["ly_do"]))
         ung.append(dong)
@@ -1776,7 +2006,9 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         if dong.tang and dong.tang > 0:
             hang_pt = (tang.index(dong.tang) / (len(tang) - 1)) if len(tang) > 1 else 1.0
             dong.diem_len = round(ts["len"] * (0.3 + 0.7 * hang_pt), 1)
-            dong.ly_do.append("đang lên +{0:,.0f} view/ngày".format(dong.tang).replace(",", "."))
+            # 12/10/2026: trọng số 0 (cột này tương quan ÂM với kết quả trên số của ta) — vẫn ghi để người đọc thấy.
+            dong.ly_do.append("đang lên +{0:,.0f} view/ngày{1}".format(
+                dong.tang, "" if ts["len"] else " (chỉ để xem — không tính điểm)").replace(",", "."))
         # 4b. Xu hướng cụm trên trang chủ máy ảo (±, có trần) — xem `xu_huong_cum`. TRUNG BÌNH
         # các cụm của ứng viên, không cộng dồn: `tri-tue` và `tep-hoc-van-iq` cùng đo một tín
         # hiệu IQ, cộng dồn là đếm nó hai lần.
@@ -1791,9 +2023,19 @@ def cham(goc: str, kenh: str, *, bay_gio: Optional[_dt.datetime] = None) -> KetQ
         # Trùng đề tài với video đã đăng: TRỪ chứ không loại — AI có thể sai, và làm tiếp đề tài đang thắng
         # đôi khi là đúng (V11·V12 gần giống nhau mà cả hai thắng).
         if dong.trung >= ch_ai["nguong_trung"]:
-            dong.diem = max(0, dong.diem - int(ch_ai["tru_trung"]))
-            dong.ly_do.append("AI: trùng đề tài {0}% với video đã đăng “{1}” (−{2})".format(
-                dong.trung, (ten_minh.get(dong.trung_voi) or dong.trung_voi)[:40], ch_ai["tru_trung"]))
+            if dong.trung_voi and dong.trung_voi in thang_ma:
+                # 12/10/2026 (luật số 1 của TL4): gần một video THẮNG của chính kênh = làm tiếp cái thắng (cùng chủ ngữ
+                # hẹp, góc mới) — không trừ. Trùng hẳn nguồn/tiêu đề vẫn bị chặn ở cổng "đã làm"/so chữ.
+                dong.ly_do.append("AI: gần video THẮNG “{0}” ({1}%) — biến thể làm tiếp, không trừ".format(
+                    (ten_minh.get(dong.trung_voi) or dong.trung_voi)[:40], dong.trung))
+            else:
+                dong.diem = max(0, dong.diem - int(ch_ai["tru_trung"]))
+                dong.ly_do.append("AI: trùng đề tài {0}% với video đã đăng “{1}” (−{2})".format(
+                    dong.trung, (ten_minh.get(dong.trung_voi) or dong.trung_voi)[:40], ch_ai["tru_trung"]))
+        if id(dong) in tru_tuoi and diem_tru_tuoi:
+            dong.diem = max(0, dong.diem - int(round(diem_tru_tuoi)))
+            dong.ly_do.append("{0} — tệp này chỉ trừ điểm, không loại (−{1:g})".format(tru_tuoi[id(dong)],
+                                                                                    diem_tru_tuoi))
         if dong.kenh in kenh_khong_ai and TRU_KHONG_AI:
             dong.diem = max(0, dong.diem - TRU_KHONG_AI)
             dong.ly_do.append("kênh nguồn người thật quay, không làm bằng AI (−{0})".format(TRU_KHONG_AI))
@@ -1914,6 +2156,12 @@ def luu_bao_cao(goc: str, kenh: str, kq: KetQua, *, hom_nay: Optional[_dt.date] 
     dong = ["# Công thức V7 — {0} — {1}".format(kenh, hom_nay.isoformat()), "",
             "Thang: cụm đang thắng {cum} · bảng đề xuất {pool} · nguồn nổ {no} · đang lên {len} · khuôn {khuon}."
             .format(**ts), ""]
+    cf = dict(CAU_HINH_MAC_DINH["chon"], **(kq.cau_hinh.get("chon") or {}))
+    if cf.get("theo_hang"):
+        dong += ["Sản xuất nhận THEO HẠNG: top {0} của bảng này (sau cổng, sau lọc đã làm/trùng), sàn {1:g} điểm và "
+                 "gấp ≥ {2:g}× trung vị kênh nguồn — không còn mốc tuyệt đối “{3}” ≥ {4}.".format(
+                     cf.get("top_n"), float(cf.get("diem_san") or 0), float(cf.get("vuot_san") or 0), NEN_LAM,
+                     (kq.cau_hinh.get("loai") or {}).get("nen_lam", 60)), ""]
     for cb in kq.canh_bao:
         dong.append("> ⚠ " + cb)
     if kq.ghi_chu:

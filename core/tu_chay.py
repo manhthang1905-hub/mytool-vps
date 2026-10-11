@@ -1270,6 +1270,12 @@ def _uu_tien_co_kho(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
     """
     if len(ds) < 2:
         return ds[0]
+    if ds[0].get("ep_chon"):
+        # 12/10/2026: nguồn bộ não ÉP CHỌN không bị đổi sang nguồn khác chỉ vì nguồn kia có lời thoại sẵn — khâu kịch
+        # bản vẫn thử lấy lời thoại (trạm `/loi-thoai/can-lay` thấy cùng bảng nên trình duyệt đã đi hút nó).
+        log("  giữ nguồn bộ não ép chọn “{0}” (không đổi theo kho lời thoại).".format(
+            str(ds[0].get("tieu_de") or ds[0].get("ma") or "?")[:60]))
+        return ds[0]
     try:
         from . import loi_thoai as kho  # noqa: PLC0415 — nhập muộn như các module khác ở đây
 
@@ -1313,34 +1319,78 @@ SO_TOT_CAN = 3
 NGUONG_TAM_DUNG = 65
 
 
+#: kenh.yaml — `bien_tap_xep_lai: true` trả biên tập viên AI về luật CŨ (được đảo thứ tự công thức). Mặc định false
+#: (12/10/2026): biên tập CHỈ PHỦ QUYẾT. Giữ khoá để chạy thí nghiệm A/B (P10) hoặc hoàn tác không cần sửa mã.
+KHOA_BIEN_TAP_XEP_LAI = "bien_tap_xep_lai"
+
+
+def _ghim_ep_chon(ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Dòng bộ não ÉP CHỌN (`ep_chon`) đứng đầu, giữ thứ tự trong từng nhóm."""
+    ep = [d for d in ds if d.get("ep_chon")]
+    return ep + [d for d in ds if not d.get("ep_chon")] if ep else ds
+
+
 def _ap_cham_bien_tap(ds: List[Dict[str, Any]], ket: Dict[str, Any],
-                      log: Callable[[str], None]) -> List[Dict[str, Any]]:
-    """Áp phán quyết của cổng chất lượng (`bien_tap_content.chon_cua_so`) lên bảng công thức:
-    dòng TỐT/TẠM theo thứ tự biên tập (mang `bien_tap` = hạng/điểm/lý do), dòng TỆ BỊ BỎ HẲN (không nối
-    lại cuối bảng như trước — trước đó cửa kho lời thoại còn vớt được một dòng bị loại), dòng chưa
-    được chấm (ngoài các cửa sổ đã đọc) giữ sau cùng theo thứ tự công thức, không có `bien_tap`."""
+                      log: Callable[[str], None], chi_phu_quyet: bool = True) -> List[Dict[str, Any]]:
+    """Áp phán quyết của cổng chất lượng (`bien_tap_content.chon_cua_so`) lên bảng công thức.
+
+    ═══ CHỈ PHỦ QUYẾT (12/10/2026, mặc định) ═══ `workspace/chan-doan/v7-chon-content-2026-10-12.md` mục 0.5: biên tập
+    AI được "đảo hoàn toàn thứ tự" thì lấy nguồn ở hạng trung vị 8 (sâu nhất 58), đoán "thắng" 49 lần đúng 5, và nuốt cả
+    14 đề cử của bộ não; điểm của nó tương quan +0,1–0,2 với kết quả. Giờ: THỨ TỰ CÔNG THỨC GIỮ NGUYÊN; dòng TỆ (lệch
+    ngách / không an toàn / trùng ý / không chép được — có lý do) bị BỎ HẲN; dòng TỐT/TẠM mang `bien_tap` (hạng, điểm,
+    lý do, dự đoán — chỉ để ghi sổ và chấm Brier, `core.du_doan_bien_tap`), `che_do` = "phu_quyet"; dòng chưa chấm giữ
+    chỗ (cổng chất lượng bỏ nó vì chưa ai kiểm). Dòng bộ não ép chọn luôn đứng đầu.
+
+    `chi_phu_quyet=False` (kenh.yaml `bien_tap_xep_lai: true`): luật cũ — TỐT/TẠM theo thứ tự biên tập, TỆ bỏ, dòng
+    chưa chấm sau cùng (vẫn ghim dòng ép chọn)."""
     theo_ma = {str(d.get("ma") or ""): (i, d) for i, d in enumerate(ds)}
     hang = {so.ma_video(str(k)) or str(k): v for k, v in (ket.get("hang") or {}).items()}
     diem = {so.ma_video(str(k)) or str(k): v for k, v in (ket.get("diem_bt") or {}).items()}
     ly = {so.ma_video(str(k)) or str(k): v for k, v in (ket.get("ly_do") or {}).items()}
     du_doan = {so.ma_video(str(k)) or str(k): v for k, v in (ket.get("du_doan") or {}).items()}
-    moi: List[Dict[str, Any]] = []
+
+    def gan(i: int, d: Dict[str, Any], ma: str) -> Dict[str, Any]:
+        d = dict(d)
+        d["bien_tap"] = {"hang_cong_thuc": i + 1, "ly_do": str(ly.get(ma) or ""), "hang": hang[ma],
+                         "diem": diem.get(ma), "du_doan": du_doan.get(ma) or {},
+                         "che_do": "phu_quyet" if chi_phu_quyet else "xep_lai"}
+        if ly.get(ma):
+            d["ly_do"] = list(d.get("ly_do") or []) + ["Biên tập AI [{0}{1}]: {2}".format(
+                hang[ma], " {0}".format(diem[ma]) if diem.get(ma) is not None else "", str(ly[ma])[:300])]
+        return d
+
+    bo = [ma for ma, h in hang.items() if h == "TE" and ma in theo_ma]
+    if chi_phu_quyet:
+        moi: List[Dict[str, Any]] = []
+        for i, d in enumerate(ds):
+            ma = str(d.get("ma") or "")
+            h = hang.get(ma)
+            if h == "TE":
+                continue
+            # Dòng chưa chấm vẫn mang dấu chế độ (hạng rỗng) — để cổng biết bảng ĐÃ qua biên tập, không coi như
+            # "biên tập tắt" khi mọi dòng đã chấm đều bị phủ quyết.
+            moi.append(gan(i, d, ma) if h in ("TOT", "TAM") else dict(
+                d, bien_tap={"hang_cong_thuc": i + 1, "hang": "", "che_do": "phu_quyet"}))
+        moi = _ghim_ep_chon(moi)
+        dau = next((d for d in moi if isinstance(d.get("bien_tap"), dict)), None)
+        log("  Biên tập AI (CHỈ PHỦ QUYẾT — giữ thứ tự công thức): loại {0} TỆ{1}; {2}.".format(
+            len(bo), ": " + " | ".join("“{0}”: {1}".format(str(theo_ma[m][1].get("tieu_de") or "")[:36],
+                                                         str(ly.get(m) or "TỆ")[:90]) for m in bo[:5]) if bo else "",
+            "đầu bảng còn lại “{0}” [{1}] (hạng {2} của công thức)".format(
+                str(dau.get("tieu_de") or "")[:60], dau["bien_tap"]["hang"], dau["bien_tap"]["hang_cong_thuc"])
+            if dau else "không còn dòng nào đã chấm"))
+        return moi
+    moi = []
     da: set = set()
     for muc in ket.get("thu_tu") or []:
         ma = so.ma_video(str(muc)) or str(muc)
         if ma not in theo_ma or ma in da or hang.get(ma) not in ("TOT", "TAM"):
             continue
         i, d = theo_ma[ma]
-        d = dict(d)
-        d["bien_tap"] = {"hang_cong_thuc": i + 1, "ly_do": str(ly.get(ma) or ""), "hang": hang[ma],
-                         "diem": diem.get(ma), "du_doan": du_doan.get(ma) or {}}
-        if ly.get(ma):
-            d["ly_do"] = list(d.get("ly_do") or []) + ["Biên tập AI [{0}{1}]: {2}".format(
-                hang[ma], " {0}".format(diem[ma]) if diem.get(ma) is not None else "", str(ly[ma])[:300])]
-        moi.append(d)
+        moi.append(gan(i, d, ma))
         da.add(ma)
-    bo = [ma for ma, h in hang.items() if h == "TE" and ma in theo_ma]
     con = [d for d in ds if str(d.get("ma") or "") not in da and str(d.get("ma") or "") not in hang]
+    moi = _ghim_ep_chon(moi)
     if moi:
         log("  Biên tập AI xếp lại {0} ứng viên đã chấm (bỏ {1} TỆ) — đầu bảng mới: “{2}” [{3}] (hạng {4} của "
             "công thức).".format(len(moi), len(bo), str(moi[0].get("tieu_de") or "")[:60],
@@ -1377,11 +1427,33 @@ def _cong_chat_luong(ds: List[Dict[str, Any]], log: Callable[[str], None],
     Không có TỐT nào → TẠM có lý do và điểm ≥ `NGUONG_TAM_DUNG` (log CẢNH BÁO). Vẫn không có → trả []
     (nơi gọi không mở lượt, cắm cờ nghiên cứu lại). Dòng không đạt được log từng dòng — không im lặng.
     Không có phán quyết nào (chế độ thử, biên tập tắt/hỏng) → giữ nguyên bảng, log một dòng."""
+    pq = [d for d in ds if isinstance(d.get("bien_tap"), dict) and d["bien_tap"].get("che_do") == "phu_quyet"]
     co_cham = [d for d in ds if isinstance(d.get("bien_tap"), dict) and d["bien_tap"].get("hang")]
-    if not co_cham:
+    if not co_cham and not pq:
         if ds:
             log("  [CỔNG NGUỒN] bảng chưa qua biên tập AI (tắt/hỏng/chế độ thử) — dùng thứ tự công thức.")
         return ds
+    if pq:
+        # 12/10/2026 — biên tập CHỈ PHỦ QUYẾT: mọi dòng đã chấm mà không bị loại (TỐT/TẠM) qua cổng, GIỮ thứ tự công
+        # thức (TỆ đã bị bỏ ở `_ap_cham_bien_tap`; dòng chưa chấm thì chưa ai kiểm — không qua). Đăng thưa còn kho đệm
+        # (`chi_tot`) thì chỉ TỐT — trừ dòng bộ não ép chọn.
+        qua = [d for d in pq if d["bien_tap"].get("hang") in ("TOT", "TAM")]
+        if chi_tot:
+            qua = [d for d in qua if d["bien_tap"]["hang"] == "TOT" or d.get("ep_chon")]
+            if not qua:
+                log("  [CỔNG NGUỒN] không có nguồn TỐT — {0}: KHÔNG nhận nguồn TẠM, không mở lượt (chờ nguồn TỐT)."
+                    .format(chi_tot))
+                return []
+        if qua:
+            log("  [CỔNG NGUỒN] chỉ phủ quyết: {0} nguồn qua ({1} TỐT · {2} TẠM), thứ tự công thức: {3}".format(
+                len(qua), sum(1 for d in qua if d["bien_tap"]["hang"] == "TOT"),
+                sum(1 for d in qua if d["bien_tap"]["hang"] == "TAM"), " | ".join(
+                    "“{0}” (hạng {1}{2})".format(str(d.get("tieu_de") or "")[:40], d["bien_tap"].get("hang_cong_thuc"),
+                                               ", bộ não ép" if d.get("ep_chon") else "") for d in qua[:3])))
+            return qua
+        log("  [CỔNG NGUỒN] KHÔNG nguồn nào qua: biên tập phủ quyết mọi dòng đã chấm ({0} dòng chưa chấm không được "
+            "dùng) — không mở lượt, không tốn tiền sản xuất; cắm cờ để nghiên cứu nhóm tìm nguồn mới.".format(len(pq)))
+        return []
 
     def co_ly_do(d: Dict[str, Any]) -> bool:
         return len(str(d["bien_tap"].get("ly_do") or "").strip()) >= 8
@@ -1443,6 +1515,7 @@ def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
         return ds
     ten_ct, _ly = chon_cong_thuc(goc, ma_kenh, co_v7_truoc)
     tep = str(_cai_kenh(goc, ma_kenh, "tep", "") or "")
+    chi_pq = not _cai_kenh(goc, ma_kenh, KHOA_BIEN_TAP_XEP_LAI, False)
     # 30/09/2026 — CỔNG CHẤT LƯỢNG: `chon_cua_so` chấm TỪNG ứng viên TỐT/TẠM/TỆ theo cửa sổ 20 dòng,
     # mở cửa sổ kế khi chưa đủ nguồn TỐT (tới `SO_CUA_SO_BIEN_TAP` cửa sổ), nhớ phán quyết 18 giờ.
     ham_cs = getattr(bien_tap_content, "chon_cua_so", None)
@@ -1455,7 +1528,13 @@ def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
             log("  (biên tập AI hỏng: {0}) — giữ thứ tự của công thức.".format(str(loi)[:120]))
             return ds
         if isinstance(ket_cs, dict) and isinstance(ket_cs.get("hang"), dict):
-            return _ap_cham_bien_tap(ds, ket_cs, log)
+            try:  # 12/10/2026: dự đoán của biên tập → sổ xác suất (chấm Brier sau), KHÔNG ảnh hưởng thứ tự
+                from . import du_doan_bien_tap  # noqa: PLC0415
+
+                du_doan_bien_tap.ghi(goc, ma_kenh, day_du, ket_cs)
+            except Exception as loi:  # noqa: BLE001
+                log("  (sổ dự đoán biên tập: chưa ghi được — {0})".format(str(loi)[:100]))
+            return _ap_cham_bien_tap(ds, ket_cs, log, chi_phu_quyet=chi_pq)
         return ds
     top = [_chuan_hoa_cho_bien_tap(goc, ma_kenh, d, ten_ct, tep) for d in ds[:SO_UNG_VIEN_BIEN_TAP]]
     try:
@@ -1506,23 +1585,33 @@ def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
         da.add(ma)
     if not moi:
         return ds
+    if chi_pq:
+        # 12/10/2026 — chỉ phủ quyết: hợp đồng cũ `chon` không chấm hạng → không loại được gì; giữ thứ tự công thức,
+        # chỉ gắn lý do biên tập vào các dòng nó đã nhắc.
+        theo = {str(d.get("ma") or ""): d for d in moi}
+        ra = [theo.get(str(d.get("ma") or ""), d) for d in ds]
+        log("  Biên tập AI (CHỈ PHỦ QUYẾT): {0} ứng viên có lý do biên tập — giữ thứ tự công thức.".format(len(moi)))
+        return _ghim_ep_chon(ra)
     con = [d for d in ds[:SO_UNG_VIEN_BIEN_TAP] if str(d.get("ma") or "") not in da]
     log("  Biên tập AI xếp lại {0} ứng viên đầu bảng — đầu bảng mới: “{1}” (hạng {2} của công thức)."
         .format(len(moi), str(moi[0].get("tieu_de") or "")[:60], moi[0]["bien_tap"]["hang_cong_thuc"]))
-    return moi + con + list(ds[SO_UNG_VIEN_BIEN_TAP:])
+    return _ghim_ep_chon(moi + con + list(ds[SO_UNG_VIEN_BIEN_TAP:]))
 
 
 def _chon_nguon(goc: str, ma_kenh: str, *a: Any, **kw: Any) -> Optional[Dict[str, Any]]:
     """Vỏ của `_chon_nguon_goc` (03/10/2026): sau MỘT lần chọn thật (`goi_chat` có), mọi đề cử còn mở của bộ
     não (`core/nao`, lệnh `uu-tien-nguon`) coi như đã dùng. Lỗi ở phía não không ảnh hưởng việc chọn."""
+    chon: Optional[Dict[str, Any]] = None
     try:
-        return _chon_nguon_goc(goc, ma_kenh, *a, **kw)
+        chon = _chon_nguon_goc(goc, ma_kenh, *a, **kw)
+        return chon
     finally:
         if kw.get("goi_chat") is not None:
             try:
                 from . import nao  # noqa: PLC0415
 
-                nao.dung_xong_de_cu(goc, ma_kenh)
+                # 12/10/2026: đưa link ĐÃ CHỌN — đề cử chỉ `xong` khi gói bàn giao dùng đúng link (`nao.ghi_ban_giao`).
+                nao.dung_xong_de_cu(goc, ma_kenh, chon=str((chon or {}).get("link") or ""))
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1668,6 +1757,12 @@ def _chon_nguon_goc(goc: str, ma_kenh: str, co_v7_truoc: bool, loai_tru: set,
                                       doc_danh_sach=doc_danh_sach, log=log,
                                       da_lam_tieu_de=da_lam_tieu_de,
                                       nguong_giong_tieu_de=nguong_giong_tieu_de, tham_do=False)
+            try:  # 12/10/2026: đề cử bộ não giữ ghim cả ở bảng khai thác
+                from . import nao  # noqa: PLC0415
+
+                ds = nao.ap_uu_tien(goc, ma_kenh, ds, None)
+            except Exception:  # noqa: BLE001
+                pass
             ds = _cong_chat_luong(_bien_tap_ai(goc, ma_kenh, ds, goi_chat, co_v7_truoc, log), log,
                                   **({"chi_tot": chi_tot} if chi_tot else {}))
     if thong_ke is not None:
@@ -1694,6 +1789,16 @@ def _chon_khong_trung_y(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
     một ứng viên chưa chắc trùng còn hơn không sản xuất gì đêm nay.
     """
     da_loai: set = set()
+    # 12/10/2026: biến thể của video THẮNG của chính kênh KHÔNG phải trùng ý (luật số 1 của TL4) — bỏ chúng khỏi danh
+    # sách so (`kiem_trung_y.bo_video_thang`); trùng thứ đã làm/lên kế hoạch mà không thắng, hay của anh em, vẫn chặn.
+    try:
+        da_lam_kiem, n_mien = kiem_trung_y.bo_video_thang(
+            da_lam_tieu_de, kiem_trung_y.khoa_video_thang(goc, ma_kenh), ma_kenh)
+    except Exception:  # noqa: BLE001
+        da_lam_kiem, n_mien = list(da_lam_tieu_de), 0
+    if n_mien:
+        log("  [Việc 5b] {0} dòng đã làm thuộc video THẮNG/đang nóng của kênh — biến thể góc mới được phép, không "
+            "tính là trùng ý.".format(n_mien))
     for lan in range(1, SO_LAN_KIEM_TRUNG_Y_TOI_DA + 1):
         con_lai = [d for d in ds if str(d.get("ma") or "") not in da_loai]
         if not con_lai:
@@ -1702,7 +1807,7 @@ def _chon_khong_trung_y(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
         tieu_de = str(ung_vien.get("tieu_de") or "")
         ma = str(ung_vien.get("ma") or "")
         trung, voi, ly_do = kiem_trung_y.kiem_trung_y(
-            goi_chat, tieu_de, da_lam_tieu_de,
+            goi_chat, tieu_de, da_lam_kiem,
             khoa=_khoa_kiem_trung_y(ma_kenh, ma, lan), ghi=log)
         if not trung:
             return ung_vien
@@ -3050,6 +3155,14 @@ def _chay_mot_ngay_trong_khoa(
                     tu_hoc.ghi_van_tu_luot(goc, ma_kenh, ma_goi, run.get("nguon") or {})
                 except Exception as loi_hoc:  # noqa: BLE001
                     log("  (tự học: chưa ghi được ván {0}: {1})".format(ma_goi, str(loi_hoc)[:100]))
+                try:  # 12/10/2026: đề cử bộ não chỉ `xong` khi gói bàn giao dùng ĐÚNG link đề cử
+                    from . import nao  # noqa: PLC0415
+
+                    xong = nao.ghi_ban_giao(goc, ma_kenh, ma_goi, str((run.get("nguon") or {}).get("link") or ""))
+                    if xong:
+                        log("  [bộ não] đề cử {0} → {1}: đã bàn giao đúng nguồn đề cử.".format(", ".join(xong), ma_goi))
+                except Exception as loi_nao:  # noqa: BLE001
+                    log("  (bộ não: chưa ghi được bàn giao {0}: {1})".format(ma_goi, str(loi_nao)[:100]))
                 # Một content chỉ là quyết định cho video này. Khi đã bàn giao
                 # sang khâu đăng, bỏ đúng lựa chọn vừa dùng để lần kế tiếp được
                 # chấm lại trên dữ liệu mới thay vì tích một kho content cũ.

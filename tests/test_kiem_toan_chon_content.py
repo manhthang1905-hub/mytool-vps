@@ -183,7 +183,20 @@ def test_ap_cham_bo_te_va_cong_chat_luong(tmp_path):
     ket = {"thu_tu": [L[2], L[1]], "hang": {L[0]: "TE", L[1]: "TAM", L[2]: "TOT", L[3]: "TE"},
            "diem_bt": {L[1]: 70, L[2]: 81}, "ly_do": {L[2]: "cụm đang thắng, chân dung", L[1]: "hơi cũ nhưng hợp tệp"}}
     log = []
-    moi = tu_chay._ap_cham_bien_tap(ds, ket, log.append)
+    # 12/10/2026 — mặc định CHỈ PHỦ QUYẾT: giữ thứ tự công thức, TỆ bỏ hẳn, TỐT/TẠM cùng qua cổng.
+    pq = tu_chay._ap_cham_bien_tap(ds, ket, log.append)
+    assert [d["ma"] for d in pq] == [ds[1]["ma"], ds[2]["ma"]], "thứ tự công thức, dòng TỆ bị bỏ hẳn"
+    assert pq[0]["bien_tap"]["che_do"] == "phu_quyet" and pq[0]["bien_tap"]["hang_cong_thuc"] == 2
+    assert [d["ma"] for d in tu_chay._cong_chat_luong(pq, log.append)] == [ds[1]["ma"], ds[2]["ma"]]
+    assert tu_chay._cong_chat_luong(pq, log.append, chi_tot="kho còn 1") == [pq[1]]      # đăng thưa: chỉ TỐT
+    # Phủ quyết HẾT mọi dòng đã chấm (còn dòng chưa chấm) → không mở lượt, KHÔNG coi như "biên tập tắt".
+    het = tu_chay._ap_cham_bien_tap(ds, dict(ket, hang={L[0]: "TE", L[1]: "TE", L[2]: "TE"}), log.append)
+    assert [d["ma"] for d in het] == [ds[3]["ma"]] and tu_chay._cong_chat_luong(het, log.append) == []
+    # Dòng bộ não ép chọn luôn đứng đầu (vẫn bị phủ quyết được).
+    ep = [dict(d, ep_chon=(i == 2)) for i, d in enumerate(ds)]
+    assert [d["ma"] for d in tu_chay._ap_cham_bien_tap(ep, ket, log.append)][:1] == [ds[2]["ma"]]
+    # Luật cũ (kenh.yaml bien_tap_xep_lai: true): theo thứ tự biên tập.
+    moi = tu_chay._ap_cham_bien_tap(ds, ket, log.append, chi_phu_quyet=False)
     assert [d["ma"] for d in moi] == [ds[2]["ma"], ds[1]["ma"]], "dòng TỆ bị bỏ hẳn, không nối lại cuối"
     assert moi[0]["bien_tap"]["hang"] == "TOT" and moi[0]["bien_tap"]["hang_cong_thuc"] == 3
     qua = tu_chay._cong_chat_luong(moi, log.append)

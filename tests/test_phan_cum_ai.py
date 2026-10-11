@@ -102,6 +102,12 @@ def test_bien_tap_ai_xep_lai_va_ghi_ly_do(tmp_path, monkeypatch):
                 "ly_do": "chung"}
 
     _gia_bien_tap(monkeypatch, types.SimpleNamespace(chon=chon))
+    # 12/10/2026 — mặc định chỉ phủ quyết: giữ thứ tự công thức, chỉ gắn lý do biên tập.
+    ds = tu_chay._bien_tap_ai(goc, "K", _ds(), lambda *a, **k: "", False, lambda m: None)
+    assert [d["ma"] for d in ds] == ["aaaaaaaaaa0", "aaaaaaaaaa1", "aaaaaaaaaa2"]
+    assert ds[2]["bien_tap"] == {"hang_cong_thuc": 3, "ly_do": "hợp tệp hơn"}
+    # Luật cũ khi kênh khai `bien_tap_xep_lai: true`.
+    goc = _goc(tmp_path / "xep", "K", "bien_tap_xep_lai: true\n")
     ds = tu_chay._bien_tap_ai(goc, "K", _ds(), lambda *a, **k: "", False, lambda m: None)
     assert [d["ma"] for d in ds] == ["aaaaaaaaaa2", "aaaaaaaaaa0", "aaaaaaaaaa1"]
     assert ds[0]["bien_tap"] == {"hang_cong_thuc": 3, "ly_do": "hợp tệp hơn"}

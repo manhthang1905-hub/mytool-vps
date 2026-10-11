@@ -163,6 +163,17 @@ def truoc_luot(goc: str, ma_kenh: str, goi_chat: Optional[Callable[..., str]],
     except Exception as loi:  # noqa: BLE001
         log("  0) [vòng học] thống kê theo công thức hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
 
+    # 5b) 12/10/2026: chấm BRIER dự đoán của biên tập AI (biên tập chỉ phủ quyết; sổ này để đo hiệu chuẩn) — cùng
+    #     debounce bước 3, try riêng.
+    try:
+        from . import du_doan_bien_tap  # noqa: PLC0415
+
+        duong_br = os.path.join(du_doan_bien_tap._thu_muc(goc, ma_kenh), du_doan_bien_tap.TEP_BRIER)  # noqa: SLF001
+        if _can_hoc_lai(goc, ma_kenh, co_so_moi, bay_gio=bay_gio, duong=duong_br):
+            ket["brier_bien_tap"] = du_doan_bien_tap.ghi_tom_tat(goc, ma_kenh)
+    except Exception as loi:  # noqa: BLE001
+        log("  0) [vòng học] chấm Brier biên tập hỏng: {0} — bỏ qua.".format(str(loi)[:200]))
+
     # 6) Tự học (`core/tu_hoc`): chấm ván + bảng điểm cho người đọc — try riêng, không chặn gì.
     #    07/10/2026: vòng thật (`goi_chat` có) thì ván thiếu nhãn cụm được nhãn THEO NGHĨA (≤ 60 tiêu đề/lượt,
     #    qua van ví — `core/cum_y_nghia`); `goi_chat=None` (bài kiểm, chạy tay) thì không gọi AI.
