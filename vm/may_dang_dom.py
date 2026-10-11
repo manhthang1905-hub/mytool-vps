@@ -9,6 +9,9 @@ Cách chạy:
     python vm/may_dang_dom.py --kiem-dom --kenh TL1-T7 [--sau] [--ghi-dom-day-du]
     python vm/may_dang_dom.py --kenh TL1-T7 --ma TL1-T7-0007 --bo-loc-ngay
     python vm/may_dang_dom.py --kenh TL3-T7 --sua-video [--kiem-dom [--video <id>]]   # sửa video cũ (hang-sua.json)
+    python vm/may_dang_dom.py --kenh TL2-T7 --hoan-tat TL2-T7-0024 [--kiem-dom]      # LÀM NỐT gói hỏng dở
+        (id trong sổ, đã tải xong): nháp → mở lại nháp; riêng tư → hẹn lịch ở trang sửa; KHÔNG tải bản mới.
+        --kiem-dom = chỉ đọc (tra kênh + trang sửa, in việc sẽ làm) → vm/logs/kiem-dom/hoan-tat-<kênh>.json
 
 Mã thoát (hợp đồng mục 8 — agent dựa vào đây để quyết có lùi đường ảnh không):
 
@@ -135,7 +138,25 @@ CHU_TRANG_THAI = {
     # 09/10: Studio vi đo thật (TL2-T7) — banner đỏ đầu trình soạn khi phần tử bắt đầu ngoài 20 giây cuối.
     "mhkt_loi_20s": ["20 giây cuối", "last 20 seconds", "final 20 seconds",
                      "最後の 20 秒", "最後の20秒", "最後の 20秒", "마지막 20초"],
+    # 12/10/2026: hộp hiện SAU khi bấm «Lên lịch» lúc Studio còn kiểm tra (TL2-T7-0024, ảnh
+    # 20261011-214828-hong): «Chúng tôi vẫn đang kiểm tra nội dung của bạn … Đã hiểu».
+    "kiem_noi_dung": ["vẫn đang kiểm tra nội dung", "Quay lại trước khi video của bạn được xuất bản",
+                      "still checking your content", "We're still checking",
+                      "まだコンテンツを確認しています", "コンテンツを確認しています", "コンテンツのチェック",
+                      "まだチェック", "콘텐츠를 확인하는 중"],
 }
+#: 12/10/2026 — TIẾP NHÁP (sửa luật 30/09 "nháp để kệ, tải mới" — TL2-T7-0024 / TL6-T7-K2-0007 mỗi lượt
+#: hỏng sinh thêm một nháp thừa mà vẫn không lên lịch): gói có id trong sổ, ĐÃ có bằng chứng tải xong và
+#: id còn là NHÁP trên kênh → MỞ LẠI nháp đó làm nốt, không tải bản mới. Tối đa ngần này lần/ngày/gói;
+#: quá trần thì DỪNG (báo chủ kênh, `--hoan-tat` chạy tay vẫn được) — không quay về tải mới.
+TRAN_TIEP_NHAP_NGAY = 2
+#: Thẻ SEO: Studio từ chối thẻ quá dài / lẫn ký tự lạ → nút «Tiếp» TẮT ở bước Chi tiết (TL6-T7-K2-0007
+#: 11–12/10: cột thẻ dính đoạn mô tả «━━━ 📌 目次 00:00 …», một thẻ 207 ký tự — 3 lượt "nut_tiep: không
+#: thấy", 3 nháp thừa). Máy đăng LỌC thẻ trước khi gõ (thẻ thật dài nhất các kênh: 16 ký tự).
+THE_TOI_DA_KY_TU = 30
+THE_TONG_TOI_DA = 500
+#: Chờ nút «Tiếp» hết TẮT (Studio đang lưu/kiểm ô) tối đa ngần này lượt × ~1,5 giây.
+SO_LUOT_CHO_TIEP = 30
 #: Thứ tự dò có chủ ý: "Không công khai" ⊃ "công khai", "限定公開"/"非公開" ⊃ "公開"
 #: → không công khai, riêng tư dò TRƯỚC công khai.
 _THU_TU_LOAI = ("loi_tai", "nhap", "da_len_lich", "khong_cong_khai", "rieng_tu", "cong_khai")
@@ -152,6 +173,10 @@ class LoiTruoc(Exception):
 
 class LoiSau(Exception):
     """Hỏng SAU khi đã chạm kênh (có/có thể có bản nháp) → mã 1, không lùi."""
+
+
+class KhongCoNhap(LoiSau):
+    """Tiếp nháp: không tìm thấy hàng nháp / nút «Chỉnh sửa bản nháp» của id trong danh sách."""
 
 
 class DungKenh(Exception):
@@ -518,6 +543,41 @@ def tach_the(the) -> list:
     return [t.strip() for t in str(the or "").replace("、", ",").split(",") if t.strip()]
 
 
+def dem_ky_tu_the(ds: list) -> int:
+    """Số ký tự Studio tính cho danh sách thẻ: thẻ có dấu cách tính thêm 2 (ngoặc kép), cộng dấu phẩy."""
+    ds = list(ds or [])
+    return sum(len(t) + (2 if " " in t else 0) for t in ds) + max(0, len(ds) - 1)
+
+
+def _the_hong(t: str) -> str:
+    """Lý do thẻ `t` sẽ bị Studio từ chối ('' = ổn)."""
+    if len(t) > THE_TOI_DA_KY_TU:
+        return "dài {0} ký tự > {1}".format(len(t), THE_TOI_DA_KY_TU)
+    if any(c in t for c in "<>\n\r\t"):
+        return "chứa < > hoặc xuống dòng"
+    if re.search(r"\d{1,2}:\d{2}", t):
+        return "giống mốc mục lục (00:00) — đoạn mô tả lọt vào cột thẻ"
+    if any(0x2500 <= ord(c) <= 0x27BF or ord(c) > 0xFFFF for c in t):
+        return "chứa ký tự kẻ khung/biểu tượng"
+    return ""
+
+
+def loc_the_seo(the) -> tuple:
+    """(thẻ giữ, [(thẻ bỏ, lý do)]) — hàm thuần. Bỏ thẻ Studio sẽ từ chối (`_the_hong`), bỏ trùng,
+    cắt đuôi cho tổng ≤ `THE_TONG_TOI_DA` (cách Studio đếm, `dem_ky_tu_the`)."""
+    giu, bo = [], []
+    for t in tach_the(the):
+        t2 = re.sub(r"\s+", " ", t).strip()
+        ly = _the_hong(t2)
+        if ly:
+            bo.append((t2, ly))
+        elif t2 not in giu:
+            giu.append(t2)
+    while giu and dem_ky_tu_the(giu) > THE_TONG_TOI_DA:
+        bo.append((giu.pop(), "vượt tổng {0} ký tự".format(THE_TONG_TOI_DA)))
+    return giu, bo
+
+
 def kiem_du_lieu_dong(d: dict) -> list:
     """Lỗi dữ liệu chặn tải (mục 2.2 bước 0). [] = ổn."""
     loi = []
@@ -620,17 +680,33 @@ def trung_tieu_de(hang: list, kenh: str) -> list:
     return ra
 
 
+def da_tai_xong_theo_so(muc: dict) -> bool:
+    """Sổ có BẰNG CHỨNG video của mục đã tải lên xong (`_cho_tai_xong` ghi `tai_xong_luc`;
+    hậu kiểm ghi `tai_xong`). Hậu kiểm báo hỏng (`tai_xong` False) thì không tính."""
+    muc = muc or {}
+    if muc.get("tai_xong") is False:
+        return False
+    return bool(muc.get("tai_xong_luc")) or muc.get("tai_xong") is True
+
+
 def quyet_dinh(dong: dict, muc_so: dict, ket_qua_kenh: list, hom_nay: str = None,
-               tran: int = TRAN_TAI_MOI_NGAY) -> dict:
+               tran: int = TRAN_TAI_MOI_NGAY, tran_tiep: int = TRAN_TIEP_NHAP_NGAY,
+               ep_tiep: bool = False) -> dict:
     """Bảng quyết định mục 3 (hàm thuần).
 
     `muc_so`: mục sổ videoId của gói ({} nếu chưa có). `ket_qua_kenh`: các hàng
     video tra được trên kênh (lọc tiêu đề + hàng mang id), mỗi hàng
-    {video_id, tieu_de, loai, luc}. Trả {hanh_dong: tai_moi|da_co|
-    bao_chu_kenh|dung, video_id, nhap_thua:[id], tay, ly_do}.
+    {video_id, tieu_de, loai, luc}. Trả {hanh_dong: tai_moi|tiep_nhap|da_co|
+    bao_chu_kenh|dung, video_id, nhap_thua:[id], id_khong_thay, tay, ly_do, hen_lai}.
 
-    30/09/2026 (chủ kênh chốt): KHÔNG còn `tiep_nhap` — nháp của lượt hỏng để
-    kệ, lượt sau tải mới (trần `tran` lần/ngày/gói giữ số nháp có hạn)."""
+    30/09/2026 (chủ kênh chốt): nháp của lượt hỏng để kệ, lượt sau tải mới (trần
+    `tran` lần/ngày/gói). 12/10/2026: TRỪ khi sổ có bằng chứng ĐÃ TẢI XONG
+    (`da_tai_xong_theo_so`) — khi ấy nháp đó là bản đúng, chỉ hỏng ở bước sau →
+    `tiep_nhap` (mở lại, làm nốt), không sinh thêm nháp (trần `tran_tiep`
+    lần/ngày, quá trần → `dung`; `ep_tiep` = chạy tay `--hoan-tat`, bỏ trần).
+    Video của sổ đang RIÊNG TƯ mà đã tải xong → `bao_chu_kenh` kèm `hen_lai`
+    (`--hoan-tat` hẹn lịch nó ở trang sửa). Id của sổ KHÔNG thấy trên kênh thì
+    vào `id_khong_thay`, không bị báo là "nháp thừa"."""
     muc = muc_so or {}
     hom_nay = hom_nay or date.today().isoformat()
     vid = str(muc.get("video_id") or "")
@@ -638,21 +714,24 @@ def quyet_dinh(dong: dict, muc_so: dict, ket_qua_kenh: list, hom_nay: str = None
     hang = [h for h in (ket_qua_kenh or []) if h]
     cung = [h for h in hang if chuan_hoa_tieu_de(h.get("tieu_de")) == tt]
     lan_hom_nay = int(muc.get("lan_tai_moi") or 0) if muc.get("ngay_tai") == hom_nay else 0
+    lan_tiep = int(muc.get("lan_tiep_nhap") or 0) if muc.get("ngay_tiep_nhap") == hom_nay else 0
+    da_tai = da_tai_xong_theo_so(muc)
 
     def ket(hd, **kw):
         kw.setdefault("video_id", "")
         kw.setdefault("nhap_thua", [])
+        kw.setdefault("id_khong_thay", "")
         kw.setdefault("tay", False)
         kw.setdefault("ly_do", "")
         kw["hanh_dong"] = hd
         return kw
 
-    def tai_moi(thua, ly_do):
+    def tai_moi(thua, ly_do, **kw):
         if lan_hom_nay >= tran:
             return ket("dung", nhap_thua=thua,
                        ly_do="đã tải mới {0} lần hôm nay (trần {1}) — không tải thêm".format(
-                           lan_hom_nay, tran))
-        return ket("tai_moi", nhap_thua=thua, ly_do=ly_do)
+                           lan_hom_nay, tran), **kw)
+        return ket("tai_moi", nhap_thua=thua, ly_do=ly_do, **kw)
 
     if vid:
         h = next((x for x in hang if x.get("video_id") == vid), None)
@@ -666,12 +745,24 @@ def quyet_dinh(dong: dict, muc_so: dict, ket_qua_kenh: list, hom_nay: str = None
             return ket("da_co", video_id=vid, loai=h.get("loai"), luc=h.get("luc"),
                        nhap_thua=thua, ly_do="sổ có id, kênh báo {0}".format(h.get("loai")))
         if h and h.get("loai") == "nhap":
-            # 30/09/2026 chủ kênh chốt: lượt hỏng để lại nháp thì ĐỂ KỆ (chủ kênh
-            # tự xoá) — không mở lại/sửa tiếp/xoá; id cũ vào `id_cu`, TẢI MỚI.
-            return tai_moi(thua + [vid], "id {0} còn là NHÁP (lượt trước hỏng) — để kệ nháp, tải mới".format(vid))
+            if da_tai and muc.get("trang_thai") != "loi-tai":
+                # 12/10/2026: video ĐÃ tải xong, chỉ hỏng ở bước sau (hộp mới của Studio, nút Tiếp
+                # tắt…) → MỞ LẠI đúng nháp này làm nốt; tải mới chỉ đẻ thêm nháp thừa.
+                if lan_tiep >= tran_tiep and not ep_tiep:
+                    return ket("dung", video_id=vid, nhap_thua=thua,
+                               ly_do="tiếp nháp {0} đã hỏng {1} lần hôm nay (trần {2}) — KHÔNG tải bản mới; "
+                                     "chủ kênh xem / chạy --hoan-tat".format(vid, lan_tiep, tran_tiep))
+                return ket("tiep_nhap", video_id=vid, nhap_thua=thua,
+                           ly_do="id {0} là NHÁP đã tải xong ({1}) — mở lại nháp làm nốt, không tải bản mới".format(
+                               vid, muc.get("tai_xong_luc") or "sổ: tai_xong"))
+            # 30/09/2026 chủ kênh chốt: lượt hỏng để lại nháp (chưa chắc tải xong) thì ĐỂ KỆ
+            # (chủ kênh tự xoá) — id cũ vào `id_cu`, TẢI MỚI.
+            return tai_moi(thua + [vid], "id {0} còn là NHÁP chưa có bằng chứng tải xong (lượt trước hỏng) "
+                                         "— để kệ nháp, tải mới".format(vid))
         if h and h.get("loai") == "rieng_tu":
-            return ket("bao_chu_kenh", video_id=vid, nhap_thua=thua,
-                       ly_do="video {0} của sổ đang RIÊNG TƯ (không phải nháp)".format(vid))
+            return ket("bao_chu_kenh", video_id=vid, nhap_thua=thua, hen_lai=da_tai,
+                       ly_do="video {0} của sổ đang RIÊNG TƯ (không phải nháp){1}".format(
+                           vid, " — đã tải xong: chạy --hoan-tat để hẹn lịch ở trang sửa" if da_tai else ""))
         if muc.get("trang_thai") in TT_SO_DA_HEN and not (h and h.get("loai") == "loi_tai"):
             # Chống trùng thật: sổ ghi đã bấm «Lên lịch» mà kênh không thấy/không
             # đọc được hàng → KHÔNG tải lại, báo chủ kênh.
@@ -679,7 +770,11 @@ def quyet_dinh(dong: dict, muc_so: dict, ket_qua_kenh: list, hom_nay: str = None
                        ly_do="sổ ghi {0} đã hẹn lịch ({1}) mà kênh {2} — không tải lại".format(
                            vid, muc.get("trang_thai"),
                            "báo {0}".format(h.get("loai")) if h else "không thấy"))
-        return tai_moi(thua + [vid], "id {0} lỗi tải/không còn trên kênh".format(vid))
+        if h:     # loi_tai / khong_ro: bản ấy CÒN trên kênh → báo như nháp thừa
+            return tai_moi(thua + [vid], "id {0} báo {1} trên kênh — để kệ, tải mới".format(vid, h.get("loai")))
+        # 12/10/2026 (TL6-T7-K2-0007 00:06): KHÔNG thấy id trên kênh thì không được báo nó là
+        # "nháp thừa trên kênh" (log cũ tự mâu thuẫn) — ghi riêng `id_khong_thay`.
+        return tai_moi(thua, "id {0} KHÔNG thấy trên kênh (danh sách lẫn trang sửa)".format(vid), id_khong_thay=vid)
 
     da_dang = [h for h in cung if h.get("loai") in LOAI_DA_DANG]
     nhap = [h for h in cung if h.get("loai") == "nhap" and h.get("video_id")]
@@ -1454,11 +1549,117 @@ class MayDangDom:
             for h in self._doc_danh_sach(ta) or []:
                 if any(rut_video_id(x) == vid for x in h.get("hrefs") or []):
                     if not h.get("nut_nhap"):
-                        raise LoiSau("hàng {0} không có nút Chỉnh sửa bản nháp".format(vid))
+                        raise KhongCoNhap("hàng {0} không có nút Chỉnh sửa bản nháp".format(vid))
                     ta.bam(h["nut_nhap"], hau_dieu_kien=lambda: ta.co("hop_upload"), han_hau=30)
                     self.nk("{0}: đã mở lại bản nháp {1}".format(d["ma"], vid))
                     return
-        raise LoiSau("không tìm thấy bản nháp {0} để mở lại".format(vid))
+        raise KhongCoNhap("không tìm thấy bản nháp {0} để mở lại".format(vid))
+
+    # ── TIẾP NHÁP / HOÀN TẤT (12/10/2026) ────────────────────────────────
+    def _tra_trang_sua(self, vid: str, muc: dict = None):
+        """Id của sổ KHÔNG thấy trong danh sách: mở TRANG SỬA của nó (tab B) để biết còn trên kênh
+        không. Trả hàng {video_id, tieu_de, loai, luc, nguon} hoặc None (không còn / không mở được).
+        Sổ còn ở bước nháp (`trang_thai` nhap) mà trang ghi riêng tư/không rõ → coi là NHÁP (bản nháp
+        của hộp tải lên mang nhãn «Đã lưu ở chế độ riêng tư»)."""
+        muc = muc or {}
+        tb = self.tab_b()
+        try:
+            co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
+        except Exception as loi:  # noqa: BLE001
+            self.nk("tra trang sửa {0}: {1}".format(vid, str(loi)[:120]))
+            return None
+        if not co_trang or (bat_duoc and goi is None):
+            return None
+        chu = tb.doc_chu("hien_thi_trang_sua") or ""
+        loai, luc = phan_tich_trang_thai(chu, self.bo.get("chu_trang_thai"))
+        nhap_goi = str((goi or {}).get("draftStatus") or "").upper()
+        if (nhap_goi and "NONE" not in nhap_goi) or (
+                muc.get("trang_thai") == "nhap" and loai in ("rieng_tu", "khong_ro", "nhap")):
+            loai = "nhap"
+        td = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or (goi or {}).get("title") or "")
+        self.nk("tra trang sửa {0}: còn trên kênh — «{1}» → {2}".format(vid, chuan_hoa_tieu_de(chu)[:60], loai))
+        return {"video_id": vid, "tieu_de": td, "loai": loai, "luc": luc, "nguon": "trang_sua", "chu": chu}
+
+    def _tra_va_quyet(self, d: dict, muc: dict, ep_tiep: bool = False) -> tuple:
+        """Tra kênh + (id của sổ đã tải xong mà danh sách không thấy → trang sửa) → `quyet_dinh`."""
+        vid = str((muc or {}).get("video_id") or "")
+        hang = self.tra_kenh(d["tieu_de"], vid)
+        if vid and da_tai_xong_theo_so(muc) and muc.get("trang_thai") != "tai-hong" \
+                and not any(x.get("video_id") == vid for x in hang):
+            x = self._tra_trang_sua(vid, muc)
+            if x:
+                hang.append(x)
+        return hang, quyet_dinh(d, muc, hang, self.bay_gio().date().isoformat(), ep_tiep=ep_tiep)
+
+    def _hoan_tat_trang_sua(self, d: dict, vid: str, lich: datetime, k: str) -> dict:
+        """`--hoan-tat` cho video ĐÃ lưu (riêng tư, không còn là nháp): trang sửa → điền tiêu đề/mô tả
+        nếu thiếu/lệch → Chế độ hiển thị → Lên lịch giờ của gói → Xong → Lưu → đọc lại; rồi `xac_nhan`."""
+        ma = d["ma"]
+        kq = self.doi_lich_mot(k, vid, lich, tu_rieng_tu=True, chi_tiet=d)
+        if kq["ket"] != "ok":
+            return {"ket_qua": "hong_sau", "video_id": vid,
+                    "ly_do": "hẹn lịch ở trang sửa: {0}".format(kq.get("ly_do") or kq["ket"])}
+        lich_s = lich.strftime("%d/%m/%Y %H:%M")
+        self.so.cap_nhat(k, video_id=vid, trang_thai="da-len-lich", lich=lich_s, lich_dat=lich_s)
+        self.nk("{0}: đã hẹn lịch {1} ở trang sửa (video {2}) — xác nhận".format(ma, lich_s, vid))
+        return self.xac_nhan(d, vid, lich, k)
+
+    def hoan_tat(self, d: dict) -> dict:
+        """`--hoan-tat`: làm nốt gói (xem `dang_mot_goi(hoan_tat=True)`)."""
+        kq = self.dang_mot_goi(d, hoan_tat=True)
+        kq["ma"] = d["ma"]
+        self.bao_cao["goi"].append(kq)
+        self.nk("{0}: HOÀN TẤT → {1}{2}".format(d["ma"], kq["ket_qua"], " — " + kq["ly_do"] if kq.get("ly_do") else ""))
+        return kq
+
+    def kiem_hoan_tat(self, d: dict) -> dict:
+        """`--hoan-tat --kiem-dom`: CHỈ ĐỌC — tra danh sách + trang sửa của id trong sổ, ra quyết định
+        như lượt thật và in việc SẼ làm. Không mở hộp tải lên, không gõ, không bấm nút nào của video."""
+        ma = d["ma"]
+        k = self.khoa_so(ma)
+        muc = self.so.lay(k) or {}
+        vid = str(muc.get("video_id") or "")
+        lich, ghi_chu = gio_hen_hieu_luc(d.get("ngay"), d.get("gio"), self.bay_gio())
+        kq = {"ma": ma, "kenh": self.kenh, "video_id": vid, "so": {x: muc.get(x) for x in (
+            "trang_thai", "tai_xong_luc", "tai_xong", "lan_tai_moi", "lan_tiep_nhap", "id_cu", "lich", "lich_dat")},
+              "lich_ke_hoach": "{0} {1}".format(d.get("ngay"), d.get("gio")),
+              "lich_se_dat": lich.strftime("%d/%m/%Y %H:%M") if lich else "", "ghi_chu_lich": ghi_chu,
+              "the_bo": [list(x) for x in loc_the_seo(d.get("the"))[1]], "ok": False}
+        self.lay_uc()
+        hang = self.tra_kenh(d["tieu_de"], vid)
+        kq["hang_kenh"] = [{"video_id": x["video_id"], "loai": x["loai"],
+                            "luc": x["luc"].strftime("%d/%m/%Y %H:%M") if x.get("luc") else "",
+                            "nut_nhap": bool((x.get("hang") or {}).get("nut_nhap"))} for x in hang]
+        trang = self._tra_trang_sua(vid, muc) if vid else None
+        kq["trang_sua"] = ({"loai": trang["loai"], "chu": chuan_hoa_tieu_de(trang.get("chu"))[:200],
+                            "tieu_de": trang["tieu_de"]} if trang else None)
+        if trang and not any(x.get("video_id") == vid for x in hang):
+            hang.append(trang)
+        qd = quyet_dinh(d, muc, hang, self.bay_gio().date().isoformat(), ep_tiep=True)
+        kq["quyet_dinh"] = {x: qd.get(x) for x in ("hanh_dong", "video_id", "ly_do", "nhap_thua", "id_khong_thay")}
+        hd = qd["hanh_dong"]
+        thay = next((x for x in kq["hang_kenh"] if x["video_id"] == vid), None)
+        if hd == "tiep_nhap":
+            kq["se_lam"] = ("mở lại nháp {0} ({1}) → Chi tiết → Thành phần → Kiểm tra → Lên lịch {2} → xác "
+                            "nhận".format(vid, "nút «Chỉnh sửa bản nháp» có" if thay and thay["nut_nhap"] else
+                                          "KHÔNG thấy nút nháp trong danh sách → hẹn lịch ở trang sửa",
+                                          kq["lich_se_dat"]))
+            kq["ok"] = True
+        elif hd == "bao_chu_kenh" and qd.get("hen_lai"):
+            kq["se_lam"] = "video riêng tư {0}: trang sửa → Lên lịch {1} → Lưu → đọc lại → xác nhận".format(
+                vid, kq["lich_se_dat"])
+            kq["ok"] = True
+        elif hd == "da_co":
+            kq["se_lam"] = "video {0} đã {1} — chỉ đọc lại/xác nhận lịch".format(qd.get("video_id"), qd.get("loai"))
+            kq["ok"] = True
+        else:
+            kq["se_lam"] = "KHÔNG làm ({0}: {1}) — --hoan-tat không tải bản mới".format(hd, qd.get("ly_do"))
+        try:
+            self.tab_b().ghi_bang_chung("hoan-tat-kiem-" + ma)
+        except Exception:  # noqa: BLE001
+            pass
+        self.nk("KIỂM hoàn tất {0}: {1}".format(ma, kq["se_lam"]))
+        return kq
 
     # ── bước 4: chi tiết ─────────────────────────────────────────────────
     def _dam_bao_chon(self, ta, khoa: str) -> None:
@@ -1511,13 +1712,27 @@ class MayDangDom:
         ta.bam("playlist_xong", hau_dieu_kien=lambda: not ta.co("playlist_muc"), han_hau=10)
         return "ok"
 
-    def _the_seo(self, ta, the: str) -> str:
-        ds = tach_the(the)
+    def _the_seo(self, ta, the: str, ma: str = "") -> str:
+        ds, bo = loc_the_seo(the)
+        for t, ly in bo:
+            self._canh_bao("{0}: BỎ thẻ «{1}» — {2} (Studio từ chối thì nút Tiếp TẮT)".format(
+                ma, t[:40] + ("…" if len(t) > 40 else ""), ly))
         if not ds:
             return "bo"
         co_san = ta.tim("the_da_co", han=0)
-        if co_san and int(co_san.get("so") or 0) >= len(ds):
-            return "ok"
+        if co_san:
+            # 12/10/2026 — TIẾP NHÁP: nháp có thể đang mang thẻ hỏng của lượt trước (TL6-T7-K2-0007)
+            # → «Xoá tất cả» rồi gõ lại bộ đã lọc.
+            chu_co = [chuan_hoa_tieu_de(x.get("chu") or "") for x in (ta.doc_tat_ca("the_da_co") or [])]
+            mong = {chuan_hoa_tieu_de(x) for x in ds}
+            hong = [c for c in chu_co if c and (_the_hong(c) or c not in mong)]
+            if hong and ta.co("the_xoa_het"):
+                self.nk("{0}: ô thẻ đang có {1} thẻ lạ/hỏng ({2}) — Xoá tất cả, gõ lại".format(
+                    ma, len(hong), ", ".join(h[:20] for h in hong[:3])))
+                ta.bam("the_xoa_het", hau_dieu_kien=lambda: not ta.co("the_da_co"), han_hau=8)
+                co_san = None
+            elif int(co_san.get("so") or 0) >= len(ds):
+                return "ok"
         ta.go_tho("o_the", ", ".join(ds) + ",")
         ta.phim("Enter")
         pt = ta.tim("the_da_co", han=5)
@@ -1551,7 +1766,7 @@ class MayDangDom:
             ta.bam("hien_them", hau_dieu_kien=lambda: ta.co("ai_co") or ta.co("o_the"), han_hau=10)
         self._dam_bao_chon(ta, "ai_co")
         try:
-            self._the_seo(ta, d.get("the"))
+            self._the_seo(ta, d.get("the"), d["ma"])
         except Exception as loi:  # noqa: BLE001 — mềm
             self._canh_bao("{0}: thẻ SEO bỏ qua ({1})".format(d["ma"], loi))
         self._con_hop(ta, "chi tiết")
@@ -1561,10 +1776,71 @@ class MayDangDom:
             raise LoiSau("hộp tải lên đã đóng giữa chừng (sau {0})".format(buoc))
 
     # ── bước 5: thành phần ───────────────────────────────────────────────
-    def _tiep(self, ta, hau, ten: str) -> None:
+    # ── hộp «vẫn đang kiểm tra nội dung» (12/10/2026, TL2-T7-0024) ───────
+    def _hop_kiem_noi_dung(self, ta):
+        """Phần tử hộp «Chúng tôi vẫn đang kiểm tra nội dung của bạn» nếu đang hiện, không thì None.
+        chon#1/#2 riêng hộp này; khớp bằng bộ chọn chung (chon#3) thì phải có chữ `kiem_noi_dung`."""
+        try:
+            pt = ta.tim("hop_kiem_noi_dung", han=0)
+        except Exception:  # noqa: BLE001 — bộ chọn cũ chưa có khoá này
+            return None
+        if not pt:
+            return None
+        if pt.get("cach") in ("chon#1", "chon#2"):
+            return pt
+        try:
+            chu = chuan_hoa_tieu_de(ta.doc_chu(pt) or "").lower()
+        except Exception:  # noqa: BLE001
+            return None
+        return pt if any(w.lower() in chu for w in self._chu("kiem_noi_dung")) else None
+
+    def _dong_hop_kiem_noi_dung(self, ta, pt, ma: str) -> bool:
+        """Bấm nút duy nhất («Đã hiểu») của hộp kiểm tra nội dung — dò TRONG hộp. True = đã đóng."""
+        nut = ta.tim("nut_da_hieu_kiem", han=5, trong=pt)
+        if not nut:
+            try:
+                ta.ghi_bang_chung("kiem-noi-dung-" + ma)
+            except Exception:  # noqa: BLE001
+                pass
+            return False
+        self.nk("{0}: Studio báo «vẫn đang kiểm tra nội dung» — bấm «Đã hiểu», rồi kiểm lịch đã áp chưa".format(ma))
+        try:
+            ta.bam(nut, hau_dieu_kien=lambda: self._hop_kiem_noi_dung(ta) is None, han_hau=15)
+        except Exception as loi:  # noqa: BLE001
+            self.nk("{0}: bấm «Đã hiểu» lỗi: {1}".format(ma, loi))
+            return self._hop_kiem_noi_dung(ta) is None
+        return True
+
+    def _tiep(self, ta, hau, ten: str, ma: str = "") -> None:
+        """Bấm «Tiếp». 12/10/2026 (TL6-T7-K2-0007 3 lượt "nut_tiep: không thấy" — nút có nhưng TẮT):
+        dẹp hộp kiểm tra nội dung nếu có; nút đang TẮT thì chờ (Studio đang lưu/kiểm ô) tối đa
+        `SO_LUOT_CHO_TIEP` lượt; vẫn tắt → chụp bằng chứng, báo rõ "nút Tiếp TẮT"."""
+        ma = ma or ((self._d_dang or {}).get("ma") or "")
+        for lan in range(SO_LUOT_CHO_TIEP):
+            pt = self._hop_kiem_noi_dung(ta)
+            if pt:
+                self._dong_hop_kiem_noi_dung(ta, pt, ma)
+            if ta.co("nut_tiep"):
+                break
+            if not ta.tim("nut_tiep", han=0, cho_tat=True):
+                break        # không có hẳn → để `bam` dò lâu hơn (dự phòng/tự chữa)
+            if lan == 0:
+                self.nk("{0}: nút Tiếp (sang {1}) đang TẮT — chờ Studio".format(ma, ten))
+            self.ngu(1.5)
+        else:
+            try:
+                ta.ghi_bang_chung("tiep-tat-" + ma)
+            except Exception:  # noqa: BLE001
+                pass
+            raise LoiSau("không sang được bước {0}: nút Tiếp đang TẮT sau ~{1:.0f} giây — Studio chặn bước "
+                         "này (thẻ/tiêu đề/mô tả bị từ chối?)".format(ten, SO_LUOT_CHO_TIEP * 1.5))
         try:
             ta.bam("nut_tiep", hau_dieu_kien=hau, han_hau=30)
         except Exception as loi:  # noqa: BLE001
+            try:
+                ta.ghi_bang_chung("tiep-" + ma)
+            except Exception:  # noqa: BLE001
+                pass
             raise LoiSau("không sang được bước {0}: {1}".format(ten, loi))
 
     def _phu_de(self, ta, d: dict, srt: str) -> str:
@@ -2335,12 +2611,16 @@ class MayDangDom:
         if luc != lich:
             raise Exception("đọc lại ô lịch {0} ≠ {1}".format(luc, lich))
 
-    def doi_lich_mot(self, khoa: str, vid: str, lich_moi: datetime, chi_kiem: bool = False) -> dict:
+    def doi_lich_mot(self, khoa: str, vid: str, lich_moi: datetime, chi_kiem: bool = False,
+                     tu_rieng_tu: bool = False, chi_tiet: dict = None) -> dict:
         """DỜI LỊCH MỘT video đã hẹn giờ qua TRANG SỬA: mở trang → hộp Chế độ hiển thị → Lên lịch → đọc
         giờ đang hẹn → gõ ngày/giờ mới → ĐỌC LẠI ô → Xong (`sua_hop_xong`) → Lưu (nút Lưu của trang) →
         mở lại trang ĐỌC LẠI giờ hẹn. Trả {ket: ok|khong-the|loi, ly_do, lich_truoc, lich_doc_lai}.
         Video đã công khai / không còn «Đã lên lịch» / giờ đang hẹn còn < `DOI_LICH_BIEN_PHUT` phút →
-        `khong-the` (để nguyên). `chi_kiem`: chỉ mở hộp, đọc, chụp bằng chứng, Escape — không gõ, không lưu."""
+        `khong-the` (để nguyên). `chi_kiem`: chỉ mở hộp, đọc, chụp bằng chứng, Escape — không gõ, không lưu.
+        12/10/2026 `tu_rieng_tu` (`--hoan-tat`): video RIÊNG TƯ/nháp chưa có lịch → hẹn LẦN ĐẦU (không
+        cần giờ cũ, không xét biên 90 phút); vẫn KHÔNG đụng video đã công khai. `chi_tiet` (dòng kế
+        hoạch): tiêu đề trên trang khác kế hoạch thì gõ lại tiêu đề + mô tả trước khi Lưu."""
         nhan = "{0}/{1}".format(str(khoa).split("/", 1)[-1] or khoa, vid)
         self.vid_dang = vid
         tb = self.tab_b()
@@ -2362,8 +2642,16 @@ class MayDangDom:
                 return ket("loi", "không mở được trang sửa video")
             chu = tb.doc_chu("hien_thi_trang_sua") or ""
             loai, _luc = phan_tich_trang_thai(chu, self.bo.get("chu_trang_thai"))
-            if loai in ("cong_khai", "khong_cong_khai", "rieng_tu"):
+            if loai in ("cong_khai", "khong_cong_khai") or (loai == "rieng_tu" and not tu_rieng_tu):
                 return ket("khong-the", "video đang «{0}» — không còn hẹn giờ".format(chuan_hoa_tieu_de(chu)[:60]))
+            if chi_tiet and not chi_kiem:
+                hien = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or "")
+                if hien != chuan_hoa_tieu_de(chi_tiet.get("tieu_de")):
+                    self.nk("hoàn tất {0}: tiêu đề trên trang «{1}» ≠ kế hoạch — gõ lại tiêu đề + mô tả".format(
+                        nhan, hien[:40]))
+                    tb.go("tieu_de", chi_tiet["tieu_de"])
+                    if chi_tiet.get("mo_ta"):
+                        tb.go("mo_ta", chi_tiet["mo_ta"])
             self._mo_hop_lich_sua(tb)
             truoc = self._doc_o_lich(tb)
             ra["lich_truoc"] = truoc.strftime("%d/%m/%Y %H:%M") if truoc else ""
@@ -2376,16 +2664,16 @@ class MayDangDom:
                 self._huy_sua(tb, nhan)
                 return ket("ok" if (truoc and xong) else "loi",
                            "KIỂM: đang hẹn {0}, nút Xong {1}".format(ra["lich_truoc"] or "?", ra.get("nut_xong") or "KHÔNG THẤY"))
-            if truoc is None:
+            if truoc is None and not tu_rieng_tu:
                 self._dong_hop_lich(tb)
                 self._huy_sua(tb, nhan)
                 return ket("loi", "không đọc được giờ đang hẹn trong hộp Lên lịch")
-            if truoc <= han:
+            if truoc is not None and truoc <= han and not tu_rieng_tu:
                 self._dong_hop_lich(tb)
                 self._huy_sua(tb, nhan)
                 return ket("khong-the", "đang hẹn {0} — còn dưới {1} phút, để nguyên".format(
                     ra["lich_truoc"], DOI_LICH_BIEN_PHUT))
-            if truoc == lich_moi:
+            if truoc == lich_moi and (loai == "da_len_lich" or not tu_rieng_tu):
                 self._dong_hop_lich(tb)
                 self._huy_sua(tb, nhan)
                 return ket("ok", "đã đúng giờ mới — không gõ", lich_doc_lai=lich_s)
@@ -2606,6 +2894,13 @@ class MayDangDom:
         try:
             ta.bam("the_them", hau_dieu_kien=lambda: ta.co("hop_the"), han_hau=30)
             self.ngu(2)
+            if getattr(self, "dang_tiep", False) and ta.co("the_moc"):
+                # 12/10/2026 — TIẾP NHÁP: nháp đã có thẻ từ lượt trước → không thêm chồng (trần 5 thẻ).
+                self.nk("{0}: nháp đã có thẻ — không thêm chồng".format(d["ma"]))
+                if ta.co("hop_con_huy"):
+                    ta.bam("hop_con_huy")
+                    self.ngu(1.5)
+                return "ok:co-san"
             return self._luu_the(ta, d, links, moc)
         except Exception as loi:  # noqa: BLE001 — PHỤ
             return self._huy_the(ta, d, loi)
@@ -2695,7 +2990,7 @@ class MayDangDom:
     def _thanh_phan(self, ta, d: dict, tep: dict, k: str) -> None:
         # Hậu điều kiện bằng khoá ĐÃ ĐO trên trang thật (ô tiêu đề biến mất khi
         # rời bước Chi tiết) — không dựa vào nút phụ đề/MHKT/thẻ chưa đo.
-        self._tiep(ta, lambda: not ta.co("tieu_de"), "Thành phần video")
+        self._tiep(ta, lambda: not ta.co("tieu_de"), "Thành phần video", d["ma"])
         self.ngu(2)
         ta.ghi_bang_chung("thanh-phan-" + d["ma"])
         pd = self._phu_de(ta, d, tep.get("srt"))
@@ -2709,7 +3004,7 @@ class MayDangDom:
     # ── bước 6–7: kiểm tra, hiển thị ─────────────────────────────────────
     def _kiem_tra(self, ta, k: str) -> None:
         truoc = ta.doc_chu("hop_upload") or ""
-        self._tiep(ta, lambda: (ta.doc_chu("hop_upload") or "") != truoc, "Kiểm tra")
+        self._tiep(ta, lambda: (ta.doc_chu("hop_upload") or "") != truoc, "Kiểm tra", str(k).split("/", 1)[-1])
         self.ngu(2)
         chu = ta.doc_chu("hop_upload") or ""
         if any(w.lower() in chu.lower() for w in self._chu("loi_tai")):
@@ -2721,6 +3016,10 @@ class MayDangDom:
         for lan in range(3):
             if ta.co("len_lich_mo"):
                 return
+            pt = self._hop_kiem_noi_dung(ta)
+            if pt:
+                self._dong_hop_kiem_noi_dung(ta, pt, str(k).split("/", 1)[-1])
+                continue
             try:
                 ta.bam("nut_tiep", hau_dieu_kien=lambda: ta.co("len_lich_mo"), han_hau=20)
                 return
@@ -2843,8 +3142,7 @@ class MayDangDom:
             except Exception:  # noqa: BLE001
                 pass
             raise LoiSau("CHƯA có bằng chứng video đã tải lên xong — KHÔNG bấm «Lên lịch»")
-        ta.bam("nut_xong", hau_dieu_kien=lambda: ta.co("hop_da_xong") or not ta.co("hop_upload"),
-               han_hau=60)
+        self._bam_len_lich(ta, d["ma"])
         # `lich_dat`: ngày + giờ ĐÃ ĐỌC LẠI khớp trong ô trước khi bấm «Lên lịch»
         # — xác nhận dùng nó khi Studio chỉ hiện "Đã lên lịch" không kèm giờ.
         self.so.cap_nhat(k, trang_thai="da-len-lich", lich=lich.strftime("%d/%m/%Y %H:%M"),
@@ -2856,6 +3154,49 @@ class MayDangDom:
                 ta.phim("Escape")
         ta.giu_khi_roi(False)
         return lich
+
+    def _bam_len_lich(self, ta, ma: str) -> None:
+        """Bấm «Lên lịch» tới khi hộp tải lên đóng / hiện hộp "đã xong".
+
+        12/10/2026 (TL2-T7-0024 hai lượt "nut_xong: bấm xong nhưng hậu điều kiện không đạt"): Studio
+        còn kiểm tra thì hiện hộp «Chúng tôi vẫn đang kiểm tra nội dung của bạn … Đã hiểu» CHE hộp tải
+        lên → bấm «Đã hiểu»; hộp tải lên vẫn mở mà nút còn «Lên lịch» thì bấm lại (tối đa 3 vòng).
+        Lịch có áp thật hay không do `xac_nhan` đọc lại trên Studio."""
+        def xong():
+            return ta.co("hop_da_xong") or not ta.co("hop_upload")
+
+        def nut_con_len_lich():
+            if not ta.co("nut_xong"):
+                return False
+            chu = chuan_hoa_tieu_de(ta.doc_chu("nut_xong") or "")
+            return any(w.lower() in chu.lower() for w in ("Lên lịch", "Schedule", "予約", "スケジュール"))
+
+        ta.bam("nut_xong", hau_dieu_kien=lambda: xong() or self._hop_kiem_noi_dung(ta) is not None,
+               han_hau=60)
+        for vong in range(3):
+            if xong():
+                return
+            pt = self._hop_kiem_noi_dung(ta)
+            if pt:
+                if not self._dong_hop_kiem_noi_dung(ta, pt, ma):
+                    raise LoiSau("hộp «vẫn đang kiểm tra nội dung» hiện mà không bấm được «Đã hiểu»")
+                for _ in range(20):
+                    if xong() or self._hop_kiem_noi_dung(ta) or nut_con_len_lich():
+                        break
+                    self.ngu(1.5)
+                continue
+            if nut_con_len_lich():
+                self.nk("{0}: hộp tải lên còn mở, nút vẫn «Lên lịch» — bấm lại (vòng {1})".format(ma, vong + 2))
+                ta.bam("nut_xong", hau_dieu_kien=lambda: xong() or self._hop_kiem_noi_dung(ta) is not None,
+                       han_hau=60)
+                continue
+            break
+        if not xong():
+            try:
+                ta.ghi_bang_chung("len-lich-chua-dong-" + ma)
+            except Exception:  # noqa: BLE001
+                pass
+            raise LoiSau("đã bấm «Lên lịch» nhưng hộp tải lên chưa đóng — chưa chắc đã lên lịch")
 
     # ── bước 9: xác nhận thật ────────────────────────────────────────────
     def xac_nhan(self, d: dict, vid: str, lich: datetime, k: str) -> dict:
@@ -3064,10 +3405,13 @@ class MayDangDom:
         return kq
 
     # ── một gói ──────────────────────────────────────────────────────────
-    def dang_mot_goi(self, d: dict) -> dict:
+    def dang_mot_goi(self, d: dict, hoan_tat: bool = False) -> dict:
+        """Đăng một gói. `hoan_tat` (CLI `--hoan-tat`): chỉ LÀM NỐT bản đã có trên kênh (tiếp nháp /
+        hẹn lịch ở trang sửa), bỏ trần tiếp nháp/ngày, KHÔNG BAO GIỜ tải bản mới."""
         ma = d["ma"]
         k = self.khoa_so(ma)
         self.dang_tai = False
+        self.dang_tiep = False
         tep = tep_goi(os.path.join(self.thu_muc_done, ma))
         loi = kiem_du_lieu_dong(d)
         if not tep["mp4"]:
@@ -3097,14 +3441,23 @@ class MayDangDom:
         try:
             self.lay_uc()
             muc = self.so.lay(k)
-            hang = self.tra_kenh(d["tieu_de"], muc.get("video_id") or "")
-            qd = quyet_dinh(d, muc, hang, self.bay_gio().date().isoformat())
+            hang, qd = self._tra_va_quyet(d, muc, ep_tiep=hoan_tat)
             self.nk("{0}: quyết định {1} {2} — {3}".format(ma, qd["hanh_dong"], qd.get("video_id") or "",
                                                          qd.get("ly_do")))
             for x in qd.get("nhap_thua") or []:
                 self.bao_cao["nhap_thua"].append({"ma": ma, "video_id": x})
                 self._canh_bao("{0}: NHÁP THỪA trên kênh {1} (chỉ báo, không xoá)".format(ma, x))
+            if qd.get("id_khong_thay"):
+                self._canh_bao("{0}: id {1} của sổ KHÔNG thấy trên kênh (danh sách + trang sửa) — không phải "
+                               "nháp thừa".format(ma, qd["id_khong_thay"]))
             hd = qd["hanh_dong"]
+            if hoan_tat and hd == "tai_moi":
+                # `--hoan-tat` chỉ LÀM NỐT bản đã có — không bao giờ tải thêm bản mới.
+                ly = "--hoan-tat không tải bản mới ({0})".format(qd.get("ly_do"))
+                self._canh_bao("{0}: {1}".format(ma, ly))
+                return {"ket_qua": "bao_chu_kenh", "video_id": muc.get("video_id") or "", "ly_do": ly}
+            if hd == "bao_chu_kenh" and hoan_tat and qd.get("hen_lai"):
+                return self._hoan_tat_trang_sua(d, qd["video_id"], lich, k)
             if hd == "tai_moi" and getattr(self, "nhap_khong_id", None):
                 # 30/09/2026: nháp để kệ (chủ kênh tự xoá) — trước đây dừng hẳn
                 # ở đây (lặp hỏng mãi); giờ chỉ báo rồi tải mới.
@@ -3114,7 +3467,8 @@ class MayDangDom:
                 self._canh_bao("{0}: {1} — không tải, không đánh dấu".format(ma, qd.get("ly_do")))
                 return {"ket_qua": "bao_chu_kenh", "video_id": qd.get("video_id"), "ly_do": qd.get("ly_do")}
             if hd == "dung":
-                return {"ket_qua": "hong_sau", "ly_do": qd.get("ly_do")}
+                self._canh_bao("{0}: {1}".format(ma, qd.get("ly_do")))
+                return {"ket_qua": "hong_sau", "video_id": qd.get("video_id") or "", "ly_do": qd.get("ly_do")}
             if hd == "da_co":
                 return self._da_co(d, qd, lich, k)
             if not self.con_han(10 * 60):
@@ -3125,11 +3479,27 @@ class MayDangDom:
                 vid = self._tai_moi(ta, d, tep, k, qd)
             else:
                 vid = qd["video_id"]
-                self.so.cap_nhat(k, video_id=vid, trang_thai="nhap")
+                hom_nay = self.bay_gio().date().isoformat()
+                lan = (int(muc.get("lan_tiep_nhap") or 0) if muc.get("ngay_tiep_nhap") == hom_nay else 0) + 1
+                self.so.cap_nhat(k, video_id=vid, trang_thai="nhap", lan_tiep_nhap=lan, ngay_tiep_nhap=hom_nay)
                 if qd.get("nhan_moi"):
                     self.bao(ma, "{0} · nháp {1}".format(TIEN_TO_DANG_DANG, vid), video_id=vid)
                 self.ghi_dodang(ma, "tiep-nhap", vid)
-                self._mo_nhap(ta, d, vid)
+                self.dang_tiep = True
+                # Bằng chứng tải xong của lượt trước vẫn đúng cho chính bản này (sổ `tai_xong_luc`).
+                self.tai_xong_ok = da_tai_xong_theo_so(muc)
+                self.nk("{0}: TIẾP NHÁP {1} lần {2} hôm nay — mở lại nháp, làm nốt (không tải bản mới)".format(
+                    ma, vid, lan))
+                try:
+                    self._mo_nhap(ta, d, vid)
+                except KhongCoNhap as loi:
+                    if not hoan_tat:
+                        raise
+                    # `--hoan-tat`: hàng không còn nút «Chỉnh sửa bản nháp» (Studio đã lưu riêng tư)
+                    # → hẹn lịch ở trang sửa thay vì mở hộp tải lên.
+                    self.nk("{0}: {1} — hẹn lịch ở TRANG SỬA".format(ma, loi))
+                    ta.giu_khi_roi(False)
+                    return self._hoan_tat_trang_sua(d, vid, lich, k)
             self.vid_dang = vid
             try:
                 self._chi_tiet(ta, d, tep)
@@ -3753,15 +4123,32 @@ def _doc_lenh(argv):
     ap.add_argument("--doi-lich", action="store_true",
                     help="DỜI LỊCH video đã hẹn giờ theo logs/hang-doi-lich.json (trang sửa → Lên lịch → Lưu → đọc "
                          "lại); kèm --kiem-dom = CHỈ ĐỌC hộp Lên lịch của --video (không gõ, không lưu)")
+    ap.add_argument("--hoan-tat", metavar="MA",
+                    help="LÀM NỐT gói hỏng dở (id trong sổ, đã tải xong): nháp → mở lại nháp; riêng tư → hẹn lịch ở "
+                         "trang sửa; không bao giờ tải bản mới. Kèm --kiem-dom = CHỈ ĐỌC, in việc sẽ làm")
     ap.add_argument("--video", help="với --sua-video --kiem-dom: videoId để kiểm (mặc định: việc đầu hàng)")
     ap.add_argument("--han-giay", type=float, default=0.0,
                     help="hạn phiên (giây); 0 = theo config phien_han_dang_giay")
     return ap.parse_args(argv)
 
 
+def _doc_ke_hoach_kenh(a, cfg: dict, nguon_tool) -> list:
+    """Hàng kế hoạch của kênh `a.kenh` (khổ rộng, hàng đầu là tiêu đề)."""
+    if a.bao_truc_tiep:
+        # Đọc THẲNG kế hoạch trên đĩa (cùng tệp trạm phục vụ ở /ke-hoach) —
+        # trạm tắt thì bản đệm vm/ke-hoach-<k>.csv có thể đã cũ.
+        goc_tool = os.path.dirname(GOC)
+        if goc_tool not in sys.path:
+            sys.path.insert(0, goc_tool)
+        from core import ke_hoach_dang  # noqa: PLC0415
+        return [[""] * nguon_tool.RONG_DONG] + nguon_tool.hang_tu_csv(
+            ke_hoach_dang.doc_van_ban(goc_tool, a.kenh), a.kenh)
+    return nguon_tool.get_rows(dict(cfg, cac_kenh=[a.kenh]))
+
+
 def main(argv=None) -> int:
     a = _doc_lenh(sys.argv[1:] if argv is None else argv)
-    _cai_nhat_ky(ra_man_hinh=a.kiem_dom or bool(a.ma))
+    _cai_nhat_ky(ra_man_hinh=a.kiem_dom or bool(a.ma) or bool(a.hoan_tat))
     import agent  # noqa: PLC0415
     import cdp as cdp_mod  # noqa: PLC0415
     import cdp_studio  # noqa: PLC0415
@@ -3848,21 +4235,27 @@ def main(argv=None) -> int:
             except Exception as loi:  # noqa: BLE001
                 log.info("bù MHKT: không đọc được kế hoạch (%s) — tìm nguồn theo videoId", str(loi)[:120])
                 hang = [[]]
+        elif a.hoan_tat:
+            # LÀM NỐT một gói hỏng dở (12/10/2026): dòng kế hoạch theo mã (bất kể trạng thái) + id trong sổ.
+            hang = _doc_ke_hoach_kenh(a, cfg, nguon_tool)
+            cac = [d for d in (dong_tu_hang(r) for r in hang[1:]) if d["ma"] == a.hoan_tat]
+            vid_so = SoVideoId().lay("{0}/{1}".format(a.kenh, a.hoan_tat)).get("video_id")
+            if not cac or not vid_so:
+                log.error("--hoan-tat %s: cần mã có trong kế hoạch kênh %s VÀ có video_id trong sổ (%s)",
+                          a.hoan_tat, a.kenh, "không có dòng" if not cac else "sổ không có id")
+                return MA_HONG
+            log.info("kênh %s: hoàn tất %s (video %s)%s", a.kenh, a.hoan_tat, vid_so,
+                     " — KIỂM, chỉ đọc" if a.kiem_dom else "")
+            if not a.kiem_dom:
+                # Video đã lưu riêng tư: hẹn lịch ở trang sửa PHẢI bấm Lưu của trang (như --doi-lich).
+                cam = dict(bo.get("cam_bam_sua_video") or {}) or dict(bo.get("cam_bam") or {}, chon=[
+                    s for s in (bo.get("cam_bam") or {}).get("chon") or [] if "#save" not in s])
+                bo = dict(bo, cam_bam={k: x for k, x in cam.items() if k != "ghi_chu"})
         elif not a.kiem_dom:
             if a.mot_lan and not a.ma and not _tu_dang_bat(a.kenh):
                 log.info("kênh %s: tu_dang đang TẮT — bỏ qua", a.kenh)
                 return MA_XONG
-            if a.bao_truc_tiep:
-                # Đọc THẲNG kế hoạch trên đĩa (cùng tệp trạm phục vụ ở /ke-hoach) —
-                # trạm tắt thì bản đệm vm/ke-hoach-<k>.csv có thể đã cũ.
-                goc_tool = os.path.dirname(GOC)
-                if goc_tool not in sys.path:
-                    sys.path.insert(0, goc_tool)
-                from core import ke_hoach_dang  # noqa: PLC0415
-                hang = [[""] * nguon_tool.RONG_DONG] + nguon_tool.hang_tu_csv(
-                    ke_hoach_dang.doc_van_ban(goc_tool, a.kenh), a.kenh)
-            else:
-                hang = nguon_tool.get_rows(dict(cfg, cac_kenh=[a.kenh]))
+            hang = _doc_ke_hoach_kenh(a, cfg, nguon_tool)
             for x, y in trung_tieu_de(hang, a.kenh):
                 log.warning("CẢNH BÁO kế hoạch %s và %s TRÙNG tiêu đề", x, y)
             if a.them_the or a.them_mhkt:
@@ -3905,7 +4298,7 @@ def main(argv=None) -> int:
             return loi.ma
         log.info("đã nối Chrome kênh %s (%s, cổng %s%s)", a.kenh, cdp.phien_ban, cdp.cong,
                  ", máy này tự mở" if cdp.tu_mo else "")
-        if a.kiem_dom and not a.sua_video and not a.doi_lich:
+        if a.kiem_dom and not a.sua_video and not a.doi_lich and not a.hoan_tat:
             kq = kiem_dom(cdp, a.kenh, bo, sau=a.sau, nhat_ky=log.info, ghi_dom_day_du=a.ghi_dom_day_du)
             duong = ghi_bao_cao_kiem(kq)
             dong = "máy đăng DOM kiểm {0} mức {1}: {2}{3}{4}".format(
@@ -3937,7 +4330,23 @@ def main(argv=None) -> int:
                                if x.get("ma") and x.get("kenh") == a.kenh}
         ma_thoat = MA_HONG
         try:
-            if a.doi_lich and a.kiem_dom:
+            if a.hoan_tat:
+                if a.kiem_dom:
+                    kq = may.kiem_hoan_tat(cac[0])
+                    ma_thoat = MA_XONG if kq["ok"] else MA_LUI
+                else:
+                    kq = may.hoan_tat(cac[0])
+                    ma_thoat = MA_XONG if kq["ket_qua"] in ("xong", "da_co") else MA_HONG
+                kq = dict(kq, kenh=a.kenh, kiem=bool(a.kiem_dom), luc=time.strftime("%Y-%m-%d %H:%M:%S"))
+                try:
+                    os.makedirs(THU_MUC_KIEM, exist_ok=True)
+                    with open(os.path.join(THU_MUC_KIEM, "hoan-tat-{0}.json".format(a.kenh)), "w",
+                              encoding="utf-8") as tep:
+                        json.dump(kq, tep, ensure_ascii=False, indent=1, default=str)
+                except OSError:
+                    pass
+                log.info("hoàn tất %s: %s", a.hoan_tat, kq.get("se_lam") or kq.get("ket_qua"))
+            elif a.doi_lich and a.kiem_dom:
                 may.lay_uc()
                 kq = may.doi_lich_mot("{0}/{1}".format(a.kenh, cac[0]["ma_goi"]), cac[0]["video_id"],
                                       datetime.now() + timedelta(days=30), chi_kiem=True)

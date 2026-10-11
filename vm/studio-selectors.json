@@ -128,6 +128,21 @@
         "ytcp-free-text-chip-bar ytcp-chip"
       ]
     },
+    "the_xoa_het": {
+      "chon": [
+        "#tags-container ytcp-icon-button#clear-button",
+        "ytcp-free-text-chip-bar #clear-button",
+        "ytcp-chip-bar #clear-button"
+      ],
+      "chu": [
+        "Xoá tất cả",
+        "Xóa tất cả",
+        "Delete all",
+        "Clear all",
+        "すべて削除"
+      ],
+      "ghi_chu": "12/10/2026: nút «Xoá tất cả» thẻ (đo bản đồ DOM 20261011-073235-kiem-trang-sua: ytcp-chip-bar ytcp-icon-button#clear-button aria='Xoá tất cả'). Dùng khi TIẾP NHÁP mà nháp đang mang thẻ hỏng (TL6-T7-K2-0007: thẻ 207 ký tự làm nút Tiếp TẮT)."
+    },
     "tien_do": {
       "chon": [
         "ytcp-uploads-dialog ytcp-video-upload-progress",
@@ -528,6 +543,29 @@
         "Đóng",
         "Đã hiểu"
       ]
+    },
+    "hop_kiem_noi_dung": {
+      "chon": [
+        "ytcp-prechecks-warning-dialog tp-yt-paper-dialog",
+        "tp-yt-paper-dialog:has(.ytcp-prechecks-warning-dialog)",
+        "ytcp-dialog tp-yt-paper-dialog"
+      ],
+      "ghi_chu": "12/10/2026: hộp «Chúng tôi vẫn đang kiểm tra nội dung của bạn» hiện SAU khi bấm «Lên lịch» lúc Studio còn kiểm tra (đo bản đồ DOM 20261011-214827-hong-TL2-T7-0024: tp-yt-paper-dialog#dialog.ytcp-dialog chứa ytcp-ve.ytcp-prechecks-warning-dialog). chon#1/#2 riêng hộp này; chon#3 chung mọi ytcp-dialog → máy đăng chỉ nhận khi chữ hộp khớp chu_trang_thai.kiem_noi_dung."
+    },
+    "nut_da_hieu_kiem": {
+      "chon": [
+        "ytcp-prechecks-warning-dialog #primary-action-button",
+        "#primary-action-button"
+      ],
+      "chu": [
+        "Đã hiểu",
+        "Got it",
+        "OK",
+        "了解",
+        "了解しました",
+        "확인"
+      ],
+      "ghi_chu": "12/10/2026: nút duy nhất của hộp hop_kiem_noi_dung (đo 20261011-214827-hong-TL2-T7-0024: ytcp-button#primary-action-button.ytcp-prechecks-warning-dialog 'Đã hiểu'). Chỉ dò TRONG hộp đó (trong=hộp) — chữ 'OK' không được khớp nút khác của trang."
     },
     "dong_hop_upload": {
       "chon": [
@@ -1150,6 +1188,17 @@
     "loi_mhkt": [
       "Rất tiếc, đã xảy ra lỗi"
     ],
+    "kiem_noi_dung": [
+      "vẫn đang kiểm tra nội dung",
+      "Quay lại trước khi video của bạn được xuất bản",
+      "still checking your content",
+      "We're still checking",
+      "まだコンテンツを確認しています",
+      "コンテンツを確認しています",
+      "コンテンツのチェック",
+      "まだチェック",
+      "콘텐츠를 확인하는 중"
+    ],
     "mhkt_loi_20s": [
       "20 giây cuối",
       "last 20 seconds",
@@ -1254,6 +1303,13 @@
         "#publish-button"
       ],
       "ghi_chu": "30/09: trình soạn phụ đề sót lại (panel 'Bản xem trước phụ đề' che the_them/nut_tiep) → bấm Xong của nó; chỉ dùng khi nó CHE nút khác"
+    },
+    {
+      "chon": "tp-yt-paper-dialog:has(.ytcp-prechecks-warning-dialog)",
+      "dong": [
+        "#primary-action-button"
+      ],
+      "ghi_chu": "12/10/2026: hộp «vẫn đang kiểm tra nội dung» (TL2-T7-0024) che nút của hộp tải lên → bấm «Đã hiểu»; luồng đăng cũng tự xử lý ngay sau khi bấm Lên lịch"
     }
   ],
   "bam_js_an_toan": [

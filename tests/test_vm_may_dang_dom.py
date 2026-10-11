@@ -102,6 +102,31 @@ class TestHamThuan:
                                      "the": ", ".join(["t" * 50] * 11)})
         assert len(loi) == 4
 
+    def test_loc_the_seo_the_rac_tl6_k2_0007(self):
+        """Cột thẻ thật của TL6-T7-K2-0007 (12/10/2026): đoạn mô tả «━━━ 📌 目次 00:00 …» lọt vào một
+        thẻ 207 ký tự → Studio tắt nút Tiếp. Lọc bỏ, giữ thẻ thường."""
+        the = ("優しい人が損をする, 優しい人を利用する, 心理学, 人間関係, 心理学黒  ━━━━━━━━━━━━━━ 📌 目次 00:00 "
+               "優しさの代償——自分を見失う人間関係 00:39 他者の感情を自分の責任にしてしまう心理 ━━━━━━━━━━━━━━")
+        giu, bo = mdd.loc_the_seo(the)
+        assert giu == ["優しい人が損をする", "優しい人を利用する", "心理学", "人間関係"]
+        assert len(bo) == 1 and bo[0][0].startswith("心理学黒")
+        assert mdd.loc_the_seo("a <b>, " + "x" * 31 + ", ok, ok, ★sao")[0] == ["ok"]
+        nhieu = ", ".join("tag {0:02d} abc".format(i) for i in range(60))
+        giu, bo = mdd.loc_the_seo(nhieu)
+        assert mdd.dem_ky_tu_the(giu) <= 500 and bo and all("tổng" in ly for _t, ly in bo)
+
+    def test_bo_chon_12_10_hop_kiem_noi_dung_the_xoa_het_va_cli(self):
+        bo = cdp_studio.doc_bo_chon()
+        assert cdp_studio.kiem_bo_chon(bo) == []
+        pt = bo["phan_tu"]
+        assert "ytcp-prechecks-warning-dialog #primary-action-button" in pt["nut_da_hieu_kiem"]["chon"]
+        assert "Đã hiểu" in pt["nut_da_hieu_kiem"]["chu"] and "Got it" in pt["nut_da_hieu_kiem"]["chu"]
+        assert pt["hop_kiem_noi_dung"]["chon"][0] == "ytcp-prechecks-warning-dialog tp-yt-paper-dialog"
+        assert any("vẫn đang kiểm tra nội dung" in w for w in bo["chu_trang_thai"]["kiem_noi_dung"])
+        assert "ytcp-chip-bar #clear-button" in pt["the_xoa_het"]["chon"]
+        a = mdd._doc_lenh(["--kenh", "TL2-T7", "--hoan-tat", "TL2-T7-0024", "--kiem-dom"])
+        assert a.hoan_tat == "TL2-T7-0024" and a.kiem_dom
+
 
 def _hop(loai, noi):
     return struct.pack(">I4s", 8 + len(noi), loai) + noi
@@ -282,6 +307,27 @@ class TestQuyetDinh:
         q = mdd.quyet_dinh(DONG, {}, [_h("F" * 11, "cong_khai", tieu_de="video khác")], HOM_NAY)
         assert q["hanh_dong"] == "tai_moi"
 
+    def test_12_10_tiep_nhap_khi_da_tai_xong(self):
+        xong = {"video_id": "A" * 11, "trang_thai": "nhap", "tai_xong_luc": "2026-09-29 08:00:00"}
+        q = mdd.quyet_dinh(DONG, xong, [_h("A" * 11, "nhap"), _h("B" * 11, "nhap")], HOM_NAY)
+        assert q["hanh_dong"] == "tiep_nhap" and q["video_id"] == "A" * 11 and q["nhap_thua"] == ["B" * 11]
+        # quá trần tiếp nháp/ngày → DỪNG (không tải mới); --hoan-tat (ep_tiep) bỏ trần
+        tran = dict(xong, lan_tiep_nhap=2, ngay_tiep_nhap=HOM_NAY)
+        assert mdd.quyet_dinh(DONG, tran, [_h("A" * 11, "nhap")], HOM_NAY)["hanh_dong"] == "dung"
+        assert mdd.quyet_dinh(DONG, tran, [_h("A" * 11, "nhap")], HOM_NAY, ep_tiep=True)["hanh_dong"] == "tiep_nhap"
+        # hậu kiểm báo hỏng / Studio báo lỗi tải → vẫn tải mới như cũ
+        assert mdd.quyet_dinh(DONG, dict(xong, tai_xong=False), [_h("A" * 11, "nhap")], HOM_NAY)["hanh_dong"] == "tai_moi"
+        assert mdd.quyet_dinh(DONG, dict(xong, trang_thai="loi-tai"), [_h("A" * 11, "nhap")],
+                              HOM_NAY)["hanh_dong"] == "tai_moi"
+        # riêng tư + đã tải xong → báo chủ kênh kèm hen_lai (--hoan-tat hẹn ở trang sửa)
+        q = mdd.quyet_dinh(DONG, xong, [_h("A" * 11, "rieng_tu")], HOM_NAY)
+        assert q["hanh_dong"] == "bao_chu_kenh" and q["hen_lai"] and "--hoan-tat" in q["ly_do"]
+
+    def test_12_10_id_khong_thay_khong_bao_nhap_thua(self):
+        """TL6-T7-K2-0007 00:06: «lỗi tải/không còn trên kênh» + «NHÁP THỪA» cùng id — mâu thuẫn."""
+        q = mdd.quyet_dinh(DONG, {"video_id": "A" * 11}, [], HOM_NAY)
+        assert q["hanh_dong"] == "tai_moi" and q["nhap_thua"] == [] and q["id_khong_thay"] == "A" * 11
+
     def test_tieu_de_so_bang_chuan_hoa(self):
         # Studio trả tiêu đề có khoảng trắng đầu/cuối, xuống dòng, dấu cách toàn khổ
         q = mdd.quyet_dinh(DONG, {}, [_h("B" * 11, "cong_khai", tieu_de="\n " + TD + "　 ")], HOM_NAY)
@@ -372,6 +418,10 @@ class KenhGia:
         self.mhkt_nhap_tu = []
         self.tien_do = None       # None = giả lập tải xong ở lần đọc 2; [] = không đọc được gì
         self.goi_studio = {}      # videoId → {"status", "lengthSeconds"} cho hậu kiểm
+        # 12/10/2026: hộp «vẫn đang kiểm tra nội dung» sau khi bấm Lên lịch — None | "dong" (Đã hiểu là
+        # lên lịch + đóng) | "bam_lai" (Đã hiểu xong hộp tải lên vẫn mở, phải bấm Lên lịch lần nữa)
+        self.kiem_noi_dung = None
+        self.tiep_tat = False     # nút Tiếp ở bước Chi tiết TẮT mãi (TL6-T7-K2-0007)
 
     def moi_id(self):
         self.dem += 1
@@ -454,6 +504,8 @@ class StudioGia:
             "hang_sua_nhap": self.trang == "ds" and any(v["loai"] == "nhap" for v in self._hang()),
             "the_da_co": (co_vid and bool((self._v() or {}).get("the")))
                          or (self.trang == "sua" and bool((self.k.tim_video(self.vid_sua) or {}).get("the"))),
+            "the_xoa_het": co_vid and b == 0 and bool((self._v() or {}).get("the")),
+            "hop_kiem_noi_dung": bool(h.get("kiem_nd")), "nut_da_hieu_kiem": bool(h.get("kiem_nd")),
             "playlist_muc": con == "playlist", "playlist_xong": con == "playlist",
             "nut_tiep": co_vid and b < 3 and not con,
             "phu_de_them": co_vid and b == 1 and not con, "mhkt_them": co_vid and b == 1 and not con,
@@ -496,7 +548,11 @@ class StudioGia:
             return None
         if not self._hien(khoa):
             return None
+        if khoa == "nut_tiep" and self.k.tiep_tat and (self.hop or {}).get("buoc") == 0 and not cho_tat:
+            return None           # nút có nhưng TẮT: `tim` thường không nhận
         so = 3 if khoa == "playlist_muc" else 6 if khoa == "mhkt_mau" else 1
+        if khoa == "the_da_co":
+            so = len((self._v() or {}).get("the") or [])
         if khoa in ("the_moc", "the_moc_o", "the_muc_ten"):
             so = len((self.hop or {}).get("the_ds") or [])
             if thu >= so:
@@ -622,13 +678,19 @@ class StudioGia:
         elif khoa == "o_ngay_mo":
             h["con"] = "ngay"
         elif khoa == "nut_xong":
-            ngay = cdp_studio.chuan_chu(h.get("ngay_chu"))
-            dd = mdd.phan_tich_ngay(ngay)[0]
-            g = mdd.phan_tich_gio(h.get("gio_chu"))
-            v["loai"] = "da_len_lich"
-            v["lich"] = datetime(dd.year, dd.month, dd.day, g[0], g[1]) + timedelta(minutes=self.k.lech_phut)
-            self.hop = None
-            self.da_xong_hop = True
+            self.bam_xong = getattr(self, "bam_xong", 0) + 1
+            if self.k.kiem_noi_dung and not h.get("kiem_nd_da"):
+                h["kiem_nd"] = h["kiem_nd_da"] = True       # hộp kiểm tra nội dung che, CHƯA lên lịch
+            else:
+                self._len_lich(h, v)
+        elif khoa == "nut_da_hieu_kiem":
+            h["kiem_nd"] = False
+            self.da_hieu = getattr(self, "da_hieu", 0) + 1
+            if self.k.kiem_noi_dung == "dong":
+                self._len_lich(h, v)
+        elif khoa == "the_xoa_het":
+            v["the"] = []
+            self.xoa_het_the = True
         elif khoa == "dong_hop_da_xong":
             self.da_xong_hop = False
         elif khoa == "dong_hop_upload":
@@ -636,6 +698,15 @@ class StudioGia:
         self._o_cuoi = khoa
         self._check(hau_dieu_kien, khoa)
         return x if isinstance(x, dict) else {"khoa": khoa}
+
+    def _len_lich(self, h, v):
+        ngay = cdp_studio.chuan_chu(h.get("ngay_chu"))
+        dd = mdd.phan_tich_ngay(ngay)[0]
+        g = mdd.phan_tich_gio(h.get("gio_chu"))
+        v["loai"] = "da_len_lich"
+        v["lich"] = datetime(dd.year, dd.month, dd.day, g[0], g[1]) + timedelta(minutes=self.k.lech_phut)
+        self.hop = None
+        self.da_xong_hop = True
 
     def _check(self, hau, khoa):
         if hau is not None and not hau():
@@ -665,6 +736,8 @@ class StudioGia:
             return [{"chu": g, "value": g} for g in sorted(h.get("the_gio") or [])]
         if khoa == "the_dau_phat" and h.get("con") == "the":
             return [{"chu": h.get("dau_phat", ""), "value": h.get("dau_phat", "")}]
+        if khoa == "the_da_co":
+            return [{"chu": t, "value": ""} for t in ((self._v() or {}).get("the") or [])]
         return []
 
     def phim(self, ten, n=1, modifiers=0):
@@ -702,6 +775,9 @@ class StudioGia:
                     "Bước {0}".format(h.get("buoc")))
         if khoa == "hien_thi_trang_sua":
             return _chu_trang_thai(self.k.tim_video(self.vid_sua), self.k.an_gio)
+        if khoa == "hop_kiem_noi_dung":
+            return ("Chúng tôi vẫn đang kiểm tra nội dung của bạn Bạn nên xem lại nội dung của mình. "
+                    "Quay lại trước khi video của bạn được xuất bản vào ngày 12 thg 10, 2026 Đã hiểu")
         if khoa == "playlist_muc":
             return "DS {0}".format(x.get("thu", 0) + 1)
         return ""
@@ -766,6 +842,8 @@ class StudioGia:
         self.dong_ = True
 
     def bat_json(self, url, chua_url, han=30, toi_da=4):
+        if "/video/" in url:
+            self.mo(url)          # trang thật: bat_json MỞ trang rồi bắt gói
         if chua_url == "get_creator_videos" and "/video/" in url:
             vid = url.split("/video/")[1].split("/")[0]
             g = self.k.goi_studio.get(vid)
@@ -969,7 +1047,8 @@ class TestLuong:
 
     def test_dut_sau_co_id_ma_1_luot_sau_tai_moi_de_ke_nhap(self, moi):
         """30/09/2026 chủ kênh chốt: nháp của lượt hỏng để kệ (chủ kênh xoá) —
-        lượt sau TẢI MỚI, id cũ vào `id_cu`, không mở lại/sửa/xoá nháp."""
+        lượt sau TẢI MỚI, id cũ vào `id_cu`, không mở lại/sửa/xoá nháp.
+        12/10/2026: chỉ còn đúng khi sổ CHƯA có bằng chứng tải xong (xem test_tiep_nhap_*)."""
         k, bao = KenhGia(), Bao()
         k.dut_con = 1
         m = _may(moi, k, bao)
@@ -978,6 +1057,7 @@ class TestLuong:
         so = m.so.lay("TL1-T7/TL1-T7-0007")
         assert so["video_id"] == vid and so["trang_thai"] == "nhap"
         assert bao.trang_thai() == ["ĐANG ĐĂNG · nháp " + vid]
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", tai_xong_luc=None)    # chưa có bằng chứng tải xong
         bao2 = Bao()
         m2 = _may(moi, k, bao2)
         assert m2.chay([_dong(trang_thai="ĐANG ĐĂNG · nháp " + vid)]) == mdd.MA_XONG
@@ -989,6 +1069,143 @@ class TestLuong:
         assert so2["video_id"] == moi_v["id"] and so2["id_cu"] == [vid] and so2["lan_tai_moi"] == 2
         assert {"ma": "TL1-T7-0007", "video_id": vid} in m2.bao_cao["nhap_thua"]
         assert bao2.ds[-1][1] == "ĐÃ ĐĂNG" and bao2.ds[-1][2]["video_id"] == moi_v["id"]
+
+    # ── 12/10/2026: TIẾP NHÁP thay vì tải mới (TL2-T7-0024, TL6-T7-K2-0007) ──
+    def test_tiep_nhap_da_tai_xong_khong_tai_ban_moi(self, moi):
+        """Lượt 1 hỏng SAU khi đã tải xong (sổ có tai_xong_luc) → lượt 2 MỞ LẠI đúng nháp đó, làm
+        nốt, lên lịch; KHÔNG tải bản mới, không báo nháp thừa."""
+        k, bao = KenhGia(), Bao()
+        k.dut_con = 1
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        vid = k.video[0]["id"]
+        assert m.so.lay("TL1-T7/TL1-T7-0007")["tai_xong_luc"], "lượt 1 phải ghi bằng chứng tải xong"
+        bao2 = Bao()
+        m2 = _may(moi, k, bao2)
+        assert m2.chay([_dong(trang_thai="ĐANG ĐĂNG · nháp " + vid)]) == mdd.MA_XONG
+        assert k.lan_dat_tep_video == 1 and len(k.video) == 1, "không được tải bản mới"
+        v = k.video[0]
+        assert v["loai"] == "da_len_lich" and v["lich"] == datetime(2026, 9, 30, 20, 0)
+        assert v["tieu_de"] == TD and v["mo_ta"] == MO_TA and v["the"] == ["目覚める", "潜在意識", "夜中"]
+        so2 = m2.so.lay("TL1-T7/TL1-T7-0007")
+        assert so2["video_id"] == vid and so2["trang_thai"] == "xac-nhan" and so2["lan_tiep_nhap"] == 1
+        assert so2["lan_tai_moi"] == 1 and not so2.get("id_cu")
+        assert m2.bao_cao["nhap_thua"] == []
+        assert bao2.ds[-1] == ("TL1-T7-0007", "ĐÃ ĐĂNG", {"video_id": vid, "lich": "30/09/2026 20:00"})
+
+    def test_tiep_nhap_qua_tran_thi_dung_khong_tai_moi(self, moi):
+        k, bao = KenhGia(), Bao()
+        k.video.append({"id": "DRAFTxxxxxx", "tieu_de": TD, "loai": "nhap"})
+        m = _may(moi, k, bao)
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="DRAFTxxxxxx", trang_thai="nhap",
+                      tai_xong_luc="2026-09-29 08:00:00", lan_tiep_nhap=2, ngay_tiep_nhap=BAY_GIO.date().isoformat())
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        assert k.lan_dat_tep_video == 0 and len(k.video) == 1
+        assert m.bao_cao["goi"][-1]["ket_qua"] == "hong_sau" and "trần" in m.bao_cao["goi"][-1]["ly_do"]
+
+    def test_tiep_nhap_nhap_mang_the_hong_thi_xoa_het_go_lai_va_khong_them_the_chong(self, moi):
+        """TL6-T7-K2-0007: nháp mang thẻ 207 ký tự (nút Tiếp TẮT) → Xoá tất cả, gõ bộ đã lọc; nháp
+        đã có thẻ video từ lượt trước → không thêm chồng."""
+        rac = "心理学黒  ━━━━━━━━━━━━━━ 📌 目次 00:00 優しさの代償——自分を見失う人間関係 00:39 他者の感情"
+        k, bao = KenhGia(), Bao()
+        k.video.append({"id": "DRAFTxxxxxx", "tieu_de": TD, "loai": "nhap", "the": ["目覚める", rac],
+                        "the_card": ["ds", "video:AAAAAAAAAAA"]})
+        m = _may(moi, k, bao)
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="DRAFTxxxxxx", trang_thai="nhap",
+                      tai_xong_luc="2026-09-29 08:00:00")
+        assert m.chay([_dong(the="目覚める, 潜在意識, " + rac)]) == mdd.MA_XONG
+        t = m._tabs_gia
+        assert any(getattr(x, "xoa_het_the", False) for x in t), "phải bấm «Xoá tất cả» thẻ hỏng"
+        v = k.video[0]
+        assert v["the"] == ["目覚める", "潜在意識"] and v["loai"] == "da_len_lich"
+        assert v["the_card"] == ["ds", "video:AAAAAAAAAAA"]
+        assert m.so.lay("TL1-T7/TL1-T7-0007")["the"] == "ok:co-san"
+        assert any("BỎ thẻ" in c for c in m.bao_cao["canh_bao"])
+        assert k.lan_dat_tep_video == 0
+
+    def test_id_so_khong_thay_tren_danh_sach_nhung_trang_sua_con_thi_tiep_nhap(self, moi):
+        """TL6-T7-K2-0007 00:06: danh sách không thấy id (log cũ «lỗi tải/không còn» + «NHÁP THỪA» cùng
+        lúc) → mở trang sửa: còn → tiếp nháp (mở từ danh sách đầy đủ); hàng nháp không đọc được id →
+        hỏng sau, KHÔNG tải mới."""
+        for an_id, ket in ((False, "xong"), (True, "hong_sau")):
+            k, bao = KenhGia(), Bao()
+            k.video.append({"id": "DRAFTxxxxxx", "tieu_de": "khác hẳn", "loai": "nhap", "an_id": an_id})
+            if (moi / "so.json").exists():
+                (moi / "so.json").unlink()
+            m = _may(moi, k, bao)
+            m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="DRAFTxxxxxx", trang_thai="nhap",
+                          tai_xong_luc="2026-09-29 08:00:00")
+            m.tra_kenh = lambda tieu_de, vid="": []          # danh sách đọc trượt
+            kq = m.dang_mot_goi(_dong())
+            assert kq["ket_qua"] == ket, an_id
+            if an_id:
+                assert "bản nháp" in kq["ly_do"]
+            else:
+                assert k.video[0]["loai"] == "da_len_lich"
+            assert k.lan_dat_tep_video == 0 and m.bao_cao["nhap_thua"] == []
+            assert not any("NHÁP THỪA" in c for c in m.bao_cao["canh_bao"])
+
+    def test_hop_kiem_noi_dung_sau_len_lich_bam_da_hieu(self, moi):
+        """TL2-T7-0024: bấm «Lên lịch» → hộp «Chúng tôi vẫn đang kiểm tra nội dung» → «Đã hiểu» → xác nhận."""
+        for kieu, so_bam in (("dong", 1), ("bam_lai", 2)):
+            k, bao = KenhGia(), Bao()
+            k.kiem_noi_dung = kieu
+            if (moi / "so.json").exists():
+                (moi / "so.json").unlink()                  # mỗi kiểu một sổ mới
+            m = _may(moi, k, bao)
+            assert m.chay([_dong()]) == mdd.MA_XONG, kieu
+            v = k.video[0]
+            assert v["loai"] == "da_len_lich" and v["lich"] == datetime(2026, 9, 30, 20, 0)
+            ta = next(x for x in m._tabs_gia if getattr(x, "bam_xong", 0))
+            assert ta.da_hieu == 1 and ta.bam_xong == so_bam, kieu
+            assert m.so.lay("TL1-T7/TL1-T7-0007")["trang_thai"] == "xac-nhan"
+
+    def test_nut_tiep_tat_bao_ro_va_chup_bang_chung(self, moi):
+        k, bao = KenhGia(), Bao()
+        k.tiep_tat = True
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        kq = m.bao_cao["goi"][-1]
+        assert kq["ket_qua"] == "hong_sau" and "nút Tiếp đang TẮT" in kq["ly_do"]
+        assert any("tiep-tat-TL1-T7-0007" in b for x in m._tabs_gia for b in x.bang_chung)
+
+    def test_hoan_tat_video_rieng_tu_hen_lich_o_trang_sua(self, moi, monkeypatch):
+        k, bao = KenhGia(), Bao()
+        k.video.append({"id": "PRIVxxxxxxx", "tieu_de": TD, "loai": "rieng_tu"})
+        m = _may(moi, k, bao)
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="PRIVxxxxxxx", trang_thai="nhap",
+                      tai_xong_luc="2026-09-29 08:00:00")
+        # luồng tự động: chỉ báo chủ kênh, không tải
+        assert m.chay([_dong()]) == mdd.MA_HONG and k.lan_dat_tep_video == 0
+        assert "--hoan-tat" in m.bao_cao["goi"][-1]["ly_do"]
+        goi = []
+
+        def doi(self, khoa, vid, lich, chi_kiem=False, tu_rieng_tu=False, chi_tiet=None):
+            goi.append((vid, lich, tu_rieng_tu, chi_tiet["ma"]))
+            v = k.tim_video(vid)
+            v["loai"], v["lich"] = "da_len_lich", lich
+            return {"ket": "ok", "ly_do": ""}
+        monkeypatch.setattr(mdd.MayDangDom, "doi_lich_mot", doi)
+        m2 = _may(moi, k, Bao())
+        kq = m2.hoan_tat(_dong())
+        assert kq["ket_qua"] == "xong" and goi == [("PRIVxxxxxxx", datetime(2026, 9, 30, 20, 0), True, "TL1-T7-0007")]
+        assert m2.so.lay("TL1-T7/TL1-T7-0007")["trang_thai"] == "xac-nhan" and k.lan_dat_tep_video == 0
+
+    def test_hoan_tat_khong_bao_gio_tai_moi_va_kiem_chi_doc(self, moi):
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="MATxxxxxxxx", trang_thai="nhap")   # không tải xong
+        kq = m.hoan_tat(_dong())
+        assert kq["ket_qua"] == "bao_chu_kenh" and "không tải bản mới" in kq["ly_do"]
+        assert k.lan_dat_tep_video == 0 and bao.ds == []
+        # --kiem-dom: chỉ đọc
+        k.video.append({"id": "DRAFTxxxxxx", "tieu_de": TD, "loai": "nhap"})
+        m.so.cap_nhat("TL1-T7/TL1-T7-0007", video_id="DRAFTxxxxxx", tai_xong_luc="2026-09-29 08:00:00")
+        m3 = _may(moi, k, bao)
+        kq = m3.kiem_hoan_tat(_dong())
+        assert kq["ok"] and kq["quyet_dinh"]["hanh_dong"] == "tiep_nhap" and "mở lại nháp" in kq["se_lam"]
+        assert k.video[0]["loai"] == "nhap" and bao.ds == [] and k.lan_dat_tep_video == 0
+        assert all(not getattr(x, "bam_xong", 0) for x in m3._tabs_gia)
 
     def test_xac_nhan_da_len_lich_khong_gio_theo_lich_dat(self, moi):
         """30/09 TL1-T7-0011: Studio chỉ hiện "Chế độ hiển thị Đã lên lịch" (không
