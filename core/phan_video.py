@@ -763,6 +763,41 @@ def co_muc_luc(seo: str) -> bool:
     return "目次" in seo or any((n + "\n") in seo for n in ("Chapters",) + tuple(NHAN_MUC_LUC.values()))
 
 
+_NHAN_SEO = re.compile(r"^\s*[A-Z][A-Z_]{2,}:")
+
+
+def chen_khoi_vao_mo_ta(cac: List[str], khoi: Sequence[str]) -> List[str]:
+    """Chèn `khoi` (các dòng mục lục) vào CUỐI phần `DESCRIPTION:` của `1-seo.txt` — trước nhãn kế tiếp
+    (`HASHTAGS:`/`KEYWORDS:`/`TAGS:`…) và trước dòng hashtag chốt mô tả nếu có. Không có `DESCRIPTION:` thì
+    trước `HASHTAGS:`, không có nữa thì nối cuối (hành vi cũ).
+
+    12/10/2026: bản cũ chỉ tìm `HASHTAGS:`; tệp SEO không có nhãn đó (hashtag nằm trong mô tả) thì khối bị nối
+    SAU `KEYWORDS:` → lọt vào cột thẻ (thẻ 206 ký tự, Studio tắt nút Tiếp — TL6-T7-K2/0007) và mô tả mất 目次."""
+    cac = list(cac)
+    i_mo = next((i for i, x in enumerate(cac) if x.strip().upper().startswith("DESCRIPTION:")), None)
+    if i_mo is not None:
+        ket = next((i for i in range(i_mo + 1, len(cac)) if _NHAN_SEO.match(cac[i])), len(cac))
+        san = i_mo
+    else:
+        ket = next((i for i, x in enumerate(cac) if x.strip().upper().startswith("HASHTAGS:")), None)
+        if ket is None:
+            while cac and not cac[-1].strip():
+                cac.pop()
+            return cac + [""] + list(khoi)
+        san = -1
+    j = ket - 1
+    while j > san and not cac[j].strip():
+        j -= 1
+    if j > san and cac[j].lstrip().startswith("#"):
+        vi_tri = j                                   # trước dòng hashtag chốt mô tả
+        moi = list(khoi) + [""]
+    else:
+        vi_tri = j + 1                               # ngay sau dòng chữ cuối của mô tả
+        moi = [""] + list(khoi)
+    cac[vi_tri:vi_tri] = moi
+    return cac
+
+
 def dat_muc_luc_seo(duong_seo: str, dong: Sequence[str], ngon_ngu: str) -> str:
     """ĐẶT khối mục lục trong `1-seo.txt`: thay khối cũ (giữa hai dòng `━…`
     có `📌`) nếu có, không có thì chèn như `_chen_muc_luc_seo`. Idempotent.
@@ -796,22 +831,7 @@ def dat_muc_luc_seo(duong_seo: str, dong: Sequence[str], ngon_ngu: str) -> str:
             return "giu"
         if co_muc_luc(seo):
             return "giu"        # khối lạ do người/AI viết — không chèn đúp
-        vi_tri = None
-        for i, x in enumerate(cac):
-            if x.strip().upper().startswith("HASHTAGS:"):
-                vi_tri = i
-                break
-        if vi_tri is None:
-            while cac and not cac[-1].strip():
-                cac.pop()
-            cac += [""] + khoi
-        else:
-            j = vi_tri - 1
-            while j >= 0 and not cac[j].strip():
-                j -= 1
-            if j >= 0 and cac[j].lstrip().startswith("#"):
-                vi_tri = j
-            cac[vi_tri:vi_tri] = khoi + [""]
+        cac = chen_khoi_vao_mo_ta(cac, khoi)
         ket = "chen"
     tam = duong_seo + ".tmp"
     with open(tam, "w", encoding="utf-8") as tep:

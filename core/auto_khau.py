@@ -5160,23 +5160,11 @@ def _chen_muc_luc_seo(bc: BoiCanh, d: str, duong_srt: str) -> None:
         dau = dau_muc_luc(bc.kenh.ngon_ngu)
         khoi = ("━━━━━━━━━━━━━━\n{0}\n".format(dau)
                 + "\n".join(muc) + "\n━━━━━━━━━━━━━━")
-        dong = seo.split("\n")
-        # Chèn cuối DESCRIPTION: trước nhãn HASHTAGS:, và trước cả dòng
-        # hashtag chốt mô tả nếu có — mục lục nằm trong mô tả, hashtag vẫn cuối.
-        vi_tri = None
-        for i, dg in enumerate(dong):
-            if dg.strip().upper().startswith("HASHTAGS:"):
-                vi_tri = i
-                break
-        if vi_tri is None:
-            dong += ["", khoi]
-        else:
-            j = vi_tri - 1
-            while j >= 0 and not dong[j].strip():
-                j -= 1
-            if j >= 0 and dong[j].lstrip().startswith("#"):
-                vi_tri = j
-            dong[vi_tri:vi_tri] = [khoi, ""]
+        # Chèn CUỐI phần DESCRIPTION (trước nhãn kế tiếp và dòng hashtag chốt mô tả) — dùng chung
+        # `phan_video.chen_khoi_vao_mo_ta` (12/10/2026: bản cũ nối sau KEYWORDS khi tệp không có HASHTAGS:).
+        from .phan_video import chen_khoi_vao_mo_ta  # noqa: PLC0415
+
+        dong = chen_khoi_vao_mo_ta(seo.replace("\r\n", "\n").split("\n"), khoi.split("\n"))
         _ghi_chu(duong_seo, "\n".join(dong))
         bc.ghi("  đã chèn 目次 {0} chương (mốc thật từ SRT) vào 1-seo.txt."
                .format(len(muc)))
