@@ -148,6 +148,25 @@ LAP_DIA_DAY_GIO = 24.0
 #: `core.bang_dieu_khien` (dòng ~1012-1018, không có hằng số export riêng).
 NGUONG_STUDIO_CU_GIO = 48.0
 
+# ── Sức khoẻ SỐ LIỆU THẬT (12/10/2026, `core/chi_so_ytb/suc_khoe.py`) ─────────
+#
+# `_kiem_studio_cu` đo mtime `bang-tom-tat.csv` — tệp ấy được VẼ LẠI mỗi khi có gói về, kể cả gói
+# rỗng, nên TL2-T7 mất số toàn kênh 07–11/10 và 18–39% bản chụp rỗng mà không lớp nào kêu
+# (chẩn đoán `workspace/chan-doan/view-giam-2026-10-12.md` mục 6). Kiểm dưới đây đo trên bản chụp.
+
+#: Số (toàn kênh hoặc video) mới nhất CÓ SỐ cũ hơn ngần này giờ → báo.
+NGUONG_SO_LIEU_CU_GIO = 24.0
+#: Dung sai cho lịch QUÉT NGÀY trôi giờ (02:10–06:00, mỗi kênh lệch ~30–60 phút/ngày): số hôm qua
+#: lúc 03:10 mà hôm nay kênh quét lúc 03:40 thì giữa hai lúc đó số "24,5 giờ" là bình thường —
+#: báo khi quá `NGUONG_SO_LIEU_CU_GIO + DUNG_SAI_LICH_QUET_GIO` giờ (không báo oan mỗi sáng).
+DUNG_SAI_LICH_QUET_GIO = 3.0
+#: Lượt quét gần nhất có hơn ngần này phần video không ra số → báo.
+NGUONG_TI_LE_BAN_RONG = 0.20
+#: …chỉ khi lượt ấy chụp ít nhất ngần này video (1/2 = 50% không nói lên gì).
+TOI_THIEU_VIDEO_LUOT_QUET = 3
+#: Kênh tắt tự chạy mà số cũ quá ngần này giờ thì coi là kênh ngừng theo dõi — không báo.
+GIO_COI_LA_NGUNG_THEO_DOI = 7 * 24.0
+
 # ── Ngưỡng thêm 29/09/2026 (tối) — "chế độ chạy max", xem
 # `workspace/ban-va/2026-09-29-tu-canh-loi/GHI-CHU.md` ─────────────────────
 
@@ -305,6 +324,23 @@ def _mtime_chi_so_gio(goc: str, ma: str, bay_gio: _dt.datetime) -> Optional[floa
     except OSError:
         return None
     return (bay_gio.timestamp() - mtime) / 3600.0
+
+
+def _suc_khoe_chi_so(goc: str, ma: str, bay_gio: _dt.datetime) -> Optional[Dict[str, Any]]:
+    """`core.chi_so_ytb.suc_khoe.suc_khoe` của kênh — CHỈ ĐỌC (không sửa tên thư mục, không giải mã).
+    Chưa có `chi-so/` hoặc đọc hỏng → `None` (kiểm bỏ qua, không đoán bừa)."""
+    try:
+        from .chi_so_ytb import loc_video as _loc  # noqa: PLC0415
+        from .chi_so_ytb import suc_khoe as _sk  # noqa: PLC0415
+
+        thu_muc_kenh = kenh_mod.duong_kenh(goc, ma)
+        thu_muc = os.path.join(thu_muc_kenh, "chi-so")
+        if not os.path.isdir(thu_muc):
+            return None
+        return _sk.suc_khoe(thu_muc, bay_gio=bay_gio.timestamp(),
+                            moc=_loc.moc_cua_thu_muc(thu_muc_kenh))
+    except Exception:  # noqa: BLE001 — một kênh hỏng không được chặn cả ảnh chụp
+        return None
 
 
 def _mtime_bao_cao_ngay_epoch(goc: str, ma: str, ngay_str: str) -> Optional[float]:
@@ -585,6 +621,7 @@ def _chup_kenh(goc: str, ma: str, thu_muc_vm: str, bay_gio: _dt.datetime,
         "kiem_dom": bang_dieu_khien.doc_kiem_dom(thu_muc_vm, ma),
         "dung_may_dang_dom": dung_may_dang_dom,
         "chi_so_tuoi_gio": _mtime_chi_so_gio(goc, ma, bay_gio),
+        "chi_so_suc_khoe": _suc_khoe_chi_so(goc, ma, bay_gio),
         "bao_cao_tuoi_phut": _moc_hoat_dong_tuoi_phut(goc, ma, bay_gio, pid_nang),
     }
 
@@ -853,6 +890,55 @@ def _kiem_studio_cu(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
+def _kiem_du_lieu_chi_so(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Số liệu Studio THẬT của kênh (12/10/2026) — đọc `snap["chi_so_suc_khoe"]` (xem
+    `_suc_khoe_chi_so`): (1) số toàn kênh / số video mới nhất CÓ SỐ cũ quá
+    `NGUONG_SO_LIEU_CU_GIO` (+ `DUNG_SAI_LICH_QUET_GIO`); (2) lượt quét gần nhất có hơn
+    `NGUONG_TI_LE_BAN_RONG` video ra bản chụp rỗng. Mỗi thứ báo tối đa 1 lần/ngày."""
+    sk = snap.get("chi_so_suc_khoe")
+    if not isinstance(sk, dict):
+        return []
+    ra: List[Dict[str, Any]] = []
+    tuoi_kenh, tuoi_video = sk.get("kenh_tuoi_gio"), sk.get("video_tuoi_gio")
+    cac_tuoi = [t for t in (tuoi_kenh, tuoi_video) if isinstance(t, (int, float))]
+    # Kênh tắt tự chạy mà số đã cũ cả tuần: kênh ngừng theo dõi (bản thử, kênh cũ) — im.
+    dang_theo_doi = bool(snap.get("tu_chay")) or (cac_tuoi and min(cac_tuoi) < GIO_COI_LA_NGUNG_THEO_DOI)
+    nguong = NGUONG_SO_LIEU_CU_GIO + DUNG_SAI_LICH_QUET_GIO
+    cu = []
+    if sk.get("co_thu_muc_kenh") and (tuoi_kenh is None or tuoi_kenh > nguong):
+        cu.append("số TOÀN KÊNH " + ("chưa có bản nào có số" if tuoi_kenh is None
+                                     else "{0:.0f} giờ".format(tuoi_kenh)))
+    if (sk.get("so_video") or 0) and (tuoi_video is None or tuoi_video > nguong):
+        cu.append("số VIDEO " + ("chưa có bản nào có số" if tuoi_video is None
+                                 else "{0:.0f} giờ".format(tuoi_video)))
+    if dang_theo_doi and cu:
+        sc = _su_co(
+            "so_lieu_chi_so_cu", bao_dong.MUC_THUONG, kenh=ma,
+            chuyen_gi="Số liệu Studio của kênh {0} quá {1:.0f} giờ chưa có bản mới có số ({2}).".format(
+                ma, NGUONG_SO_LIEU_CU_GIO, "; ".join(cu)),
+            can_lam_gi=("Xem lượt QUÉT NGÀY gần nhất của kênh {0} trong vm/agent.log và nhật ký tiện ích "
+                        "(dòng HỎNG / THIẾU gói) — máy tự chụp lại ở lượt quét sau.").format(ma),
+            neu_khong_lam="Vòng học, giám đốc kênh và bộ não đọc số cũ — chấm sai video, chọn sai đề tài.",
+            dedupe_khoa="chi_so_cu:{0}".format(ma))
+        sc["lap_gio"] = 24.0
+        ra.append(sc)
+    luot = sk.get("luot_cuoi") or {}
+    tong, rong, ti_le = int(luot.get("tong") or 0), int(luot.get("rong") or 0), luot.get("ti_le_rong")
+    if tong >= TOI_THIEU_VIDEO_LUOT_QUET and isinstance(ti_le, (int, float)) and ti_le > NGUONG_TI_LE_BAN_RONG:
+        ds = ", ".join((luot.get("video_rong") or [])[:8])
+        sc = _su_co(
+            "ban_chup_rong", bao_dong.MUC_THUONG, kenh=ma,
+            chuyen_gi="Lượt quét {0} của kênh {1}: {2}/{3} video ({4:.0f}%) không ra số Studio (bản chụp rỗng){5}.".format(
+                luot.get("ngay") or "?", ma, rong, tong, 100.0 * ti_le, (": " + ds) if ds else ""),
+            can_lam_gi=("Xem nhật ký tiện ích kênh {0} (HỎNG / quá hạn / tab không ở Studio) — trạm sẽ xin "
+                        "chụp bù các video này ở lượt quét sau.").format(ma),
+            neu_khong_lam="Video thiếu số muộn bị vòng học chấm \"trượt\" oan; mất mốc 96h/7 ngày.",
+            dedupe_khoa="chi_so_rong:{0}:{1}".format(ma, luot.get("ngay") or ""))
+        sc["lap_gio"] = 24.0
+        ra.append(sc)
+    return ra
+
+
 def _kiem_dia_day(anh: Dict[str, Any]) -> List[Dict[str, Any]]:
     con_gb = ((anh.get("may") or {}).get("dia") or {}).get("con_gb")
     if con_gb is not None and con_gb < NGUONG_DIA_GB:
@@ -1111,6 +1197,7 @@ def kiem_su_co(anh: Dict[str, Any], *, so_du_vnd: Optional[float] = None) -> Lis
         _goi("hen_lich_chua_tai", _kiem_hen_lich_chua_tai, ma, snap, bay_gio)
         _goi("tai_len_loi_lap", _kiem_tai_len_loi_lap, ma, snap)
         _goi("so_lieu_studio_cu", _kiem_studio_cu, ma, snap)
+        _goi("du_lieu_chi_so", _kiem_du_lieu_chi_so, ma, snap)
         _goi("khau_dung_qua_lau", _kiem_khau_dung_qua_lau, ma, snap, anh)
         _goi("loi_lap_cung_khau", _kiem_loi_lap_cung_khau, ma, snap)
         _goi("tai_len_hong", _kiem_may_dang_khong_nhan_dien, ma, snap)

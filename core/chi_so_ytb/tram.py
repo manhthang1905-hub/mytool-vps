@@ -181,6 +181,20 @@ def an_toan(s) -> str:
     return s[:120]
 
 
+def an_toan_ma(s) -> str:
+    """MÃ VIDEO lấy từ gói mạng → tên thư mục, GIỮ NGUYÊN '-' và '_' ở hai đầu.
+
+    ═══ VÌ SAO KHÔNG DÙNG `an_toan` CHO MÃ VIDEO (12/10/2026) ═══
+
+    `an_toan` cắt '-' và '.' ở hai đầu (chặn `..`). Mã video YouTube được phép BẮT ĐẦU bằng '-':
+    `-vidGiac99a` của TL2-T7 nằm trong thư mục `vidGiac99a` (10 ký tự), và mọi bộ đọc đòi tên 11 ký
+    tự (`cong_thuc_v7.video_cua_kenh`…) nên video ấy biến khỏi vòng học. Ở đây chỉ giữ
+    `[A-Za-z0-9_-]` và chữ — KHÔNG có '.', '/', '\\' — nên vẫn không trèo ra ngoài được.
+    """
+    s = re.sub(r"[^\w-]+", "-", str(s or ""))[:120]
+    return s if s.strip("-_") else "x"
+
+
 def dia_chi_may(cong: int = CONG_MAC_DINH) -> List[str]:
     """Những địa chỉ dán được vào extension, thứ tự ưu tiên.
 
@@ -795,7 +809,7 @@ class Tram:
             return "skip"
 
         kd = thu_muc_kenh(b.get("kenh") or "kenh", self.goc)
-        vid = an_toan(b.get("id"))
+        vid = an_toan_ma(b.get("id"))
         tm = os.path.join(kd, vid, an_toan(b.get("label")), "raw")
         os.makedirs(tm, exist_ok=True)
         ten = an_toan(b.get("ten") or f"{datetime.now():%Y%m%d-%H%M%S}.json")
@@ -834,7 +848,7 @@ class Tram:
         Thiếu ảnh KHÔNG phải lý do vứt chữ — đúng cảnh đang gặp.
         """
         kd = thu_muc_kenh(b.get("kenh") or "kenh", self.goc)
-        vid = an_toan(b.get("id"))
+        vid = an_toan_ma(b.get("id"))
         tm = os.path.join(kd, vid, an_toan(b.get("label")), "anh")
         goc_ten = an_toan(b.get("ten") or f"{datetime.now():%Y%m%d-%H%M%S}")
         for duoi in (".jpg", ".txt"):
@@ -1132,6 +1146,33 @@ class Tram:
         with self._khoa_viec:
             self._quet_xong[kenh] = time.time()
         self.ghi(f"kênh {kenh}: tiện ích báo đã quét xong (hết hàng)")
+
+    def can_chup_bu(self, kenh: str, bay_gio: Optional[float] = None) -> dict:
+        """`GET /chup-bu?kenh=` — video thiếu số MỚI (≥ 20 giờ không có bản hợp lệ, tuổi ≤ 31 ngày)
+        để tiện ích chụp bù ngay đầu lượt quét (12/10/2026).
+
+        Trạm là nơi DUY NHẤT nhìn được bản nào trên đĩa thật sự có số: sổ `daChup` của tiện ích từng
+        ghi "xong" cho bản rỗng (lượt chụp chồng) và mốc ấy không bao giờ được chụp lại — chỉ 17%
+        bản chụp > 120h tuổi còn số (chẩn đoán 12/10). Kèm sửa thư mục video mất dấu '-' đầu mã
+        (`suc_khoe.va_thu_muc_ma_bi_cat`) trước khi đếm. Hỏng thì trả danh sách rỗng — tiện ích
+        vẫn chụp theo lịch như cũ."""
+        try:
+            from . import suc_khoe as _sk  # noqa: PLC0415
+            from .loc_video import moc_cua_thu_muc  # noqa: PLC0415
+
+            kd = thu_muc_kenh(kenh or "kenh", self.goc)
+            if not os.path.isdir(kd):
+                return {"video": []}
+            _sk.va_thu_muc_ma_bi_cat(kd, ghi=self.ghi)
+            ds = _sk.can_chup_bu(kd, bay_gio=bay_gio, moc=moc_cua_thu_muc(os.path.dirname(kd)))
+        except Exception as loi:  # noqa: BLE001 — danh sách phụ, hỏng không được chặn lượt quét
+            self.ghi(f"kênh {an_toan(kenh)}: không lập được danh sách chụp bù ({loi})")
+            return {"video": [], "loi": str(loi)[:200]}
+        if ds:
+            self.ghi("kênh {0}: xin tiện ích chụp bù {1} video thiếu số mới ({2})".format(
+                an_toan(kenh), len(ds), ", ".join(d["video_id"] for d in ds[:6])
+                + (" …" if len(ds) > 6 else "")))
+        return {"video": ds}
 
     def da_quet_xong(self, kenh: str) -> bool:
         """`GET /quet-xong?kenh=` — agent hỏi mỗi nhịp tim trong lúc chờ.
@@ -1756,6 +1797,16 @@ def _lam_xu_ly(tram: "Tram"):
                 return self._tra(json.dumps(
                     {"viec": viec, "cai_dat": cai}, ensure_ascii=False)
                     .encode("utf-8"), "application/json; charset=utf-8")
+            if self.path.startswith("/chup-bu"):
+                # 12/10/2026 — tiện ích hỏi đầu lượt quét: video nào thiếu số mới cần chụp bù
+                # (xem `Tram.can_chup_bu`).
+                from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+
+                q = parse_qs(urlparse(self.path).query)
+                kenh = an_toan((q.get("kenh") or [""])[0])
+                return self._tra(json.dumps(tram.can_chup_bu(kenh) if kenh else {"video": []},
+                                            ensure_ascii=False).encode("utf-8"),
+                                 "application/json; charset=utf-8")
             if self.path.startswith("/quet-xong"):
                 # Đợt 2, kiểm toán #10: `vm/agent.py` hỏi mỗi nhịp tim trong
                 # lúc chờ quét Studio thay vì ngủ trọn `CHO_QUET_GIAY`.
@@ -1937,11 +1988,16 @@ def _lam_xu_ly(tram: "Tram"):
                                      "application/json; charset=utf-8")
                 if self.path == "/done":
                     kd = thu_muc_kenh(b.get("kenh") or "kenh", tram.goc)
-                    tm = os.path.join(kd, an_toan(b.get("id")), an_toan(b.get("label")))
+                    tm = os.path.join(kd, an_toan_ma(b.get("id")), an_toan(b.get("label")))
                     os.makedirs(tm, exist_ok=True)
+                    # Giờ TRẠM nhận — đối chiếu với `chup_luc`/`xong_luc` tiện ích ghi (12/10/2026).
+                    b.setdefault("tram_nhan_luc", datetime.now().isoformat(timespec="seconds"))
                     io.open(os.path.join(tm, "_thong-tin.json"), "w", encoding="utf-8").write(
                         json.dumps(b, ensure_ascii=False, indent=1))
-                    tram.ghi(f"xong {b.get('id')} [{b.get('label')}]")
+                    tram.ghi("xong {0} [{1}]{2}".format(
+                        b.get("id"), b.get("label"),
+                        " — KHÔNG HỢP LỆ: " + str(b.get("ly_do") or "không có số")[:120]
+                        if b.get("hop_le") is False else ""))
                 return self._tra(b"ok")
             except Exception as e:
                 tram.ghi(f"LỖI: {e}")

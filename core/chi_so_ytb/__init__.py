@@ -215,6 +215,12 @@ def _giai_ma_con_thieu(kenh_dir: str) -> int:
     """
     gm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giai_ma.py")
     n = 0
+    # 12/10/2026: thư mục video mất '-' đầu mã (trạm cũ) → đổi về đúng mã trước khi đọc.
+    try:
+        from . import suc_khoe as _sk  # noqa: PLC0415
+        _sk.va_thu_muc_ma_bi_cat(kenh_dir)
+    except Exception:  # noqa: BLE001 — sửa tên là phụ, không được chặn lượt đọc
+        pass
     for raw in sorted(glob.glob(os.path.join(kenh_dir, "*", "*", "raw"))):
         snap = os.path.dirname(raw)
         tq = os.path.join(snap, "tong-quan.json")
@@ -283,6 +289,22 @@ def _gan_thong_tin(snap: str) -> None:
             doi = True
     if t.get("ngay_dang") and not q.get("ngay_dang"):
         q["ngay_dang"] = str(t["ngay_dang"])[:10]
+        doi = True
+    # 12/10/2026 — giờ chụp THẬT, tuổi THẬT, mốc dự định (tiện ích ≥ 2.10 ghi vào `_thong-tin.json`),
+    # và cờ `hop_le`: bản không có số (`impressions`/`views` đều None) ghi rõ `hop_le: false` để bộ
+    # đọc bỏ qua — không còn "bản rỗng trông như bản thật". Cờ tính từ SỐ trong tệp, không tin cờ
+    # của tiện ích: gói có số về trễ (cùng nhãn) thì bản ấy hợp lệ thật.
+    for khoa in ("chup_luc", "tuoi_gio_that", "moc_du_dinh"):
+        if t.get(khoa) not in (None, "") and q.get(khoa) in (None, ""):
+            q[khoa] = t[khoa]
+            doi = True
+    co_so = q.get("impressions") is not None or q.get("views") is not None
+    if q.get("hop_le") is not co_so:
+        q["hop_le"] = co_so
+        if not co_so:
+            q["ly_do_khong_hop_le"] = str(t.get("ly_do") or "không có gói chỉ số")[:200]
+        else:
+            q.pop("ly_do_khong_hop_le", None)
         doi = True
     if doi:
         io.open(tq, "w", encoding="utf-8").write(json.dumps(q, ensure_ascii=False, indent=2))

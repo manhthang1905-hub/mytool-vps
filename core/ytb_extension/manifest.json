@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chỉ số kênh YouTube",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlR9NYezV67vCDnAwDWMDq/AlrM9hvYh6I65coy0jcnocCCB3RKDFmh61LR6cZBIK6/iIjZAhFqObpDEtD0j4MMCmRF8c/TAAt7Zpoioxn8Q4hfzR1v0HxW3J2zFKwjqCgLfneNze31uV8wJEN7I5KmmZ9hsqTCkoTkI1ZVSXikwWyTZts4X/l5+SIpb+T9EuYj/7ppItwhL0ergeCVu28nXqcyhbAkk2auJCNnN1oldKFqTrb89/HvsJGotqenwnwiYZgzY/y4eW0FNNMRY88gWyf0F0WvNFVouvzExzgo2di569iYxLKBbYpMYpy17u3bp/CyDqctGCu1oaxWhjHwIDAQAB",
   "description": "Tự lấy số liệu kênh và từng video từ YouTube Studio (kèm ảnh chụp màn hình để đối chiếu), lưu vào máy bạn để đưa cho AI phân tích.",
   "permissions": [

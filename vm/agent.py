@@ -2504,7 +2504,47 @@ def _du_lieu_kenh_da_ve_hom_nay(cau_hinh: dict, kenh: str, ngay: str = None):
             return None if not _kenh_da_co_video(kenh) else False
         if ngay_tep < hom_nay:
             return False
+    # 12/10/2026: hai bảng trên được VẼ LẠI mỗi khi có gói video về — kể cả hôm số TOÀN KÊNH không về
+    # (TL2-T7: không có `kenh-<ngày>` từ 07/10 tới 11/10 mà phiên nào cũng "xong", nên không lượt nào
+    # thử lại). Kênh đã từng có số toàn kênh thì còn đòi thư mục `chi-so/kenh/kenh-<ngày ≥ ngày bắt
+    # đầu lượt>` có gói thô. Chưa từng có (kênh mới) thì giữ luật cũ.
+    if _da_tung_co_so_kenh(thu_muc) and not _co_so_kenh_tu_ngay(thu_muc, hom_nay):
+        return False
     return True
+
+
+def _da_tung_co_so_kenh(thu_muc_chi_so: str) -> bool:
+    try:
+        return any(d.startswith("kenh-") for d in os.listdir(os.path.join(thu_muc_chi_so, "kenh")))
+    except OSError:
+        return False
+
+
+def _co_so_kenh_tu_ngay(thu_muc_chi_so: str, ngay: str) -> bool:
+    """Có `chi-so/kenh/kenh-YYYYMMDD` (ngày ≥ `ngay` "YYYY-MM-DD") mà `raw/` không rỗng — và nếu trạm
+    đã giải mã (`tong-quan.json`) thì phải có lượt xem hoặc giờ xem (gói về mà rỗng số thì chưa đủ)."""
+    moc = str(ngay or "").replace("-", "")[:8]
+    goc = os.path.join(thu_muc_chi_so, "kenh")
+    try:
+        cac = os.listdir(goc)
+    except OSError:
+        return False
+    for d in cac:
+        if not d.startswith("kenh-") or d[5:13] < moc:
+            continue
+        try:
+            if not os.listdir(os.path.join(goc, d, "raw")):
+                continue
+        except OSError:
+            continue
+        try:
+            with open(os.path.join(goc, d, "tong-quan.json"), "r", encoding="utf-8") as tep:
+                tq = json.load(tep)
+        except (OSError, ValueError):
+            return True         # chưa giải mã: gói thô đã về là đủ cho lượt này
+        if isinstance(tq, dict) and (tq.get("views") is not None or tq.get("watch_hours") is not None):
+            return True
+    return False
 
 
 #: Trang chủ của kênh chỉ là nguồn đối thủ đáng tin khi lần đo nuôi trang chủ gần nhất > ngưỡng này (%).

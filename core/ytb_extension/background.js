@@ -43,12 +43,11 @@ const MOC = MOC_DAY.concat(MOC_NGAY_NHE);
 //: Mốc lớn hơn ngần này dùng chụp NHẸ (chỉ tab tổng quan) thay vì đủ 4 link.
 const NGUONG_NHE_GIO = 120;
 const laNhe = (gio) => Number(gio) > NGUONG_NHE_GIO;
-const captures = {};          // tabId -> {count, last}
+const captures = {};          // tabId -> {maLink, count, last, so, card, coSo}
 const lanTay = {};            // "videoId|endpoint" -> lần ghi cuối từ tab người dùng (chống rác)
-let nhanHienTai = null;       // {videoId, label} của lượt đang chạy
+let nhanHienTai = null;       // {videoId, label, maLink} của link đang mở trong lượt chụp
 let tabLamViec = null;
-let dangChay = false;
-let kenhDangCho = false;       // số toàn kênh có ưu tiên trước chùm video quá hạn
+let soGoi = 0;                // số thứ tự gói (tên tệp không trùng)
 let logs = [];
 let endpoints = {};
 let giuThuc = null;
@@ -66,6 +65,67 @@ const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 // service worker MV3 hay bị ngủ giữa chừng → giữ thức trong lúc làm việc
 const batGiuThuc = () => { if (!giuThuc) giuThuc = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000); };
 const tatGiuThuc = () => { if (giuThuc) { clearInterval(giuThuc); giuThuc = null; } };
+
+// ═══ MỌI LỜI GỌI TRONG LƯỢT CHỤP ĐỀU CÓ HẠN (12/10/2026) ═══
+//
+// TL2-T7 11/10: lượt chụp cuối xong lúc 03:22:07, rồi tiện ích IM 21 phút tới hết giờ chờ của
+// agent — không lượt nào chạy tiếp, không chụp kênh, không "quét xong". Một lời gọi không bao
+// giờ trả (`executeScript` chờ trang "idle", `fetch` về trạm không trả lời…) là đủ giữ tab cả
+// lượt. Từ nay lời gọi nào quá hạn thì ném lỗi, nơi gọi đi tiếp.
+const coHan = (p, ms, ten) => Promise.race([p, new Promise((_, loi) =>
+  setTimeout(() => loi(new Error(`quá ${Math.round(ms / 1000)} giây chờ ${ten}`)), ms))]);
+async function fetchCoHan(url, tuy = {}, ms = 20000) {
+  const ac = new AbortController();
+  const hen = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(url, Object.assign({}, tuy, { signal: ac.signal })); }
+  finally { clearTimeout(hen); }
+}
+
+// ═══ KHOÁ TAB THẬT — MỘT VIỆC MỘT LÚC (12/10/2026) ═══
+//
+// Bản cũ giữ tab bằng cờ `dangChay` + vòng `while (dangChay) await cho(3000)`, rồi `await
+// st('daChup')` TRƯỚC khi bật cờ. Báo thức quá hạn của mọi video đều đặt "nổ sau 2 giây" trong
+// cùng một vòng (`datLich`) nên mọi lượt chờ thức dậy CÙNG PHA — cả chục lượt cùng lọt khe
+// `await` ấy, và lượt nào xong trước cũng hạ cờ hộ lượt khác. Đo thật:
+//   · TL2 11/10 03:20:13–03:21:05: 15 video chụp CÙNG LÚC trên MỘT tab → quota ảnh
+//     (MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND), đọc chữ trúng `nghi.html` (lượt khác vừa đưa
+//     tab về trang nghỉ), 15 lượt "HỎNG", gói của video này rơi vào nhãn của video kia.
+//   · TL1 12/10 02:42:09: 12 lượt nhẹ cùng mở; cả 12 "xong 6 gói" bằng ĐÚNG 6 gói của
+//     vidGiaad6bc → `daChup` ghi vidGia685d6 142h là đã có số, thư mục thật thì rỗng.
+// Nay: một hàng đợi có ưu tiên (khám phá > kênh > video ≤ 5 ngày > video cũ, cùng mức thì tới
+// trước làm trước). Mỗi lượt cầm một MÃ; chỉ người cầm mã mới nhả được. Người cầm treo quá
+// `HAN_GIU_TAB_MS` thì người kế lấy lại (nhịp `hoi-lenh` mỗi phút gọi `moiTab`), không chết im.
+const hangTab = [];           // [{uuTien, so, viec, nhan}]
+let chuTab = null;            // {ma, viec, tu}
+let soMaTab = 0;
+const HAN_GIU_TAB_MS = 12 * 60 * 1000;
+const tabBan = () => !!chuTab || hangTab.length > 0 || soViecCho > 0;
+const conGiuTab = (ma) => !!chuTab && chuTab.ma === ma;
+function xinTab(viec, uuTien = 0) {
+  return new Promise((nhan) => {
+    hangTab.push({ uuTien, so: ++soMaTab, viec, nhan });
+    moiTab();
+  });
+}
+function moiTab() {
+  if (chuTab && Date.now() - chuTab.tu > HAN_GIU_TAB_MS) {
+    log(`khoá tab bị "${chuTab.viec}" giữ quá ${Math.round(HAN_GIU_TAB_MS / 60000)} phút — lấy lại cho việc kế`);
+    chuTab = null;
+  }
+  if (chuTab || !hangTab.length) return;
+  let i = 0;
+  for (let j = 1; j < hangTab.length; j++) if (hangTab[j].uuTien > hangTab[i].uuTien) i = j;
+  const x = hangTab.splice(i, 1)[0];
+  chuTab = { ma: x.so, viec: x.viec, tu: Date.now() };
+  batGiuThuc();
+  x.nhan(x.so);
+}
+function nhaTab(ma) {
+  if (!chuTab || chuTab.ma !== ma) return;      // nhả hộ người khác = không làm gì
+  chuTab = null;
+  if (!hangTab.length && !ltDoi) tatGiuThuc();
+  moiTab();
+}
 
 // ═══ CỔNG QUÉT — CHỈ QUÉT KHI TOOL MỞ CHROME CHO VIỆC "QUÉT NGÀY" (30/09/2026) ═══
 //
@@ -180,10 +240,18 @@ async function datTab(id) {
 //
 // `can` nói gói nào mới là đủ: 'card' cho trang tổng quan (chỉ `get_cards` mới mang bộ chỉ số ta
 // đặt trong CHI_SO — `get_screen` chỉ có ba chỉ số mặc định của YouTube), 'so' cho bảng chi tiết.
+//
+// 12/10/2026: mỗi lần mở link mang một MÃ (`maLink`); `luuCapture` chỉ đếm gói của ĐÚNG mã ấy và
+// ĐÚNG video ấy. Trước đây đếm theo tab: gói của video khác (lượt chồng, gói về trễ của trang
+// trước) cũng làm vòng chờ tưởng "đủ", và lượt chụp được chấm "xong" bằng số của video khác.
+// `coSo` = số gói mang CHỈ SỐ THẬT (xem `coSoVideo`/`coSoKenh`), không chỉ "có gói về".
+let soLink = 0;
 async function moLink(tabId, url, nhan, can = null) {
-  nhanHienTai = nhan;
-  captures[tabId] = { count: 0, last: 0, so: 0, card: 0 };
-  try { await chrome.tabs.update(tabId, { url, active: true }); } catch (e) { return { tong: 0, card: 0, so: 0 }; }
+  const maLink = ++soLink;
+  nhanHienTai = nhan ? Object.assign({}, nhan, { maLink }) : null;
+  captures[tabId] = { maLink, count: 0, last: 0, so: 0, card: 0, coSo: 0 };
+  try { await coHan(chrome.tabs.update(tabId, { url, active: true }), 15000, 'đổi trang'); }
+  catch (e) { log(`không mở được trang (${e.message})`); return { tong: 0, card: 0, so: 0, coSo: 0 }; }
   const batDau = Date.now();
   let daTaiLai = false;
   const du = (c) => (can === 'card' ? c.card > 0 : can === 'so' ? c.so > 0 : c.count > 0);
@@ -194,18 +262,18 @@ async function moLink(tabId, url, nhan, can = null) {
     if (!daTaiLai && !du(c) && Date.now() - batDau > 12000) {
       daTaiLai = true;                                    // vẫn thiếu → tải lại đúng 1 lần
       log(`chưa thấy gói ${can || 'nào'} → tải lại`);
-      try { await chrome.tabs.reload(tabId, { bypassCache: true }); } catch (e) {}
+      try { await coHan(chrome.tabs.reload(tabId, { bypassCache: true }), 15000, 'tải lại'); } catch (e) {}
     }
   }
-  const c = captures[tabId] || { count: 0, so: 0, card: 0 };
+  const c = captures[tabId] || { count: 0, so: 0, card: 0, coSo: 0 };
   if (can && !du(c)) log(`THIẾU gói ${can} sau 45 giây (${c.count} gói khác)`);
-  return { tong: c.count || 0, card: c.card || 0, so: c.so || 0 };
+  return { tong: c.count || 0, card: c.card || 0, so: c.so || 0, coSo: c.coSo || 0 };
 }
 
 // Bấm nút "Xuất → .csv" của chính Studio (mọi ngôn ngữ đều có chữ .csv).
 async function xuatCSV(tabId) {
   try {
-    const r = await chrome.scripting.executeScript({ target: { tabId }, func: async () => {
+    const r = await coHan(chrome.scripting.executeScript({ target: { tabId }, func: async () => {
       const cho = (ms) => new Promise(r => setTimeout(r, ms));
       const moiNode = () => { const ra = []; const sau = (root) => { for (const e of root.querySelectorAll('*')) { ra.push(e); if (e.shadowRoot) sau(e.shadowRoot); } }; sau(document); return ra; };
       const btn = moiNode().find(e => e.id === 'export-button');
@@ -224,7 +292,7 @@ async function xuatCSV(tabId) {
       }
       if (!csv) { document.body.click(); return 'không thấy mục csv'; }
       csv.click(); return 'đã bấm csv';
-    } });
+    } }), 30000, 'bấm xuất csv');
     return r && r[0] && r[0].result;
   } catch (e) { return 'lỗi: ' + e.message; }
 }
@@ -243,16 +311,22 @@ async function nhanDienVideo(res, ep) {
   duyet(res, (d) => {
     const id = d.videoId;
     if (typeof id !== 'string' || !/^[\w-]{11}$/.test(id)) return;
-    const ts = Number(d.timePublishedSeconds || d.publishedTimestamp || d.timeCreatedSeconds || 0);
-    if (!ts) return;
+    // Giờ ĐĂNG thắng giờ TẠO (12/10/2026): gói nào chỉ mang `timeCreatedSeconds` (lúc tải lên —
+    // sớm hơn giờ đăng 3–21 giờ với video hẹn lịch) KHÔNG được đè giờ đăng đã biết, nếu không
+    // tuổi video lật qua lại giữa hai mốc và nhãn bản chụp lệch theo.
+    const tsDang = Number(d.timePublishedSeconds || d.publishedTimestamp || 0);
+    const tsTao = Number(d.timeCreatedSeconds || 0);
+    if (!tsDang && !tsTao) return;
     const ch = d.channelId || (d.metadata && d.metadata.channelId) || '';
     if (kenh ? ch !== kenh : !(tuDanhSach && !ch)) return;
     cuaMinh.add(id);
     const v = videos[id] || {};
     if (!videos[id]) moi++;
+    const giuDang = !tsDang && v.nguon_ngay === 'dang' && v.ngay_dang_ms;
     videos[id] = {
       tieu_de: d.title || v.tieu_de || '',
-      ngay_dang_ms: ts * 1000,
+      ngay_dang_ms: tsDang ? tsDang * 1000 : (giuDang ? v.ngay_dang_ms : tsTao * 1000),
+      nguon_ngay: (tsDang || giuDang) ? 'dang' : 'tao',
       dai_giay: Number(d.lengthSeconds || v.dai_giay || 0),
       kenh: ch || kenh,
       phat_hien: v.phat_hien || Date.now(),
@@ -263,6 +337,7 @@ async function nhanDienVideo(res, ep) {
       if (!cuaMinh.has(id)) {
         delete videos[id];
         await chrome.alarms.clear(`ngay|${id}`);
+        await chrome.alarms.clear(`bu|${id}`);
         for (const h of MOC) await chrome.alarms.clear(`snap|${id}|${h}`);
         log(`bỏ video lạ ${id}`);
       }
@@ -272,16 +347,68 @@ async function nhanDienVideo(res, ep) {
   if (moi) { log(`thấy ${moi} video mới (tổng ${Object.keys(videos).length})`); await datLich(); }
 }
 
+// ═══ GÓI NÀY CÓ CHỈ SỐ THẬT KHÔNG (12/10/2026) ═══
+//
+// "Có gói về" KHÔNG phải "có số": Studio hay trả `get_cards`/`join` mà thẻ chỉ số rỗng, và bản
+// chụp như thế từng được chấm "xong" (rồi `daChup` khoá luôn mốc đó). Hai hàm dưới khớp đúng
+// điều kiện bộ giải mã phía tool (`core/chi_so_ytb/giai_ma.py: sinh`, `tong_tu_join`) dùng để
+// điền `impressions`/`views` — nên "tiện ích nói có số" = "tool đọc ra số".
+function coSoThe(res, cacChiSo) {
+  let co = false;
+  duyet(res, (d) => {
+    const pc = d.primaryContent;
+    if (!co && pc && typeof pc === 'object' && cacChiSo.includes(String(pc.metric || ''))
+        && typeof pc.total === 'number') co = true;
+  });
+  return co;
+}
+function coSoJoin(req, res) {
+  const nodes = (req && req.nodes) || [];
+  for (const x of (res && res.results) || []) {
+    const key = String((x && x.key) || '');
+    if (!/TOTALS_SUMS/.test(key)) continue;
+    // Tổng của trang pool đề xuất bị lọc YT_RELATED — chỉ là phần Đề xuất, không phải tổng video.
+    const node = nodes.find((n) => n && n.key === key);
+    const rs = node ? ((((node.value || {}).query) || {}).restricts || []) : [];
+    if (!rs.every((r) => (((r && r.dimension) || {}).type) === 'VIDEO')) continue;
+    const rt = ((x.value || {}).resultTable) || {};
+    if (rt.dimensionColumns && rt.dimensionColumns.length) continue;
+    const so = {};
+    for (const c of rt.metricColumns || []) {
+      const t = String(((c && c.metric) || {}).type || '');
+      const o = c.counts || c.percentages || c.milliseconds || {};
+      const v = Array.isArray(o.values) ? o.values[0] : null;
+      if (t && typeof v === 'number' && !(c.undefinedValueIndices || []).length) so[t] = v;
+    }
+    if (typeof so.VIDEO_THUMBNAIL_IMPRESSIONS === 'number'
+        && ((so.VIDEO_THUMBNAIL_IMPRESSIONS || 0) > 0 || (so.EXTERNAL_VIEWS || 0) > 0)) return true;
+  }
+  return false;
+}
+function coSoVideo(req, res, ep) {
+  if (/get_cards|get_screen/.test(ep)) return coSoThe(res, ['VIDEO_THUMBNAIL_IMPRESSIONS']);
+  if (/join/.test(ep)) return coSoJoin(req, res);
+  return false;
+}
+const coSoKenh = (res, ep) => /get_cards|get_screen/.test(ep)
+  && coSoThe(res, ['EXTERNAL_VIEWS', 'EXTERNAL_WATCH_TIME', 'SUBSCRIBERS_NET_CHANGE']);
+
 async function luuCapture(msg, sender) {
+  // Lấy nhãn lượt chụp NGAY khi gói tới, TRƯỚC mọi `await` (12/10/2026). Bản cũ đọc
+  // `nhanHienTai` sau vài lượt `await st(...)` — lúc ấy lượt kế đã đổi nhãn, nên gói về trễ của
+  // trang trước rơi vào nhãn của lượt sau: vidGiaa9179 có thư mục "23h" (nhãn của video mới
+  // chụp kế đó) lúc nó đã 125 giờ tuổi; cùng một bộ số nằm ở 106h/118h/119h.
+  // Và gói chỉ được nhận là của lượt chụp khi nó là của ĐÚNG video lượt ấy đang chụp.
+  const nhan = nhanHienTai;
   const tabId = sender.tab && sender.tab.id;
+  const vid = (msg.href.match(/\/video\/([\w-]{11})\//) || [])[1] || 'kenh';
+  const laLuotChup = !!nhan && tabId === tabLamViec && nhan.videoId === vid;
   const ch = (msg.href.match(/\/channel\/(UC[\w-]+)/) || [])[1];
   if (ch) { const cu = await st('kenh', ''); if (cu !== ch) { await luu('kenh', ch); log(`kênh: ${ch}`); } }
   const kenh = (await st('ma_kenh', '')) || (await st('kenh', '')) || 'kenh';
-  const vid = (msg.href.match(/\/video\/([\w-]{11})\//) || [])[1] || 'kenh';
   const tab = (msg.href.match(/\/(tab-[a-z_]+)/) || [])[1] || 'tab';
   const ep = tenEp(msg.url).replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'ep';
-  const laLuotChup = tabId === tabLamViec && nhanHienTai;
-  const lb = laLuotChup ? nhanHienTai.label : `tay-${stamp().slice(0, 8)}`;
+  const lb = laLuotChup ? nhan.label : `tay-${stamp().slice(0, 8)}`;
 
   // Tab Studio người dùng để mở vẫn tự gọi lại API (thẻ "Hoạt động mới nhất" làm mới mỗi 10 giây).
   // Không chặn hẳn — bản chụp tình cờ đó từng là nguồn số duy nhất của một mốc — nhưng mỗi
@@ -300,13 +427,17 @@ async function luuCapture(msg, sender) {
   // cửa sổ QUÉT NGÀY thì không lưu/gửi gói nào (chỉ giữ việc nhận diện video ở trên, cục bộ).
   if (!laLuotChup && !(await choPhepQuet())) { baoChan('gói từ tab Studio'); return; }
 
-  const c = (captures[tabId] = captures[tabId] || { count: 0, last: 0, so: 0, card: 0 });
-  c.count += 1; c.last = Date.now();
-  // Đếm riêng: `so` = gói có chỉ số, `card` = gói mang đúng bộ chỉ số ta đặt trong CHI_SO.
-  // `get_creator_videos` / `list_creator_videos` chỉ là danh sách video, không tính.
-  if (/get_screen|get_cards|join|csv_export/.test(ep)) c.so += 1;
-  if (/get_cards/.test(ep)) c.card += 1;
-  const ten = `${stamp()}_${tab}_${ep}_${c.count}.json`;
+  // Đếm cho vòng chờ của `moLink` — CHỈ gói của đúng link đang mở (cùng `maLink`, cùng video).
+  // Đếm riêng: `so` = gói có chỉ số, `card` = gói mang đúng bộ chỉ số ta đặt trong CHI_SO,
+  // `coSo` = gói mang CHỈ SỐ THẬT. `get_creator_videos` / `list_creator_videos` chỉ là danh sách.
+  const c = captures[tabId];
+  if (laLuotChup && c && c.maLink === nhan.maLink) {
+    c.count += 1; c.last = Date.now();
+    if (/get_screen|get_cards|join|csv_export/.test(ep)) c.so += 1;
+    if (/get_cards/.test(ep)) c.card += 1;
+    try { if (vid === 'kenh' ? coSoKenh(res, ep) : coSoVideo(req, res, ep)) c.coSo += 1; } catch (e) {}
+  }
+  const ten = `${stamp()}_${tab}_${ep}_${++soGoi}.json`;
   const goi = { captured_at: new Date().toISOString(), href: msg.href, url: msg.url, request: req, response: res };
   await luuGoi(kenh, vid, lb, ten, goi, msg.resText.length);
   ghiEp(tenEp(msg.url), true);
@@ -319,8 +450,8 @@ async function luuGoi(kenh, vid, nhan, ten, goi, cỡ = 0, im = false) {
   const host = await st('host', '');
   if (host) {
     try {
-      const r = await fetch(host + '/capture', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kenh, id: vid, label: nhan, ten, goi }) });
+      const r = await fetchCoHan(host + '/capture', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kenh, id: vid, label: nhan, ten, goi }) }, 30000);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       if (!im) log(`→host ${vid}/${nhan} ${ten.slice(0, 28)} (${Math.round(cỡ / 1024)} KB)`);
       return true;
@@ -328,8 +459,8 @@ async function luuGoi(kenh, vid, nhan, ten, goi, cỡ = 0, im = false) {
   }
   try {
     const thu_muc = await st('thu_muc', 'chi-so-youtube');
-    await chrome.downloads.download({ url: 'data:application/json;base64,' + b64(JSON.stringify(goi)),
-      filename: `${thu_muc}/${kenh}/${vid}/${nhan}/${ten}`, conflictAction: 'uniquify', saveAs: false });
+    await coHan(chrome.downloads.download({ url: 'data:application/json;base64,' + b64(JSON.stringify(goi)),
+      filename: `${thu_muc}/${kenh}/${vid}/${nhan}/${ten}`, conflictAction: 'uniquify', saveAs: false }), 20000, 'lưu tệp');
     if (!im) log(`↓ đã lưu ${vid}/${nhan} (${Math.round(cỡ / 1024)} KB)`);
     return true;
   } catch (e) { log(`LỖI lưu: ${e.message}`); return false; }
@@ -365,7 +496,7 @@ const LINK_VIDEO = (id) => [
 
 async function nghi(tabId) {
   nhanHienTai = null;
-  try { await chrome.tabs.update(tabId, { url: TRANG_NGHI, active: false }); } catch (e) {}
+  try { await coHan(chrome.tabs.update(tabId, { url: TRANG_NGHI, active: false }), 15000, 'về trang nghỉ'); } catch (e) {}
 }
 
 // ═══ ẢNH CHỤP MÀN HÌNH TỪNG TAB SỐ LIỆU ═══
@@ -390,7 +521,7 @@ async function nghi(tabId) {
 // phải tự đi xuống từng shadowRoot, đúng cách `xuatCSV` đang làm.
 async function docChu(tabId) {
   try {
-    const r = await chrome.scripting.executeScript({ target: { tabId }, func: () => {
+    const r = await coHan(chrome.scripting.executeScript({ target: { tabId }, func: () => {
       // Chỉ lấy chữ ĐANG HIỆN. Bản đầu lấy cả nút ẩn, và hậu quả không phải là rác thừa:
       // Studio giữ sẵn khuôn "Rất tiếc, đã xảy ra lỗi. / Thử lại" ẩn trong DOM ở MỌI trang,
       // nên bản chụp nào cũng có câu ấy. Một lưới an toàn kêu oan mỗi lượt còn tệ hơn không có
@@ -418,21 +549,47 @@ async function docChu(tabId) {
       const da = new Set();
       for (const t of ra) { if (!da.has(t)) { da.add(t); goc.push(t); } }
       return (document.title + '\n' + location.href + '\n\n' + goc.join('\n')).slice(0, 20000);
-    } });
+    } }), 15000, 'đọc chữ trang');
     return (r && r[0] && r[0].result) || '';
   } catch (e) { return 'LỖI đọc chữ: ' + (e.message || e); }
+}
+
+// ═══ ẢNH CÓ NHỊP (12/10/2026) ═══ Chrome chỉ cho `captureVisibleTab` khoảng 2 lần/giây. Ảnh của
+// các lượt chồng nhau từng ăn lỗi "MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND" hàng loạt. Khoá tab
+// đã hết chồng lượt; đây là lớp thứ hai: giãn ≥ 1,1 giây giữa hai lần chụp, quá quota thì chờ
+// rồi thử lại tối đa hai lần, và lời gọi nào cũng có hạn.
+const KHOANG_CHUP_ANH_MS = 1100;
+let lanChupAnhCuoi = 0;
+async function captureVisibleTabCoNhip(windowId) {
+  for (let lan = 0; ; lan++) {
+    const doi = KHOANG_CHUP_ANH_MS - (Date.now() - lanChupAnhCuoi);
+    if (doi > 0) await cho(doi);
+    lanChupAnhCuoi = Date.now();
+    try {
+      return await coHan(chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 55 }), 15000, 'chụp ảnh');
+    } catch (e) {
+      if (lan < 2 && /MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/.test(String(e && e.message))) { await cho(1500 * (lan + 1)); continue; }
+      throw e;
+    }
+  }
 }
 
 async function chupAnh(tabId, kenh, vid, nhan, ten) {
   if (!ten) return false;
   const tenTep = `${stamp()}_${ten}`;
-  const chu = await docChu(tabId);
-  let anh = '', loi = '';
+  // Tab không còn ở Studio (về trang nghỉ, bị điều hướng) thì đừng chụp/đọc trang LẠ rồi gắn nhãn
+  // của video này — ghi rõ lý do thay vì "Cannot access … nghi.html".
+  let tab = null;
+  try { tab = await coHan(chrome.tabs.get(tabId), 5000, 'đọc tab'); } catch (e) {}
+  const oStudio = !!tab && String(tab.url || '').startsWith('https://studio.youtube.com/');
+  const chu = oStudio ? await docChu(tabId) : '';
+  let anh = '', loi = oStudio ? '' : `tab không ở trang Studio (${String((tab && tab.url) || '?').slice(0, 80)})`;
   try {
-    const tab = await chrome.tabs.get(tabId);
-    const url = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 55 });
-    anh = (url || '').split(',')[1] || '';
-    if (!anh) loi = 'chụp về rỗng';
+    if (oStudio) {
+      const url = await captureVisibleTabCoNhip(tab.windowId);
+      anh = (url || '').split(',')[1] || '';
+      if (!anh) loi = 'chụp về rỗng';
+    }
   } catch (e) {
     loi = e.message || String(e);
     log(`ảnh hỏng (${ten}): ${loi}`);
@@ -440,8 +597,8 @@ async function chupAnh(tabId, kenh, vid, nhan, ten) {
   const host = await st('host', '');
   if (host) {
     try {
-      const r = await fetch(host + '/anh', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kenh, id: vid, label: nhan, ten: tenTep, anh, chu, loi }) });
+      const r = await fetchCoHan(host + '/anh', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kenh, id: vid, label: nhan, ten: tenTep, anh, chu, loi }) }, 30000);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return true;
     } catch (e) { log(`gửi ảnh hỏng (${ten}): ${e.message}`); return false; }
@@ -485,9 +642,55 @@ function ngoaiPhamVi(v, moc) {
   return !!(moc && v && v.ngay_dang_ms && v.ngay_dang_ms < moc);
 }
 
-async function chupVideo(videoId, label, ep = false, nhe = false) {
+// ═══ SỔ CỦA LƯỢT QUÉT (12/10/2026) ═══
+//
+// Mỗi lượt QUÉT NGÀY (mã trong `che-do.json`; không có tệp thì theo ngày) giữ: số LẦN đã thử
+// chụp từng video, và video nào ĐÃ có số trong lượt. Hai việc:
+//   · chặn "bão thử lại": `datLich` chạy mỗi phút (nhịp `hoi-lenh`) và trước đây đặt lại báo
+//     thức "nổ ngay" cho MỌI mốc còn thiếu của MỌI video hỏng — 25 phút một lượt quét thành hàng
+//     trăm lượt chụp chồng nhau (TL2-T7 06/10: 394 ảnh cho một mốc của vidGia8f905);
+//   · danh sách chụp bù của trạm và báo thức mốc không chụp trùng một video đã có số trong lượt.
+const TOI_DA_LUOT_THU_VIDEO = 2;      // mỗi lượt quét: tối đa 2 lần xếp hàng / video (mỗi lần tự thử 3 lượt)
+const NGHI_THU_LAI_MS = [15000, 45000];  // chưa có số → nghỉ 15 giây, rồi 45 giây, thử lại
+const HONG_LIEN_TIEP_NGAT = 3;         // cầu dao: ngần này video liền nhau không ra số → thôi thử lại
+let hongLienTiep = 0;
+const dangXepVideo = new Set();        // video đang chờ / đang chụp — không xếp hàng lần hai
+async function soLuot() {
+  const c = await docCheDo();
+  const ma = String((c && c.ma) || '') || `ngay-${stamp().slice(0, 8)}`;
+  const s = await st('luot_chup', {});
+  return (s && s.ma === ma) ? s : { ma, thu: {}, ok: {} };
+}
+async function ghiSoLuot(videoId, loai) {
+  const s = await soLuot();
+  if (loai === 'thu') s.thu[videoId] = (s.thu[videoId] || 0) + 1;
+  else s.ok[videoId] = Date.now();
+  await luu('luot_chup', s);
+}
+
+// ═══ CHỤP MỘT VIDEO ═══
+//
+// `mocDuDinh`: mốc báo thức định chụp ("96h"), hoặc null (chụp bù / chụp tay). `tuy`:
+//   · `ep`   — bỏ qua `daChup` (lệnh tay, danh sách chụp bù của trạm);
+//   · `tay`  — người bấm: không tính trần lượt thử;
+//   · `bu`   — chụp bù của trạm: thôi nếu video đã có số trong lượt này.
+//
+// NHÃN = TUỔI THẬT lúc bắt đầu chụp (12/10/2026), không bao giờ là nhãn dự định của báo thức:
+// báo thức nổ trễ là chuyện thường (Chrome chỉ mở mỗi ngày một lần), và thư mục "142h" thật ra
+// chụp lúc 94h (vidGia685d6) là thứ đã làm vòng học chấm sai. `_thong-tin.json` ghi đủ: giờ
+// chụp thật, tuổi thật (lẻ), mốc dự định, hợp lệ hay không.
+//
+// `soViecCho` đếm ĐỒNG BỘ ngay lúc gọi (trước mọi `await`): lượt vừa được gọi mà chưa kịp xếp
+// hàng tab cũng tính là "còn việc", để `kiemXongQuet` không báo xong giữa chừng.
+let soViecCho = 0;
+async function chupVideo(videoId, mocDuDinh = null, tuy = {}) {
+  soViecCho++;
+  try { return await chupVideoThat(videoId, mocDuDinh, tuy); } finally { soViecCho--; }
+}
+async function chupVideoThat(videoId, mocDuDinh, tuy) {
+  const ep = !!tuy.ep;
   const kenh = await st('kenh', '');
-  const v = (await st('videos', {}))[videoId];
+  let v = (await st('videos', {}))[videoId];
   // Cổng đặt ở ĐÂY chứ không chỉ ở `datLich()`: mọi đường chụp một video đều đi qua hàm này —
   // báo thức theo lịch, "Chụp ngay tất cả" của popup, và lệnh ép từ trạm. Chặn một chỗ là chặn
   // cả ba, kể cả lệnh ép: "chụp lại tất cả" nghĩa là tất cả video CỦA ĐỜI NÀY của kênh.
@@ -496,32 +699,42 @@ async function chupVideo(videoId, label, ep = false, nhe = false) {
     log(`bỏ ${videoId}: đăng ${new Date(v.ngay_dang_ms).toISOString().slice(0, 10)}, trước ngày kênh bắt đầu`);
     return 0;
   }
-  // Cùng một mốc từng bị chụp 2–3 lần trong vài phút (lịch chồng lên thao tác tay, hoặc bấm
-  // "Chụp ngay" nhiều lần): mỗi lượt mất gần một phút và chỉ ghi đè lên chính nó. Đã chụp mốc
-  // nào thì thôi mốc đó, trừ khi người dùng chủ động ép chụp lại.
-  if (!ep && ((await st('daChup', {}))[videoId] || []).includes(label)) {
-    log(`bỏ qua ${videoId} [${label}]: đã chụp mốc này rồi`);
-    return 0;
-  }
   if (!v || (kenh && v.kenh && v.kenh !== kenh)) {
     log(`bỏ ${videoId}: không thuộc kênh`);
     const videos = await st('videos', {}); delete videos[videoId]; await luu('videos', videos);
     return 0;
   }
-  while (dangChay || kenhDangCho) await cho(3000);
-  // Xét lại SAU khi chờ: chùm báo thức quá hạn của cùng một video (13h, 18h, 24h… nổ gần như
-  // cùng lúc khi Chrome mở cho QUÉT NGÀY) cùng lọt cửa kiểm ở trên rồi xếp hàng ở đây — lượt
-  // đầu chụp xong đã đánh dấu các mốc đã qua, các lượt sau phải thôi, không chụp lại y hệt.
-  if (!ep && ((await st('daChup', {}))[videoId] || []).includes(label)) {
-    log(`bỏ qua ${videoId} [${label}]: vừa chụp trong lượt này`);
+  // Đã chụp mốc nào thì thôi mốc đó (mốc báo thức), trừ khi bị ép chụp lại.
+  const daCoMoc = async () => !ep && !!mocDuDinh && ((await st('daChup', {}))[videoId] || []).includes(mocDuDinh);
+  // Báo thức bù / danh sách bù: video đã có số trong lượt này thì thôi (lượt ấy đã gộp mọi mốc đã qua).
+  const daCoTrongLuot = async () => (!mocDuDinh && (!ep || tuy.bu)) && !!(await soLuot()).ok[videoId];
+  if (await daCoMoc()) { log(`bỏ qua ${videoId} [${mocDuDinh}]: đã chụp mốc này rồi`); return 0; }
+  if (await daCoTrongLuot()) { log(`bỏ qua ${videoId}: đã có số trong lượt quét này`); return 0; }
+  if (!tuy.tay && ((await soLuot()).thu[videoId] || 0) >= TOI_DA_LUOT_THU_VIDEO) {
+    log(`bỏ qua ${videoId}: đã thử ${TOI_DA_LUOT_THU_VIDEO} lần trong lượt quét này — lượt sau chụp lại`);
     return 0;
   }
-  dangChay = true; batGiuThuc();
+  // Kiểm + ghi LIỀN NHAU, không `await` ở giữa — hai báo thức cùng video không cùng lọt.
+  if (dangXepVideo.has(videoId)) { log(`bỏ qua ${videoId}${mocDuDinh ? ` [${mocDuDinh}]` : ''}: đang xếp hàng chụp rồi`); return 0; }
+  dangXepVideo.add(videoId);
+  const tuoiXep = v.ngay_dang_ms ? (Date.now() - v.ngay_dang_ms) / 36e5 : null;
+  const ma = await xinTab(`chụp ${videoId}`, tuoiXep != null && tuoiXep <= NGUONG_NHE_GIO ? 1 : 0);
   try {
+    // Xét lại SAU khi tới lượt: chùm báo thức của cùng một video xếp hàng nhau — lượt đầu chụp
+    // xong đã đánh dấu các mốc đã qua, các lượt sau phải thôi, không chụp lại y hệt.
+    if (await daCoMoc()) { log(`bỏ qua ${videoId} [${mocDuDinh}]: vừa chụp trong lượt này`); return 0; }
+    if (await daCoTrongLuot()) { log(`bỏ qua ${videoId}: vừa có số trong lượt này`); return 0; }
+    v = (await st('videos', {}))[videoId] || v;
+    const batDau = Date.now();
+    const tuoi = v.ngay_dang_ms ? (batDau - v.ngay_dang_ms) / 36e5 : null;
+    const label = tuoi != null ? `${Math.round(tuoi)}h` : (mocDuDinh || `tay-${stamp().slice(0, 8)}`);
+    const nhe = laNhe(tuoi != null ? tuoi : parseInt(mocDuDinh || '0', 10));
     const tabId = await layTab();
-    log(`chụp ${videoId} [${label}]${nhe ? ' (nhẹ)' : ''}`);
+    log(`chụp ${videoId} [${label}]${nhe ? ' (nhẹ)' : ''}`
+      + (mocDuDinh && mocDuDinh !== label ? ` — mốc ${mocDuDinh} tới lúc video đã ${label}, lưu theo tuổi thật` : ''));
+    await ghiSoLuot(videoId, 'thu');
     const maKenh = (await st('ma_kenh', '')) || kenh || 'kenh';
-    let tong = 0, coCard = false;
+    let tong = 0, coSo = false, lan = 1;
     // Mốc HẰNG NGÀY qua ngày 5 (`NGUONG_NHE_GIO`, xem khai báo `MOC_NGAY_NHE`) chỉ cần link
     // ĐẦU (tab tổng quan) — đó là link DUY NHẤT có đủ impressions/CTR/views/AVD (bộ giải mã
     // `core/chi_so_ytb/giai_ma.py: sinh()` đọc cả bốn số này từ `keyMetricCardData` của link
@@ -532,24 +745,58 @@ async function chupVideo(videoId, label, ep = false, nhe = false) {
     // như GHI-CHU/task cho phép ("nguồn traffic nếu có").
     const danhSachLink = nhe ? LINK_VIDEO(videoId).slice(0, 1) : LINK_VIDEO(videoId);
     for (const [url, canCSV, can, tenAnh] of danhSachLink) {
+      if (!conGiuTab(ma)) break;
       const r = await moLink(tabId, url, { videoId, label }, can);
       tong += r.tong;
-      if (can === 'card' && r.card > 0) coCard = true;
+      if (r.coSo) coSo = true;
       if (canCSV) { log(`xuất csv: ${await xuatCSV(tabId)}`); await cho(4000); }
       // Chụp SAU khi số liệu đã về và bảng đã vẽ xong — chụp sớm chỉ ra khung xám.
       await chupAnh(tabId, maKenh, videoId, label, tenAnh);
     }
+    // ═══ CHƯA CÓ SỐ → THỬ LẠI NGAY TRONG LƯỢT, GIÃN DẦN (12/10/2026) ═══
+    // Trang tổng quan trước, rồi trang nguồn theo loại (gói `join` của nó mang số TỔNG của video
+    // — `giai_ma.tong_tu_join`). Không xuất CSV ở lượt thử lại: chỉ cần số.
+    // Cầu dao: `HONG_LIEN_TIEP_NGAT` video liền nhau không ra số thì nhiều khả năng Studio hỏng
+    // cả phiên (đăng xuất, trang lỗi) — thôi thử lại từng video, để kịp lượt cho video còn lại.
+    const linkThuLai = [LINK_VIDEO(videoId)[0], LINK_VIDEO(videoId)[2]];
+    if (!coSo && hongLienTiep >= HONG_LIEN_TIEP_NGAT) log(`bỏ thử lại ${videoId}: ${hongLienTiep} video liền nhau không ra số — Studio có thể đang hỏng cả phiên`);
+    while (!coSo && hongLienTiep < HONG_LIEN_TIEP_NGAT && lan <= NGHI_THU_LAI_MS.length && conGiuTab(ma)) {
+      const nghiMs = NGHI_THU_LAI_MS[lan - 1];
+      lan++;
+      log(`chưa có số của ${videoId} [${label}] — nghỉ ${Math.round(nghiMs / 1000)} giây rồi thử lại (lần ${lan})`);
+      await nghi(tabId);
+      await cho(nghiMs);
+      for (const [url, , can, tenAnh] of linkThuLai) {
+        if (!conGiuTab(ma)) break;
+        const r = await moLink(tabId, url, { videoId, label }, can);
+        tong += r.tong;
+        if (r.coSo) coSo = true;
+        await chupAnh(tabId, maKenh, videoId, label, `${tenAnh}-lan${lan}`);
+        if (coSo) break;
+      }
+    }
     await nghi(tabId);
-    const gio = v.ngay_dang_ms ? Math.round((Date.now() - v.ngay_dang_ms) / 36e5) : null;
-    const xong = { kenh: (await st('ma_kenh', '')) || kenh || 'kenh', id: videoId, label,
-      tieu_de: v.tieu_de || '', thoi_luong: v.dai_giay || null, gio,
-      ngay_dang: v.ngay_dang_ms ? new Date(v.ngay_dang_ms).toISOString() : null };
+    const xongLuc = Date.now();
+    const lyDo = coSo ? '' : (conGiuTab(ma) ? `không có gói chỉ số sau ${lan} lần thử`
+      : 'mất khoá tab giữa chừng (lượt treo quá hạn)');
+    const cheDo = await docCheDo();
+    const xong = { kenh: maKenh, id: videoId, label,
+      tieu_de: v.tieu_de || '', thoi_luong: v.dai_giay || null,
+      gio: tuoi != null ? Math.round(tuoi) : null,
+      ngay_dang: v.ngay_dang_ms ? new Date(v.ngay_dang_ms).toISOString() : null,
+      // Giờ chụp THẬT và tuổi THẬT — không suy từ tên thư mục.
+      chup_luc: new Date(batDau).toISOString(), xong_luc: new Date(xongLuc).toISOString(),
+      tuoi_gio_that: tuoi != null ? Math.round(tuoi * 100) / 100 : null,
+      moc_du_dinh: mocDuDinh || null,
+      // Bản chụp KHÔNG có số thì nói thẳng là không hợp lệ — bộ đọc bỏ qua, lượt sau chụp lại.
+      hop_le: coSo, ly_do: lyDo, so_lan_thu: lan, so_goi: tong, nhe,
+      luot_quet: String((cheDo && cheDo.ma) || ''), phien_ban: chrome.runtime.getManifest().version };
     const host = await st('host', '');
     if (host) {
       try {
-        await fetch(host + '/done', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(xong) });
-      } catch (e) {}
+        await fetchCoHan(host + '/done', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(xong) }, 20000);
+      } catch (e) { log(`không gửi được thông tin bản chụp ${videoId}/${label} (${e.message})`); }
     } else {
       // Không có máy chủ nhận: mấy thông tin này (tiêu đề, thời lượng, mốc giờ) không nằm
       // trong gói nào của Studio, nên phải ghi thành một tệp riêng — thiếu nó thì bản chụp
@@ -561,19 +808,25 @@ async function chupVideo(videoId, label, ep = false, nhe = false) {
     // Bản cũ ghi vào `daChup` vô điều kiện, kể cả lượt về tay không. Mốc đó vĩnh viễn không bao
     // giờ được chụp lại — mốc 139h và 168h của video 1 nằm đó rỗng suốt, và không có cách nào
     // lấy lại vì Studio chỉ giữ chuỗi theo giờ trong một cửa sổ ngắn.
+    // 12/10/2026: "có chỉ số" = gói CỦA ĐÚNG video này mang số thật (`coSoVideo`), không phải
+    // "có gói get_cards nào đó về tab" — xem `moLink`.
     //
     // Thà chụp lại thừa một lượt còn hơn mất hẳn một mốc.
-    if (!coCard) {
-      log(`HỎNG ${videoId} [${label}]: không có gói chỉ số — để lần chạy sau chụp lại`);
+    if (!coSo) {
+      if (conGiuTab(ma)) hongLienTiep++;
+      log(`HỎNG ${videoId} [${label}]: ${lyDo} — bản chụp ghi KHÔNG HỢP LỆ, để lần chạy sau chụp lại`);
       return tong;
     }
+    hongLienTiep = 0;
     const daChup = await st('daChup', {});
     const ds = (daChup[videoId] = daChup[videoId] || []);
-    ds.push(label);
+    if (!ds.includes(label)) ds.push(label);
+    if (mocDuDinh && !ds.includes(mocDuDinh)) ds.push(mocDuDinh);
     // GỘP CÁC MỐC ĐÃ QUA (30/09/2026): Chrome chỉ mở mỗi ngày MỘT lần để quét, nên một bản
     // chụp lúc video 31 giờ tuổi là số mới nhất cho MỌI mốc ≤ 31h còn thiếu (13h, 18h, 24h,
     // 30h). Chụp lại từng mốc chỉ ra cùng một bộ số, tốn ~1 phút mỗi lượt. Công cụ đọc tuổi
     // THẬT từ `captured_at` (`core/chi_so_ytb/gom.py: tuoi_that_gio`), không tin nhãn.
+    const gio = tuoi != null ? Math.round(tuoi) : null;
     if (gio != null) {
       let gop = 0;
       for (const h of MOC) {
@@ -582,43 +835,83 @@ async function chupVideo(videoId, label, ep = false, nhe = false) {
       if (gop) log(`gộp ${gop} mốc đã qua của ${videoId} vào bản chụp ${gio}h`);
     }
     await luu('daChup', daChup);
-    log(`xong ${videoId} [${label}]: ${tong} gói`);
+    await ghiSoLuot(videoId, 'ok');
+    log(`xong ${videoId} [${label}]: ${tong} gói${lan > 1 ? ` (sau ${lan} lần thử)` : ''}`);
     return tong;
   } finally {
-    dangChay = false; tatGiuThuc();
+    dangXepVideo.delete(videoId);
+    nhaTab(ma);
     setTimeout(() => { kiemXongQuet().catch(() => {}); }, 5000);
   }
 }
 
-async function chupKenh() {
+// ═══ SỐ TOÀN KÊNH (12/10/2026) ═══
+//
+// TL2-T7 không có `kenh-<ngày>` nào từ 07/10 tới 11/10 trong khi mọi lượt quét vẫn "xong". Hai
+// đường hỏng, cùng gốc là lượt chụp CHỒNG nhau (xem khoá tab): (1) chụp kênh chờ cờ `dangChay` hạ,
+// mà bão chụp chồng giữ cờ suốt rồi một lượt treo giữ nốt tới hết giờ (TL2 11/10: im từ 03:22);
+// (2) chụp kênh có chạy nhưng lượt video chạy chồng gọi `nghi()` xoá nhãn giữa chừng → gói kênh
+// rơi vào `tay-<ngày>` (lọc trùng 5 phút bỏ gần hết; TL2 12/10 03:11: gói `tab-build_audience`
+// nằm ở `tay-20261012`), trong khi dấu ngày vẫn ghi "đã chụp" sau khi đi đủ ba trang.
+// Nay: kênh xếp hàng ƯU TIÊN trên mọi video, và dấu ngày (`kenh_ngay_cuoi`)
+// CHỈ ghi khi có gói mang chỉ số toàn kênh — không có thì thử lại (tối đa
+// `TOI_DA_THU_KENH_LUOT` lần mỗi lượt quét; lượt quét sau trong ngày — agent tự xếp khi thiếu
+// `kenh-<ngày>` — lại được thử), không còn "đi đủ ba trang là xong".
+const TOI_DA_THU_KENH_LUOT = 3;
+async function lanThuKenh() {
+  const s = await st('kenh_thu', {});
+  return (s && s.ma === (await soLuot()).ma) ? (s.lan || 0) : 0;
+}
+let kenhDangXep = false;
+let daBaoChuaBietKenh = false;
+async function chupKenh(tuy = {}) {
   const ch = await st('kenh', '');
-  if (!ch) return;
-  kenhDangCho = true;
-  while (dangChay) await cho(3000);
-  dangChay = true; kenhDangCho = false; batGiuThuc();
+  if (!ch) {
+    if (!daBaoChuaBietKenh) { daBaoChuaBietKenh = true; log('chưa biết mã kênh (UC…) — chưa chụp được số toàn kênh, lượt khám phá sẽ nhận diện'); }
+    return;
+  }
+  const homNay = stamp().slice(0, 8);
+  if (!tuy.tay && (await st('kenh_ngay_cuoi', '')) === homNay) return;
+  if (kenhDangXep) return;
+  kenhDangXep = true;
+  const ma = await xinTab('chụp kênh', 2);
   try {
+    if (!tuy.tay && (await st('kenh_ngay_cuoi', '')) === homNay) return;
+    const lanNay = (await lanThuKenh()) + 1;
+    await luu('kenh_thu', { ma: (await soLuot()).ma, lan: lanNay });
     const tabId = await layTab();
-    const label = `kenh-${stamp().slice(0, 8)}`;
+    const label = `kenh-${homNay}`;
     const maKenh = (await st('ma_kenh', '')) || ch || 'kenh';
-    log(`chụp kênh ${ch}`);
+    log(`chụp kênh ${ch}${lanNay > 1 ? ` (lần ${lanNay} trong lượt quét)` : ''}`);
+    let coSo = 0;
     for (const tab of ['tab-overview', 'tab-content', 'tab-build_audience']) {
-      await moLink(tabId, `https://studio.youtube.com/channel/${ch}/analytics/${tab}/period-default`, { videoId: 'kenh', label }, 'so');
+      if (!conGiuTab(ma)) break;
+      const r = await moLink(tabId, `https://studio.youtube.com/channel/${ch}/analytics/${tab}/period-default`, { videoId: 'kenh', label }, 'so');
+      coSo += r.coSo;
       await chupAnh(tabId, maKenh, 'kenh', label, tab.replace('tab-', ''));
     }
-    // Dấu ngày chỉ được ghi sau khi đã đi đủ ba trang. Lần Chrome mở lại
-    // trong cùng ngày sẽ không chụp kênh lần hai; ngày mới thì `datLich()`
-    // nhìn thấy dấu cũ và cho chạy ngay trong phiên 07:30.
-    await luu('kenh_ngay_cuoi', stamp().slice(0, 8));
+    if (!coSo && conGiuTab(ma)) {
+      log('số toàn kênh chưa về — nghỉ 20 giây rồi mở lại trang tổng quan kênh');
+      await nghi(tabId);
+      await cho(20000);
+      const r = await moLink(tabId, `https://studio.youtube.com/channel/${ch}/analytics/tab-overview/period-default`, { videoId: 'kenh', label }, 'so');
+      coSo += r.coSo;
+      await chupAnh(tabId, maKenh, 'kenh', label, 'overview-lan2');
+    }
+    // Dấu ngày CHỈ ghi khi đã có số toàn kênh. Lần Chrome mở lại trong cùng ngày sẽ không chụp
+    // kênh lần hai; ngày mới thì `datLich()` nhìn thấy dấu cũ và cho chạy ngay.
+    if (coSo) await luu('kenh_ngay_cuoi', homNay);
+    else log(`HỎNG số toàn kênh (lần ${lanNay}/${TOI_DA_THU_KENH_LUOT} trong lượt quét): không gói nào mang chỉ số`);
     await nghi(tabId);
   } finally {
-    kenhDangCho = false; dangChay = false; tatGiuThuc();
+    kenhDangXep = false;
+    nhaTab(ma);
     setTimeout(() => { kiemXongQuet().catch(() => {}); }, 5000);
   }
 }
 
 async function khamPha() {
-  while (dangChay || kenhDangCho) await cho(3000);
-  dangChay = true; batGiuThuc();
+  const ma = await xinTab('khám phá', 3);
   try {
     const tabId = await layTab();
     let ch = await st('kenh', '');
@@ -640,7 +933,37 @@ async function khamPha() {
     log('tìm video từ trang Nội dung');
     await moLink(tabId, `https://studio.youtube.com/channel/${ch}/videos/upload`, null);
     await nghi(tabId);
-  } finally { dangChay = false; tatGiuThuc(); }
+  } finally { nhaTab(ma); }
+}
+
+// ═══ DANH SÁCH CHỤP BÙ CỦA TRẠM (12/10/2026) ═══
+//
+// Trạm nhìn thấy thứ tiện ích không thấy: bản chụp nào trên đĩa THẬT SỰ có số. `daChup` của tiện
+// ích từng đánh dấu "xong" cho bản rỗng (lượt chồng), và mốc ấy không bao giờ được chụp lại — chỉ
+// 17% bản chụp > 120h còn số. Đầu mỗi lượt quét, tiện ích hỏi trạm video nào thiếu số mới (quá
+// ~20 giờ không có bản hợp lệ, tuổi ≤ 31 ngày) và chụp bù đúng những video ấy — nên mốc 72h,
+// 96h, 7 ngày, 14 ngày… có thật cho mọi video. Trạm cũ không có cửa này → danh sách rỗng.
+async function chupBuTuTram() {
+  // Đang hỏi trạm cũng là "còn việc" — `kiemXongQuet` không được báo xong khi danh sách chưa về.
+  soViecCho++;
+  try {
+    const host = await st('host', '');
+    const kenh = (await st('ma_kenh', '')) || (await st('kenh', ''));
+    if (!host || !kenh) return 0;
+    // Chưa biết video nào (vừa nâng cấp/xoá bộ nhớ, khám phá chưa xong) → hỏi lại nhịp sau.
+    if (!Object.keys(await st('videos', {})).length) return -1;
+    let ds = [];
+    try {
+      const r = await fetchCoHan(`${host}/chup-bu?kenh=${encodeURIComponent(kenh)}`, {}, 60000);
+      if (r.ok) ds = ((await r.json()) || {}).video || [];
+    } catch (e) { log(`chụp bù: không hỏi được trạm (${e.message})`); return 0; }
+    const videos = await st('videos', {});
+    const ids = ds.map((x) => String((x && x.video_id) || '')).filter((id) => videos[id]);
+    if (!ids.length) return 0;
+    log(`trạm xin chụp bù ${ids.length} video thiếu số mới: ${ids.slice(0, 8).join(' ')}${ids.length > 8 ? ' …' : ''}`);
+    for (const id of ids) chupVideo(id, null, { ep: true, bu: true }).catch((e) => log(`chụp bù ${id}: ${e}`));
+    return ids.length;
+  } finally { soViecCho--; }
 }
 
 // ---------------------------------------------------------------- lịch
@@ -650,10 +973,9 @@ async function quetNgayHet(ids) {
   // tat ca" cua popup, va lenh tu tram).
   if (!Object.keys(await st('videos', {})).length) await khamPha();
   const videos = await st('videos', {});
+  // Nhãn, chụp nhẹ/đầy: `chupVideo` tự tính theo TUỔI THẬT lúc tới lượt (12/10/2026).
   for (const id of (ids && ids.length ? ids : Object.keys(videos))) {
-    const v = videos[id];
-    const tuoi = v ? Math.round((Date.now() - v.ngay_dang_ms) / 36e5) : 0;
-    await chupVideo(id, `${tuoi}h`, true, laNhe(tuoi));
+    await chupVideo(id, null, { ep: true, tay: true });
   }
 }
 
@@ -667,7 +989,7 @@ async function hoiLenh() {
   if (!host || !kenh) return;
   let lenh = null;
   try {
-    const r = await fetch(host + '/lenh-tien-ich?kenh=' + encodeURIComponent(kenh));
+    const r = await fetchCoHan(host + '/lenh-tien-ich?kenh=' + encodeURIComponent(kenh), {}, 20000);
     if (r.ok) lenh = await r.json();
   } catch (e) { return; }
   // Trạm kèm `ngay_bat_dau` của kênh vào MỌI câu trả lời (không phải lệnh một-lần-là-hết), nên
@@ -689,8 +1011,8 @@ async function hoiLenh() {
   }
   if (lenh && lenh.chup === 'het') {
     log('tram ra lenh: CHUP LAI TAT CA (lenh tay tu tool)');
+    chupKenh({ tay: true }).catch(() => {});     // xếp hàng ưu tiên trước các video
     await quetNgayHet();
-    await chupKenh();
   }
 }
 
@@ -712,7 +1034,9 @@ async function datLich() {
   const daChup = await st('daChup', {});
   const co = new Set((await chrome.alarms.getAll()).map(a => a.name));
   const moc = await mocMs();
+  const luot = await soLuot();
   let n = 0;
+  let nBu = 0;
   let boQua = 0;
   for (const [id, v] of Object.entries(videos)) {
     // Video đời trước của kênh: không đặt lịch nào. Chặn ở `chupVideo` là đủ ĐÚNG, nhưng nếu chỉ
@@ -721,10 +1045,12 @@ async function datLich() {
     if (ngoaiPhamVi(v, moc)) {
       boQua++;
       await chrome.alarms.clear(`ngay|${id}`);
+      await chrome.alarms.clear(`bu|${id}`);
       for (const h of MOC) await chrome.alarms.clear(`snap|${id}|${h}`);
       continue;
     }
     const tuoi = (Date.now() - v.ngay_dang_ms) / 36e5;
+    let thieuMocDaQua = false;
     for (const h of MOC) {
       if (tuoi > 24 * 35) break;
       const ten = `snap|${id}|${h}`;
@@ -733,6 +1059,7 @@ async function datLich() {
       if (khi > Date.now()) {
         await chrome.alarms.create(ten, { when: khi }); co.add(ten); n++;
       } else {
+        thieuMocDaQua = true;
         // ═══ TỰ VÁ MỐC ĐÃ QUA MÀ CHƯA CÓ BÁO THỨC (29/09/2026) ═══
         //
         // Bản cũ CHỈ đặt báo thức khi `khi` còn ở tương lai — mốc nào đã qua lúc hàm này
@@ -748,13 +1075,18 @@ async function datLich() {
         // của `onAlarm` bên dưới đã chọn cho báo thức fire muộn; đây là ca báo thức CHƯA TỪNG
         // tồn tại. `chupVideo`/`daChup` vẫn chặn chụp trùng nếu mốc này lỡ đã có số liệu.
         // 30/09/2026: CHỈ trong cửa sổ QUÉT NGÀY (xem `choPhepQuet`) — ngoài đó để dành.
-        if (!duocQuet) continue;
-        await chrome.alarms.create(ten, { when: Date.now() + 2000 }); co.add(ten); n++;
+        //
+        // 12/10/2026: KHÔNG còn một báo thức cho MỖI mốc đã qua (13 cái/video, cùng nổ một
+        // giây — gốc của bão chụp chồng). Mốc đã qua chỉ được GHI NHẬN ở đây; dưới vòng này đặt
+        // đúng MỘT báo thức bù `bu|<id>` cho cả video: một bản chụp ở tuổi thật là số mới nhất
+        // cho mọi mốc đã qua (`chupVideo` gộp chúng khi có số).
       }
     }
-    if (duocQuet && !(daChup[id] || []).length && !co.has(`ngay|${id}`)) {
-      await chrome.alarms.create(`ngay|${id}`, { when: Date.now() + 5000 });
-      co.add(`ngay|${id}`);
+    const chuaTungCo = !(daChup[id] || []).length && tuoi <= 24 * 35;
+    if (duocQuet && (thieuMocDaQua || chuaTungCo) && !co.has(`bu|${id}`) && !co.has(`ngay|${id}`)
+        && !dangXepVideo.has(id) && !luot.ok[id] && (luot.thu[id] || 0) < TOI_DA_LUOT_THU_VIDEO) {
+      await chrome.alarms.create(`bu|${id}`, { when: Date.now() + 2000 + 1000 * (nBu++) });
+      co.add(`bu|${id}`); n++;
     }
   }
   if (!co.has('kham-pha')) await chrome.alarms.create('kham-pha', { periodInMinutes: 720 });
@@ -768,10 +1100,14 @@ async function datLich() {
   // video để bảng YPP luôn về đủ trong cửa 8 phút, rồi để agent đóng Chrome.
   // Lịch 360 phút đời cũ khiến Chrome tự cào bốn lần/ngày nếu bị giữ mở và
   // mâu thuẫn với hàng đợi tiết kiệm tài nguyên, nên thay hẳn bằng 1.440 phút.
+  // 12/10/2026: chưa có số kênh hôm nay thì đặt lại (mỗi phút một lần là cùng) — trừ khi đang xếp
+  // hàng chụp kênh, hoặc đã thử đủ `TOI_DA_THU_KENH_LUOT` lần trong lượt quét này.
   const homNayKenh = stamp().slice(0, 8);
   const baoKenh = await chrome.alarms.get('kenh-ngay');
   const chuaChupKenhHomNay = (await st('kenh_ngay_cuoi', '')) !== homNayKenh;
-  if (duocQuet && (chuaChupKenhHomNay || !baoKenh || baoKenh.periodInMinutes !== 1440)) {
+  const conLuotKenh = (await lanThuKenh()) < TOI_DA_THU_KENH_LUOT;
+  if (duocQuet && !kenhDangXep
+      && ((chuaChupKenhHomNay && conLuotKenh) || !baoKenh || baoKenh.periodInMinutes !== 1440)) {
     await chrome.alarms.clear('kenh-ngay');
     await chrome.alarms.create('kenh-ngay', { when: Date.now() + 1000, periodInMinutes: 1440 });
   }
@@ -808,29 +1144,19 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   // khi Chrome mở cho QUÉT NGÀY, nên không mất mốc nào.
   if (k !== 'tu-kiem' && !(await choPhepQuet())) { baoChan(`báo thức ${k}`); return; }
   if (k === 'snap') {
-    // Tuổi THẬT lúc chụp. Báo thức nổ lệch quá 3 giờ so với nhãn (Chrome chỉ mở mỗi ngày một
-    // lần cho QUÉT NGÀY; hoặc mốc đã qua được đặt lại "nổ ngay") → lưu theo tuổi thật, và
-    // `chupVideo` gộp mọi mốc đã qua vào đúng một bản chụp (không chụp lại cùng bộ số).
-    const v = (await st('videos', {}))[id];
-    const tuoiThat = v ? Math.round((Date.now() - v.ngay_dang_ms) / 36e5) : Number(h);
-    if (Math.abs(tuoiThat - Number(h)) > 3) {
-      log(`mốc ${h}h tới lúc video đã ${tuoiThat}h — lưu theo tuổi thật ${tuoiThat}h, không lưu nhầm nhãn ${h}h`);
-      await chupVideo(id, `${tuoiThat}h`, false, laNhe(tuoiThat));
-    } else {
-      await chupVideo(id, `${h}h`, false, laNhe(h));
-    }
+    // Tuổi THẬT lúc chụp: `chupVideo` đặt nhãn theo tuổi thật lúc tới lượt (12/10/2026: luôn
+    // luôn, không chỉ khi lệch quá 3 giờ — báo thức xếp hàng sau vài video là đã lệch), ghi mốc
+    // dự định `h` vào `_thong-tin.json`, và gộp mọi mốc đã qua vào đúng một bản chụp có số.
+    await chupVideo(id, `${h}h`);
   }
-  else if (k === 'ngay') {
-    // Báo thức "video chưa từng có số liệu" — fire cả cho video CŨ nếu `daChup` vừa bị mất
-    // (nạp lại extension, xem ghi chú ở `datLich()`): dùng TUỔI THẬT hiện tại để quyết định
-    // nhẹ/đầy, không phải lúc nào cũng là video mới.
-    const v = (await st('videos', {}))[id];
-    const tuoi = v ? Math.round((Date.now() - v.ngay_dang_ms) / 36e5) : 0;
-    await chupVideo(id, `${tuoi}h`, false, laNhe(tuoi));
+  else if (k === 'ngay' || k === 'bu') {
+    // `bu|<id>`: MỘT báo thức bù cho mọi mốc đã qua còn thiếu của video (xem `datLich`).
+    // `ngay|<id>`: báo thức "video chưa từng có số liệu" của bản cũ — xử lý y như bù.
+    await chupVideo(id, null);
   } else if (k === 'kham-pha') await khamPha();
   else if (k === 'kenh' || k === 'kenh-ngay') await chupKenh();
-  else if (k === 'hoi-lenh') { await batDauQuetNeuCan(); await hoiLenh(); await kiemXongQuet(); }
-  else if (k === 'tu-kiem') await datLich();
+  else if (k === 'hoi-lenh') { moiTab(); await batDauQuetNeuCan(); await hoiLenh(); await kiemXongQuet(); }
+  else if (k === 'tu-kiem') { moiTab(); await datLich(); }
 });
 
 // ═══ ĐẦU / CUỐI MỘT LƯỢT QUÉT NGÀY (30/09/2026) ═══
@@ -848,10 +1174,21 @@ async function batDauQuetNeuCan() {
     daBaoChan = false;
     log(`QUÉT NGÀY bắt đầu (lượt ${ma})`);
     try { lanKhamPha = Date.now(); await khamPha(); } catch (e) {}
+    // 12/10/2026: số TOÀN KÊNH xếp hàng NGAY, trước mọi video (xem `chupKenh`).
+    chupKenh().catch((e) => log(`chụp kênh: ${e}`));
   }
   await datLich();
+  // Danh sách chụp bù của trạm — sau `datLich` để báo thức mốc của lượt này đã có chỗ đứng; trùng
+  // video thì `chupVideo` tự bỏ (đang xếp hàng / đã có số trong lượt). Hỏi MỘT lần mỗi lượt mỗi
+  // đời service worker: worker bị Chrome cho ngủ giữa lượt thì hàng đợi trong RAM mất — hỏi lại,
+  // trạm chỉ trả những video còn thiếu.
+  if (ma && daHoiBuLuot !== ma) {
+    daHoiBuLuot = ma;
+    if ((await chupBuTuTram().catch(() => 0)) < 0) daHoiBuLuot = '';
+  }
   return true;
 }
+let daHoiBuLuot = '';
 
 // Cuối lượt: không còn việc nào đang chạy hay sắp nổ (≤ 60 giây), đã chụp kênh hôm nay → báo
 // agent (đổi TAB LÀM VIỆC sang `nghi.html?quet_xong=<mã>` — agent đọc danh sách tab ở cổng
@@ -864,10 +1201,15 @@ async function kiemXongQuet() {
   if (!ma || (await st('quet_ma_xong', '')) === ma) return false;
   if ((await st('quet_ma_bat_dau', '')) !== ma) return false;
   if (Date.now() - Number(await st('quet_bat_dau_luc', 0)) < 60000) return false;
-  if (dangChay || kenhDangCho || ltDoi) return false;
-  if ((await st('kenh', '')) && (await st('kenh_ngay_cuoi', '')) !== stamp().slice(0, 8)) return false;
+  if (tabBan() || ltDoi) return false;
+  // Chưa có số toàn kênh hôm nay thì chưa xong — trừ khi đã thử đủ lần trong lượt này (khi ấy báo
+  // xong để agent đi tiếp; phía tool `_du_lieu_kenh_da_ve_hom_nay` thấy thiếu `kenh-<ngày>` → lượt
+  // quét sau trong ngày thử lại, và người gác báo "số liệu kênh cũ").
+  const homNay = stamp().slice(0, 8);
+  if ((await st('kenh', '')) && (await st('kenh_ngay_cuoi', '')) !== homNay
+      && (await lanThuKenh()) < TOI_DA_THU_KENH_LUOT) return false;
   const sap = (await chrome.alarms.getAll()).filter((x) =>
-    (/^(snap|ngay)\|/.test(x.name) || x.name === 'kenh-ngay') && (x.scheduledTime || 0) <= Date.now() + 60000);
+    (/^(snap|ngay|bu)\|/.test(x.name) || x.name === 'kenh-ngay') && (x.scheduledTime || 0) <= Date.now() + 60000);
   if (sap.length) return false;
   await luu('quet_ma_xong', ma);
   log(`QUÉT NGÀY xong (lượt ${ma}) — báo agent`);
@@ -879,8 +1221,8 @@ async function kiemXongQuet() {
   const kenh = (await st('ma_kenh', '')) || (await st('kenh', ''));
   if (host && kenh) {
     try {
-      await fetch(host + '/quet-xong', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kenh }) });
+      await fetchCoHan(host + '/quet-xong', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kenh }) }, 20000);
     } catch (e) {}
   }
   return true;
@@ -936,7 +1278,7 @@ let ltDoi = null;                // {daLam:Set, dem:{co,khong_co,loi}, batDau}
 // Đo thật 22/09/2026 (phiên TL1-T7, 09:52–10:03): kết quả "0 lấy được · 0 không có · 8 chưa
 // về", và LevelDB của tiện ích không có một dòng log nào chứa "lời thoại". Tệp phiên
 // Chromium `Session_13434519629720236` giải thích vì sao: nó chứa CẢ HAI địa chỉ cho cùng
-// một video — `…watch?v=i2EAnLd8Duo&shopapi_lt=1` VÀ `…watch?v=i2EAnLd8Duo`. Tab mở đúng
+// một video — `…watch?v=vidGiaee003&shopapi_lt=1` VÀ `…watch?v=vidGiaee003`. Tab mở đúng
 // địa chỉ kèm dấu, rồi YouTube tự `replaceState` gỡ dấu đi. `loi-thoai.js` chạy ở
 // `document_idle`, tới lúc ấy dấu đã mất, và nó `return` trong im lặng.
 //
@@ -1237,7 +1579,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       if (tabId != null) ltNhanBaoCao(msg, tabId).catch((e) => log(`lời thoại: ${e}`));
     }
     else if (msg.type === 'kham_pha') { khamPha(); reply({ ok: true }); }
-    else if (msg.type === 'chup_kenh') { chupKenh(); reply({ ok: true }); }
+    else if (msg.type === 'chup_kenh') { chupKenh({ tay: true }); reply({ ok: true }); }
     else if (msg.type === 'xoa_lich') {
       await chrome.alarms.clearAll(); await luu('daChup', {});
       log('xoá lịch sử chụp, đặt lại lịch');
