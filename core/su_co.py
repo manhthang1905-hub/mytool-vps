@@ -43,7 +43,7 @@ __all__ = [
     "KHOA_DA_DUNG", "KHOA_LECH", "TAM_NGHI", "MAT_MANG", "CHAM_LAI", "NOI_DUNG", "HET_KHO", "HET_TIEN",
     "CHET", "NHA_MAY_NGHI", "HET_HAN_MUC", "LoiNoiDung", "LoiTaiVe",
     "phan_loai", "nen_thu_lai", "nhip_cho", "mo_ta", "goi_kien_nhan",
-    "dat_tran_moi_phut",
+    "dat_tran_moi_phut", "DAU_KET_QUA_MAT",
 ]
 
 # ── Bảy loại sự cố ───────────────────────────────────────────────────────────
@@ -159,6 +159,14 @@ _DAU_HET_HAN_MUC = ("hết hạn mức credit", "đã dùng hết hạn mức", 
                     "used up today")
 
 
+#: Câu mở đầu lỗi khi kết quả một job KHÔNG CÒN trên máy chủ (`/v1/jobs/{id}/download` trả 400/404/410)
+#: và đã đặt lại bằng khoá mới hết lượt vẫn vậy. Xếp `TAM_NGHI` (phía máy chủ) — xem `_BANG`.
+#:
+#: Đo 11/10/2026: sau ~6 giờ ShopAPI tắt TTS, một đoạn giọng đọc nhận `400` lúc tải → `CHET` → L3 bỏ hẳn
+#: lượt sau 3 lần nhặt. 400 lúc TẢI nghĩa là kết quả đã mất (job hỏng/hết hạn), không phải tool sai.
+DAU_KET_QUA_MAT = "máy chủ không còn giữ kết quả job"
+
+
 class LoiNoiDung(RuntimeError):
     """Nội dung máy chủ trả về không dùng được (JSON đứt, thiếu trường…)."""
 
@@ -219,7 +227,10 @@ _BANG: Sequence[Tuple[str, Tuple[str, ...]]] = (
     # Trục trặc tạm — máy chủ nói thẳng là chưa trừ tiền.
     (TAM_NGHI, ("tạm gián đoạn", "không bị trừ tiền", "502", "503", "504",
                 "bad gateway", "service unavailable", "gateway timeout",
-                "temporarily", "tạm thời")),
+                "temporarily", "tạm thời",
+                # Câu TOOL tự viết khi `/download` trả 400/404/410 cả sau hai lần đặt lại bằng khoá mới
+                # (`auto_khau._tai_ket_qua_dat_lai`) — phía máy chủ, để L3 không bỏ oan lượt dở.
+                DAU_KET_QUA_MAT)),
     # Hết giờ chờ phía client — máy chủ có thể vẫn đang làm.
     (CHO_TIEP, ("timeout", "timed out", "hết giờ", "read timeout")),
     # Đứt mạng phía khách — request chưa rời khỏi máy, retry vô hạn an toàn.

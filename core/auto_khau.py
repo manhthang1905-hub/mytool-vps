@@ -57,8 +57,8 @@ from .ghi_dia import (duong_tam, ghi_chu as _ghi_chu_dia, ghi_json,
                       thay_the)
 from .the_cam_xuc import TEP_CO_THE, chen_the, kiem_the
 from .tron_tieng import co_ne_giong, loc_tron_nhac
-from .su_co import (SUAT_TAI_TEP, LoiNoiDung, LoiTaiVe, goi_kien_nhan,
-                    phan_loai, xin_nhip)
+from .su_co import (DAU_KET_QUA_MAT, SUAT_TAI_TEP, LoiNoiDung, LoiTaiVe,
+                    goi_kien_nhan, phan_loai, xin_nhip)
 
 __all__ = [
     "BoiCanh", "dung_bo_viec", "chia_doan_doc", "chia_doan_va_nghi",
@@ -2375,6 +2375,62 @@ def _tai_ket_qua(bc: BoiCanh, goi: Dict[str, Any], chi_so: int, dich: str,
             return _tai_ket_qua_mot_lan(bc, goi, chi_so, dich)
 
     return goi_kien_nhan(mot_lan, on_log=bc.ghi, kiem_dung=bc.kiem_dung, ngu=ngu)
+
+
+#: Mã HTTP của `/v1/jobs/{id}/download` nghĩa là "kết quả job này KHÔNG CÒN" (job hỏng/hết hạn/bị dọn).
+#: Tải lại đúng job ấy bao nhiêu lần cũng vậy — chỉ đặt job MỚI (khoá mới) mới có tệp. 5xx thì khác:
+#: trục trặc tạm, `_tai_ket_qua` tự kiên nhẫn như cũ.
+MA_KET_QUA_MAT = (400, 404, 410)
+
+#: Đặt lại tối đa mấy lần cho MỘT mục khi kết quả mất — cùng trần hai nấc với "nhận việc rồi bỏ đó".
+SO_DAT_LAI_KET_QUA_MAT = 2
+
+
+def khoa_dat_lai_ket_qua_mat(lan: int) -> str:
+    """Đuôi khoá cho lần đặt lại vì kết quả mất. Tiền tố `:mat` để KHÔNG trùng đuôi `khoa_thoat_ket` mà
+    vòng "nhận việc rồi bỏ đó" vừa dùng trong cùng phút (trùng là cổng phát lại đúng job đã mất kết quả)."""
+    return ":mat" + khoa_thoat_ket(lan)
+
+
+def _tai_ket_qua_dat_lai(bc: BoiCanh, goi: Dict[str, Any], dich: str,
+                         dat_lai: Callable[[str], Dict[str, Any]],
+                         ten_viec: str = "") -> str:
+    """Tải kết quả về; `/download` báo kết quả KHÔNG CÒN (400/404/410) thì đặt lại bằng khoá mới.
+
+    ═══ ĐO 11/10/2026 ═══
+
+    ShopAPI tắt TTS ~6 giờ. Lượt nhặt lại sau đó: đoạn giọng đọc gửi lại đúng khoá cũ → cổng phát lại
+    job cũ → `/download` trả **400** → `LoiTaiVe(400)` → `CHET` → khâu dừng; ba lần nhặt lại đều y hệt
+    (cùng khoá, cùng xác job) → trần L3 bỏ HẲN lượt, mất kịch bản/ảnh đã trả tiền. Cùng họ với ghi chú ở
+    `_cho_job` (job `failed` phát lại theo khoá → 400 lúc tải).
+
+    `dat_lai(hau_to)` gửi lại ĐÚNG việc ấy với đuôi khoá `hau_to` và đợi xong, trả gói job mới. Tối đa
+    `SO_DAT_LAI_KET_QUA_MAT` lần; hết lượt thì ném `LoiTaiVe` mở đầu bằng `DAU_KET_QUA_MAT` — câu
+    `core/su_co.py` xếp `TAM_NGHI` (phía máy chủ), nên L3 (`tu_chay._dung_vi_phia_shopapi`) không bỏ oan.
+
+    Gọi `_tai_ket_qua(bc, goi, 0, dich)` theo vị trí — bài kiểm nào thay `_tai_ket_qua` bằng hàm 4 đối
+    số vẫn chạy y cũ.
+    """
+    ten = ten_viec or "kết quả"
+    for lan in range(SO_DAT_LAI_KET_QUA_MAT + 1):
+        try:
+            return _tai_ket_qua(bc, goi, 0, dich)
+        except LoiTaiVe as loi:
+            if int(getattr(loi, "status", 0) or 0) not in MA_KET_QUA_MAT:
+                raise
+            if lan >= SO_DAT_LAI_KET_QUA_MAT:
+                # Không ghi mã job vào câu lỗi: mã ngẫu nhiên có thể chứa "402"/"429"/"503" và câu lỗi
+                # là thứ `phan_loai` dò chữ (lần nhặt sau đọc lại nó từ sổ). Mã job đã nằm trong nhật ký.
+                raise LoiTaiVe(
+                    "{0} (HTTP {1}) — {2}: đã đặt lại bằng khoá mới {3} lần vẫn không tải được; "
+                    "sự cố phía máy chủ ShopAPI, chạy tiếp sẽ đặt lại".format(
+                        DAU_KET_QUA_MAT, loi.status, ten, SO_DAT_LAI_KET_QUA_MAT),
+                    loi.status) from loi
+            bc.ghi("    {0}: máy chủ không còn giữ kết quả job {1} (HTTP {2}) — đặt lại bằng "
+                   "khoá mới ({3}/{4}).".format(ten, _ma_job(goi) or "?", loi.status, lan + 1,
+                                                 SO_DAT_LAI_KET_QUA_MAT))
+            goi = dat_lai(khoa_dat_lai_ket_qua_mat(lan + 1))
+    raise AssertionError("không tới được")  # pragma: no cover
 
 
 def _tai_ket_qua_mot_lan(bc: BoiCanh, goi: Dict[str, Any], chi_so: int,
@@ -4695,7 +4751,9 @@ def _khau_giong_doc(bc: BoiCanh):
                         raise
                     bc.ghi("    đoạn {0}: máy chủ nhận việc rồi bỏ đó — đặt "
                            "lại bằng khoá mới ({1}/2).".format(so, _lan + 1))
-            _tai_ket_qua(bc, goi_tts, 0, tep)
+            # `/download` báo kết quả không còn (400/404/410) → đọc lại bằng khoá mới, hai nấc
+            # (11/10/2026: TL1-T7 sau 6 giờ TTS tắt) — xem `_tai_ket_qua_dat_lai`.
+            _tai_ket_qua_dat_lai(bc, goi_tts, tep, doc, "đoạn {0}".format(so))
             # ═══ SOI ÂM ĐẦU: NHÀ MÁY HAY XÉN MẤT CHỮ ĐẦU ═══
             #
             # Xem `NGUONG_AM_DAU`. Đọc lại đúng MỘT lần bằng khoá mới — bản
@@ -4711,7 +4769,10 @@ def _khau_giong_doc(bc: BoiCanh):
                     # âm mạnh, không có "khoảng đệm" cho máy vào tiếng — đọc lại
                     # y hệt thì y hệt lỗi. Thêm `DEM_DOC_LAI` ở đầu câu cho máy
                     # một quãng nghỉ để "vào tiếng" trước khi tới chữ thật.
-                    _tai_ket_qua(bc, doc(":am-dau", DEM_DOC_LAI + chu), 0, tep)
+                    _tai_ket_qua_dat_lai(
+                        bc, doc(":am-dau", DEM_DOC_LAI + chu), tep,
+                        lambda h: doc(":am-dau" + h, DEM_DOC_LAI + chu),
+                        "đoạn {0} (đọc lại)".format(so))
                 except Exception as loi:  # noqa: BLE001
                     bc.ghi("    đoạn {0}: đọc lại không được ({1}) — giữ bản "
                            "cũ.".format(so, str(loi)[:60]))
@@ -6332,11 +6393,13 @@ def _anh_khung_cuoi(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
     # vẽ được.
     hop_cuoi = ThamChieuCanh(bc, duong + [anh_dau]) if duong else hop
     try:
-        goi = _tao_anh(bc, luot, loi_nhac, hop_cuoi,
-                       khoa_viec(luot, "img", so_canh, loi_nhac,
-                                 "|".join(hop_cuoi.lay()), "kc"),
-                       ten_hien="khung cuối cảnh {0}".format(so_canh), so=so)
-        _tai_ket_qua(bc, goi, 0, dich)
+        khoa = khoa_viec(luot, "img", so_canh, loi_nhac, "|".join(hop_cuoi.lay()), "kc")
+        ten = "khung cuối cảnh {0}".format(so_canh)
+
+        def ve(hau_to=""):
+            return _tao_anh(bc, luot, loi_nhac, hop_cuoi, khoa + hau_to, ten_hien=ten, so=so)
+
+        _tai_ket_qua_dat_lai(bc, ve(), dich, ve, ten)
         _xoa_dau(bc, dich)
     except Exception as loi:  # noqa: BLE001 — không có khung cuối thì ghim một đầu
         bc.ghi("    cảnh {0}: không vẽ được khung cuối ({1}) — ghim một đầu."
@@ -6506,7 +6569,9 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
         # Chữ ký ảnh khung đầu hết hạn giữa mẻ — tải lại đúng tấm ấy.
         url_anh = _url_anh_canh(bc, luot, so_canh, anh, bo_qua_nho=True)
         goi = goi_clip(url_anh, ":tc2")
-    _tai_ket_qua(bc, goi, 0, dich)
+    # `/download` báo kết quả không còn (400/404/410) → tạo lại bằng khoá mới — `_tai_ket_qua_dat_lai`.
+    ten_canh = "cảnh {0}".format(so_canh)
+    _tai_ket_qua_dat_lai(bc, goi, dich, lambda h: goi_clip(url_anh, h), ten_canh)
     try:
         _kiem_media(bc, dich)
     except LoiNoiDung as loi:
@@ -6518,7 +6583,7 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
         bc.ghi("    cảnh {0}: clip tải về hỏng ({1}) — tạo lại bằng khoá mới."
                .format(so_canh, str(loi)[:80]))
         goi = goi_clip(url_anh, ":hong2")
-        _tai_ket_qua(bc, goi, 0, dich)
+        _tai_ket_qua_dat_lai(bc, goi, dich, lambda h: goi_clip(url_anh, ":hong2" + h), ten_canh)
         _kiem_media(bc, dich)
 
 
@@ -6584,11 +6649,18 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
     # Đo được 15/08/2026: chạy lại khâu ảnh của một lượt cũ là hỏng 100% ngay
     # lượt gọi đầu. Khâu clip đã đưa `dia_chi` vào khoá từ trước; khâu ảnh và
     # khâu ảnh bìa thì quên — cùng một bài học, sót hai chỗ.
+    # Nhớ lời nhắc + khoá của bản ĐÃ ra job, để kết quả mất lúc tải (400/404/410) thì đặt lại ĐÚNG bản ấy
+    # bằng khoá mới — xem `_tai_ket_qua_dat_lai`.
+    ten_anh = "ảnh cảnh {0}".format(so_canh)
+    dung: Dict[str, str] = {}
+
+    def ve(ln: str, khoa: str):
+        dung.update(ln=ln, khoa=khoa)
+        return _tao_anh(bc, luot, ln, hop, khoa, ten_hien=ten_anh, so=so)
+
     try:
-        goi = _tao_anh(bc, luot, c["img_prompt"], hop,
-                       khoa_viec(luot, "img", so_canh, c["img_prompt"],
-                                 "|".join(hop.lay())),
-                       ten_hien="ảnh cảnh {0}".format(so_canh), so=so)
+        goi = ve(c["img_prompt"], khoa_viec(luot, "img", so_canh, c["img_prompt"],
+                                            "|".join(hop.lay())))
     except Exception as loi:  # noqa: BLE001
         # ═══ BỘ LỌC TỪ CHỐI → VIẾT LẠI LỜI NHẮC MỘT LẦN, KHÔNG BỎ CẢNH ═══
         #
@@ -6601,9 +6673,7 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         if not moi:
             raise
         try:
-            goi = _tao_anh(bc, luot, moi, hop,
-                           khoa_viec(luot, "img", so_canh, moi, "|".join(hop.lay()), "vl"),
-                           ten_hien="ảnh cảnh {0}".format(so_canh), so=so)
+            goi = ve(moi, khoa_viec(luot, "img", so_canh, moi, "|".join(hop.lay()), "vl"))
         except Exception as loi2:  # noqa: BLE001
             # Lần 3: thay từ thô (mồm, liếm, nuốt, vũ khí…) — không tốn lượt chữ.
             # Đo 26/08/2026: bản AI viết lại vẫn giữ "toward his open mouth" và
@@ -6611,10 +6681,12 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
             tho = _lam_lanh_tho_neu_bi_tu_choi(bc, luot, c, moi, loi2)
             if not tho:
                 raise
-            goi = _tao_anh(bc, luot, tho, hop,
-                           khoa_viec(luot, "img", so_canh, tho, "|".join(hop.lay()), "vl2"),
-                           ten_hien="ảnh cảnh {0}".format(so_canh), so=so)
-    _tai_ket_qua(bc, goi, 0, tep)
+            goi = ve(tho, khoa_viec(luot, "img", so_canh, tho, "|".join(hop.lay()), "vl2"))
+    ln_dung, khoa_dung = dung["ln"], dung["khoa"]
+    _tai_ket_qua_dat_lai(
+        bc, goi, tep,
+        lambda h: _tao_anh(bc, luot, ln_dung, hop, khoa_dung + h, ten_hien=ten_anh, so=so),
+        ten_anh)
     _xoa_dau(bc, tep)
     _cham_va_ve_lai(bc, luot, c, tep, hop, so=so)
 
@@ -6685,12 +6757,15 @@ def _cham_va_ve_lai(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         for lan in range(SO_UNG_VIEN_CHAM):
             bc.kiem_dung()
             try:
-                goi = _tao_anh(bc, luot, c["img_prompt"], hop,
-                               khoa_viec(luot, "img", so_canh, c["img_prompt"],
-                                         "|".join(hop.lay()), "uv{0}".format(lan + 1)),
-                               ten_hien="ảnh cảnh {0} (ứng viên {1})".format(
-                                   so_canh, lan + 1), so=so)
-                _tai_ket_qua(bc, goi, 0, tep)
+                khoa_uv = khoa_viec(luot, "img", so_canh, c["img_prompt"],
+                                    "|".join(hop.lay()), "uv{0}".format(lan + 1))
+                ten_uv = "ảnh cảnh {0} (ứng viên {1})".format(so_canh, lan + 1)
+
+                def ve_uv(hau_to="", _k=khoa_uv, _t=ten_uv):
+                    return _tao_anh(bc, luot, c["img_prompt"], hop, _k + hau_to,
+                                    ten_hien=_t, so=so)
+
+                _tai_ket_qua_dat_lai(bc, ve_uv(), tep, ve_uv, ten_uv)
                 _xoa_dau(bc, tep)
             except Exception as loi:  # noqa: BLE001 — ứng viên hỏng thì giữ tấm cũ
                 bc.ghi("    ảnh cảnh {0}: ứng viên {1} không vẽ được ({2})".format(
@@ -8874,9 +8949,13 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
         tep = os.path.join(thu, "thu_{0}.png".format(i + 1))
         try:
             nen = os.path.join(thu, "_nen_thu_{0}.png".format(i + 1)) if ma_ve else tep
-            goi = _tao_anh(bc, luot, ln, hop, khoa_viec(luot, "thu-khuon", i + 1, ln, "|".join(hop.lay())),
-                           ten_hien="thử khuôn {0}".format(i + 1))
-            _tai_ket_qua(bc, goi, 0, nen)
+            khoa_tk = khoa_viec(luot, "thu-khuon", i + 1, ln, "|".join(hop.lay()))
+            ten_tk = "thử khuôn {0}".format(i + 1)
+
+            def ve_tk(hau_to="", _ln=ln, _k=khoa_tk, _t=ten_tk):
+                return _tao_anh(bc, luot, _ln, hop, _k + hau_to, ten_hien=_t)
+
+            _tai_ket_qua_dat_lai(bc, ve_tk(), nen, ve_tk, ten_tk)
             _xoa_dau(bc, nen)
             if ma_ve:
                 _btk.ve_chu_len_anh(nen, tep, _btk.bo_tri_chu("khuon", bt["chu_tang"], kc), goc=bc.goc,
@@ -8973,11 +9052,13 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
     dich = os.path.join(thu_muc, "znen-thumb_{0:03d}.png".format(so_bia)) if ma_ve else tep
     if not (ma_ve and os.path.exists(dich)):
         # Khoá phủ cả ảnh tham chiếu — xem ghi chú ở `_lam_anh_canh`.
-        goi = _tao_anh(bc, luot, loi_nhac, hop,
-                       khoa_viec(luot, "thumb", so_bia, loi_nhac,
-                                 "|".join(hop.lay())),
-                       ten_hien="ảnh bìa {0}".format(so_bia), so=so)
-        _tai_ket_qua(bc, goi, 0, dich)
+        khoa_bia = khoa_viec(luot, "thumb", so_bia, loi_nhac, "|".join(hop.lay()))
+        ten_bia = "ảnh bìa {0}".format(so_bia)
+
+        def ve_bia(hau_to=""):
+            return _tao_anh(bc, luot, loi_nhac, hop, khoa_bia + hau_to, ten_hien=ten_bia, so=so)
+
+        _tai_ket_qua_dat_lai(bc, ve_bia(), dich, ve_bia, ten_bia)
         _xoa_dau(bc, dich)
     if ma_ve:
         from . import bia_theo_khuon as _btk  # noqa: PLC0415
@@ -8986,10 +9067,13 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
             ln2 = loi_nhac + ("\nIMPORTANT: the previous attempt was pale and grey. Use rich warm "
                               "golden/orange light, deep shadows and saturated colour across the scene.")
             try:
-                goi = _tao_anh(bc, luot, ln2, hop, khoa_viec(luot, "thumb-am", so_bia, ln2,
-                                                            "|".join(hop.lay())),
-                               ten_hien="ảnh bìa {0} (vẽ lại)".format(so_bia), so=so)
-                _tai_ket_qua(bc, goi, 0, dich)
+                khoa_am = khoa_viec(luot, "thumb-am", so_bia, ln2, "|".join(hop.lay()))
+                ten_am = "ảnh bìa {0} (vẽ lại)".format(so_bia)
+
+                def ve_am(hau_to=""):
+                    return _tao_anh(bc, luot, ln2, hop, khoa_am + hau_to, ten_hien=ten_am, so=so)
+
+                _tai_ket_qua_dat_lai(bc, ve_am(), dich, ve_am, ten_am)
                 _xoa_dau(bc, dich)
             except Exception as loi:  # noqa: BLE001 — giữ nền cũ, bộ chọn sẽ chấm
                 bc.ghi("    (vẽ lại hỏng: {0})".format(str(loi)[:100]))

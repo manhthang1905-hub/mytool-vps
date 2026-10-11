@@ -839,30 +839,66 @@ def _dat_khoa(chu: str, khoa: str, gia_tri: Any) -> str:
     return dat_khoa_yaml(chu, khoa, _mot_dong(gia_tri), nhay=True)
 
 
-def _tao_anh_nv(client: Any, prompt: str, dich: str, khoa: str) -> str:
-    """MỘT ảnh nhân vật tham chiếu (100₫) qua `images.create_and_wait` (SDK tự giãn nhịp hỏi theo
-    `estimated_seconds`), tải về bằng `/v1/jobs/{id}/download`. Trả đường tệp."""
-    job = client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9", idempotency_key=khoa,
-                                        timeout=900)
+def _tai_job_ve(client: Any, job: Any, dich: str, ten: str = "ảnh") -> str:
+    """Tải kết quả một job qua `/v1/jobs/{id}/download` về `dich` (qua tệp `.tam`). Mã HTTP ≥ 400 → `LoiTaiVe`
+    kèm `status` để nơi gọi phân biệt "kết quả không còn" (400/404/410) với trục trặc tạm."""
+    from .su_co import LoiTaiVe  # noqa: PLC0415
+
     ma = str((job or {}).get("id") or (job or {}).get("job_id") or "")
     if not ma:
-        raise RuntimeError("máy chủ không trả mã job ảnh")
+        raise RuntimeError("máy chủ không trả mã job {0}".format(ten))
     goc_url = str(getattr(client, "base_url", "") or "https://api.shopapi.vn").rstrip("/")
     dau = client._build_headers(accept="*/*")  # noqa: SLF001
-    os.makedirs(os.path.dirname(dich), exist_ok=True)
+    os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
     tam = dich + ".tam"
     with client._http.stream("GET", "{0}/v1/jobs/{1}/download".format(goc_url, ma), headers=dau) as ph:  # noqa: SLF001
         if ph.status_code >= 400:
             ph.read()
-            raise RuntimeError("tải ảnh nhân vật hỏng ({0})".format(ph.status_code))
+            raise LoiTaiVe("tải {0} hỏng ({1})".format(ten, ph.status_code), ph.status_code)
         with open(tam, "wb") as tep:
             for khuc in ph.iter_bytes(1 << 16):
                 tep.write(khuc)
     if os.path.getsize(tam) < 1000:
         os.remove(tam)
-        raise RuntimeError("ảnh nhân vật tải về rỗng")
+        raise RuntimeError("{0} tải về rỗng".format(ten))
     os.replace(tam, dich)
     return dich
+
+
+def tao_va_tai_job(client: Any, tao: Callable[[str], Any], khoa: str, dich: str, ten: str = "ảnh",
+                   log: Optional[Callable[[str], None]] = None) -> str:
+    """`tao(khoa)` đặt + đợi một job, rồi tải kết quả về. `/download` báo kết quả KHÔNG CÒN (400/404/410 —
+    job hỏng/hết hạn, khoá cũ phát lại đúng xác ấy) thì đặt lại bằng khoá mới, tối đa hai lần — cùng luật
+    với dây chuyền Tự động (`auto_khau._tai_ket_qua_dat_lai`, đo 11/10/2026)."""
+    from .auto_khau import MA_KET_QUA_MAT, SO_DAT_LAI_KET_QUA_MAT, khoa_dat_lai_ket_qua_mat  # noqa: PLC0415
+    from .su_co import DAU_KET_QUA_MAT, LoiTaiVe  # noqa: PLC0415
+
+    hau_to = ""
+    for lan in range(SO_DAT_LAI_KET_QUA_MAT + 1):
+        job = tao(khoa + hau_to)
+        try:
+            return _tai_job_ve(client, job, dich, ten)
+        except LoiTaiVe as loi:
+            if loi.status not in MA_KET_QUA_MAT:
+                raise
+            if lan >= SO_DAT_LAI_KET_QUA_MAT:
+                raise LoiTaiVe("{0} (HTTP {1}) — {2}: đã đặt lại bằng khoá mới {3} lần vẫn không tải được; "
+                               "sự cố phía máy chủ ShopAPI".format(DAU_KET_QUA_MAT, loi.status, ten,
+                                                                   SO_DAT_LAI_KET_QUA_MAT), loi.status) from loi
+            if log is not None:
+                log("  {0}: máy chủ không còn giữ kết quả (HTTP {1}) — đặt lại bằng khoá mới ({2}/{3}).".format(
+                    ten, loi.status, lan + 1, SO_DAT_LAI_KET_QUA_MAT))
+            hau_to = khoa_dat_lai_ket_qua_mat(lan + 1)
+    raise AssertionError("không tới được")  # pragma: no cover
+
+
+def _tao_anh_nv(client: Any, prompt: str, dich: str, khoa: str) -> str:
+    """MỘT ảnh nhân vật tham chiếu (100₫) qua `images.create_and_wait` (SDK tự giãn nhịp hỏi theo
+    `estimated_seconds`), tải về bằng `/v1/jobs/{id}/download`. Trả đường tệp."""
+    return tao_va_tai_job(
+        client, lambda k: client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9",
+                                                        idempotency_key=k, timeout=900),
+        khoa, dich, "ảnh nhân vật")
 
 
 def buoc_kenh(goc: str, yc: YeuCau, hs: Dict[str, Any], ai: BoGoiAI, kq: KetQua,

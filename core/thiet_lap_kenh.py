@@ -510,7 +510,7 @@ def _loi_nhac_anh(muc: str, st: Dict[str, Any], hs: Dict[str, Any]) -> str:
 def tao_anh_that(client: Any) -> Callable[..., str]:
     """`tao(prompt, dich, tham_chieu=[duong…]) -> duong` qua cổng ảnh ShopAPI (cùng đường với nhân vật/bìa của tool)."""
     from . import anh_len  # noqa: PLC0415
-    from .khoi_tao_ngach import _tao_anh_nv  # noqa: PLC0415,SLF001
+    from .khoi_tao_ngach import _tao_anh_nv, tao_va_tai_job  # noqa: PLC0415,SLF001
     import hashlib  # noqa: PLC0415
 
     def tao(prompt: str, dich: str, tham_chieu: Sequence[str] = ()) -> str:
@@ -518,21 +518,12 @@ def tao_anh_that(client: Any) -> Callable[..., str]:
         if not tham_chieu:
             return _tao_anh_nv(client, prompt, dich, khoa)
         url = [anh_len.tai_len(client, p) for p in tham_chieu]
-        job = client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9", idempotency_key=khoa, timeout=900,
-                                            reference_images=[u for u in url if u] or None)
-        ma = str((job or {}).get("id") or (job or {}).get("job_id") or "")
-        goc_url = str(getattr(client, "base_url", "") or "https://api.shopapi.vn").rstrip("/")
-        os.makedirs(os.path.dirname(dich), exist_ok=True)
-        with client._http.stream("GET", "{0}/v1/jobs/{1}/download".format(goc_url, ma),  # noqa: SLF001
-                                 headers=client._build_headers(accept="*/*")) as ph:  # noqa: SLF001
-            if ph.status_code >= 400:
-                ph.read()
-                raise RuntimeError("tải ảnh hỏng ({0})".format(ph.status_code))
-            with open(dich + ".tam", "wb") as tep:
-                for khuc in ph.iter_bytes(1 << 16):
-                    tep.write(khuc)
-        os.replace(dich + ".tam", dich)
-        return dich
+        # `/download` báo kết quả không còn (400/404/410) → đặt lại bằng khoá mới, hai nấc — `tao_va_tai_job`.
+        return tao_va_tai_job(
+            client, lambda k: client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9",
+                                                            idempotency_key=k, timeout=900,
+                                                            reference_images=[u for u in url if u] or None),
+            khoa, dich, "ảnh")
 
     return tao
 

@@ -1098,7 +1098,7 @@ def _viec_theo_lop(viec: List[Tuple[str, str, str]],
 
 
 def _dung_tao_anh_that(bc: Any, luot: Any) -> Callable[..., None]:
-    from .auto_khau import _tai_ket_qua, _tao_anh, khoa_viec  # noqa: PLC0415
+    from .auto_khau import _tai_ket_qua_dat_lai, _tao_anh, khoa_viec  # noqa: PLC0415
     from .goi_van_ban import goi_van_ban  # noqa: PLC0415
     from .viet_lai_prompt import la_bi_tu_choi, viet_lai_prompt  # noqa: PLC0415
 
@@ -1111,8 +1111,11 @@ def _dung_tao_anh_that(bc: Any, luot: Any) -> Callable[..., None]:
         # Giai đoạn sau của một nhân vật: gửi kèm ẢNH giai đoạn đầu để vẽ ra
         # ĐÚNG con ấy ở hình dạng mới — xem `_viec_theo_lop`.
         hop = ThamChieuCanh(bc, list(tham_chieu)) if tham_chieu else _HopRong()
+        # Bản ĐÃ ra job (lời nhắc + khoá) — `/download` báo kết quả không còn (400/404/410) thì đặt lại
+        # đúng bản ấy bằng khoá mới, xem `auto_khau._tai_ket_qua_dat_lai`.
+        dung = {"ln": prompt, "khoa": khoa_viec(luot, "tc", ma_id, prompt)}
         try:
-            goi = _tao_anh(bc, luot, prompt, hop, khoa_viec(luot, "tc", ma_id, prompt),
+            goi = _tao_anh(bc, luot, prompt, hop, dung["khoa"],
                            ten_hien="tham chiếu " + ma_id)
         except Exception as loi:  # noqa: BLE001
             if not la_bi_tu_choi("", str(loi)):
@@ -1121,11 +1124,18 @@ def _dung_tao_anh_that(bc: Any, luot: Any) -> Callable[..., None]:
             if not moi or moi.strip() == prompt.strip():
                 raise
             bc.ghi("    tham chiếu {0}: bị từ chối — đã viết lại, thử lại…".format(ma_id))
-            goi = _tao_anh(bc, luot, moi, hop, khoa_viec(luot, "tc", ma_id, moi, "vl"),
+            dung = {"ln": moi, "khoa": khoa_viec(luot, "tc", ma_id, moi, "vl")}
+            goi = _tao_anh(bc, luot, moi, hop, dung["khoa"],
                            ten_hien="tham chiếu " + ma_id)
+
+        def dat_lai(hau_to: str):
+            g = _tao_anh(bc, luot, dung["ln"], hop, dung["khoa"] + hau_to,
+                         ten_hien="tham chiếu " + ma_id)
+            return g[0] if isinstance(g, tuple) else g
+
         if isinstance(goi, tuple):
             goi = goi[0]
-        _tai_ket_qua(bc, goi, 0, dich)
+        _tai_ket_qua_dat_lai(bc, goi, dich, dat_lai, "tham chiếu " + ma_id)
 
     return lam
 
