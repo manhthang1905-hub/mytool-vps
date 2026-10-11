@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.183.0** — 2026-10-12 — `vps-jp1` — feat(bia): soat chinh ta chu bia (AI) truoc khi ve + doc lai chu tren anh; chan dai toi/khung che nhan vat; giam khao loai het thi lam lo bia moi (toi da 3), khong xuat tam 'it chu nhat'
 - **2.182.0** — 2026-10-12 — `vps-jp1` — feat(thuoc-thang): mot thuoc thang chung — phan vi cung tuoi, phan tu >=96h (khong phan @48h), ban chup hop le moi nhat, dong cung sau 168h; thay o V7, tu hoc, giam doc, nao_goi_y
 - **2.181.2** — 2026-10-12 — `vps-jp1` — fix(chi-so): tien ich 2.10.0 — khoa tab that (het chup chong), chi tinh co so khi dung video, nhan tuoi that, chup bu moc muon /chup-bu, so kenh TL2, ma video dau '-', bao dong so cu/rong
 - **2.181.1** — 2026-10-12 — `vps-jp1` — fix(giam-doc): quyen tu ap can KY NANG (hon ti le nen >=15 diem, dung >=2 video thang) — doan 'truot' moi video dat 93% khong con duoc tu ap; bai hoc khong tu ap
