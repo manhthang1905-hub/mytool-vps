@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.181.0** — 2026-10-12 — `vps-jp1` — feat(cho-engine): luot cho engine giong ShopAPI (sap/tam dong/hang cho dai) ghi dau cho, nha lan va thoat; dieu phoi sinh lai khi toi gio tham do; khong tinh L3
 - **2.180.16** — 2026-10-12 — `vps-jp1` — fix(muc-luc): chen 目次 vao cuoi phan DESCRIPTION (truoc KEYWORDS/TAGS), khong noi sau KEYWORDS — the rac 206 ky tu TL6-K2/0007
 - **2.180.15** — 2026-10-12 — `vps-jp1` — fix(dang-dom): hop 'van dang kiem tra noi dung' -> Da hieu; loc the rac; lam not nhap da tai thay vi tai ban moi; lenh --hoan-tat
 - **2.180.14** — 2026-10-12 — `vps-jp1` — fix(clip): canh treo 2 lan cung anh+loi nhac thi vao thang duong cuu (viet lai loi nhac, ve lai anh doi bo cuc) — anh bo cuc moi ~48' thay vi ~100'
