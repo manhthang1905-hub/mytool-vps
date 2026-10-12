@@ -2527,11 +2527,17 @@ LUAT_MO_DAU = (
     "chủ đề…\" — kể cả khi bản gốc có những câu ấy.\n"
     "2. Câu ĐẦU TIÊN là MÓC: vào thẳng tình huống, câu hỏi hoặc sự thật gây tò mò của chủ đề.\n"
     "3. Phần mở đầu trước ý chính thứ nhất dài tối đa ~{giay} giây (~{kt} ký tự); hết chừng ấy là vào ý 1.\n"
-    "4. Lời mời đăng ký / like / bình luận (nếu có) chỉ đặt ở đoạn KẾT, một lần, ngắn.\n")
+    "{luat4}\n")
+#: Luật 4 khi lượt KHÔNG bật đòn bẩy sub (nhóm đối chứng — y nết cũ) và khi BẬT (`core.chuyen_doi_sub`: câu mời
+#: giữa bài + câu hứa video tiếp, vẫn không bao giờ trong {giay} giây đầu).
+LUAT_4_CU = "4. Lời mời đăng ký / like / bình luận (nếu có) chỉ đặt ở đoạn KẾT, một lần, ngắn."
+LUAT_4_CTA = ("4. Lời mời đăng ký: KHÔNG trong {giay} giây đầu; đặt đúng theo LUẬT MỜI ĐĂNG KÝ bên dưới (một câu "
+              "giữa bài + đoạn kết). Like / bình luận (nếu có) chỉ ở đoạn KẾT, ngắn.")
 
 
-def luat_mo_dau(k: Any) -> str:
-    """Khối luật mở đầu cho kênh `k` ("" khi kênh tắt `luat_mo_dau`)."""
+def luat_mo_dau(k: Any, cta_giua: bool = False) -> str:
+    """Khối luật mở đầu cho kênh `k` ("" khi kênh tắt `luat_mo_dau`). `cta_giua` = lượt bật đòn bẩy sub: luật 4
+    trỏ sang luật mời đăng ký giữa bài thay vì "chỉ ở đoạn kết"."""
     bat = getattr(k, "luat_mo_dau", True)
     if bat is False or str(bat).strip().lower() in ("false", "no", "0", "tat"):
         return ""
@@ -2543,7 +2549,8 @@ def luat_mo_dau(k: Any) -> str:
         nhip = float(getattr(k, "ky_tu_moi_phut", 0) or 0) or 300.0
     except (TypeError, ValueError):
         nhip = 300.0
-    return LUAT_MO_DAU.format(giay=giay, kt=int(round(nhip * giay / 60.0 / 10.0)) * 10)
+    return LUAT_MO_DAU.format(giay=giay, kt=int(round(nhip * giay / 60.0 / 10.0)) * 10,
+                              luat4=(LUAT_4_CTA if cta_giua else LUAT_4_CU).format(giay=giay))
 
 
 #: Ô DỮ LIỆU dài (bản gốc, bản nháp, thân bài) — luật phải nằm TRƯỚC khối dữ liệu đầu tiên, không sau bản
@@ -2551,13 +2558,13 @@ def luat_mo_dau(k: Any) -> str:
 _O_DU_LIEU = ("<<COMPETITOR_TRANSCRIPT>>", "<<DRAFT>>", "<<THAN_BAI>>", "<<TRANSCRIPT_SAMPLE>>")
 
 
-def them_luat_mo_dau(khuon: str, k: Any) -> str:
+def them_luat_mo_dau(khuon: str, k: Any, cta_giua: bool = False) -> str:
     """Đưa `luat_mo_dau(k)` vào lời nhắc: thay ô `<<LUAT_MO_DAU>>` nếu có; không thì chèn ngay trước khối dữ
     liệu đầu tiên (kể cả dòng nhãn "…:" đứng trên nó); không có khối dữ liệu thì nối cuối. Lời nhắc rỗng giữ
     rỗng (bước bị tắt)."""
     if not (khuon or "").strip():
         return khuon
-    luat = luat_mo_dau(k)
+    luat = luat_mo_dau(k, cta_giua=cta_giua)
     if "<<LUAT_MO_DAU>>" in khuon:
         return khuon.replace("<<LUAT_MO_DAU>>", luat)
     if not luat:
@@ -2575,6 +2582,83 @@ def them_luat_mo_dau(khuon: str, k: Any) -> str:
     if j > 0 and dong[j - 1].rstrip().endswith((":", "：")):
         p = len("\n".join(dong[:j - 1])) + (1 if j > 1 else 0)
     return khuon[:p] + luat + "\n" + khuon[p:]
+
+
+# ── Đòn bẩy SUB (12/10/2026, `core/chuyen_doi_sub.py`) ──────────────────────
+#
+# Hai kênh gần YPP nhất đều đang thiếu sub. Lượt BẬT nhánh `cta_giua` có thêm một câu mời đăng ký giữa bài (25–40%,
+# không bao giờ trong `giay_mo_dau_toi_da` giây đầu) và một câu hứa video tiếp ở đoạn kết. Lượt TẮT viết y như cũ,
+# làm nhóm đối chứng. Mọi hàm dưới đây HỎNG THÌ IM: lượt viết như cũ, không bao giờ vỡ vì đòn bẩy.
+
+def _don_bay_sub(bc: "BoiCanh", k: Any, luot: "LuotChay") -> Dict[str, Any]:
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+
+        qd = cds.quyet_dinh_luot(bc.goc, k, luot.thu_muc, luot.ma_kenh or str(getattr(k, "ma", "") or ""),
+                                 luot.ma_luot)
+        bc.ghi("  đòn bẩy sub: {0}".format(
+            "; ".join("{0} {1}".format(cds.TEN_DON_BAY[db], "BẬT" if cds.nhanh_bat(qd, db) else "tắt")
+                      for db in cds.DON_BAY) + " ({0})".format(qd.get("ly_do") or "")))
+        return qd
+    except Exception as loi:  # noqa: BLE001
+        bc.ghi("  (đòn bẩy sub: không chốt được nhánh — {0}; lượt viết như cũ)".format(str(loi)[:80]))
+        return {}
+
+
+def _doc_qd_sub(thu_muc_luot: str) -> Dict[str, Any]:
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+
+        return cds.doc_quyet_dinh(thu_muc_luot) if thu_muc_luot else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _luat_sub(khuon: str, k: Any, qd: Dict[str, Any], *, muc_tieu_kt: int = 0, giu: bool = False) -> str:
+    """Nhánh `cta_giua` BẬT: luật 4 của luật mở đầu trỏ sang luật mời đăng ký, rồi chèn luật ấy (hoặc chỉ câu GIỮ
+    khi `giu`). Nhánh TẮT hoặc lỗi thì trả nguyên lời nhắc."""
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+
+        if not cds.nhanh_bat(qd, "cta_giua"):
+            return cds.them_luat_dang_ky(khuon, k, qd)
+        if not giu:
+            try:
+                giay = max(20, min(180, int(getattr(k, "giay_mo_dau_toi_da", 60) or 60)))
+            except (TypeError, ValueError):
+                giay = 60
+            khuon = khuon.replace(LUAT_4_CU, LUAT_4_CTA.format(giay=giay))
+        return cds.them_luat_dang_ky(khuon, k, qd, muc_tieu_kt=muc_tieu_kt, giu=giu)
+    except Exception:  # noqa: BLE001
+        return khuon
+
+
+def _luat_binh_luan_sub(khuon: str, thu_muc_luot: str) -> str:
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+
+        return cds.them_luat_binh_luan(khuon, _doc_qd_sub(thu_muc_luot))
+    except Exception:  # noqa: BLE001
+        return khuon
+
+
+def _do_cta_sub(bc: "BoiCanh", k: Any, thu_muc_luot: str, ban: str) -> None:
+    """Đo kịch bản CUỐI: có câu mời giữa bài không, có rơi vào giây đầu không. Ghi vào quyết định của lượt để đo A/B.
+    Tiêu chí MỀM: chỉ cảnh báo, không chặn."""
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+
+        qd = cds.ghi_do_kich_ban(thu_muc_luot, ban, k)
+        do = qd.get("do") or {}
+        if cds.nhanh_bat(qd, "cta_giua") and not do.get("giua"):
+            bc.ghi("  ⚠ đòn bẩy sub BẬT mà bài cuối KHÔNG còn câu mời đăng ký giữa bài (vị trí đo được: {0}) — vẫn "
+                   "đi tiếp, lượt này tính là nhánh bật nhưng không áp được.".format(do.get("vi_tri_pct") or "không có"))
+        if do.get("som"):
+            dau = int(getattr(k, "giay_mo_dau_toi_da", 60) or 60)
+            bc.ghi("  ⚠ có câu mời đăng ký trong {0} giây đầu (giây {1}) — trái luật mở đầu.".format(
+                dau, [g for g in do.get("giay") or [] if g < dau][:3]))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _khau_kich_ban(bc_goc: BoiCanh):
@@ -2962,11 +3046,16 @@ def _khau_kich_ban(bc_goc: BoiCanh):
             #
             # Nay: viết → NẮN → rà soát. Bước nắn nhận bản chữ liền mạch (thứ
             # nó dễ nén nhất), và thẻ chỉ được chèn một lần, lên bản cuối cùng.
+            # ═══ ĐÒN BẨY SUB (12/10/2026, `core.chuyen_doi_sub`) ═══
+            # Chốt nhánh A/B của lượt MỘT LẦN (`1-don-bay-sub.json`) trước khi viết. Nhánh BẬT: thêm luật câu mời
+            # đăng ký giữa bài + câu hứa video tiếp. Nhánh TẮT: lời nhắc y như cũ, làm nhóm đối chứng.
+            qd_sub = _don_bay_sub(bc, k, luot)
             for ten, nhan in (("2-viet.md", nhan_viet),):
                 khuon = k.prompt.get(ten, "")
                 if not khuon.strip():
                     continue
                 khuon = them_luat_mo_dau(khuon, k)
+                khuon = _luat_sub(khuon, k, qd_sub, muc_tieu_kt=muc_tieu_kt)
                 nhap = os.path.join(d, "1-nhap-{0}.txt".format(ten[0]))
                 da_co = _doc_chu(nhap).strip()
                 if da_co:
@@ -3023,7 +3112,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 bc.ghi("  đọc lại lần cuối…")
                 # Bước này CÓ thể làm ngắn lại, nên đo lần nữa sau nó và giữ
                 # bản tốt hơn — đọc mượt mà hụt 15% thì vẫn là hỏng.
-                cuoi = _goi(bc, _thay(khuon_cuoi,
+                cuoi = _goi(bc, _thay(_luat_sub(khuon_cuoi, k, qd_sub, giu=True),
                                       dict(chung, DRAFT=ban_nhap)),
                             "{0}:chat:5-hoan-thien.md".format(
                                 luot.ma_luot)).strip()
@@ -3068,7 +3157,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                            "cảm xúc…")
                     truoc_sua = ban_nhap
                     sua = _goi(
-                        bc, _thay(khuon_sua, dict(chung, DRAFT=ban_nhap)),
+                        bc, _thay(_luat_sub(khuon_sua, k, qd_sub, giu=True), dict(chung, DRAFT=ban_nhap)),
                         _khoa_chat(luot, "3-sua.md"),
                         toi_da_token=_token_viet(len(tu_lieu),
                                                  muc_tieu_kt)).strip()
@@ -3137,6 +3226,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
         _kiem_kich_ban_dung_duoc(doc_duoc, muc_tieu_kt, duong_kb,
                                  tu_do=bool(getattr(k, "do_dai_tu_do", False)))
         _kiem_ban_sach(bc, ban_nhap, duong_kb)
+        _do_cta_sub(bc, k, d, ban_nhap)
 
         # SEO — thiếu cũng vẫn ra được video, nên hỏng thì chỉ ghi nhật ký.
         duong_seo = os.path.join(d, "1-seo.txt")
@@ -3174,7 +3264,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
         if k.prompt.get("6b-binh-luan.md") and not os.path.exists(duong_bl):
             try:
                 bc.kiem_dung()
-                binh_luan = _goi(bc, _thay(k.prompt["6b-binh-luan.md"], dict(
+                binh_luan = _goi(bc, _thay(_luat_binh_luan_sub(k.prompt["6b-binh-luan.md"], d), dict(
                     chung, SCRIPT_ENDING=ban_nhap[-1500:])),
                     _khoa_chat(luot, "binh-luan"))
                 _ghi_chu(duong_bl, binh_luan)
@@ -3743,7 +3833,8 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
             # "làm nhiều chọn một" của cả template. Kênh không bật đi y đường cũ.
             so_ht = max(1, int(getattr(k, "so_ban_va", 1) or 1)) if so_vong > 0 else 1
             tran_ht = 1.5 if so_vong > 0 else 1.25
-            khuon_ht = dien_o_giu_lai(them_luat_mo_dau(k.prompt.get("2c-hoan-thien.md", ""), k),
+            khuon_ht = dien_o_giu_lai(_luat_sub(them_luat_mo_dau(k.prompt.get("2c-hoan-thien.md", ""), k), k,
+                                                _doc_qd_sub(d), muc_tieu_kt=int(muc_tieu or 0)),
                                       dict(chung, SO_BAN=len(ban)))
             ung_vien: List[str] = []
             ghi_ht = ""
@@ -4091,6 +4182,8 @@ def _nan_do_dai(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
                                     _phut(_do_doc(ban_nhap), nhip)))
         return ban_nhap
 
+    # Lượt bật đòn bẩy sub: nắn độ dài phải GIỮ câu mời giữa bài + câu hứa video tiếp (`core.chuyen_doi_sub`).
+    khuon = _luat_sub(khuon, k, _doc_qd_sub(getattr(luot, "thu_muc", "")), giu=True)
     dich = muc_tieu
     cho_phep = _chenh_cho_phep(k)
     duoi, tren = dich * (1 - cho_phep), dich * (1 + cho_phep)

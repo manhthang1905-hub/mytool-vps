@@ -424,7 +424,7 @@ def _gon(x: Any) -> Any:
     if isinstance(x, float):
         if x == int(x) and abs(x) < 1e15:
             return int(x)
-        return float("{0:.4g}".format(x)) if abs(x) < 1e4 else round(x, 1)
+        return float(format(x, ".{0}g".format(4))) if abs(x) < 1e4 else round(x, 1)
     return x
 
 

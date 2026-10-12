@@ -130,9 +130,13 @@ def ket_luan(vm: Any, hs: Dict[str, Any], nguong: Optional[float], *,
 
 
 def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
-    """`{video_id: (đăng ký, lượt xem)}` từ `chi-so/bang-tom-tat.csv` (cùng nguồn biên tập viên)."""
+    """`{video_id: (đăng ký, lượt xem)}` từ `chi-so/bang-tom-tat.csv` (cùng nguồn biên tập viên).
+
+    12/10/2026: cặp (sub, view) lấy từ CÙNG một bản chụp có số đăng ký (`chuyen_doi_sub.cap_sub_xem`). Video chưa
+    đo được sub thì VẮNG MẶT, không còn đọc thành (0, view mới nhất). Lỗi cũ ấy làm một kênh hiện "sub/1k ≈ 0,0"."""
     try:
         from ..kenh import duong_kenh  # noqa: PLC0415
+        from ..chuyen_doi_sub import cap_sub_xem  # noqa: PLC0415
 
         duong = os.path.join(duong_kenh(goc, ma_kenh), "chi-so", "bang-tom-tat.csv")
         with io.open(duong, encoding="utf-8-sig", newline="") as tep:
@@ -142,8 +146,9 @@ def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
     ra: Dict[str, Tuple[float, float]] = {}
     for d in hang:
         vid = str(d.get("Mã video") or "").strip()
-        if vid:
-            ra[vid] = (_so(d.get("Đăng ký")) or 0.0, _so(d.get("Lượt xem")) or 0.0)
+        cap = cap_sub_xem(d) if vid else None
+        if cap:
+            ra[vid] = (float(cap[0]), float(cap[1]))
     return ra
 
 

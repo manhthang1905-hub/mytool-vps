@@ -519,17 +519,27 @@ def xuat_tom_tat(kenh: str, goc: Optional[str] = None) -> str:
     ban_ghi = doc_kenh(kenh, goc)
     moi_nhat: Dict[str, BanGhi] = {}
     so_moc: Dict[str, int] = {}
+    theo_video: Dict[str, List[BanGhi]] = {}
     for b in ban_ghi:
         so_moc[b.video_id] = so_moc.get(b.video_id, 0) + 1
+        theo_video.setdefault(b.video_id, []).append(b)
         cu = moi_nhat.get(b.video_id)
         if cu is None or (b.moc_gio or 0) >= (cu.moc_gio or 0):
             moi_nhat[b.video_id] = b
+    # ═══ ĐĂNG KÝ: CẶP (sub, view) CỦA CÙNG MỘT BẢN CHỤP (12/10/2026) ═══
+    #
+    # Sau ~24h Studio chỉ trả gói tab Reach (`join`), mà gói này không có SUBSCRIBERS_NET_CHANGE. Nên ô "Đăng ký"
+    # của bản MỚI NHẤT thường trống. Bộ đọc cũ đọc ô trống thành 0, chia cho view mới nhất, và ra "sub/1k ≈ 0,0"
+    # cho cả một kênh. Thêm ba cột cuối (giữ nguyên các cột cũ): sub + view + mốc của bản CÓ số đăng ký và nhiều
+    # view nhất. Xem `core.chuyen_doi_sub`.
+    from .. import chuyen_doi_sub as _cds  # noqa: PLC0415
+    ban_sub = {vid: _cds.chon_ban_do_sub(ds) for vid, ds in theo_video.items()}
     # Cột theo đúng SỔ TAY của kênh (CHANNEL/<kênh>/CLAUDE.md): xem THẬT ước
     # (luật 8 — YPP tính lượt thật), view/người (luật 5 — >2 tuần đầu là số
     # bẩn), JP % (ngưỡng phân loại ≥80%).
     dong = ["Tiêu đề,Mã video,Ngày đăng,Dài,Mốc mới nhất,Lượt hiển thị,"
             "Tỷ lệ bấm,Lượt xem,Xem thật ước,View/người,JP %,Xem TB,"
-            "% độ dài,Đăng ký,Số lần chụp"]
+            "% độ dài,Đăng ký,Số lần chụp,{0},{1},{2}".format(_cds.COT_SUB, _cds.COT_XEM, _cds.COT_MOC)]
     def _o(v):
         chu = "" if v is None else str(v)
         return '"' + chu.replace('"', '""') + '"'
@@ -549,6 +559,7 @@ def xuat_tom_tat(kenh: str, goc: Optional[str] = None) -> str:
         # để vòng học/người đọc không áp luật JP ≥80% hay luật 5 lên một con số còn đang lệch
         # cửa sổ — không xoá số (vẫn cần thấy để theo dõi đà), chỉ nói rõ nó CHƯA ổn định.
         chua_chot = b.moc_gio is None or b.moc_gio < 96
+        bs = ban_sub.get(b.video_id)
         vn = ""
         if b.unique_viewers:
             if b.views_chot:
@@ -572,6 +583,8 @@ def xuat_tom_tat(kenh: str, goc: Optional[str] = None) -> str:
             _o(_mmss(b.avd_giay) if b.avd_giay else ""),
             _o(f"{b.avd_pct}%" if b.avd_pct is not None else ""),
             _o(b.subs), _o(so_moc.get(b.video_id, 0)),
+            _o(bs.subs if bs else None), _o(bs.views if bs else None),
+            _o((f"{bs.moc_gio}h" if bs.moc_gio is not None else (bs.luc_chup or "tay")) if bs else None),
         ]))
     # Bảng TOÀN KÊNH theo ngày — cột Giờ xem là đường tới mốc YPP 4.000h.
     tong = doc_kenh_tong(kenh, goc)

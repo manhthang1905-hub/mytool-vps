@@ -487,6 +487,10 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
     hook_nhan = _doc_json(os.path.join(thu_muc_luot, "1-tu-hoc-hook.json"))  # tự học đợt 2
     if isinstance(hook_nhan, dict):
         ho_so["kich_ban"]["hook_nhan"] = hook_nhan
+    # Đòn bẩy sub (12/10/2026): nhánh A/B của lượt + số đo câu mời. Thư mục lượt bị dọn thì A/B vẫn đo được.
+    don_bay = _doc_json(os.path.join(thu_muc_luot, "1-don-bay-sub.json"))
+    if isinstance(don_bay, dict):
+        ho_so["don_bay_sub"] = don_bay
     ho_so["phan"] = _doc_phan(thu_muc_luot)
     ho_so["nhac"] = _doc_json(os.path.join(thu_muc_luot, "8-nhac.json"))
     tu_anh = _doc_json(os.path.join(thu_muc_luot, "6-clip", "tu-anh.json"))

@@ -303,6 +303,10 @@ class Kenh:
     #: đầu, mở đầu trước ý 1 ≤ chừng ấy giây, móc trước, lời mời chỉ ở cuối. `false` = tắt cho kênh này.
     luat_mo_dau: bool = True
     giay_mo_dau_toi_da: int = 60
+    #: Đòn bẩy SUB (12/10/2026, `core/chuyen_doi_sub.py`): khối `chuyen_doi_sub:` của kenh.yaml — `bat` (auto/true/
+    #: false), `cta_giua`/`binh_luan` (ab/true/false), `ti_le_bat`, `mo_ta_lien_ket`. Rỗng = mặc định của module
+    #: (auto: bật khi kênh trong tầm YPP, A/B 70% bật).
+    chuyen_doi_sub: Dict[str, Any] = field(default_factory=dict)
     #: Trần số chương mục lục (gộp phần kề nhau khi nhiều hơn). Video thắng TL4: 6–11 chương.
     chuong_toi_da: int = 10
     #: Mã giọng đọc trên cổng ShopAPI.
@@ -946,6 +950,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         tieu_de_ky_tu=str(cai.get("tieu_de_ky_tu") if cai.get("tieu_de_ky_tu") is not None else "").strip(),
         luat_mo_dau=_co_mac_dinh(cai.get("luat_mo_dau"), True),
         giay_mo_dau_toi_da=max(20, min(180, int(_so(cai.get("giay_mo_dau_toi_da"), 60)))),
+        chuyen_doi_sub=dict(cai["chuyen_doi_sub"]) if isinstance(cai.get("chuyen_doi_sub"), dict) else {},
         chuong_toi_da=max(3, min(20, int(_so(cai.get("chuong_toi_da"), 10)))),
         voice_id=str(cai.get("voice_id") or ""),
         engine=str(cai.get("engine") or "veo3"),

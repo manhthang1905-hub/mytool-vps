@@ -647,6 +647,8 @@ def chi_so_7_ngay(hang: Iterable[Dict[str, str]], hom_nay: _dt.date,
         so_video += 1
         views += _so(d.get("Lượt xem")) or 0.0
         s = _so(d.get("Đăng ký"))
+        if s is None:   # 12/10/2026: bản mới nhất (gói join) không có sub — lấy bản gần nhất có số
+            s = _so(d.get("ĐK đo được"))
         if s is not None:
             subs += s
             co_subs = True

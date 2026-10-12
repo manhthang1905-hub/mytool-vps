@@ -401,6 +401,26 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
                 pass
             raise RuntimeError("KHÔNG bàn giao {0}: chất lượng chưa đạt — {1} (luật 07/10/2026: thà không đăng "
                                "còn hơn sản phẩm kém; chi tiết {2})".format(ma, ly_do, "9-chat-luong.json"))
+    # ═══ ĐÒN BẨY SUB — MÔ TẢ LINK MỘT VIDEO LIÊN QUAN (12/10/2026, `core.chuyen_doi_sub`) ═══
+    # Kênh trong tầm YPP (hoặc bật tay): nối "▼ <xem tiếp>" + link một video ĐÃ ĐĂNG của kênh, do AI chọn theo nghĩa,
+    # vào cuối mô tả, TRƯỚC cổng QA để QA soát luôn. Hỏng → mô tả cũ (không bao giờ chặn bàn giao).
+    try:
+        from . import chuyen_doi_sub as _cds  # noqa: PLC0415
+
+        def goi_lk(de: str) -> str:
+            # Dựng đường gọi AI CHỈ khi thật sự cần (kênh bật đòn bẩy, có ≥ 2 ứng viên).
+            if goi_ai is not None:
+                return goi_ai(de)
+            from .giam_doc.quan_ly import goi_chat_that  # noqa: PLC0415
+            _g = goi_chat_that(goc)
+            if not _g:
+                raise RuntimeError("không có đường gọi AI")
+            return _g(de, mo_hinh="claude-sonnet-5", toi_da_token=16)
+
+        mo_ta_moi, _ghi = _cds.them_lien_ket_mo_ta(goc, k, gt["tieu_de"], gt["mo_ta"], goi_lk)
+        gt = dict(gt, mo_ta=mo_ta_moi)
+    except Exception:  # noqa: BLE001
+        pass
     xuat_goi(thu_muc_luot, thu_muc_done, ma)
     thu_muc_goi = os.path.join(thu_muc_done, ma)
     _ghi_nguon_clip(thu_muc_goi, dict(clip, loi=loi_clip, cho_phep_tu_anh=cho_phep_tu_anh))

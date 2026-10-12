@@ -899,6 +899,42 @@ def danh_sach_thieu_mhkt(so: dict) -> dict:
     return ra
 
 
+def phan_loai_mhkt(hang) -> dict:
+    """Chữ các hàng thành phần MHKT → `{doc_duoc, dang_ky, video, phu_hop}` (`core.chuyen_doi_sub.phan_loai_mhkt`).
+    Không nạp được core thì mọi khoá là None ("chưa rõ"), và máy đăng chạy như cũ."""
+    try:
+        goc_tool = os.path.dirname(GOC)
+        if goc_tool not in sys.path:
+            sys.path.append(goc_tool)      # thêm CUỐI, không che module vm/
+        from core.chuyen_doi_sub import phan_loai_mhkt as _pl  # noqa: PLC0415
+        return _pl(list(hang or []))
+    except Exception:  # noqa: BLE001
+        return {"doc_duoc": False, "dang_ky": None, "video": None, "phu_hop": None}
+
+
+def _mhkt_dk_cua_muc(m: dict):
+    """Mục sổ → MHKT có nút Đăng ký (True/False), None khi chưa có chữ đọc lại."""
+    dk = (m or {}).get("mhkt_dang_ky")
+    if dk is None:
+        chu = str((m or {}).get("mhkt_doc_lai") or (m or {}).get("mhkt_bu_doc_lai") or "")
+        if chu:
+            dk = phan_loai_mhkt(chu.split(" | ")).get("dang_ky")
+    return dk
+
+
+def danh_sach_mhkt_thieu_dang_ky(so: dict) -> dict:
+    """Video ĐÃ lên kênh, sổ ghi CÓ MHKT nhưng chữ đọc lại không có nút Đăng ký. Hàm thuần (12/10/2026: kênh thiếu
+    sub cần nút Đăng ký trên MỌI video; MHKT nhập dây chuyền từ một video nguồn thiếu nút làm thiếu cả loạt)."""
+    ra = {}
+    for k, m in sorted((so or {}).items()):
+        if not isinstance(m, dict) or not m.get("video_id") or m.get("trang_thai") not in TT_SO_DA_LEN_KENH:
+            continue
+        if str(m.get("mhkt") or "").startswith("ok") and _mhkt_dk_cua_muc(m) is False:
+            ra[k] = {"video_id": m.get("video_id"), "mhkt": m.get("mhkt"), "lich": m.get("lich") or "",
+                     "doc_lai": str(m.get("mhkt_doc_lai") or m.get("mhkt_bu_doc_lai") or "")[:200]}
+    return ra
+
+
 def can_bu_mhkt(m, toi_da_loi: int = BU_MHKT_TOI_DA_LOI) -> bool:
     """Mục sổ có vào hàng BÙ MHKT không: đã lên kênh, tải không hỏng, `mhkt` là
     bo / lỗi / rỗng (không bắt đầu "ok", không "khong-the"), chưa hỏng đủ trần."""
@@ -1293,6 +1329,10 @@ class MayDangDom:
         self._d_dang = None
         self.tieu_de_theo_ma = {}    # mã gói → tiêu đề (tìm video nguồn MHKT trong hộp chọn)
         self.mhkt_nguon = ""         # videoId đã nhập MHKT từ đó (ghi sổ `mhkt_nguon`)
+        self.mhkt_doc = []           # chữ các hàng thành phần MHKT vừa lưu (đọc trước khi bấm Lưu)
+        #: 12/10/2026: MHKT phải có nút Đăng ký. Nguồn nhập không có nút → bỏ nguồn, dựng mẫu «1 video, 1 đăng ký».
+        #: `may-ao.json: mhkt_bat_buoc_dang_ky: false` để tắt.
+        self.mhkt_bat_buoc_dk = bool((cai_dat_kenh or {}).get("mhkt_bat_buoc_dang_ky", True))
         self.tab_giu = []            # tab tải lên cố ý để mở — Chrome KHÔNG được đóng
         self.thu_muc_hl_tam = None   # None = vm/logs/hl-tam (bài kiểm truyền thư mục tạm)
         self.bao_cao = {"kenh": kenh, "goi": [], "nhap_thua": [], "canh_bao": []}
@@ -1907,10 +1947,16 @@ class MayDangDom:
                 continue
             if not str(m.get("mhkt") or "").startswith("ok") or m.get("tai_xong") is False:
                 continue
+            # 12/10/2026: nguồn mà chữ đọc lại cho thấy THIẾU nút Đăng ký thì không nhập (nhập là chép cái thiếu sang
+            # video mới — đúng dây chuyền đã làm cả loạt video một kênh không có nút Đăng ký). Nguồn đã biết CÓ nút
+            # xếp trước nguồn chưa rõ.
+            dk = _mhkt_dk_cua_muc(m)
+            if dk is False and self.mhkt_bat_buoc_dk:
+                continue
             ma = str(k).split("/", 1)[1]
-            ds.append((str(m.get("cap_nhat") or ""), vid, self.tieu_de_theo_ma.get(ma, "")))
+            ds.append((1 if dk is True else 0, str(m.get("cap_nhat") or ""), vid, self.tieu_de_theo_ma.get(ma, "")))
         ds.sort(reverse=True)
-        return [(vid, td) for _cn, vid, td in ds]
+        return [(vid, td) for _dk, _cn, vid, td in ds]
 
     def _mhkt(self, ta, d: dict) -> str:
         """Màn hình kết thúc ở bước Thành phần (PHỤ — hỏng thì vẫn lên lịch):
@@ -2083,6 +2129,18 @@ class MayDangDom:
             ta.bam(the)
             kq = self._cho_nhap_mhkt(ta)
             if kq == "ok":
+                # ĐỌC các hàng vừa nhập TRƯỚC khi Lưu (12/10/2026): thiếu nút Đăng ký thì không lưu bản nhập. Huỷ
+                # trình soạn, trả "" để `_mhkt` dựng mẫu «1 video, 1 đăng ký». Chỉ kết luận "thiếu" khi đọc được
+                # nhãn hàng (`doc_duoc`); đọc không ra chữ thì lưu như cũ.
+                hang = self._doc_phan_tu_mhkt(ta)
+                pl = phan_loai_mhkt(hang)
+                self.mhkt_doc = list(hang)
+                if self.mhkt_bat_buoc_dk and pl.get("doc_duoc") and pl.get("dang_ky") is False:
+                    self.nk("{0}: MHKT nhập từ {1} THIẾU nút Đăng ký ({2}) — huỷ bản nhập, dựng mẫu «1 video, "
+                            "1 đăng ký»".format(d["ma"], vid, " | ".join(hang)[:160]))
+                    self._dong_trinh_soan(ta, "mhkt-thieu-dk-" + d["ma"])
+                    self.mhkt_doc = []
+                    return ""
                 if self._mhkt_luu(ta, d, "nhập " + vid):
                     self.mhkt_nguon = vid
                     self.nk("{0}: màn hình kết thúc = nhập từ {1} (video đã có MHKT)".format(d["ma"], vid))
@@ -2133,6 +2191,7 @@ class MayDangDom:
             if not ta.tim("mhkt_phan_tu", han=10):
                 raise Exception("mẫu «1 video, 1 đăng ký» không tạo được thành phần")
         doc = [x.get("chu") for x in ta.doc_tat_ca("mhkt_phan_tu")][:4]
+        self.mhkt_doc = [chuan_hoa_tieu_de(str(x or "")) for x in doc if x]
         if not self._mhkt_luu(ta, d, "mẫu"):
             raise Exception("dựng mẫu xong mà nút Lưu chưa bật")
         self.nk("{0}: màn hình kết thúc = TỰ DỰNG mẫu «1 video, 1 đăng ký» (20 giây cuối){1}".format(
@@ -2999,7 +3058,19 @@ class MayDangDom:
         self._ve_thanh_phan(ta, "màn hình kết thúc")
         th = self._the_video(ta, d, tep, getattr(self, "vid_dang", ""))
         self._ve_thanh_phan(ta, "thẻ")
-        self.so.cap_nhat(k, phu_de=pd, mhkt=mh, the=th, mhkt_nguon=self.mhkt_nguon)
+        # 12/10/2026 — KIỂM MHKT MỌI LẦN ĐĂNG: ghi chữ các hàng đã lưu + có nút Đăng ký / phần tử video / "phù hợp nhất
+        # với người xem" không (`mhkt_dang_ky`, `mhkt_video`, `mhkt_phu_hop`; None = chưa đọc được). Thiếu → cảnh báo.
+        them = {}
+        hang_mh = [str(x) for x in self.mhkt_doc if x and str(x) != "(có thành phần)"]
+        if str(mh or "").startswith("ok") and hang_mh:
+            pl = phan_loai_mhkt(hang_mh)
+            them = {"mhkt_doc_lai": " | ".join(hang_mh)[:300], "mhkt_dang_ky": pl.get("dang_ky"),
+                    "mhkt_video": pl.get("video"), "mhkt_phu_hop": pl.get("phu_hop")}
+            if pl.get("doc_duoc") and pl.get("dang_ky") is False:
+                self._canh_bao("{0}: MÀN HÌNH KẾT THÚC THIẾU NÚT ĐĂNG KÝ ({1})".format(d["ma"], them["mhkt_doc_lai"][:120]))
+            elif pl.get("doc_duoc") and pl.get("video") is False:
+                self._canh_bao("{0}: màn hình kết thúc không có phần tử video".format(d["ma"]))
+        self.so.cap_nhat(k, phu_de=pd, mhkt=mh, the=th, mhkt_nguon=self.mhkt_nguon, **them)
 
     # ── bước 6–7: kiểm tra, hiển thị ─────────────────────────────────────
     def _kiem_tra(self, ta, k: str) -> None:
@@ -3434,6 +3505,7 @@ class MayDangDom:
         self.ghi_dodang(ma, "bat-dau")
         self.tai_xong_ok = False
         self.mhkt_nguon = ""
+        self.mhkt_doc = []
         self._d_dang = d
         self.han_tai = han_cho_tai(tep["mp4"])
         vid = ""
@@ -4409,6 +4481,10 @@ def main(argv=None) -> int:
                 with open(os.path.join(os.path.dirname(os.path.abspath(may.so.duong)), "mhkt-thieu.json"),
                           "w", encoding="utf-8") as tep:
                     json.dump(danh_sach_thieu_mhkt(may.so.doc()), tep, ensure_ascii=False, indent=1)
+                # 12/10/2026: video CÓ MHKT nhưng THIẾU nút Đăng ký (chữ đọc lại) — để chủ kênh / não thấy.
+                with open(os.path.join(os.path.dirname(os.path.abspath(may.so.duong)), "mhkt-thieu-dang-ky.json"),
+                          "w", encoding="utf-8") as tep:
+                    json.dump(danh_sach_mhkt_thieu_dang_ky(may.so.doc()), tep, ensure_ascii=False, indent=1)
             except OSError:
                 pass
             try:

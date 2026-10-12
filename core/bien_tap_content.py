@@ -606,12 +606,16 @@ def _ho_so_video(goc: str, ma_kenh: str) -> List[Dict[str, Any]]:
 
 
 def _sub_theo_video(goc: str, ma_kenh: str) -> Dict[str, Tuple[float, float]]:
-    """`{video_id: (đăng ký, lượt xem)}` từ `chi-so/bang-tom-tat.csv`."""
+    """`{video_id: (đăng ký, lượt xem)}` từ `chi-so/bang-tom-tat.csv`. Cặp lấy từ CÙNG một bản chụp có số đăng ký
+    (`chuyen_doi_sub.cap_sub_xem`, 12/10/2026). Video chưa đo được sub thì vắng mặt, hiện "?" chứ không hiện 0."""
+    from .chuyen_doi_sub import cap_sub_xem  # noqa: PLC0415
+
     ra = {}
     for d in _doc_csv(os.path.join(_duong_kenh(goc, ma_kenh), "chi-so", "bang-tom-tat.csv")):
         vid = str(d.get("Mã video") or "").strip()
-        if vid:
-            ra[vid] = (_so(d.get("Đăng ký")), _so(d.get("Lượt xem")))
+        cap = cap_sub_xem(d) if vid else None
+        if cap:
+            ra[vid] = (float(cap[0]), float(cap[1]))
     return ra
 
 

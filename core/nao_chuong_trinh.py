@@ -261,6 +261,13 @@ def dong_danh_muc(goc: str, kenh_ds: Sequence[str], bay_gio: _dt.datetime) -> Li
                 _ypp.nhan_sub(y), _f(y.get("toc_dk"), 1), _ypp.nhan_gio(y), _f(y.get("toc_gio"), 0), eta))
         except Exception:  # noqa: BLE001
             pass
+        try:
+            # 12/10/2026 — chuyển đổi sub (sub/1k view, xu hướng) + trạng thái A/B các đòn bẩy (`core.chuyen_doi_sub`).
+            from . import chuyen_doi_sub as _cds  # noqa: PLC0415
+
+            ra.extend(_cds.dong_nao(goc, k, bay_gio=bay_gio))
+        except Exception:  # noqa: BLE001
+            pass
         if d.get("loi"):
             ra.append("    (thiếu số: {0})".format("; ".join(d["loi"])[:160]))
     if dung_ds:
