@@ -167,21 +167,36 @@ MAC_DINH: Dict[str, Any] = {
     # dựng lâu khoảng bốn lần, đúng kiểu tải thừa đã làm máy này thiếu ổn định.
     "do_phan_giai": "1080p",
 
-    # Khâu KỊCH BẢN của tab Tự động viết bằng Claude Code trên thuê bao Claude
-    # (Pro/Max) đã đăng nhập sẵn trên máy, thay vì trừ ví ShopAPI.
-    #
-    # ═══ TẮT SẴN ═══
-    #
-    # Chủ dự án, 24/08/2026: *"ở cài đặt tao sẽ có thể chọn phần đó cho kịch
-    # bản, còn khách thì vì họ không có claude code max nên vẫn phải qua key
-    # shopapi"*. Đúng vậy: khách thường không có thuê bao Claude, bật sẵn là
-    # mọi lượt chạy của họ phải thử-rồi-lui vô ích.
-    #
-    # CHỈ khâu kịch bản đi đường này. Lời nhắc ảnh/clip, ảnh, clip, giọng đọc
-    # vẫn đi ví ShopAPI — thuê bao Claude không làm thay được việc của nhà máy.
-    # Máy chưa cài/chưa đăng nhập Claude Code thì tool tự lui về ví, có ghi
-    # nhật ký. Xem `core/viet_max.py`.
+    # (CŨ — giữ để máy đã bật vẫn được hiểu đúng.) `true` = như
+    # `viet_chu_bang: "claude_max"`. `false` KHÔNG có nghĩa "ép ví": `ghi()` ghi
+    # đủ mọi khoá mặc định ra tệp, nên `false` nằm trong tệp của MỌI máy từng
+    # bấm Cài đặt — không phân biệt được với một lựa chọn. Lựa chọn thật nằm ở
+    # `viet_chu_bang` dưới đây; ô trên giao diện cũng đã chuyển sang đó.
     "kich_ban_bang_claude_code": False,
+
+    # MỌI việc viết chữ của tool (kịch bản, tiêu đề/SEO, chữ bìa, chọn content,
+    # giám đốc, phòng thí nghiệm…) đi đường nào — xem `core/viet_max.py`:
+    #   "tu_dong"    máy có Claude Code ĐÃ ĐĂNG NHẬP thuê bao Claude → thuê bao;
+    #                không có → ví ShopAPI (máy khách: không đổi gì).
+    #   "claude_max" ép thuê bao Claude Max của máy (thiếu Claude Code thì báo lỗi,
+    #                KHÔNG lặng lẽ đi ví — chủ dự án 24/08/2026).
+    #   "vi"         ép ví ShopAPI.
+    #
+    # ═══ VÌ SAO MẶC ĐỊNH "tu_dong" (12/10/2026) ═══
+    #
+    # Chủ dự án: *"việc content rất quan trọng nên sẽ dùng claude 20x trên máy
+    # này… áp dụng cho các kênh khác"*. Máy có thuê bao thì dùng nó là đúng cho
+    # cả chất lượng lẫn tiền; máy khách không có thì "tu_dong" chính là ví như cũ.
+    # Lời nhắc ẢNH/CLIP và chấm ảnh nhà máy vẫn đi ví ở mọi lựa chọn.
+    "viet_chu_bang": "tu_dong",
+    # Model đầu thang của đường thuê bao (chủ dự án chọn Opus 5.5). Cạn hạn mức
+    # thì tụt bậc: opus-5 → sonnet-5-5 → sonnet-5 (`viet_max.THANG_MO_HINH`).
+    "claude_max_mo_hinh": "claude-opus-5-5",
+    # Mức suy nghĩ của model (`--effort`): low | medium | high | xhigh | max.
+    "claude_max_suy_nghi": "high",
+    # Bao nhiêu tiến trình Claude viết cùng lúc trên cả máy (1–8). Mỗi tiến trình
+    # vài trăm MB RAM và cùng ăn một hạn mức thuê bao.
+    "claude_max_song_song": 3,
 
     # Mốc công suất gửi việc lên máy chủ: "mac_dinh" | "nhanh" | "toi_da".
     #

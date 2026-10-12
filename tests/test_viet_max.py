@@ -83,10 +83,23 @@ class TestLenh:
 
     def test_co_loi_dan_va_cam_cong_cu(self):
         lenh = _lenh("claude", "claude-sonnet-5")
-        assert "--append-system-prompt" in lenh
+        # 12/10/2026: THAY lời nhắc agent (37.104 → 2.013 token mỗi lượt, đo trên máy này), không nối thêm.
+        assert "--system-prompt" in lenh and "--append-system-prompt" not in lenh
+        assert "bộ máy sinh VĂN BẢN" in lenh[lenh.index("--system-prompt") + 1]
+        assert lenh[lenh.index("--tools") + 1] == "", "không ảnh thì không công cụ nào"
+        for co in ("--no-session-persistence", "--strict-mcp-config", "--disable-slash-commands"):
+            assert co in lenh
         assert "--disallowedTools" in lenh
         for cong_cu in ("Write", "Edit", "Bash"):
             assert cong_cu in lenh
+
+    def test_co_anh_thi_chi_mo_read_va_effort(self):
+        lenh = _lenh("claude", "claude-opus-5-5", ["anh-1.png", "anh-2.jpg"], "high")
+        assert lenh[lenh.index("--tools") + 1] == "Read"
+        assert lenh[lenh.index("--effort") + 1] == "high"
+        chi_dao = lenh[lenh.index("--system-prompt") + 1]
+        assert "`anh-1.png`" in chi_dao and "`anh-2.jpg`" in chi_dao
+        assert "--effort" not in _lenh("claude", "m", "", "linh-tinh")
 
     def test_tu_choi_tin_nhan_lien_phien(self):
         """Lượt 0012: tiến trình viết nhận tin của phiên khác rồi bỏ bài đi
@@ -96,6 +109,16 @@ class TestLenh:
         lenh = _lenh("claude", "m")
         cai = _json.loads(lenh[lenh.index("--settings") + 1])
         assert cai["crossSessionInbound"] == "refuse"
+
+    def test_khong_nap_claude_md_cha_va_cai_dat_may(self):
+        """12/10/2026: thư mục rỗng nằm DƯỚI thư mục tool → `CLAUDE.md` (luật VPS) lọt vào mọi lượt viết; và
+        `~/.claude/settings.json` có thể mang khoá ShopAPI trong `env` (máy khách bị cắm khoá)."""
+        import json as _json
+
+        lenh = _lenh("claude", "m")
+        cai = _json.loads(lenh[lenh.index("--settings") + 1])
+        assert "**/CLAUDE.md" in cai["claudeMdExcludes"] and "**/CLAUDE.local.md" in cai["claudeMdExcludes"]
+        assert lenh[lenh.index("--setting-sources") + 1] == "local"
 
     def test_cam_cong_cu_dung_cuoi(self):
         """`--disallowedTools <tools...>` nuốt mọi thứ đứng sau nó."""
@@ -284,15 +307,25 @@ class TestBoiCanhChoKichBan:
 
 
 class TestCaiDat:
-    def test_mac_dinh_tat(self):
-        """Khách thường không có thuê bao Claude — bật sẵn là hại họ."""
+    def test_mac_dinh_tu_dong(self):
+        """12/10/2026: mặc định "tu_dong" — máy có Claude Code đã đăng nhập thì viết bằng thuê bao, máy khách không có
+        thì vẫn ví (không bật sẵn thứ họ không có). Khoá cũ giữ False: `ghi()` ghi nó ra mọi tệp nên False không phải
+        một lựa chọn."""
+        assert cai_dat.MAC_DINH.get("viet_chu_bang") == "tu_dong"
+        assert cai_dat.MAC_DINH.get("claude_max_mo_hinh") == "claude-opus-5-5"
         assert cai_dat.MAC_DINH.get("kich_ban_bang_claude_code") is False
 
     def test_co_o_trong_tab_cai_dat(self):
         """Thêm tuỳ chọn mà quên dựng ô là nó chỉ sửa được bằng tệp JSON."""
-        from ui_qt.trang_cai_dat import MUC
+        import inspect
 
-        assert any(k == "kich_ban_bang_claude_code" for k, _n, _g in MUC)
+        from ui_qt import trang_cai_dat as tcd
+
+        for khoa in ("viet_chu_bang", "claude_max_mo_hinh", "claude_max_suy_nghi", "claude_max_song_song"):
+            assert khoa in tcd.MUC_RIENG
+        nguon = inspect.getsource(tcd.TrangCaiDat._the_viet_chu)
+        assert "claude_max_mo_hinh" in nguon and "claude_max_suy_nghi" in nguon and "claude_max_song_song" in nguon
+        assert [k for k, _n in tcd.VIET_CHU_BANG] == ["tu_dong", "claude_max", "vi"]
 
 
 class TestChanDoanLoi:

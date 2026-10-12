@@ -39,6 +39,13 @@ os.environ.setdefault("SHOPAPI_HOI_DONG", "0")
 # cũ của Một nút không cần nó (thêm đọc đĩa + tệp lạ trong tmp_path). Tắt mặc định; bài kiểm phòng thí nghiệm tự bật.
 os.environ.setdefault("MYTOOL_PHONG_THI_NGHIEM", "0")
 
+# Đường viết chữ bằng thuê bao Claude Max (`core/viet_max.py`, 12/10/2026): máy này CÓ Claude Code đã đăng nhập, nên
+# Cài đặt "tu_dong" sẽ rẽ MỌI `goi_van_ban` của bộ test (client giả) sang Claude Code THẬT. Hai chốt: (1) "tu_dong"
+# coi như ví; bài kiểm cần đường thuê bao tự bật (`monkeypatch.setenv` / Cài đặt trong tmp_path, kèm đồ giả); (2) không
+# bài nào được sinh tiến trình `claude` thật — `viet_bang_max` không có `mo_tien_trinh` giả là ném lỗi.
+os.environ.setdefault("MYTOOL_VIET_CHU", "vi")
+os.environ.setdefault("MYTOOL_KHONG_CHAY_CLAUDE", "1")
+
 # Lưới an toàn thứ ba cho `vm/agent.py` (06/10/2026): fixture `_co_lap_vm_agent_goc` bên dưới chỉ đặt
 # `SHOPAPI_VM_GOC` cho từng BÀI — fixture cấp module (vd `tests/test_vm_bao_tri_so_sach.agent_mod`) nạp
 # `vm/agent.py` TRƯỚC nó, nên `agent.GOC` rơi về `vm/` thật và `ghi()` → `nhip_tim()` ghi đè

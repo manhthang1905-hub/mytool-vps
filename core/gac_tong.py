@@ -1378,7 +1378,9 @@ def _loc_lap_su_co(goc: str, ds_su_co: List[Dict[str, Any]],
 #: Loại sự cố cấp máy do `core.chot_an_toan` sinh — được đưa lên giao diện.
 LOAI_CANH_BAO_MAY = ("vi_sap_can", "vi_het_tien", "license_rearm_loi", "license_cho_khoi_dong_lai",
                      "license_khoi_dong_lai", "license_het_rearm", "han_vps",
-                     "han_vps_sai_dinh_dang", "giong_doc_trung", "chot_an_toan_hong")
+                     "han_vps_sai_dinh_dang", "giong_doc_trung", "chot_an_toan_hong",
+                     # Đường viết chữ bằng thuê bao Claude Max (`core.chot_an_toan.kiem_claude_max`, 12/10/2026).
+                     "claude_max_can_han_muc", "claude_max_chua_dang_nhap", "claude_max_hong")
 
 
 def canh_bao_may(ds_su_co: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2015,7 +2017,8 @@ def _mot_luot(goc: str, thu: bool) -> int:
         from core import chot_an_toan  # noqa: PLC0415
 
         if thu:
-            ds_su_co += chot_an_toan.kiem_han_vps(goc) + chot_an_toan.kiem_giong_trung(goc)
+            ds_su_co += (chot_an_toan.kiem_han_vps(goc) + chot_an_toan.kiem_giong_trung(goc)
+                         + chot_an_toan.kiem_claude_max(goc))
         else:
             kq_chot = chot_an_toan.kiem_tat_ca(goc)
             ds_su_co += kq_chot["su_co"]

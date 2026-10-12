@@ -88,6 +88,7 @@ __all__ = [
     "duong_settings_may", "cai_vao_may", "go_khoi_may",
     "DIA_CHI_TAI_XUONG_CLAUDE", "toi_duoc", "lenh_cai_npm",
     "cai_dat_du_phong_npm", "cai_dat_co_du_phong",
+    "tim_claude", "claude_trong_extension", "co_phien_dang_nhap", "thu_muc_cau_hinh_claude",
 ]
 
 #: Gói npm của Claude Code.
@@ -287,6 +288,79 @@ def tim_lenh(ten: str, goc: str = "") -> str:
                 if os.path.isfile(thu):
                     return thu
     return ""
+
+
+#: Thư mục extension của các bản VS Code (và họ hàng) — extension Claude Code
+#: mang theo CLI gốc của nó ở `resources/native-binary/`.
+_CHO_EXTENSION = (
+    os.path.join("~", ".vscode", "extensions"),
+    os.path.join("~", ".vscode-insiders", "extensions"),
+    os.path.join("~", ".cursor", "extensions"),
+)
+
+
+def _phien_ban_extension(duong: str) -> tuple:
+    """`…/anthropic.claude-code-2.1.296-win32-x64/…` → `(2, 1, 296)` để xếp mới nhất lên đầu."""
+    import re  # noqa: PLC0415
+
+    tim = re.search(r"claude-code-(\d+(?:\.\d+)*)", duong.replace("\\", "/"))
+    return tuple(int(x) for x in tim.group(1).split(".")) if tim else (0,)
+
+
+def claude_trong_extension() -> str:
+    """`claude(.exe)` đi kèm extension Claude Code của VS Code — bản MỚI NHẤT, hoặc rỗng."""
+    import glob  # noqa: PLC0415
+
+    ten = "claude.exe" if os.name == "nt" else "claude"
+    ds: List[str] = []
+    for cho in _CHO_EXTENSION:
+        mau = os.path.join(os.path.expanduser(cho), "anthropic.claude-code-*",
+                           "resources", "native-binary", ten)
+        ds += [d for d in glob.glob(mau) if os.path.isfile(d)]
+    ds.sort(key=_phien_ban_extension, reverse=True)
+    return ds[0] if ds else ""
+
+
+def tim_claude(goc: str = "") -> str:
+    """Đường tới CLI `claude` để TOOL chạy — **một hàm chung** cho mọi nơi cần nó.
+
+    ═══ VÌ SAO KHÔNG CHỈ `tim_lenh("claude")` (12/10/2026) ═══
+
+    Trên VPS của chủ dự án, Claude Code chỉ có ở dạng extension VS Code: không có
+    `claude` trong PATH, không có `~/.local/bin`. `tim_lenh` dò hai chỗ ấy nên trả
+    rỗng — và đường "viết bằng thuê bao Claude Max" (`core/viet_max.py`) coi như
+    máy chưa cài, trong khi bộ não (`core/nao.py`) vẫn tìm ra vì nó tự dò thêm thư
+    mục extension. Hai nơi hai cách dò là hai kết luận khác nhau trên cùng một máy.
+
+    Thứ tự: PATH / chỗ cài quen (`tim_lenh`, kể cả `runtime/` của tool) trước — bản
+    cài tay là bản chủ máy chọn; rồi tới CLI kèm extension, lấy bản mới nhất (VS
+    Code tự cập nhật extension, bản cũ có thể bị xoá bất cứ lúc nào).
+    """
+    return tim_lenh("claude", goc) or claude_trong_extension()
+
+
+def thu_muc_cau_hinh_claude() -> str:
+    """Thư mục cấu hình của Claude Code (`CLAUDE_CONFIG_DIR`, mặc định `~/.claude`)."""
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+
+
+def co_phien_dang_nhap() -> bool:
+    """Máy có phiên đăng nhập thuê bao Claude (Pro/Max) cho Claude Code không.
+
+    Chỉ nhìn **có hay không** trường khoá trong `.credentials.json`
+    (`claudeAiOauth`) — không đọc ra, không in, không gửi đi đâu giá trị nào. Máy
+    khách chỉ có khoá ShopAPI thì không có tệp/trường này → `False`.
+    """
+    duong = os.path.join(thu_muc_cau_hinh_claude(), ".credentials.json")
+    try:
+        with open(duong, "r", encoding="utf-8") as tep:
+            du = json.load(tep)
+    except (OSError, ValueError):
+        return False
+    oa = du.get("claudeAiOauth") if isinstance(du, dict) else None
+    if not isinstance(oa, dict):
+        return False
+    return bool(str(oa.get("refreshToken") or oa.get("accessToken") or "").strip())
 
 
 def lenh_chay_duoc(lenh: Sequence[str]) -> List[str]:

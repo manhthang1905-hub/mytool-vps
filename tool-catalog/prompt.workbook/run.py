@@ -1334,6 +1334,7 @@ def _hop_goi(request: Mapping[str, Any], model: str):
         bam = hashlib.sha256(loi_nhac.encode("utf-8")).hexdigest()[:10]
         return goi_van_ban(khach(), [{"role": "user", "content": loi_nhac}],
                            mo_hinh=model, toi_da_token=TOKEN_CANH, on_log=ghi,
+                           qua_vi=True,  # dan dung + loi nhac ANH/CLIP -> vi ShopAPI (viet_max, 12/10/2026)
                            khoa="{0}:{1}:{2}:{3}".format(request.get("run_id", "run"),
                                                          request.get("node_id", "workbook"),
                                                          phan_khoa, bam))

@@ -664,7 +664,8 @@ class TrangPromptVisuals(QWidget):
 
         def viec():
             from core.goi_van_ban import goi_van_ban  # noqa: PLC0415
-            return goi_van_ban(client, tin, toi_da_token=2000)
+            # Dựng phong cách ẢNH từ ảnh mẫu — việc của lời nhắc ảnh → ví ShopAPI.
+            return goi_van_ban(client, tin, toi_da_token=2000, qua_vi=True)
 
         self._app.run_bg(
             viec, on_ok=lambda tra: self._xay_xong(tra, so),
@@ -2203,7 +2204,8 @@ class TrangPromptVisuals(QWidget):
             if nv is None:
                 raise ValueError("không thấy {0} trong sheet characters".format(ma_id))
             tra = goi_van_ban(client, [{"role": "user", "content": loi_nhac_thiet_ke_lai(nv, ly_do)}],
-                              mo_hinh=MO_HINH_PV, toi_da_token=1024)
+                              mo_hinh=MO_HINH_PV, toi_da_token=1024,
+                              qua_vi=True)  # thiết kế lại nhân vật (lời nhắc ảnh) → ví
             moi = str(loc_json(tra).get("english_prompt") or "").strip()
             if len(moi) < 20:
                 raise ValueError("AI không trả mô tả mới")

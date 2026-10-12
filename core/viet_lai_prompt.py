@@ -297,7 +297,8 @@ def dung_viet_lai(lay_client: Callable[[], object], *, mo_hinh: str = "claude-so
 
             def _goi(loi_nhac: str) -> str:
                 return goi_van_ban(client, [{"role": "user", "content": loi_nhac}],
-                                   mo_hinh=mo_hinh, toi_da_token=2048)
+                                   mo_hinh=mo_hinh, toi_da_token=2048,
+                                   qua_vi=True)  # viết lại LỜI NHẮC ảnh/clip → ví ShopAPI
 
             goi_ai = _goi
         loai = "video" if str(getattr(spec, "kind", "")) == "video" else "image"

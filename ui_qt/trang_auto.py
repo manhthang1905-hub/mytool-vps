@@ -1362,18 +1362,17 @@ class TrangTuDong(QWidget):
 
     def _dung_goi_chat_kich_ban(self, huy: Optional[threading.Event] = None,
                                 ghi: Optional[Callable[[str], None]] = None):
-        """Đường viết RIÊNG cho khâu kịch bản qua Claude Code (Cài đặt bật),
-        hoặc `None` nếu đi ví chung. Hỏng thì THỬ LẠI, không rẽ sang ví —
-        chủ dự án 24/08/2026. Xem `core/viet_max.py`."""
-        from core.viet_max import co_claude_code, dung_goi_chat_max  # noqa: PLC0415
+        """Đường viết qua thuê bao Claude Max của máy cho khâu kịch bản (Cài đặt
+        "Viết chữ bằng" → máy đi thuê bao), hoặc `None` nếu đi ví. Các khâu
+        khác cũng đi thuê bao — qua `goi_van_ban` (12/10/2026). Hỏng thì THỬ
+        LẠI, không rẽ sang ví — chủ dự án 24/08/2026. Xem `core/viet_max.py`."""
+        from core.viet_max import duong_viet_chu, dung_goi_chat_max  # noqa: PLC0415
 
-        if not cai_dat.doc(self._app.base_dir).get("kich_ban_bang_claude_code"):
+        duong, ly_do = duong_viet_chu(self._app.base_dir)
+        if duong == "loi":
+            raise RuntimeError(ly_do)
+        if duong != "max":
             return None
-        if not co_claude_code():
-            raise RuntimeError(
-                "Cài đặt đang bật “Kịch bản viết bằng Claude Code” nhưng máy "
-                "này chưa cài Claude Code. Cài ở Cài đặt → Agent xây tool, hoặc "
-                "tắt nút đó để viết bằng ví ShopAPI.")
 
         def kiem_dung():
             if huy is not None and huy.is_set():

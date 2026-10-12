@@ -937,7 +937,8 @@ def _dung_goi_ai_that(bc: Any) -> Callable[[str], str]:
 
     def goi_ai(loi_nhac: str) -> str:
         return goi_van_ban(bc.client, [{"role": "user", "content": loi_nhac}],
-                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=2048)
+                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=2048,
+                           qua_vi=True)  # lời nhắc ẢNH (thiết kế/viết lại) → ví ShopAPI
 
     return goi_ai
 
@@ -989,7 +990,8 @@ def _dung_cham_chan_dung_that(bc: Any) -> Callable[[str, str, str], Tuple[Option
 
     def goi(noi_dung):
         return goi_van_ban(bc.client, [{"role": "user", "content": noi_dung}],
-                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=300)
+                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=300,
+                           qua_vi=True)  # chấm ảnh chân dung nhà máy → ví ShopAPI
 
     def cham(anh: str, mo_ta: str, vai: str) -> Tuple[Optional[int], str]:
         return cham_chan_dung(goi, anh, mo_ta, vai)
@@ -1104,7 +1106,8 @@ def _dung_tao_anh_that(bc: Any, luot: Any) -> Callable[..., None]:
 
     def goi_ai(loi_nhac: str) -> str:
         return goi_van_ban(bc.client, [{"role": "user", "content": loi_nhac}],
-                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=2048)
+                           mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"), toi_da_token=2048,
+                           qua_vi=True)  # lời nhắc ẢNH (thiết kế/viết lại) → ví ShopAPI
 
     def lam(ma_id: str, prompt: str, dich: str,
             tham_chieu: Optional[List[str]] = None) -> None:

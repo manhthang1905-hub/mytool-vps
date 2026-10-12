@@ -37,6 +37,7 @@ import re
 import shutil
 import subprocess
 import collections
+import contextlib
 import threading
 import time
 from dataclasses import dataclass, field, replace
@@ -612,8 +613,14 @@ class BoiCanh:
 
 
 def _goi(bc: "BoiCanh", loi_nhac: str, khoa: str,
-         toi_da_token: int = 8192, anh: str | List[str] = "", mo_hinh: str = "") -> str:
+         toi_da_token: int = 8192, anh: str | List[str] = "", mo_hinh: str = "",
+         qua_vi: bool = False) -> str:
     """Gọi AI, kèm Idempotency-Key **cố định theo bước**.
+
+    `qua_vi=True` (12/10/2026): lượt này viết LỜI NHẮC ẢNH/CLIP (bảng cảnh, bản đồ
+    hình) → đi ví ShopAPI dù máy viết chữ bằng thuê bao Claude Max (chủ dự án
+    24/08/2026: *"khi tạo các prompt ảnh video thì nó có thể dùng key của
+    shopapi"*). Xem `core.goi_van_ban.qua_vi`.
 
     ═══ VÌ SAO CẦN KHOÁ CỐ ĐỊNH, VÀ VÌ SAO KHÔNG ĐƯỢC GỬI LẠI ═══
 
@@ -701,8 +708,11 @@ def _goi(bc: "BoiCanh", loi_nhac: str, khoa: str,
             them = {"anh": anh} if anh else {}
             # `mo_hinh` riêng (09/10/2026): việc chữ NGẮN (tên chương) đi bậc giữa, không theo mô hình
             # viết kịch bản của kênh. Rỗng → `bc.kenh.mo_hinh` như cũ.
-            ket = bc.goi_chat(loi_nhac, mo_hinh=mo_hinh or bc.kenh.mo_hinh,
-                              khoa=khoa_lan, toi_da_token=toi_da_token, **them)
+            from .goi_van_ban import qua_vi as _qua_vi  # noqa: PLC0415
+
+            with (_qua_vi() if qua_vi else contextlib.nullcontext()):
+                ket = bc.goi_chat(loi_nhac, mo_hinh=mo_hinh or bc.kenh.mo_hinh,
+                                  khoa=khoa_lan, toi_da_token=toi_da_token, **them)
             # ═══ BÓC LỚP VỎ "GỌI CÔNG CỤ" GIẢ ═══
             #
             # Có lượt mô hình không trả thẳng lời đọc, mà "diễn" một pha ghi tệp
@@ -2582,20 +2592,20 @@ def _khau_kich_ban(bc_goc: BoiCanh):
         # Chủ dự án, 25/08/2026, đọc nhật ký lượt 0049: *"sao bước viết content
         # ở máy này lại là dùng api… có thể mày đang viết content bằng
         # shopapi"*. Một dòng này để ai dán nhật ký lên cũng thấy ngay.
-        if bc_goc.goi_chat_kich_ban is not None:
-            from .viet_max import (NHIP_THU_LAI, THANG_MO_HINH,  # noqa: PLC0415
-                                   mo_hinh_dang_dung)
+        if bc_goc.goi_chat_kich_ban is not None or _viet_bang_thue_bao(bc.goc):
+            from .viet_max import (NHIP_THU_LAI, mo_hinh_dang_dung,  # noqa: PLC0415
+                                   thang_mo_hinh)
 
             # Nói model ĐANG dùng, không nói model đứng đầu thang: hôm nay
-            # fable cạn hạn mức thì dòng này phải hiện đúng bậc thay thế, chứ
-            # không phải một cái tên đã bị bỏ qua từ nãy.
+            # đầu thang cạn hạn mức thì dòng này phải hiện đúng bậc thay thế.
             dang = mo_hinh_dang_dung(bc.goc)
+            dau = thang_mo_hinh(bc.goc)[0]
             bc.ghi("  đường viết chữ: Claude Code (thuê bao Claude Max của máy), "
                    "model {0}{1}, KHÔNG tiêu ví; hết hạn mức thì tụt bậc ngay, "
                    "hỏng vì lý do khác thì thử lại {2} lần rồi mới báo lỗi.".format(
                        dang,
-                       "" if dang == THANG_MO_HINH[0] else
-                       " (đã tụt từ {0} vì hết hạn mức)".format(THANG_MO_HINH[0]),
+                       "" if dang == dau else
+                       " (đã tụt từ {0} vì hết hạn mức)".format(dau),
                        1 + len(NHIP_THU_LAI)))
         else:
             bc.ghi("  đường viết chữ: ví ShopAPI, model {0} (mỗi lượt gọi trừ "
@@ -3181,8 +3191,19 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 "tieu_de": tieu_de, "chu_bia": chu_bia}
 
     # Nhãn cho nhật ký của `core/auto.chay`: khâu này có đi ví hay không.
-    lam.khong_tieu_vi = bc_goc.goi_chat_kich_ban is not None
+    lam.khong_tieu_vi = bc_goc.goi_chat_kich_ban is not None or _viet_bang_thue_bao(bc_goc.goc)
     return lam
+
+
+def _viet_bang_thue_bao(goc: str) -> bool:
+    """Máy viết chữ bằng thuê bao Claude Max (`core.viet_max.duong_viet_chu`) — mọi `goi_van_ban` của khâu chữ tự rẽ
+    sang đó, kể cả khi `BoiCanh` không có `goi_chat_kich_ban` (lượt `tu_chay`). Lỗi dò → False (ví, như cũ)."""
+    try:
+        from .goi_van_ban import dung_thue_bao  # noqa: PLC0415
+
+        return dung_thue_bao(goc)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 #: Lời nhắc chèn dấu ngắt phần — NGẮN, không đụng lời nhắc sinh của kênh.
@@ -5592,9 +5613,10 @@ def _ke_hoach_hinh(bc: BoiCanh, luot: LuotChay,
             # thì cổng báo "khoá này đã dùng cho nội dung khác" và lượt chạy
             # kẹt ở đây mãi. Xem `khoa_viec` và ca lượt 0016 ghi ở
             # `core/goi_van_ban.py`.
+            # Bản đồ HÌNH (bối cảnh, vật ẩn dụ cho lời nhắc ảnh) — việc của lời nhắc ảnh/clip → ví.
             tra = _goi(bc, loi_nhac,
                        khoa_viec(luot, "ke-hoach", 0, dong, lan, loi_nhac),
-                       toi_da_token=TOKEN_KE_HOACH)
+                       toi_da_token=TOKEN_KE_HOACH, qua_vi=True)
             ke_hoach = sach_ke_hoach(loc_json(tra), cue)
         except Exception as loi:  # noqa: BLE001
             # Cùng lý lẽ với vòng hỏi lại của `_hoi_chia_canh`: khoá kẹt thì
@@ -5669,9 +5691,10 @@ def _hoi_chia_canh(bc: BoiCanh, luot: LuotChay, khuon: str,
         # khuôn chia cảnh của kênh, mà khuôn ấy khách sửa được. Bỏ điều kiện
         # đi thì luật thành một câu: lời nhắc nào, khoá nấy. Chạy lại y nguyên
         # vẫn ra đúng khoá cũ nên không trả tiền lần hai.
+        # Chia cảnh + VIẾT LỜI NHẮC ẢNH/CLIP từng cảnh → ví ShopAPI (chủ dự án 24/08/2026).
         tra = _goi(bc, loi_nhac,
                    khoa_viec(luot, "canh", cue[0]["index"], dong, lan, loi_nhac),
-                   toi_da_token=TOKEN_CANH)
+                   toi_da_token=TOKEN_CANH, qua_vi=True)
         try:
             goi = loc_json(tra)
         except (ValueError, TypeError) as loi:
@@ -6885,8 +6908,9 @@ def _cham_va_ve_lai(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
     def goi_cham(noi_dung):
         from .goi_van_ban import goi_van_ban  # noqa: PLC0415
 
+        # Cửa chấm ẢNH CẢNH của nhà máy (kèm ảnh, nhiều lượt nhỏ) → ví, không phải việc viết chữ.
         return goi_van_ban(bc.client, [{"role": "user", "content": noi_dung}],
-                           mo_hinh=bc.kenh.mo_hinh, toi_da_token=200)
+                           mo_hinh=bc.kenh.mo_hinh, toi_da_token=200, qua_vi=True)
 
     diem = cham_anh(goi_cham, tep, refs, mo_ta=str(c.get("img_prompt") or "")[:600])
     # `0` KHÔNG phải điểm kém: giám khảo được bảo trả 0 khi nhân vật không có
@@ -7003,8 +7027,11 @@ def _viet_lai_khi_bi_tu_choi(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
     bc.ghi("    ảnh cảnh {0}: bị bộ lọc từ chối — viết lại lời nhắc rồi thử lại…".format(so_canh))
 
     def goi_ai(loi_nhac: str) -> str:
-        return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
-                           khoa=khoa_viec(luot, "vl-img", so_canh, cu), toi_da_token=2048)
+        from .goi_van_ban import qua_vi  # noqa: PLC0415
+
+        with qua_vi():  # viết lại LỜI NHẮC ẢNH → ví ShopAPI
+            return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
+                               khoa=khoa_viec(luot, "vl-img", so_canh, cu), toi_da_token=2048)
 
     try:
         moi = viet_lai_prompt(goi_ai, cu, str(loi))
@@ -8323,8 +8350,11 @@ def _viet_lai_loi_nhac_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
         return ""
 
     def goi_ai(loi_nhac: str) -> str:
-        return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
-                           khoa=khoa_viec(luot, "vl-vid", so_canh, cu, vong), toi_da_token=2048)
+        from .goi_van_ban import qua_vi  # noqa: PLC0415
+
+        with qua_vi():  # viết lại LỜI NHẮC CLIP → ví ShopAPI
+            return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
+                               khoa=khoa_viec(luot, "vl-vid", so_canh, cu, vong), toi_da_token=2048)
 
     try:
         moi = viet_lai_prompt(goi_ai, cu, str(loi or "")[:200], loai="video")
@@ -8360,9 +8390,12 @@ def _ve_lai_anh_cho_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
         cu = str(c.get("img_prompt") or "")
 
         def goi_ai(loi_nhac: str) -> str:
-            return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
-                               khoa=khoa_viec(luot, "vl-img-clip", so_canh, cu, vong),
-                               toi_da_token=2048)
+            from .goi_van_ban import qua_vi  # noqa: PLC0415
+
+            with qua_vi():  # viết lại LỜI NHẮC ẢNH → ví ShopAPI
+                return bc.goi_chat(loi_nhac, mo_hinh=str(bc.kenh.mo_hinh or "claude-sonnet-5"),
+                                   khoa=khoa_viec(luot, "vl-img-clip", so_canh, cu, vong),
+                                   toi_da_token=2048)
 
         from .viet_lai_prompt import doi_bo_cuc  # noqa: PLC0415
 
@@ -11636,6 +11669,17 @@ def _chay(ffmpeg: str, tham_so: Sequence[str], *,
 def _tra_anh_that(bc: BoiCanh, d: str, noi: str, noi_vi: str, moc_dinh: str,
                   nam_dau: int, nam_cuoi: int, bai: Sequence[tuple],
                   mo_hinh: str) -> Optional[Dict[str, Any]]:
+    """Tra ảnh thật — MỌI lượt AI trong đây (hỏi thể loại ảnh Commons, nhìn ảnh chọn tấm nhận dạng) là việc tìm
+    ẢNH cho nhà máy, không phải viết chữ → đi ví ShopAPI (`goi_van_ban.qua_vi`, 12/10/2026). Thân ở `_tra_anh_that_ve`."""
+    from .goi_van_ban import qua_vi  # noqa: PLC0415
+
+    with qua_vi():
+        return _tra_anh_that_ve(bc, d, noi, noi_vi, moc_dinh, nam_dau, nam_cuoi, bai, mo_hinh)
+
+
+def _tra_anh_that_ve(bc: BoiCanh, d: str, noi: str, noi_vi: str, moc_dinh: str,
+                     nam_dau: int, nam_cuoi: int, bai: Sequence[tuple],
+                     mo_hinh: str) -> Optional[Dict[str, Any]]:
     """Tra ẢNH THẬT của chỗ ấy về đĩa, và chọn lấy một tấm làm ẢNH NHẬN DẠNG.
 
     Chạy ở khâu KỊCH BẢN, tức TRƯỚC khi dựng bảng mốc — thứ tự này quan trọng:
@@ -12113,8 +12157,9 @@ def _soat_thoi_dai_anh_moc(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any],
     )
 
     def goi(noi_dung):
+        # Soi ẢNH MỐC nhà máy vừa vẽ (kèm ảnh) — cửa chấm ảnh, không phải viết chữ → ví.
         return goi_van_ban(bc.client, [{"role": "user", "content": noi_dung}],
-                           mo_hinh=bc.kenh.mo_hinh, toi_da_token=300)
+                           mo_hinh=bc.kenh.mo_hinh, toi_da_token=300, qua_vi=True)
 
     # Bo cham nem loi thi coi nhu tam sach. Cua nay de BAT loi, khong phai
     # de chan ca day chuyen khi chinh no hong -- va con `khoa_the_ky` o loi

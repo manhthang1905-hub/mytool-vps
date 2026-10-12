@@ -78,7 +78,55 @@ from .su_co import (
 )
 
 __all__ = ["goi_van_ban", "loc_json", "khoi_anh", "MO_HINH_MAC_DINH",
-           "TOI_DA_TOKEN_MAC_DINH", "CHI_TRA_NOI_DUNG", "tin_nhan_viet"]
+           "TOI_DA_TOKEN_MAC_DINH", "CHI_TRA_NOI_DUNG", "tin_nhan_viet",
+           "qua_vi", "dang_qua_vi", "dung_thue_bao"]
+
+
+# ═══ ĐƯỜNG THUÊ BAO CLAUDE MAX (12/10/2026) ═══
+#
+# Chủ dự án: *"việc content rất quan trọng nên sẽ dùng claude 20x trên máy này —
+# dùng mode claude opus 5.5 — và áp dụng cho các kênh khác"*. Hàm này là chỗ DUY
+# NHẤT tool nhờ AI viết chữ, nên rẽ đường ở ĐÂY là mọi việc chữ — kịch bản, tiêu
+# đề, SEO, bìa, chọn content, giám đốc, phòng thí nghiệm — cùng đi thuê bao khi
+# máy bật (`core.viet_max.duong_viet_chu`), không phải sửa từng nơi gọi.
+#
+# Ngoại lệ có chủ đích — lời nhắc ẢNH/CLIP và cửa chấm ảnh của nhà máy — vẫn đi
+# ví ShopAPI (chủ dự án 24/08/2026: *"khi tạo các prompt ảnh video thì nó có thể
+# dùng key của shopapi"*): nơi gọi truyền `qua_vi=True`, hoặc bọc cả khối bằng
+# `with qua_vi():` khi lời gọi nằm sâu trong một hàm `goi_chat` truyền tay.
+_CUC_BO = threading.local()
+
+
+class _QuaVi:
+    """`with qua_vi():` — mọi `goi_van_ban` trong khối (CÙNG luồng) đi ví ShopAPI."""
+
+    def __enter__(self) -> "_QuaVi":
+        _CUC_BO.sau = getattr(_CUC_BO, "sau", 0) + 1
+        return self
+
+    def __exit__(self, *_a: Any) -> None:
+        _CUC_BO.sau = max(0, getattr(_CUC_BO, "sau", 0) - 1)
+
+
+def qua_vi() -> _QuaVi:
+    return _QuaVi()
+
+
+def dang_qua_vi() -> bool:
+    return getattr(_CUC_BO, "sau", 0) > 0
+
+
+def dung_thue_bao(goc: str = "") -> bool:
+    """Lượt viết chữ (không trong khối `qua_vi`) có đi thuê bao Claude Max không — cho nơi cần biết trước (ví dụ để
+    khỏi dựng client ShopAPI, khỏi hỏi van ví cho việc không tiêu ví). Lỗi dò → `False`."""
+    if dang_qua_vi():
+        return False
+    try:
+        from .viet_max import duong_viet_chu  # noqa: PLC0415
+
+        return duong_viet_chu(goc)[0] == "max"
+    except Exception:  # noqa: BLE001
+        return False
 
 #: Lời nhắc **hệ thống** đi kèm mọi lượt nhờ AI viết chữ của tool.
 #:
@@ -371,8 +419,16 @@ def goi_van_ban(
     on_log: Optional[Callable[[str], None]] = None,
     kiem_dung: Optional[Callable[[], None]] = None,
     ngu: Callable[[float], None] = time.sleep,
+    qua_vi: bool = False,
+    goc: str = "",
 ) -> str:
     """Nhờ AI viết, kiên nhẫn qua trục trặc tạm. Trả về đoạn chữ.
+
+    Máy bật viết chữ bằng thuê bao Claude Max (`core.viet_max.duong_viet_chu`)
+    thì lượt này đi Claude Code trên phiên đăng nhập của máy — `client`,
+    `mo_hinh`, `khoa` của ví không dùng tới (model theo thang của thuê bao).
+    `qua_vi=True` (hay khối `with qua_vi():`) ép đi ví: lời nhắc ảnh/clip.
+    `goc` là thư mục tool (mặc định: thư mục chứa `core/`).
 
     `tin_nhan` là danh sách `{"role", "content"}` theo đúng thứ tự hội thoại.
 
@@ -393,7 +449,23 @@ def goi_van_ban(
         if on_log is not None:
             on_log(dong)
 
-    goc = khoa or str(uuid.uuid4())
+    if not qua_vi and not dang_qua_vi():
+        try:
+            from .viet_max import duong_viet_chu  # noqa: PLC0415
+
+            duong, ly_do = duong_viet_chu(goc)
+        except Exception as loi:  # noqa: BLE001 — dò đường hỏng (lỗi mã) thì đi ví như cũ, có ghi
+            duong, ly_do = "vi", ""
+            ghi("  (không dò được đường viết chữ: {0} — đi ví)".format(str(loi)[:100]))
+        if duong == "loi":
+            raise RuntimeError(ly_do)
+        if duong == "max":
+            from .viet_max import goi_tin_nhan_max  # noqa: PLC0415
+
+            return goi_tin_nhan_max(tin_nhan, goc=goc, toi_da_token=toi_da_token, khoa=khoa,
+                                    on_log=on_log, kiem_dung=kiem_dung, ngu=ngu)
+
+    khoa_goc = khoa or str(uuid.uuid4())
     tin_nhan = gop_he_thong_vao_nguoi_dung(tin_nhan)
     # ═══ KHOÁ PHẢI THUẦN ASCII ═══
     #
@@ -402,7 +474,7 @@ def goi_van_ban(
     # → `UnicodeEncodeError: 'ascii' codec can't encode characters`.
     #
     # Sanitize TẠI ĐÂY thay vì tin nơi gọi đã làm: một chỗ duy nhất, không lọt.
-    goc = goc.encode("ascii", "replace").decode("ascii").replace("?", "-")
+    khoa_goc = khoa_goc.encode("ascii", "replace").decode("ascii").replace("?", "-")
     loi_cuoi: Optional[BaseException] = None
     # ═══ SÀN TRẦN TOKEN (30/09/2026) ═══ — xem `SAN_MAX_TOKENS`.
     tran = max(int(toi_da_token or 0), SAN_MAX_TOKENS)
@@ -410,7 +482,7 @@ def goi_van_ban(
     for luot in range(_SO_LUOT_KHOA):
         # Khoá lượt đầu giữ nguyên bản gốc, để nơi gọi tự đặt khoá vẫn nhận lại
         # đúng việc cũ của mình sau khi đóng tool giữa chừng.
-        khoa_luot = goc if luot == 0 else "{0}:k{1}".format(goc, luot)
+        khoa_luot = khoa_goc if luot == 0 else "{0}:k{1}".format(khoa_goc, luot)
 
         goi_bang = _client_khong_tu_thu_lai(client, tran)
 

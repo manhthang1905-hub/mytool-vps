@@ -146,7 +146,8 @@ def dung_cham_anh(lay_client: Callable[[], object], *, mo_hinh: str = "claude-so
 
         def goi(noi_dung):
             return goi_van_ban(client, [{"role": "user", "content": noi_dung}],
-                               mo_hinh=mo_hinh, toi_da_token=200)
+                               mo_hinh=mo_hinh, toi_da_token=200,
+                               qua_vi=True)  # cửa chấm ảnh của nhà máy → ví ShopAPI
 
         return cham_anh(goi, files[0], refs, getattr(spec, "content", ""))
 

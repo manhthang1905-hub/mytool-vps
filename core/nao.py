@@ -55,7 +55,9 @@ HE_SO_CUM_THU = 1.5
 TRUC_CO_HIEU_LUC = ("cum", "kieu_tieu_de", "kieu_bia", "hook")
 
 # ── phiên ────────────────────────────────────────────────────────────────────
-MO_HINH_PHIEN = "claude-fable-5"   # bậc mạnh nhất của thang model (core.viet_max.THANG_MO_HINH[0])
+#: Model của phiên khi đi ví ShopAPI. Trên thuê bao Claude Max (12/10/2026) phiên lấy bậc ĐANG MỞ của thang chung
+#: `core.viet_max.thang_mo_hinh` (đầu thang mặc định claude-opus-5-5, chủ dự án chọn) — xem `chay_phien`.
+MO_HINH_PHIEN = "claude-fable-5"
 SO_LUOT_TOI_DA = 40
 GIO_HET_GIO_PHIEN = 30 * 60
 LAN_THU_TOI_DA_MOI_NGAY = 2
@@ -1193,30 +1195,44 @@ def lenh_phien(duong_claude: str, goc: str = GOC, mo_hinh: str = MO_HINH_PHIEN, 
 
 
 def tim_claude(goc: str = GOC) -> str:
+    """CLI `claude` — dùng CHUNG bộ dò với đường viết chữ (`core.claude_code.tim_claude`: PATH rồi extension VS Code,
+    bản mới nhất). Trước 12/10/2026 hàm này tự dò extension còn `viet_max` thì không — cùng máy hai kết luận."""
     from . import claude_code  # noqa: PLC0415
 
-    duong = claude_code.tim_lenh("claude", goc)
-    if duong:
-        return duong
-    mau = os.path.join(os.path.expanduser("~"), ".vscode", "extensions", "anthropic.claude-code-*", "resources",
-                       "native-binary", "claude.exe")
-
-    def khoa(p: str) -> Tuple[int, ...]:
-        m = re.search(r"claude-code-([\d.]+)", p)
-        return tuple(int(x) for x in m.group(1).split(".") if x.isdigit()) if m else (0,)
-
-    ds = sorted(glob.glob(mau), key=khoa, reverse=True)
-    return ds[0] if ds else ""
+    return claude_code.tim_claude(goc)
 
 
-def moi_truong_phien(goc: str = GOC) -> Tuple[Dict[str, str], str]:
-    """`(env, khoá để che log)`. Khoá/địa chỉ ví lấy từ `core.config` (không in ra đâu cả)."""
+def phien_qua_max(goc: str = GOC) -> bool:
+    """Phiên não chạy trên THUÊ BAO Claude Max của máy (đăng nhập sẵn) thay vì khoá ShopAPI?
+
+    Chủ dự án 12/10/2026: *"llm dùng claude 20x chính hãng"* — cùng công tắc với mọi việc viết chữ
+    (`core.viet_max.duong_viet_chu`: Cài đặt → "Viết chữ bằng"). Lỗi dò → ví (đường cũ)."""
+    try:
+        from .viet_max import duong_viet_chu  # noqa: PLC0415
+
+        return duong_viet_chu(goc)[0] == "max"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def moi_truong_phien(goc: str = GOC, qua_max: Optional[bool] = None) -> Tuple[Dict[str, str], str]:
+    """`(env, khoá để che log)`. Khoá/địa chỉ ví lấy từ `core.config` (không in ra đâu cả).
+
+    `qua_max` (mặc định: theo `phien_qua_max`) → môi trường ĐÃ GỠ SẠCH mọi biến khoá
+    (`claude_code.moi_truong_max`): Claude Code chạy bằng phiên đăng nhập Max của máy, khoá ShopAPI không bao giờ
+    thành biến môi trường của nó. Khoá vẫn được trả về để `_che` che nếu nó lỡ lọt vào log."""
     from . import claude_code  # noqa: PLC0415
     from .config import load_config  # noqa: PLC0415
 
     cau = load_config(os.path.join(goc, "config.json"))
     khoa = (cau.api_key or "").strip()
-    mt = claude_code.moi_truong(khoa, cau.base_url or "")
+    if qua_max is None:
+        qua_max = phien_qua_max(goc)
+    if qua_max:
+        mt = claude_code.moi_truong_max()
+        mt["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    else:
+        mt = claude_code.moi_truong(khoa, cau.base_url or "")
     mt["PYTHONPATH"] = goc + (os.pathsep + mt["PYTHONPATH"] if mt.get("PYTHONPATH") else "")
     mt["PYTHONIOENCODING"] = "utf-8"
     mt["PYTHONUTF8"] = "1"
@@ -1359,6 +1375,44 @@ def _chay_mot_lan(lenh: List[str], loi_nhac: str, goc: str, mt: Dict[str, str], 
     return kq
 
 
+def _them_co_max(lenh: List[str]) -> List[str]:
+    """Phiên trên thuê bao Max — quyền/sandbox giữ nguyên, chỉ BỚT đi:
+
+    * `--strict-mcp-config` (không kèm `--mcp-config`): không nạp máy chủ MCP nào của tài khoản claude.ai.
+    * `--setting-sources project,local`: không nạp `~/.claude/settings.json` — ở đó máy khách có thể bị Studio cắm
+      khoá ShopAPI vào `env` (`claude_code.cai_vao_may`), và Claude Code thấy khoá là dùng khoá thay phiên đăng nhập.
+      Quyền của phiên não đến từ cờ `--allowedTools/--disallowedTools` (`cong_cu`), không từ tệp ấy."""
+    if "--strict-mcp-config" in lenh:
+        return list(lenh)
+    return list(lenh[:2]) + ["--strict-mcp-config", "--setting-sources", "project,local"] + list(lenh[2:])
+
+
+#: Phiên não đợi suất Claude (chung với đường viết chữ, `core.viet_max.giu_suat`) tối đa ngần này giây; quá thì vẫn
+#: chạy (một phiên/ngày — không được vì kẹt suất mà mất buổi sáng) và ghi rõ vào log.
+GIAY_CHO_SUAT_PHIEN = 45 * 60
+
+
+def _chay_mot_lan_co_suat(lenh: List[str], loi_nhac: str, goc: str, mt: Dict[str, str], khoa: str, ghi: Any,
+                          qua_max: bool, mo_hinh: str) -> Dict[str, Any]:
+    """`_chay_mot_lan`, nhưng trên thuê bao Max thì giữ một SUẤT tiến trình `claude` của máy (trần chung với mọi việc
+    viết chữ) và ghi sổ dùng thuê bao (`workspace/viet-max/so-dung.jsonl`) — để nhìn được tải thuê bao cả máy."""
+    if not qua_max:
+        return _chay_mot_lan(lenh, loi_nhac, goc, mt, khoa, ghi)
+    from . import viet_max  # noqa: PLC0415
+
+    try:
+        with viet_max.giu_suat(goc, viec="nao:phien", cho_toi_da=GIAY_CHO_SUAT_PHIEN, gio_han=GIO_HET_GIO_PHIEN):
+            kq = _chay_mot_lan(lenh, loi_nhac, goc, mt, khoa, ghi)
+    except viet_max.HetGioChoSuat:
+        ghi("đợi suất Claude quá {0} phút (máy đang viết nhiều) — chạy phiên không giữ suất".format(
+            GIAY_CHO_SUAT_PHIEN // 60))
+        kq = _chay_mot_lan(lenh, loi_nhac, goc, mt, khoa, ghi)
+    viet_max.ghi_so_dung(goc, {"mo_hinh": mo_hinh, "giay": kq.get("giay"), "ok": kq.get("ma") == 0 and not kq.get("loi"),
+                               "viec": "nao:phien", "luot": kq.get("luot"), "usd_uoc": kq.get("usd"),
+                               "loi": "" if kq.get("ma") == 0 else _cat(" | ".join(kq.get("hang_cuoi") or []), 160)})
+    return kq
+
+
 def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Optional[_dt.datetime] = None) -> int:
     """Một phiên não. Mã thoát: 0 xong (hoặc đã có phiên hôm nay) · 1 hỏng · 3 đang có phiên khác."""
     bay_gio = bay_gio or _dt.datetime.now()
@@ -1377,7 +1431,15 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
         print("Không tìm thấy Claude Code (claude) trên máy.")
         return 1
     loi_nhac = CAU_HOI_PHIEN.format(hom_nay)
-    lenh = lenh_phien(duong, goc)
+    qua_max = phien_qua_max(goc)
+    mo_hinh = MO_HINH_PHIEN
+    if qua_max:
+        from . import viet_max  # noqa: PLC0415
+
+        mo_hinh = viet_max.mo_hinh_dang_dung(goc)
+    lenh = lenh_phien(duong, goc, mo_hinh=mo_hinh)
+    if qua_max:
+        lenh = _them_co_max(lenh)
     if thu:
         print(" ".join(lenh) + "\n(stdin) " + loi_nhac)
         return 0
@@ -1385,21 +1447,41 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
         print("Đang có phiên khác chạy (khoá nao/.khoa-phien) — thoát.")
         return 3
     f = io.open(duong_log, "a", encoding="utf-8", newline="\n")
-    mt, khoa = moi_truong_phien(goc)
+    mt, khoa = moi_truong_phien(goc, qua_max=qua_max)
 
     def ghi(chu: str) -> None:
         f.write(_che("{0} {1}\n".format(time.strftime("%H:%M:%S"), chu), khoa))
         f.flush()
 
     try:
-        ghi("=== BAT DAU PHIEN {0} · model {1} · tối đa {2} lượt · hết giờ {3} phút".format(
-            hom_nay, MO_HINH_PHIEN, SO_LUOT_TOI_DA, GIO_HET_GIO_PHIEN // 60))
+        ghi("=== BAT DAU PHIEN {0} · model {1} · {2} · tối đa {3} lượt · hết giờ {4} phút".format(
+            hom_nay, mo_hinh, "thuê bao Claude Max của máy" if qua_max else "ví ShopAPI",
+            SO_LUOT_TOI_DA, GIO_HET_GIO_PHIEN // 60))
         ghi("lệnh: " + " ".join(lenh[:1] + lenh[1:]))
-        kq = _chay_mot_lan(lenh, loi_nhac, goc, mt, khoa, ghi)
+        kq = _chay_mot_lan_co_suat(lenh, loi_nhac, goc, mt, khoa, ghi, qua_max, mo_hinh)
         txt = " ".join(kq["hang_cuoi"]).lower()
         if kq["ma"] != 0 and not kq["ket"] and "max-turns" in txt and ("unknown" in txt or "unrecognized" in txt):
             ghi("bản claude không nhận --max-turns — chạy lại không có cờ này")
-            kq = _chay_mot_lan(lenh_phien(duong, goc, so_luot=None), loi_nhac, goc, mt, khoa, ghi)
+            lenh = lenh_phien(duong, goc, mo_hinh=mo_hinh, so_luot=None)
+            kq = _chay_mot_lan_co_suat(_them_co_max(lenh) if qua_max else lenh, loi_nhac, goc, mt, khoa, ghi,
+                                       qua_max, mo_hinh)
+        # Thuê bao cạn hạn mức model này → khoá bậc ấy (sổ chung với đường viết chữ) và chạy lại MỘT lần bằng
+        # bậc dưới. Không đợi: cửa sổ hạn mức mở lại tính bằng giờ (xem `core.viet_max.THANG_MO_HINH`).
+        if qua_max and (kq["ma"] != 0 or kq.get("loi")):
+            from . import viet_max  # noqa: PLC0415
+
+            loi_tho = RuntimeError(" ".join([str(kq.get("ket") or "")] + list(kq.get("hang_cuoi") or [])))
+            vi_sao = viet_max.ly_do_tut_bac(loi_tho)
+            if vi_sao:
+                viet_max.ghi_han_muc(goc, mo_hinh, viet_max.gio_mo_lai(loi_tho, time.time()) if vi_sao == "han_muc"
+                                     else time.time() + viet_max.GIAY_KHOA_MODEL_HONG)
+                ke = viet_max.mo_hinh_dang_dung(goc)
+                if ke != mo_hinh:
+                    ghi("{0} {1} — chạy lại bằng {2}.".format(
+                        mo_hinh, "cạn hạn mức thuê bao" if vi_sao == "han_muc" else "máy không dùng được", ke))
+                    mo_hinh = ke
+                    lenh = _them_co_max(lenh_phien(duong, goc, mo_hinh=mo_hinh))
+                    kq = _chay_mot_lan_co_suat(lenh, loi_nhac, goc, mt, khoa, ghi, qua_max, mo_hinh)
         nk = os.path.join(duong_nao(goc), "nhat-ky", hom_nay + ".md")
         thanh_cong = kq["ma"] == 0 and not kq["loi"] and not kq.get("het_gio") and os.path.isfile(nk)   # phải có nhật ký
         ghi("KET QUA: {0} · mã {1} · {2} lượt · {3}s · chi phí ước tính {4} USD{5}".format(
@@ -1413,7 +1495,8 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
         try:
             with io.open(os.path.join(duong_nao(goc), "nhat-ky", "chi-phi.jsonl"), "a", encoding="utf-8", newline="\n") as c:
                 c.write(json.dumps({"ngay": hom_nay, "usd_uoc_tinh": kq["usd"], "luot": kq["luot"], "giay": kq["giay"],
-                                    "model": MO_HINH_PHIEN, "thanh_cong": thanh_cong}, ensure_ascii=False) + "\n")
+                                    "model": mo_hinh, "duong": "claude_max" if qua_max else "vi",
+                                    "thanh_cong": thanh_cong}, ensure_ascii=False) + "\n")
         except OSError:
             pass
         print("Phiên {0}: {1} lượt, {2}s, ~{3} USD. Log: {4}".format("xong" if thanh_cong else "HỎNG", kq["luot"], kq["giay"],

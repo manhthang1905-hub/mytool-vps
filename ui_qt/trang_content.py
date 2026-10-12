@@ -451,23 +451,22 @@ def _goi_mo_hinh(client, yeu_cau: str) -> str:
 def _dung_goi_mo_hinh(app):
     """Hàm `(lời nhắc) -> chữ` cho tab này, hoặc `None` khi chưa có đường nào.
 
-    Máy bật "Kịch bản viết bằng Claude Code" (Cài đặt) thì chữ ở đây cũng đi
-    thuê bao Claude — chủ dự án, 24/08/2026: *"đã nói máy này là claude max 20
-    thì cứ thế mà làm"*. Không bật thì đi ví như trước, và chưa có khoá thì trả
-    `None` để nơi gọi hiện hộp "cần đăng nhập".
+    Máy viết chữ bằng thuê bao Claude Max (Cài đặt → "Viết chữ bằng", mặc định
+    tự động theo máy) thì chữ ở đây cũng đi thuê bao — chủ dự án, 24/08/2026:
+    *"đã nói máy này là claude max 20 thì cứ thế mà làm"*. Không thì đi ví như
+    trước, và chưa có khoá thì trả `None` để nơi gọi hiện hộp "cần đăng nhập".
     """
-    from core import cai_dat  # noqa: PLC0415
-
     try:
-        bat = bool(cai_dat.doc(app.base_dir).get("kich_ban_bang_claude_code"))
-    except Exception:  # noqa: BLE001
-        bat = False
-    if bat:
-        from core.viet_max import co_claude_code, dung_goi_chat_max  # noqa: PLC0415
+        from core.viet_max import duong_viet_chu  # noqa: PLC0415
 
-        if co_claude_code():
-            goi_max = dung_goi_chat_max(app.base_dir)
-            return lambda yeu_cau: goi_max(_CHI_TRA_NOI_DUNG + "\n\n" + yeu_cau)
+        duong = duong_viet_chu(app.base_dir)[0]
+    except Exception:  # noqa: BLE001
+        duong = "vi"
+    if duong == "max":
+        from core.viet_max import dung_goi_chat_max  # noqa: PLC0415
+
+        goi_max = dung_goi_chat_max(app.base_dir)
+        return lambda yeu_cau: goi_max(_CHI_TRA_NOI_DUNG + "\n\n" + yeu_cau)
     client = getattr(app, "client", None)
     if client is None:
         return None

@@ -35,8 +35,10 @@ sản xuất (cùng nết `core.kiem_trung_y`). Không import Qt.
 
 `GET /v1/models` của ShopAPI (đo 29/09/2026) liệt kê `claude-sonnet-5`, `claude-opus-5`,
 `claude-fable-5` — CÙNG GIÁ (3.500 µVND/token vào, 17.500 µVND/token ra). Fable là bậc mạnh
-nhất (`core/viet_max.THANG_MO_HINH`), nên bước này mặc định Fable, lùi Opus rồi Sonnet khi
-lượt gọi hỏng. `kenh.yaml: mo_hinh_bien_tap` đặt được mô hình khác (đứng đầu thang).
+nhất của ví, nên bước này mặc định Fable, lùi Opus rồi Sonnet khi lượt gọi hỏng.
+`kenh.yaml: mo_hinh_bien_tap` đặt được mô hình khác (đứng đầu thang). Máy viết chữ bằng thuê bao
+Claude Max (12/10/2026, `core/viet_max.py`) thì thang này không với tới: lượt gọi đi thang của
+thuê bao (đầu thang claude-opus-5-5, Cài đặt chỉnh được).
 
 Một lượt ~20–30k token vào + ~1–2k token ra ≈ 100–150 đồng. Cái đắt là THỜI GIAN: nguồn LLM
 chạy 2–8 token/giây ban ngày (`goi_van_ban.han_cho_theo_token`), nên đầu ra được giữ GỌN

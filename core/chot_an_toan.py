@@ -32,7 +32,7 @@ from . import ban_quyen_windows as bq
 from . import van_vi
 
 __all__ = ["kiem_tat_ca", "kiem_vi", "kiem_license", "kiem_han_vps", "kiem_giong_trung",
-           "doc_trang_thai"]
+           "kiem_claude_max", "doc_trang_thai"]
 
 ChayLenh = Callable[[List[str]], Tuple[int, str]]
 
@@ -366,6 +366,78 @@ def kiem_giong_trung(goc: str) -> List[Dict[str, Any]]:
     return ra
 
 
+# ═══ 5) THUÊ BAO CLAUDE MAX (đường viết chữ, 12/10/2026) ══════════════════════
+
+#: Sự cố còn được tính là "đang xảy ra" trong ngần này giờ kể từ lần cuối đường viết ghi nhận (lượt viết sau mà được
+#: thì `core.viet_max` tự xoá sự cố — không cần chờ hết hạn).
+GIO_CON_HIEU_LUC_CAN_THANG = 7.0
+GIO_CON_HIEU_LUC_DANG_NHAP = 24.0
+GIO_CON_HIEU_LUC_HONG = 6.0
+#: Hỏng (không phải hạn mức, không phải đăng nhập) bao nhiêu lượt viết liền mới báo — một lần lẻ thì tool tự thử lại.
+SO_LAN_HONG_THI_BAO = 3
+
+
+def kiem_claude_max(goc: str, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[str, Any]]:
+    """Đọc `workspace/viet-max/trang-thai.json` (do `core.viet_max` ghi) → sự cố cho "Việc của bạn".
+
+    Cạn hạn mức cả thang model: tool tự ĐỢI rồi chạy tiếp (không rẽ ví) — vẫn phải hiện để chủ biết vì sao video ra
+    chậm. Chưa đăng nhập: chỉ người làm được (/login). Không đọc được tệp → không có sự cố."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    try:
+        from . import viet_max  # noqa: PLC0415
+
+        tt = viet_max.doc_trang_thai(goc)
+    except Exception:  # noqa: BLE001
+        return []
+    gio = bay_gio.timestamp()
+    ra: List[Dict[str, Any]] = []
+
+    def _con(muc: Any, gio_hl: float) -> bool:
+        try:
+            return isinstance(muc, dict) and gio - float(muc.get("luc") or 0) < gio_hl * 3600.0
+        except (TypeError, ValueError):
+            return False
+
+    can = tt.get("can_thang")
+    if _con(can, GIO_CON_HIEU_LUC_CAN_THANG):
+        try:
+            mo = _dt.datetime.fromtimestamp(float(can.get("mo_lai") or 0)).strftime("%H:%M %d/%m")
+        except (TypeError, ValueError, OSError, OverflowError):
+            mo = "?"
+        ra.append(_su_co(
+            "claude_max_can_han_muc", _muc("khan"),
+            "Thuê bao Claude Max của máy đã cạn hạn mức ở mọi model — phần viết chữ (kịch bản, tiêu đề, chọn "
+            "content…) đang ĐỢI, dự kiến mở lại khoảng {0} rồi tự chạy tiếp.".format(mo),
+            "Không bắt buộc: đợi là tool tự viết tiếp. Muốn chạy ngay thì thêm hạn mức ở claude.ai/settings/usage, "
+            "hoặc vào Cài đặt → Viết chữ bằng → Ví ShopAPI.",
+            "Video ra chậm tới khi hạn mức mở lại; tool KHÔNG tự chuyển sang ví.",
+            khoa="claude_max:can_han_muc", lap_gio=LAP_VI_GIO))
+    dn = tt.get("chua_dang_nhap")
+    if _con(dn, GIO_CON_HIEU_LUC_DANG_NHAP):
+        ra.append(_su_co(
+            "claude_max_chua_dang_nhap", _muc("khan"),
+            "Claude Code trên máy không viết được: chưa đăng nhập hoặc phiên đăng nhập thuê bao Claude đã hết hạn.",
+            "Mở Claude Code trên máy này (VS Code hoặc terminal), gõ /login và đăng nhập lại tài khoản Claude Max. "
+            "Xong tool tự chạy lại.",
+            "Mọi khâu viết chữ dừng — không có kịch bản/tiêu đề mới, kênh ngừng ra video.",
+            khoa="claude_max:dang_nhap", lap_gio=LAP_VI_GIO))
+    hong = tt.get("hong")
+    try:
+        lan = int((hong or {}).get("lan") or 0) if isinstance(hong, dict) else 0
+    except (TypeError, ValueError):
+        lan = 0
+    if _con(hong, GIO_CON_HIEU_LUC_HONG) and lan >= SO_LAN_HONG_THI_BAO:
+        ra.append(_su_co(
+            "claude_max_hong", _muc("khan"),
+            "Claude Code trên máy hỏng {0} lượt viết liền (lỗi cuối: {1}).".format(
+                lan, str(hong.get("loi") or "?")[:160]),
+            "Xem workspace/viet-max/loi-gan-nhat.txt. Thường là mạng tới Anthropic chập hoặc Claude Code cần cập nhật "
+            "(mở VS Code để extension tự cập nhật). Tool vẫn tự thử lại.",
+            "Các khâu viết chữ hỏng theo — video không ra.",
+            khoa="claude_max:hong", lap_gio=LAP_VI_GIO))
+    return ra
+
+
 # ═══ GỘP ═════════════════════════════════════════════════════════════════════
 
 
@@ -406,4 +478,8 @@ def kiem_tat_ca(goc: str, bay_gio: Optional[_dt.datetime] = None, *, client: Any
         su_co += kiem_giong_trung(goc)
     except Exception as loi:  # noqa: BLE001
         su_co.append(_hong("giong", loi))
+    try:
+        su_co += kiem_claude_max(goc, bay_gio)
+    except Exception as loi:  # noqa: BLE001
+        su_co.append(_hong("claude_max", loi))
     return {"su_co": su_co, "so_du_vnd": so_du, "license_ngay": ngay_lic}

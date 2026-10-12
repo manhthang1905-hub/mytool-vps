@@ -260,9 +260,14 @@ def vi_cho_phep(goc: str) -> str:
 
 
 def goi_chat_that(goc: str, ghi: Optional[Callable[[str], None]] = None) -> Optional[Callable[..., str]]:
-    """Hàm gọi AI qua ví ShopAPI (client như `tram_nen._bo_viet_ho`); None khi van ví đang chặn."""
+    """Hàm gọi AI viết chữ (client như `tram_nen._bo_viet_ho`); None khi van ví đang chặn.
+
+    Máy viết chữ bằng thuê bao Claude Max (`goi_van_ban.dung_thue_bao`, 12/10/2026) thì lượt gọi KHÔNG tiêu ví →
+    van ví không chặn, và không cần dựng client ShopAPI (`goi_van_ban` tự rẽ sang Claude Code)."""
+    from ..goi_van_ban import dung_thue_bao  # noqa: PLC0415
+
     ly = vi_cho_phep(goc)
-    if ly:
+    if ly and not dung_thue_bao(goc):
         if ghi:
             ghi("  [giám đốc] không gọi AI: " + ly)
         return None
@@ -273,6 +278,9 @@ def goi_chat_that(goc: str, ghi: Optional[Callable[[str], None]] = None) -> Opti
 
         from ..goi_van_ban import goi_van_ban, tin_nhan_viet  # noqa: PLC0415
 
+        if dung_thue_bao(goc):
+            return goi_van_ban(None, tin_nhan_viet(de_bai), mo_hinh=mo_hinh, toi_da_token=int(toi_da_token),
+                               khoa=khoa, on_log=ghi, goc=goc)
         if "client" not in hop:
             from ..api import build_client  # noqa: PLC0415
             from ..config import CONFIG_FILENAME, load_config  # noqa: PLC0415

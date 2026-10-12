@@ -48,7 +48,30 @@ MUC_RIENG = ("do_phan_giai", "muc_song_song",
              "auto_so_song_song",
              # Kênh chọn lần cuối ở tab Tự động: chính ô "Kênh" của tab ấy là
              # nơi chỉnh — tool chỉ nhớ hộ, không cần ô ở đây.
-             "auto_kenh_cuoi")
+             "auto_kenh_cuoi",
+             # Thẻ "Viết chữ (AI)" — `_the_viet_chu` (12/10/2026).
+             "viet_chu_bang", "claude_max_mo_hinh", "claude_max_suy_nghi",
+             "claude_max_song_song",
+             # Ô cũ "Kịch bản viết bằng Claude Code" — đã thay bằng ô "Viết chữ
+             # bằng" ở thẻ trên; khoá giữ lại chỉ để máy đã bật vẫn hiểu đúng
+             # (xem `core/cai_dat.py`). Đổi ô mới là tool tự gỡ khoá cũ.
+             "kich_ban_bang_claude_code")
+
+#: Ô "Viết chữ bằng", `(khoá lưu, nhãn)`.
+VIET_CHU_BANG = (
+    ("tu_dong", "Tự động"),
+    ("claude_max", "Claude Max của máy"),
+    ("vi", "Ví ShopAPI"),
+)
+
+#: Ô "Mức suy nghĩ", `(khoá lưu, nhãn)`.
+SUY_NGHI = (
+    ("low", "Nhanh"),
+    ("medium", "Vừa"),
+    ("high", "Kỹ (nên dùng)"),
+    ("xhigh", "Rất kỹ"),
+    ("max", "Tối đa"),
+)
 
 #: Nguồn Chrome cho tab Chrome sạch, `(khoá lưu, nhãn)`.
 NGUON_CHROME = (
@@ -115,17 +138,6 @@ MUC = (
      "trước khi cho chạy hàng loạt.\n"
      "Tốn thêm vài lượt gọi AI viết chữ mỗi lượt chạy — loại rẻ, không phải "
      "loại đắt như ảnh hay clip."),
-    ("kich_ban_bang_claude_code", "Kịch bản viết bằng Claude Code",
-     "Tắt sẵn. Chỉ bật nếu máy này đã cài Claude Code và đăng nhập gói thuê "
-     "bao Claude (Pro/Max) của chính bạn.\n"
-     "Bật thì khâu KỊCH BẢN của tab Tự động viết bằng thuê bao đó — không trừ "
-     "ví ShopAPI cho phần viết chữ. Ảnh, clip, giọng đọc và lời nhắc ảnh/video "
-     "vẫn chạy qua ví ShopAPI như cũ.\n"
-     "Khoá ShopAPI KHÔNG được đưa vào Claude Code: lượt viết chạy bằng phiên "
-     "đăng nhập của máy, trong một thư mục rỗng, không đọc được gì của tool.\n"
-     "Bật rồi thì kịch bản CHỈ đi Claude Code: trục trặc tôi thử lại nhiều "
-     "lần, không lặng lẽ chuyển sang ví. Máy chưa cài Claude Code thì tôi báo "
-     "ngay lúc bấm Chạy để bạn cài hoặc tắt nút này."),
     ("doi_cao_do_giong", "Đổi nhẹ cao độ giọng đọc",
      "Tắt sẵn. Đây là nút DUY NHẤT trong nhóm này đụng vào chính nội dung, chứ "
      "không chỉ vào thẻ dữ liệu — nên nó tách riêng.\n"
@@ -156,6 +168,7 @@ class TrangCaiDat(QWidget):
 
         doc.addWidget(BangCapNhat(app))
         doc.addWidget(self._the_cap_nhat())
+        doc.addWidget(self._the_viet_chu())
         doc.addWidget(self._the_video())
         doc.addWidget(self._the_song_song())
         doc.addWidget(self._the_chrome_sach())
@@ -189,6 +202,124 @@ class TrangCaiDat(QWidget):
             v.addWidget(mo)
             self._o[khoa] = o
         return khung
+
+    # ── Viết chữ (AI): thuê bao Claude Max hay ví ────────────────────────────
+
+    def _the_viet_chu(self) -> QWidget:
+        """Chủ dự án 12/10/2026: *"llm dùng claude 20x chính hãng"* — mọi việc viết chữ đi thuê bao Claude Max của
+        máy khi máy có; ảnh/clip/giọng và lời nhắc ảnh/clip vẫn đi ví. Xem `core/viet_max.py`."""
+        from core import viet_max  # noqa: PLC0415
+
+        khung = the()
+        v = QVBoxLayout(khung)
+        v.setContentsMargins(20, 16, 20, 18)
+        v.setSpacing(6)
+        v.addWidget(nhan("Viết chữ (AI)", "h2"))
+        v.addWidget(self._phu(
+            "Kịch bản, tiêu đề, mô tả, chữ bìa, chọn content, giám đốc kênh — mọi việc viết chữ. Ảnh, clip, "
+            "giọng đọc và lời nhắc ảnh/clip vẫn đi ví ShopAPI."))
+        dang = cai_dat.doc(self._app.base_dir)
+
+        hang = HangXuongDong()
+        hang.addWidget(nhan("Viết chữ bằng:", "phu"))
+        self._o_vcb = QComboBox()
+        for _k, nhan_o in VIET_CHU_BANG:
+            self._o_vcb.addItem(nhan_o)
+        ds_vcb = [k for k, _n in VIET_CHU_BANG]
+        vcb = str(dang.get("viet_chu_bang") or "tu_dong")
+        self._o_vcb.setCurrentIndex(ds_vcb.index(vcb) if vcb in ds_vcb else 0)
+        self._o_vcb.setFixedWidth(180)
+        self._o_vcb.currentIndexChanged.connect(self._doi_vcb)
+        hang.addWidget(self._o_vcb)
+
+        hang.addWidget(nhan("Model:", "phu"))
+        self._o_mh = QComboBox()
+        self._o_mh.addItems(list(viet_max.MO_HINH_DAU_CHON_DUOC))
+        mh = str(dang.get("claude_max_mo_hinh") or viet_max.MO_HINH_TOT_NHAT)
+        if self._o_mh.findText(mh) < 0:
+            self._o_mh.addItem(mh)
+        self._o_mh.setCurrentIndex(max(0, self._o_mh.findText(mh)))
+        self._o_mh.setFixedWidth(170)
+        self._o_mh.currentTextChanged.connect(lambda t: self._dat_viet_chu("claude_max_mo_hinh", str(t)))
+        hang.addWidget(self._o_mh)
+        v.addLayout(hang)
+
+        hang2 = HangXuongDong()
+        hang2.addWidget(nhan("Suy nghĩ:", "phu"))
+        self._o_sn = QComboBox()
+        for _k, nhan_o in SUY_NGHI:
+            self._o_sn.addItem(nhan_o)
+        ds_sn = [k for k, _n in SUY_NGHI]
+        sn = str(dang.get("claude_max_suy_nghi") or viet_max.SUY_NGHI_MAC_DINH)
+        self._o_sn.setCurrentIndex(ds_sn.index(sn) if sn in ds_sn else ds_sn.index("high"))
+        self._o_sn.setFixedWidth(150)
+        self._o_sn.currentIndexChanged.connect(
+            lambda i: self._dat_viet_chu("claude_max_suy_nghi", ds_sn[i]) if 0 <= i < len(ds_sn) else None)
+        hang2.addWidget(self._o_sn)
+
+        hang2.addWidget(nhan("Cùng lúc:", "phu"))
+        self._o_cl = QComboBox()
+        for n in range(1, viet_max.SONG_SONG_TOI_DA + 1):
+            self._o_cl.addItem("{0} tiến trình".format(n))
+        try:
+            cl = int(dang.get("claude_max_song_song") or viet_max.SONG_SONG_MAC_DINH)
+        except (TypeError, ValueError):
+            cl = viet_max.SONG_SONG_MAC_DINH
+        self._o_cl.setCurrentIndex(max(0, min(viet_max.SONG_SONG_TOI_DA, cl) - 1))
+        self._o_cl.setFixedWidth(130)
+        self._o_cl.currentIndexChanged.connect(lambda i: self._dat_viet_chu("claude_max_song_song", int(i) + 1))
+        hang2.addWidget(self._o_cl)
+        v.addLayout(hang2)
+
+        self._nhan_vcb = self._phu("")
+        v.addWidget(self._nhan_vcb)
+        v.addWidget(self._phu(
+            "Tự động: máy có Claude Code đã đăng nhập gói Claude (Pro/Max) thì viết bằng gói đó — không trừ ví; "
+            "máy không có thì đi ví như cũ. Khoá ShopAPI KHÔNG bao giờ được đưa vào Claude Code.\n"
+            "Hết hạn mức model đầu thì tôi tụt dần (Opus 5 → Sonnet 5.5 → Sonnet 5). Cạn cả thang thì tôi ĐỢI "
+            "hạn mức mở lại rồi tự viết tiếp, báo ở “Việc của bạn” — không lặng lẽ chuyển sang ví, không viết bằng "
+            "model yếu.\n"
+            "Cùng lúc: mỗi tiến trình vài trăm MB RAM và cùng ăn một hạn mức gói Claude; việc nhiều hơn thì xếp "
+            "hàng."))
+        self._ve_viet_chu()
+        return khung
+
+    def _ve_viet_chu(self) -> None:
+        from core import viet_max  # noqa: PLC0415
+
+        goc = self._app.base_dir
+        try:
+            viet_max.xoa_nho_duong()
+            duong, ly_do = viet_max.duong_viet_chu(goc)
+            chu = {"max": "Đang viết bằng gói Claude của máy — model {0}.".format(viet_max.mo_hinh_dang_dung(goc)),
+                   "vi": "Đang viết bằng ví ShopAPI ({0}).".format(ly_do),
+                   "loi": "CHÚ Ý: " + ly_do}.get(duong, ly_do)
+            tom = viet_max.tom_tat_so_dung(goc, 24.0)
+            if tom.get("luot"):
+                chu += " 24 giờ qua: {0} lượt, {1:.0f} phút chạy{2}.".format(
+                    tom["luot"], float(tom.get("giay") or 0) / 60.0,
+                    ", {0} lượt hỏng".format(tom["hong"]) if tom.get("hong") else "")
+        except Exception as loi:  # noqa: BLE001 — dòng trạng thái không được làm hỏng trang
+            chu = "Chưa đọc được trạng thái viết chữ: {0}".format(str(loi)[:120])
+        self._nhan_vcb.setText(chu)
+
+    def _doi_vcb(self, chi_so: int) -> None:
+        if not 0 <= chi_so < len(VIET_CHU_BANG):
+            return
+        # Chọn ô mới là chọn thật — gỡ khoá cũ "kich_ban_bang_claude_code" để hai ô không cãi nhau.
+        cai = cai_dat.doc(self._app.base_dir)
+        cai["viet_chu_bang"] = VIET_CHU_BANG[chi_so][0]
+        cai["kich_ban_bang_claude_code"] = False
+        if not cai_dat.ghi(self._app.base_dir, cai):
+            self._app.show_message(
+                "Không lưu được cài đặt",
+                "Tôi không ghi được vào thư mục workspace. Bạn kiểm tra xem ổ "
+                "đĩa còn chỗ trống không.")
+        self._ve_viet_chu()
+
+    def _dat_viet_chu(self, khoa: str, gia_tri) -> None:
+        self._dat(khoa, gia_tri)
+        self._ve_viet_chu()
 
     def _the_video(self) -> QWidget:
         khung = the()
