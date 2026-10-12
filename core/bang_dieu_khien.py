@@ -1142,12 +1142,13 @@ def da_tu_xu_ly(goc: str, khoa: str, bay_gio: Optional[_dt.datetime] = None) -> 
         return False
 
 
-def goi_y_giam_doc(goc: str, ma: str) -> List[Dict[str, str]]:
-    """Gợi ý của giám đốc kênh KHÔNG cần người (xem `viec_gd_can_nguoi`) — hiện ở "Đội AI nói"."""
+def goi_y_giam_doc(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None) -> List[Dict[str, str]]:
+    """Gợi ý của giám đốc kênh KHÔNG cần người (xem `viec_gd_can_nguoi`) — hiện ở "Đội AI nói". `bay_gio` = đồng
+    hồ của người gọi (None = bây giờ) — cùng đồng hồ với `viec_cua_ban`, để báo cáo ≤ 8 ngày tuổi tính như nhau."""
     try:
         from . import giam_doc as _gd  # noqa: PLC0415
 
-        ds = [c for c in _gd.viec_cua_ban_kenh(goc, ma) if not viec_gd_can_nguoi(c)]
+        ds = [c for c in _gd.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio) if not viec_gd_can_nguoi(c)]
     except Exception:  # noqa: BLE001
         return []
     return [{"ai": "Giám đốc gợi ý", "cau": _mot_cau(c, 220), "luc": ""} for c in ds[:3]]
@@ -1263,6 +1264,25 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 chu="Số liệu Studio cũ {0:.0f} ngày".format(tuoi_gio / 24.0),
                 goi_y="→ mở Nghiên cứu để quét lại số liệu",
                 nut=[("Nhật ký", "nhat_ky", {"ma": ma})]))
+
+    # 15b) Kênh không được YouTube phát (12/10/2026, `core/kenh_khong_phat.py`): máy đã dừng làm video MỚI; việc chỉ
+    # NGƯỜI làm được — mở Studio kiểm 6 mục. "Đã kiểm Studio" ghi `viec-da-xong.json` → bộ phát hiện đọc làm mốc xoá cờ.
+    try:
+        from . import kenh_khong_phat as _kp  # noqa: PLC0415
+
+        for k in kenh_ds:
+            ma = str(k.get("ma") or "")
+            v = _kp.viec_cua_ban(goc, ma, bay_gio=bay_gio)
+            if not v or v["khoa"] in da_xong:
+                continue
+            ra.append(_viec(
+                v["khoa"], HONG, kenh=ma, chu=v["chu"], goi_y=v["goi_y"],
+                nut=[("Chi tiết", "xem_chu", {"tieu_de": "Kiểm Studio kênh {0}".format(ma), "noi_dung": v["chi_tiet"]}),
+                     ("Mở Studio", "chep_link", {"url": "https://studio.youtube.com"}),
+                     ("Đã kiểm Studio", "danh_dau_xong", {"khoa": v["khoa"]})],
+                xong_tay=True))
+    except Exception:  # noqa: BLE001 — bộ phát hiện hỏng không làm hỏng khối việc
+        pass
 
     # 14) Người gác tổng (core.gac_tong, lịch ShopAPI-GacTong mỗi 15') phát
     # hiện sự cố "chế độ chạy max" mà các kiểm phía trên (đọc trực tiếp
@@ -1446,7 +1466,30 @@ def con_thieu_ypp(ypp: Dict[str, Any]) -> str:
                 else "đủ giờ xem ({0}/{1})".format(vn(gio), vn(YPP_GIO)))
     if sub >= YPP_SUB and gio >= YPP_GIO:
         return "Đã đủ điều kiện bật kiếm tiền ({0} sub · {1} giờ xem)".format(vn(sub), vn(gio))
-    return "Còn thiếu để bật kiếm tiền: " + " · ".join(phan)
+    duoi = ""
+    if (ypp or {}).get("sub_tron_doi"):
+        # 12/10/2026: số sub TRỌN ĐỜI (Studio thời gian thực, `_ypp_that`) — không còn là sub mới 28 ngày trượt.
+        duoi = " (sub trọn đời {0})".format(vn(sub))
+    return "Còn thiếu để bật kiếm tiền: " + " · ".join(phan) + duoi
+
+
+def _ypp_that(goc: str, ma: str, ypp: Dict[str, Any]) -> Dict[str, Any]:
+    """`trung_tam.ypp()` (tổng 28 ngày TRƯỢT của kenh-theo-ngay.csv) + số TRỌN ĐỜI khi Studio có (12/10/2026,
+    `core.chi_so_kenh`): sub = thẻ thời gian thực (`sub_tron_doi: True`), giờ xem = cộng chuỗi ngày nếu lớn hơn. Hỏng →
+    bản gốc."""
+    ra = dict(ypp or {})
+    try:
+        from . import chi_so_kenh  # noqa: PLC0415
+
+        s = chi_so_kenh.sub_tron_doi(goc, ma)
+        if s.get("so") is not None:
+            ra.update(dang_ky=float(s["so"]), sub_tron_doi=True)
+        g = chi_so_kenh.gio_xem(goc, ma)
+        if g.get("gio_365") is not None and float(g["gio_365"]) > float(_so(ra.get("gio_xem")) or 0.0):
+            ra.update(gio_xem=float(g["gio_365"]), gio_chuoi_ngay=True)
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
 
 
 def _luot_da_bo(goc: str, ma: str, ma_luot: str) -> Optional[Dict[str, Any]]:
@@ -1495,6 +1538,9 @@ def _chinh_bay_gio(goc: str, k: Dict[str, Any], bay_gio: _dt.datetime) -> Option
             goc, ma, _kenh_mod.doc_kenh(goc, ma), bay_gio=bay_gio)
         if mo:
             return None
+        if ttin.get("khong_phat"):   # `core/kenh_khong_phat.py` (12/10/2026)
+            return {"chu": "Dừng làm video mới — kênh không được YouTube phát, chờ bạn kiểm Studio",
+                    "muc": "canh_bao", "chi_tiet": _ly}
         gio = lambda s: _dt.datetime.fromisoformat(s).strftime("%d/%m %H:%M")  # noqa: E731
         if ttin.get("khe_ke_tiep") and ttin.get("mo_cua_san_xuat"):
             return {"chu": "Chờ khe — sản xuất lúc " + gio(ttin["mo_cua_san_xuat"]), "muc": "cho",
@@ -1539,7 +1585,7 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
             k2["video_ke_tiep_tu"] = _video_ke_tiep_tu(goc, str(k.get("ma") or ""), bay_gio)
         k2["video_gan_day"] = video_gan_day(goc, str(k.get("ma") or ""), 3, bay_gio=bay_gio)
         k2["may_dang_hoc"] = may_dang_hoc(goc, str(k.get("ma") or ""))
-        k2["con_thieu_ypp"] = con_thieu_ypp(k.get("ypp") or {})
+        k2["con_thieu_ypp"] = con_thieu_ypp(_ypp_that(goc, str(k.get("ma") or ""), k.get("ypp") or {}))
         k2["giam_doc"] = giam_doc_the(goc, str(k.get("ma") or ""))
         k2["nuoi_so"] = nuoi_trang_chu_so(goc, str(k.get("ma") or ""))
         kenh.append(k2)

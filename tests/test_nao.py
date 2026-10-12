@@ -349,7 +349,7 @@ def _chay_chu(goc, *argv):
         return "TỪ CHỐI: " + str(loi)
 
 
-def test_dang_ky_lich_nao_04_10(tmp_path):
+def test_dang_ky_lich_nao_06_45(tmp_path):
     from core import lich_tu_chay as ltc
 
     (tmp_path / "core").mkdir()
@@ -357,7 +357,7 @@ def test_dang_ky_lich_nao_04_10(tmp_path):
     goi = []
     ok, _ = ltc.dang_ky_nao(str(tmp_path), chay_lenh=lambda l: (goi.append(l) or (0, "")))
     assert ok and goi[0][:4] == ["schtasks", "/Create", "/TN", "ShopAPI-Nao"]
-    assert goi[0][goi[0].index("/SC") + 1] == "DAILY" and goi[0][goi[0].index("/ST") + 1] == "04:10"
+    assert goi[0][goi[0].index("/SC") + 1] == "DAILY" and goi[0][goi[0].index("/ST") + 1] == "06:45"
     assert "-m core.nao phien" in goi[0][goi[0].index("/TR") + 1]
     assert ltc.dang_ky_nao(str(tmp_path), "25:00", chay_lenh=lambda l: (0, ""))[0] is False
 

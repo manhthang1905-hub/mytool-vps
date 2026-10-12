@@ -2008,6 +2008,16 @@ def _cua_so_san_xuat(goc: str, ma_kenh: str, kenh: Any,
                      ) -> Tuple[bool, str, Dict[str, Any]]:
     """Cho mở nguồn mới chỉ khi gần lịch đăng và không còn video chờ."""
     luc = bay_gio or _dt.datetime.now()
+    # 12/10/2026 — KÊNH KHÔNG ĐƯỢC PHÁT (`core/kenh_khong_phat.py`): cờ đã tính (điều phối / gác tổng) → KHÔNG mở nguồn
+    # MỚI. Chỉ ĐỌC tệp trạng thái (hàm này thuần đọc, giao diện cũng gọi); video đã hẹn lịch không bị đụng.
+    try:
+        from . import kenh_khong_phat  # noqa: PLC0415
+
+        kp_dung, kp_ly = kenh_khong_phat.dang_dung(goc, ma_kenh, bay_gio=luc)
+    except Exception:  # noqa: BLE001 — bộ phát hiện hỏng không được chặn sản xuất
+        kp_dung, kp_ly = False, ""
+    if kp_dung:
+        return False, kp_ly, {"khong_phat": True, "so_video_dang_cho": 0, "video_dang_cho": []}
     cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
     can = {ten: cot.index(ten) for ten in
            ("Ngày đăng", "Giờ đăng", "Sẵn sàng", "Trạng thái đăng")

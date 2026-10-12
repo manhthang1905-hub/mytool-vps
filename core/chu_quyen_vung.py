@@ -304,6 +304,13 @@ def thong_ke(goc: str, kenh_ds: Sequence[str]) -> Tuple[Dict[str, Dict[str, Dict
                 o["thang"] += 1
                 o["hien_thi_thang"] += float(gia or 0.0)
         song[k] = co_thang or (len(moi_nhat) >= 1 and statistics.median(moi_nhat) >= SAN_DUOC_PHAT) or not moi_nhat
+        try:  # cờ "kênh không được phát" (`core/kenh_khong_phat.py`, 12/10/2026): không giao vùng cho kênh đang bị dừng
+            from . import kenh_khong_phat  # noqa: PLC0415
+
+            if kenh_khong_phat.dang_dung(goc, k)[0]:
+                song[k] = False
+        except Exception:  # noqa: BLE001
+            pass
     for v, theo_k in tk.items():
         for o in theo_k.values():
             pv = o.pop("_pv", [])

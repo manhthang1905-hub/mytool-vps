@@ -165,7 +165,9 @@ def test_cuu_ctr_goi_y_doi_tieu_de_dung_cong():
               tieu_de_da_cham=[{"tieu_de": "t hong"}, {"tieu_de": "bản khác"}])
     on = _v("on", tuoi_gio=70.0, ket_luan="truot", chup=[_chup(60, 2000, 6.0)])
     thang = _v("thang", tuoi_gio=55.0, ket_luan="thang", thang=True, chup=[_chup(50, 40000, 2.0)])
-    bs = _bs([hong, on, thang])
+    # 12/10/2026: CTR so với CHÍNH kênh (≥ 3 video tham chiếu) — hai video cũ ngoài khung 52–120h
+    ref = [_v("ref%d" % i, tuoi_gio=200.0, ket_luan="truot", chup=[_chup(150, 3000, 5.0)]) for i in (1, 2)]
+    bs = _bs([hong, on, thang] + ref)
     qs = cuu_ctr.quan_sat(bs)
     cong = {q["video_id"]: q["cong"] for q in qs}
     assert cong == {"hong": "ctr", "on": "hien_thi", "thang": "thang"}

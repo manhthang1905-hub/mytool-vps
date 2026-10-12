@@ -268,7 +268,7 @@ def k_tu_hoc(goc, kenh):
 def k_nao(goc, kenh):
     hom = _dt.date.today().isoformat()
     return ((DAT, "phiên não hôm nay có") if os.path.isfile(os.path.join(goc, "nao", "nhat-ky", hom + ".md"))
-            else (CHO, "chưa có phiên não hôm nay (04:10)"))
+            else (CHO, "chưa có phiên não hôm nay (sau quét Studio, mặc định 06:45)"))
 
 
 def k_hl_tam(goc, kenh):
@@ -331,7 +331,7 @@ DANH_MUC: List[KyNang] = [
     KyNang("D02", "Sản xuất + bàn giao video ngày mai", "dinh_ky", "Nghiên cứu → chọn nguồn → 8 khâu → QA → bàn giao lịch 05:00.", "tu_chay.py (điều phối)", k_kho_dem, ["K03", "K04", "K05"]),
     KyNang("D03", "Bình luận (mồi + trả lời)", "dinh_ky", "Phiên kênh, DOM: đăng mồi + trả lời bình luận mới — đúng NỘI DUNG video (lời thoại từ phụ đề gói), giọng kênh, đúng ngôn ngữ kênh, gõ như người (không emoji/kaomoji).", "agent phiên kênh · thử không đăng: workspace/cong-cu-dieu-phoi/thu_tra_loi.py", k_binh_luan, ["K01"]),
     KyNang("D04", "Vòng tự học", "dinh_ky", "Bảng điểm cụm/công thức/bìa/tiêu đề/hook theo số Studio.", "tu_chay.py (bước 0)", k_tu_hoc, ["D01"]),
-    KyNang("D05", "Bộ não", "dinh_ky", "Phiên 04:10: chấm dự đoán, quyết định ≤3 hành động, ghi nhớ.", "ShopAPI-Nao", k_nao, []),
+    KyNang("D05", "Bộ não", "dinh_ky", "Phiên sáng (06:45, đợi quét Studio xong): chấm dự đoán, chương trình 6 việc, ghi nhớ.", "ShopAPI-Nao", k_nao, []),
     KyNang("D06", "Bù màn hình kết thúc", "dinh_ky", "Video thiếu MHKT → bù giờ vắng 02:00–05:00.", "agent --bu-mhkt", k_mhkt_thieu, ["K01"]),
     KyNang("D07", "Đường tới YPP", "dinh_ky", "Dự báo ngày đủ 4000 giờ + 1000 đăng ký từ chỉ số Studio hằng ngày (cận dưới theo cửa sổ 28 ngày); cảnh báo khi gần/đạt.",
            "python -m core.ypp · --canh-bao", k_ypp, ["D01"]),

@@ -125,7 +125,12 @@ def _bs_hong(goc, sub=5000):
     bs = BangSo(goc=goc, ma_kenh=K, bay_gio=BAY, cai={"giam_doc": "goi_y", "giam_doc_studio": True},
                 ctr_muc_tieu=5.0, nguong_thang_48h=6000)
     bs.ypp = {"sub": sub} if sub is not None else {}
-    bs.video = [hong]
+    # 12/10/2026: "hỏng cổng CTR" so với CTR của CHÍNH kênh → cần ≥ 3 video tham chiếu (ngoài khung 52–120h).
+    ref = [{"id": "FAKEref%04d" % i, "ma_goi": K + "-000%d" % i, "tieu_de": "ref", "cum": [], "ket_luan": "truot",
+            "thang": False, "tuoi_gio": 200.0, "lich_su_sua": [], "tieu_de_da_cham": [], "tu_tool": True,
+            "chup": [{"tuoi": 150.0, "moc": "150h", "hien_thi": 4000, "ctr": 4.0, "ctr_browse": 4.5}]}
+           for i in range(1, 4)]
+    bs.video = [hong] + ref
     return bs
 
 
@@ -188,6 +193,47 @@ def test_xu_ly_kenh_nho_tu_ap_muc_ngay_khong_cho_duyet(tmp_path, monkeypatch):
     ra = cuu_ctr.xu_ly(goc, K, bs, td, llm)
     assert ra and ra[0]["trang_thai"] == "tu_ap" and ra[0]["duyet_boi"] == "may"
     assert not cuu_ctr.cho_duyet(goc, K)
+
+
+def test_cong_ctr_so_voi_chinh_kenh_khong_theo_muc_tieu_ngach(tmp_path):
+    """12/10/2026: video CTR 4,8% — cao hơn trung vị của CHÍNH kênh (3%) dù dưới 0,8 × mục tiêu ngách 6,2% → KHÔNG
+    đổi; dưới trung vị kênh → đổi; kênh chưa đủ 3 video đo được → không đổi."""
+    bs = _bs_hong("")
+    bs.ctr_muc_tieu = 6.2
+    for r in bs.video[1:]:
+        r["chup"][0]["ctr_browse"] = 3.0
+    bs.video[0]["chup"][0]["ctr_browse"] = 4.8
+    q = cuu_ctr.quan_sat(bs)[0]
+    assert q["cong"] == "hien_thi" and q["ctr_rieng"] == 3.0 and q["n_ctr_rieng"] == 3
+    assert cuu_ctr.de_xuat(bs, [q]) == []
+    bs.video[0]["chup"][0]["ctr_browse"] = 2.0
+    q = cuu_ctr.quan_sat(bs)[0]
+    assert q["cong"] == "ctr" and [d["video_id"] for d in cuu_ctr.de_xuat(bs, [q])] == ["FAKEhong001"]
+    bs.video = bs.video[:3]   # còn 2 video tham chiếu
+    q = cuu_ctr.quan_sat(bs)[0]
+    assert q["cong"] == "chua_du" and cuu_ctr.de_xuat(bs, [q]) == []
+
+
+def test_kenh_song_bang_de_xuat_khong_bao_gio_doi_tieu_de(tmp_path):
+    """Kênh > 50% traffic đề xuất: không lập mục đổi tiêu đề, và mục ĐÃ duyệt từ trước bị bỏ khi xếp hàng."""
+    bs = _bs_hong("")
+    bs.pct_de_xuat_kenh = 85.3
+    q = cuu_ctr.quan_sat(bs)[0]
+    assert q["cong"] == "de_xuat" and cuu_ctr.de_xuat(bs, [q]) == []
+    bs.pct_de_xuat_kenh = 49.0
+    assert cuu_ctr.quan_sat(bs)[0]["cong"] == "ctr"
+    # dong_bo: chụp cấp kênh có traffic đề xuất 85% → mục đã duyệt thành "bo", không vào hàng sửa
+    goc = str(tmp_path)
+    _kenh(goc, 'giam_doc: "goi_y"', "giam_doc_studio: true")
+    for i, ngay in enumerate(("20261010", "20261011", "20261012")):
+        _ghi(os.path.join(goc, "CHANNEL", K, "chi-so", "kenh", "kenh-" + ngay, "tong-quan.json"),
+             {"traffic": {"browse": 12.0, "related": 85.0 + i, "search": 1.0}})
+    muc = {"id": "s-FAKEhong001-1", "video_id": "FAKEhong001", "ma_goi": K + "-0007", "tieu_de_cu": "cũ",
+           "tieu_de_moi": "mới", "trang_thai": "duyet", "duyet_boi": "chu", "luc": BAY.isoformat()}
+    _ghi(cuu_ctr.duong_duyet(goc, K), {"kenh": K, "muc": [muc]})
+    assert cuu_ctr.dong_bo(goc, bay_gio=BAY)["xep"] == 0
+    m = cuu_ctr.doc_duyet(goc, K)[0]
+    assert m["trang_thai"] == "bo" and "đề xuất" in m["ly_do_bo"] and cuu_ctr.doc_hang(goc) == []
 
 
 def test_gioi_han_tuoi_52_120_va_khong_dung_video_thang():

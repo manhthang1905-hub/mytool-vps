@@ -359,7 +359,9 @@ def test_bang_dieu_khien_dong_giam_doc_cong_tac_va_viec(tmp_path, monkeypatch):
     gd = [v for v in viec if v["khoa"].startswith("giam-doc:GDK:")]
     assert len(gd) == 1 and gd[0]["chu"] == "Giám đốc kênh: Quyết định lớn chờ bạn duyệt: x"
     # "Xem Studio" chỉ là gợi ý → sang Đội AI nói, không nằm ở Việc của bạn
-    assert [x["cau"] for x in bdk.goi_y_giam_doc(goc, "GDK")] == ["Xem Studio"]
+    assert [x["cau"] for x in bdk.goi_y_giam_doc(goc, "GDK", bay_gio=BAY_GIO)] == ["Xem Studio"]
+    # Báo cáo quá 8 ngày tuổi (so ĐỒNG HỒ truyền vào, không phải ngày thật) → không còn gợi ý.
+    assert bdk.goi_y_giam_doc(goc, "GDK", bay_gio=BAY_GIO + dt.timedelta(days=30)) == []
     bdk.danh_dau_xong(goc, gd[0]["khoa"])
     viec = bdk.viec_cua_ban(goc, anh={"kenh": [{"ma": "GDK"}]}, bay_gio=BAY_GIO, gio_lich="02:00")
     assert not [v for v in viec if v["khoa"].startswith("giam-doc:")]

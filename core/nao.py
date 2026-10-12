@@ -69,7 +69,9 @@ CHI_DAO_PHIEN = (
     "(2) Phiên chỉ XONG khi đã ghi nhật ký `nhat-ky/<ngày>.md` VÀ đã cập nhật `tri-nho/MEMORY.md` (mỗi sự thật bền một "
     "dòng, có số + ngày; nếu thật sự không có gì mới thì ghi một dòng nói rõ như vậy). Ghi trí nhớ/nhật ký BẰNG công cụ "
     "Write/Edit, không chỉ nói là đã ghi. (3) `thu`/`tranh` chỉ có hiệu lực ở các trục cum, kieu_tieu_de, kieu_bia, hook. "
-    "(4) Làm ít mà chắc; mẫu n<3 thì nói rõ là chưa chắc và đừng dùng làm lý do duy nhất của một hành động.")
+    "(4) Làm ít mà chắc; mẫu n<3 thì nói rõ là chưa chắc và đừng dùng làm lý do duy nhất của một hành động. "
+    "(5) Mục VIỆC BẮT BUỘC là CHƯƠNG TRÌNH (a)–(e): với MỖI phần ghi một quyết định có số (n, ngày kiểm) — lệnh in "
+    "sẵn chỉ là gợi ý của máy, chạy khi bạn đồng ý, sửa khi cần, bỏ thì ghi lý do; việc chỉ người làm được thì `de-xuat`.")
 DONG_GIOI_THIEU_TRI_NHO = ("# Trí nhớ của bộ não\n\nSự thật bền về từng kênh (tệp khán giả, cái đã chứng minh, "
                            "cái đã thất bại). Mỗi mục một dòng, có số và ngày.\n")
 
@@ -279,6 +281,22 @@ def _tao_hanh_dong_g(goc: str, lenh: str, tham_so: Dict[str, Any], *, ly_do: str
     hom_nay = _hom_nay(bay_gio)
     ds = doc_hanh_dong(goc)
     don_het_han(goc, ds, bay_gio)
+    # 12/10/2026 — RADAR NỔ (`core.nao_chuong_trinh`): `uu-tien-nguon --radar <video>` chỉ hợp lệ khi MÃ xác nhận video
+    # đang trên radar của kênh; không tính hạn mức ngày, ≤ `SO_NGUON_RADAR` nguồn mỗi video, hạn vào sản xuất 48 giờ.
+    radar = str(tham_so.get("radar") or "").strip() if lenh == "uu-tien-nguon" else ""
+    ly_radar = ""
+    if radar:
+        from . import nao_chuong_trinh  # noqa: PLC0415
+
+        ok_r, ly_radar = nao_chuong_trinh.la_radar(goc, str(tham_so.get("kenh") or ""), radar, bay_gio)
+        if not ok_r:
+            raise TuChoi(ly_radar)
+        da_ep = sum(1 for d in ds if d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") != "huy"
+                    and (d.get("tham_so") or {}).get("radar") == radar
+                    and (d.get("tham_so") or {}).get("kenh") == tham_so.get("kenh"))
+        if da_ep >= nao_chuong_trinh.SO_NGUON_RADAR:
+            raise TuChoi("video {0} đã có {1} nguồn radar — tối đa {2}".format(
+                radar, da_ep, nao_chuong_trinh.SO_NGUON_RADAR))
     if not khong_tinh:
         if not (du_doan or "").strip() or len((du_doan or "").strip()) < 10:
             raise TuChoi("thiếu --du-doan (một câu đo được, ví dụ “2 video kế của TL2 thuộc cụm X có hiển thị 48h ≥ trung vị kênh”)")
@@ -293,9 +311,9 @@ def _tao_hanh_dong_g(goc: str, lenh: str, tham_so: Dict[str, Any], *, ly_do: str
         if (han - hom).days > TOI_DA_NGAY_KIEM:
             raise TuChoi("--kiem-ngay tối đa {0} ngày kể từ hôm nay".format(TOI_DA_NGAY_KIEM))
         da_dung = sum(1 for d in ds if str(d.get("luc") or "")[:10] == hom_nay
-                      and not d.get("khong_tinh") and d.get("trang_thai") != "huy")
+                      and not d.get("khong_tinh") and not d.get("ngoai_han_muc") and d.get("trang_thai") != "huy")
         tran = han_muc_ngay(ds)
-        if da_dung >= tran:
+        if da_dung >= tran and not radar:
             dung, tong = ti_le_dung(ds)
             vi_sao = (" (quyền bị co vì tỉ lệ đúng {0}/{1} < 50% — chấm lại cho thật thà và rút kinh nghiệm)"
                       .format(dung, tong) if tran < TOI_DA_MOI_NGAY else "")
@@ -352,6 +370,11 @@ def _tao_hanh_dong_g(goc: str, lenh: str, tham_so: Dict[str, Any], *, ly_do: str
           "cham": None, "ghi_chu_cham": ""}
     if khong_tinh:
         hd["khong_tinh"] = True
+    if radar:
+        hd["ngoai_han_muc"] = True
+        hd["tham_so"]["han_san_xuat"] = (bay_gio + _dt.timedelta(hours=GIO_RADAR_SAN_XUAT)).replace(
+            microsecond=0).isoformat()
+        hd["tham_so"]["radar_ly_do"] = ly_radar
     if lenh == "thu":
         hd["tham_so"]["da_dung"] = 0
     ds.append(hd)
@@ -375,6 +398,12 @@ def don_het_han(goc: str, ds: Optional[List[Dict[str, Any]]] = None, bay_gio: Op
     for d in ds:
         if d.get("trang_thai") == "mo" and d.get("lenh") == "tranh" and str((d.get("tham_so") or {}).get("het_han") or "9") < hom_nay:
             d["trang_thai"] = "xong"
+            doi = True
+        elif _radar_qua_han(d, bay_gio or _dt.datetime.now()):
+            d["trang_thai"] = "xong"
+            d["khong_tinh"] = True
+            d["ghi_chu_cham"] = ("radar: quá {0} giờ chưa vào sản xuất (hạn {1}) — không có hiệu lực, không tính "
+                                 "điểm").format(GIO_RADAR_SAN_XUAT, str((d.get("tham_so") or {}).get("han_san_xuat"))[:16])
             doi = True
         elif _qua_han_de_xuat(d, hom_nay):
             d["trang_thai"] = "het_han"
@@ -525,6 +554,16 @@ CONG_MEM_EP = ("nguồn quá nhỏ", "kênh nguồn quá yếu", "bảng đề x
                "cổng bảng đề xuất")
 #: Đề cử đã được CHỌN vào một lượt mà quá ngần này ngày chưa bàn giao → đóng (không tính), não tự quyết lại.
 NGAY_CHO_BAN_GIAO = 10
+#: Đề cử RADAR (`uu-tien-nguon --radar`) phải vào sản xuất (được chọn) trong ngần này giờ — quá hạn tự đóng không tính.
+GIO_RADAR_SAN_XUAT = 48
+
+
+def _radar_qua_han(d: Dict[str, Any], bay_gio: _dt.datetime) -> bool:
+    """Đề cử radar còn mở, CHƯA được chọn vào lượt nào, đã quá `han_san_xuat`."""
+    ts = d.get("tham_so") or {}
+    han = str(ts.get("han_san_xuat") or "")
+    return bool(d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo" and ts.get("radar") and han
+                and not ts.get("chon_luc") and han[:19] < bay_gio.replace(microsecond=0).isoformat())
 
 
 def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -688,6 +727,13 @@ def _dung_xong_de_cu_g(goc: str, kenh: str, chon: str = "", bay_gio: Optional[_d
                                          "không tính điểm").format(str(ts["chon_luc"])[:10], cho)
                     n += 1
                     continue
+                if _radar_qua_han(d, bg):
+                    d["trang_thai"] = "xong"
+                    d["khong_tinh"] = True
+                    d["ghi_chu_cham"] = ("radar: quá {0} giờ chưa vào sản xuất — không có hiệu lực, không tính "
+                                         "điểm").format(GIO_RADAR_SAN_XUAT)
+                    n += 1
+                    continue
                 if d.get("id") in thay:
                     ts["lan_bo_qua"] = int(ts.get("lan_bo_qua") or 0) + 1
                     ts["bo_qua_luc"] = luc
@@ -788,8 +834,10 @@ def dong_hanh_dong(d: Dict[str, Any]) -> str:
     chi = {"thu": lambda: "{0}/{1}={2} x{3} (đã {4})".format(ts.get("kenh"), ts.get("truc"), ts.get("gia_tri"),
                                                            ts.get("so_video"), ts.get("da_dung")),
            "tranh": lambda: "{0}/{1}={2} tới {3}".format(ts.get("kenh"), ts.get("truc"), ts.get("gia_tri"), ts.get("het_han")),
-           "uu-tien-nguon": lambda: "{0} {1}{2}".format(
+           "uu-tien-nguon": lambda: "{0} {1}{2}{3}".format(
                ts.get("kenh"), _cat(ts.get("link"), 60),
+               " [RADAR {0}, vào sản xuất trước {1}]".format(ts.get("radar"), str(ts.get("han_san_xuat") or "")[:16])
+               if ts.get("radar") else "",
                " → " + ", ".join(ts["goi"]) if ts.get("goi") else
                " (đang sản xuất từ {0})".format(str(ts.get("chon_luc"))[:10]) if ts.get("chon_luc") else
                " (có trong bảng, chưa được chọn {0} lượt)".format(ts.get("lan_bo_qua")) if ts.get("lan_bo_qua")
@@ -809,7 +857,8 @@ def bao_cao_hanh_dong(goc: str, bay_gio: Optional[_dt.datetime] = None, chi_can_
     ds = doc_hanh_dong(goc)
     don_het_han(goc, ds, bay_gio)
     dung, tong = ti_le_dung(ds)
-    da = sum(1 for d in ds if str(d.get("luc") or "")[:10] == hom_nay and not d.get("khong_tinh") and d.get("trang_thai") != "huy")
+    da = sum(1 for d in ds if str(d.get("luc") or "")[:10] == hom_nay and not d.get("khong_tinh")
+             and not d.get("ngoai_han_muc") and d.get("trang_thai") != "huy")
     dong = ["Hành động của não: {0} tổng; đã chấm {1} (đúng {2}); hôm nay dùng {3}/{4} hành động.".format(
         len(ds), tong, dung, da, han_muc_ngay(ds))]
     hien = []
@@ -931,8 +980,8 @@ def doi_thu_dang_no(goc: str, n: int = 8, ngay: int = 14, bay_gio: Optional[_dt.
     return [t[1] for t in top], os.path.dirname(mau)
 
 
-def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong: int = 250) -> str:
-    """Báo cáo `xem`: gọn (≤ ~250 dòng), mỗi phần bọc try riêng — hỏng phần nào chỉ phần đó báo lỗi."""
+def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong: int = 340) -> str:
+    """Báo cáo `xem`: gọn (≤ ~340 dòng), mỗi phần bọc try riêng — hỏng phần nào chỉ phần đó báo lỗi."""
     from . import tu_hoc  # noqa: PLC0415
 
     bay_gio = bay_gio or _dt.datetime.now()
@@ -966,17 +1015,28 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
             except Exception:  # noqa: BLE001
                 pass
             ra.append("- {0}: {1}".format(k["ma"], _cat(bdk.cau_tinh_trang(k), 150)))
-            ra.append("    YPP: {0} sub, {1} giờ xem — {2}".format(_f(y.get("dang_ky")), _f(y.get("gio_xem"), 0),
-                                                                    _cat(k.get("con_thieu_ypp"), 100)))
+            try:
+                # 12/10/2026: sub TRỌN ĐỜI + nhãn nguồn số (`core.ypp`), không còn "sub" của cửa sổ 28 ngày trượt.
+                from . import ypp as _ypp  # noqa: PLC0415
+
+                r = _ypp.du_bao(goc, k["ma"], bay_gio)
+                ra.append("    YPP: {0} · {1} (28 ngày trượt: {2} sub mới, {3} giờ) — {4}".format(
+                    _ypp.nhan_sub(r), _ypp.nhan_gio(r), _f(r.get("dang_ky_28")), _f(r.get("gio_28"), 0),
+                    _cat(k.get("con_thieu_ypp"), 100)))
+            except Exception:  # noqa: BLE001
+                ra.append("    YPP (28 ngày trượt): {0} sub mới, {1} giờ xem — {2}".format(
+                    _f(y.get("dang_ky")), _f(y.get("gio_xem"), 0), _cat(k.get("con_thieu_ypp"), 100)))
             ra.append("    lịch đăng tới: {0}".format("; ".join(lich) if lich else (_cat(k.get("video_ke_tiep"), 60) or "chưa có")))
         return ra
 
     def bat_buoc() -> List[str]:
-        from . import nao_goi_y  # noqa: PLC0415
+        # 12/10/2026: CHƯƠNG TRÌNH mục 6 (`core/nao_chuong_trinh.py`) thay cho lệnh in sẵn (việc vặt).
+        from . import nao_chuong_trinh  # noqa: PLC0415
 
-        return nao_goi_y.dong_bat_buoc(goc, [k["ma"] for k in kenh_ds], bay_gio)
+        return nao_chuong_trinh.chuong_trinh(goc, [k["ma"] for k in kenh_ds], bay_gio)
 
-    phan("VIỆC BẮT BUỘC XEM HÔM NAY (máy tính sẵn — xử lý TRƯỚC: chạy lệnh kèm theo hoặc ghi lý do bỏ qua vào nhật ký)", bat_buoc)
+    phan("VIỆC BẮT BUỘC HÔM NAY — CHƯƠNG TRÌNH 5 VIỆC (mã tính số, BẠN QUYẾT: với mỗi mục chạy/sửa lệnh hoặc ghi "
+         "\"giữ nguyên vì …\" có số vào nhật ký; mỗi hành động nêu n + ngày kiểm)", bat_buoc)
     phan("KÊNH", kenh)
 
     def video() -> List[str]:
@@ -1053,7 +1113,8 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
         return ["  - [{0}] {1}".format(m.get("kenh") or "?", _cat(m.get("viec"), 200))
                 for m in doc_viec_cho_nao(goc, bay_gio)[:8]] or ["  (không có)"]
 
-    phan("GIÁM ĐỐC KÊNH NHỜ XEM (tự xem số bằng `xem`/chi-so rồi quyết; KHÔNG báo chủ)", giam_doc_nho)
+    phan("GIÁM ĐỐC KÊNH NHỜ XEM (tự xem số bằng `xem`/chi-so rồi quyết; việc CHỈ NGƯỜI làm được — Studio: hạn chế, "
+         "xác minh, dành cho trẻ em… — thì `de-xuat` cho chủ)", giam_doc_nho)
     def mo_kenh_moi() -> List[str]:
         from . import mo_kenh as _mk  # noqa: PLC0415
 
@@ -1413,8 +1474,123 @@ def _chay_mot_lan_co_suat(lenh: List[str], loi_nhac: str, goc: str, mt: Dict[str
     return kq
 
 
-def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Optional[_dt.datetime] = None) -> int:
-    """Một phiên não. Mã thoát: 0 xong (hoặc đã có phiên hôm nay) · 1 hỏng · 3 đang có phiên khác."""
+# ── giờ phiên: CHỜ QUÉT STUDIO XONG (12/10/2026) ─────────────────────────────
+#
+# `workspace/chan-doan/nao-vong-hoc-2026-10-12.md` mục 3 + 5 #8: phiên 04:10 chạy TRƯỚC khi 4 kênh quét xong (lượt quét
+# ngày của từng kênh cách nhau 30 phút, kênh cuối ~05:40–06:05) → não luôn xem 4 kênh bằng số HÔM QUA. Giờ phiên tự
+# đợi: không bắt đầu trước `nao_gio_phien` (mặc định 06:45, `workspace/cai-dat.json`) VÀ đợi mọi lượt QUÉT NGÀY hôm
+# nay của máy ảo kết thúc (xong, hoặc hết lượt thử — cùng luật `vm/agent._quet_ngay_ket_thuc`); quá `nao_cho_quet_toi_da`
+# (mặc định 09:30) thì vẫn chạy, ghi rõ kênh nào chưa quét. Lịch Windows cũ 04:10 vẫn đúng (phiên tự đợi); dời lịch
+# về giờ mới thì đỡ giữ tiến trình chờ: `python -m core.nao lich` in đúng lệnh `schtasks`.
+
+GIO_PHIEN_MAC_DINH = "06:45"
+GIO_CHO_QUET_TOI_DA_MAC_DINH = "09:30"
+GIAY_NHIP_CHO_QUET = 5 * 60
+QUET_NGAY_TOI_DA_LAN = 3   # khớp `vm/agent.QUET_NGAY_TOI_DA_LAN`
+
+
+def _doc_json_tep(p: str) -> Any:
+    try:
+        with io.open(p, encoding="utf-8") as tep:
+            return json.load(tep)
+    except (OSError, ValueError):
+        return None
+
+
+def _gio_hop_le(chu: Any, mac_dinh: str) -> str:
+    s = str(chu or "").strip()
+    return s if re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s) else mac_dinh
+
+
+def gio_phien(goc: str = GOC) -> Tuple[str, str]:
+    """`(giờ bắt đầu sớm nhất, giờ thôi đợi quét)` "HH:MM" — `workspace/cai-dat.json` khoá `nao_gio_phien`,
+    `nao_cho_quet_toi_da`; thiếu/sai → 06:45 / 09:30."""
+    cai = _doc_json_tep(os.path.join(goc, "workspace", "cai-dat.json"))
+    cai = cai if isinstance(cai, dict) else {}
+    return (_gio_hop_le(cai.get("nao_gio_phien"), GIO_PHIEN_MAC_DINH),
+            _gio_hop_le(cai.get("nao_cho_quet_toi_da"), GIO_CHO_QUET_TOI_DA_MAC_DINH))
+
+
+def _thu_muc_vm(goc: str) -> str:
+    try:
+        from . import trung_tam  # noqa: PLC0415
+
+        return trung_tam.thu_muc_vm(goc)
+    except Exception:  # noqa: BLE001
+        return os.path.join(goc, "vm")
+
+
+def quet_hom_nay(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None) -> Tuple[List[str], List[str]]:
+    """`(kênh CHƯA quét xong hôm nay, kênh đã xong)` theo `vm/trang-thai.json` (khoá `quet_ngay@<kênh>@<ngày>` của
+    máy ảo). Kênh chưa từng có lượt quét ngày nào trên máy này thì bỏ (không đợi kênh máy không quét). Không có máy
+    ảo / tệp hỏng → ([], [])."""
+    vm = _thu_muc_vm(goc)
+    tt = _doc_json_tep(os.path.join(vm, "trang-thai.json"))
+    if not isinstance(tt, dict):
+        return [], []
+    cai = _doc_json_tep(os.path.join(vm, "cai-dat-tool.json"))
+    kenh = list(((cai or {}).get("kenh") or {}).keys()) if isinstance(cai, dict) else []
+    hom = (bay_gio or _dt.datetime.now()).strftime("%Y-%m-%d")
+    chua, xong = [], []
+    for k in kenh:
+        if not any(str(x).startswith("quet_ngay@{0}@".format(k)) for x in tt):
+            continue
+        muc = tt.get("quet_ngay@{0}@{1}".format(k, hom))
+        muc = muc if isinstance(muc, dict) else {}
+        if muc.get("xong") or int(muc.get("lan") or 0) >= QUET_NGAY_TOI_DA_LAN:
+            xong.append(k)
+        else:
+            chua.append(k)
+    return chua, xong
+
+
+def cho_quet_xong(goc: str = GOC, *, bay_gio_fn: Any = None, ngu: Any = None, ghi: Any = None) -> Dict[str, Any]:
+    """ĐỢI tới giờ phiên + mọi lượt quét Studio hôm nay xong (xem khối chú thích trên). `bay_gio_fn`/`ngu` là seam
+    test (mặc định đồng hồ máy / `threading.Event().wait`). Trả `{cho_giay, ly_do, chua}`."""
+    bay_gio_fn = bay_gio_fn or _dt.datetime.now
+    su_kien = threading.Event()
+    ngu = ngu or (lambda giay: su_kien.wait(giay))
+    ghi = ghi or (lambda _chu: None)
+    gio, han = gio_phien(goc)
+    t0 = bay_gio_fn()
+
+    def moc(hhmm: str, ngay: _dt.date) -> _dt.datetime:
+        h, m = (int(x) for x in hhmm.split(":"))
+        return _dt.datetime.combine(ngay, _dt.time(h, m))
+
+    bat_dau, het = moc(gio, t0.date()), moc(han, t0.date())
+    da_bao = False
+    while True:
+        bg = bay_gio_fn()
+        if bg < bat_dau:
+            if not da_bao:
+                ghi("phiên não đợi tới {0} (giờ phiên `nao_gio_phien`) rồi kiểm quét Studio".format(gio))
+                da_bao = True
+            ngu(min(GIAY_NHIP_CHO_QUET * 2, max(1.0, (bat_dau - bg).total_seconds())))
+            continue
+        chua, _xong = quet_hom_nay(goc, bg)
+        cho = round((bg - t0).total_seconds())
+        if not chua:
+            return {"cho_giay": cho, "ly_do": "quét Studio hôm nay đã xong" if _xong else "không có lượt quét để đợi",
+                    "chua": []}
+        if bg >= het:
+            return {"cho_giay": cho, "ly_do": "quá {0} vẫn chưa quét xong: {1} — chạy với số cũ của các kênh này".format(
+                han, ", ".join(chua)), "chua": chua}
+        ghi("đợi quét Studio xong: còn {0}".format(", ".join(chua)))
+        ngu(GIAY_NHIP_CHO_QUET)
+
+
+def lenh_doi_lich(goc: str = GOC) -> str:
+    """Lệnh `schtasks` dời lịch phiên não `ShopAPI-Nao` về giờ phiên đang cấu hình (người vận hành tự chạy)."""
+    from .lich_tu_chay import TEN_VIEC_NAO  # noqa: PLC0415
+
+    return 'schtasks /Change /TN "{0}" /ST {1}'.format(TEN_VIEC_NAO, gio_phien(goc)[0])
+
+
+def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Optional[_dt.datetime] = None,
+               cho: bool = True) -> int:
+    """Một phiên não. Mã thoát: 0 xong (hoặc đã có phiên hôm nay) · 1 hỏng · 3 đang có phiên khác.
+    `cho` (mặc định): đợi giờ phiên + quét Studio hôm nay xong (`cho_quet_xong`) trước khi chạy."""
     bay_gio = bay_gio or _dt.datetime.now()
     hom_nay = _hom_nay(bay_gio)
     chuan_bi_thu_muc(goc)
@@ -1430,6 +1606,21 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
     if not duong:
         print("Không tìm thấy Claude Code (claude) trên máy.")
         return 1
+    if thu:
+        g, h = gio_phien(goc)
+        chua, _x = quet_hom_nay(goc, bay_gio)
+        print("Giờ phiên: không trước {0}, đợi quét Studio tới {1} (còn chưa quét hôm nay: {2}). Dời lịch: {3}".format(
+            g, h, ", ".join(chua) or "không", lenh_doi_lich(goc)))
+    elif cho:
+        def _ghi_cho(chu: str) -> None:
+            try:
+                with io.open(duong_log, "a", encoding="utf-8", newline="\n") as f_cho:
+                    f_cho.write("{0} [chờ] {1}\n".format(time.strftime("%H:%M:%S"), chu))
+            except OSError:
+                pass
+        kq_cho = cho_quet_xong(goc, ghi=_ghi_cho)
+        _ghi_cho("{0} (đợi {1} phút)".format(kq_cho["ly_do"], kq_cho["cho_giay"] // 60))
+        bay_gio = _dt.datetime.now()
     loi_nhac = CAU_HOI_PHIEN.format(hom_nay)
     qua_max = phien_qua_max(goc)
     mo_hinh = MO_HINH_PHIEN
@@ -1570,6 +1761,8 @@ def _parser() -> argparse.ArgumentParser:
     u = s.add_parser("uu-tien-nguon", help="đề cử 1 video đối thủ cho lần chọn content tới")
     u.add_argument("--kenh", required=True)
     u.add_argument("--link", required=True)
+    u.add_argument("--radar", default="", help="video_id của kênh đang trên RADAR NỔ (mã kiểm) — không tính hạn mức "
+                                               "ngày, phải vào sản xuất trong 48 giờ")
     them_chung(u)
     dx = s.add_parser("de-xuat", help="việc lớn chờ chủ duyệt")
     dx.add_argument("noi_dung")
@@ -1594,6 +1787,8 @@ def _parser() -> argparse.ArgumentParser:
     ph = s.add_parser("phien", help="chạy một phiên não (claude không giao diện)")
     ph.add_argument("--ep", action="store_true", help="bỏ giới hạn một phiên/ngày")
     ph.add_argument("--thu", action="store_true", help="chỉ in lệnh, không chạy")
+    ph.add_argument("--khong-cho", action="store_true", help="không đợi giờ phiên / quét Studio xong")
+    s.add_parser("lich", help="giờ phiên đang cấu hình + lệnh schtasks dời lịch ShopAPI-Nao (chỉ in)")
     return p
 
 
@@ -1625,7 +1820,10 @@ def chay_lenh(ns: argparse.Namespace, goc: str = GOC, bay_gio: Optional[_dt.date
     elif l == "bai-hoc":
         hd = bai_hoc(goc, ns.kenh, ns.thao_tac, ns.noi_dung, bay_gio, ns.du_doan, ns.kiem_ngay, ns.ly_do)
     elif l == "uu-tien-nguon":
-        hd = tao_hanh_dong(goc, "uu-tien-nguon", {"kenh": ns.kenh, "link": ns.link.strip()}, **chung)
+        ts = {"kenh": ns.kenh, "link": ns.link.strip()}
+        if str(getattr(ns, "radar", "") or "").strip():
+            ts["radar"] = str(ns.radar).strip()
+        hd = tao_hanh_dong(goc, "uu-tien-nguon", ts, **chung)
     elif l == "de-xuat":
         hd = tao_hanh_dong(goc, "de-xuat", {"kenh": ns.kenh, "noi_dung": ns.noi_dung.strip()}, **chung)
     elif l == "cham":
@@ -1645,7 +1843,15 @@ def main(argv: Optional[List[str]] = None, goc: str = GOC) -> int:
         pass
     ns = _parser().parse_args(argv)
     if ns.lenh == "phien":
-        return chay_phien(goc, ep=ns.ep, thu=ns.thu)
+        return chay_phien(goc, ep=ns.ep, thu=ns.thu, cho=not ns.khong_cho)
+    if ns.lenh == "lich":
+        g, h = gio_phien(goc)
+        chua, xong = quet_hom_nay(goc)
+        print("Phiên não: không bắt đầu trước {0}; đợi quét Studio hôm nay xong tới {1} (workspace/cai-dat.json: "
+              "nao_gio_phien, nao_cho_quet_toi_da).\nQuét hôm nay: xong {2} · chưa {3}.\nDời lịch Windows (chạy một "
+              "lần, cửa sổ lệnh thường):\n  {4}".format(g, h, ", ".join(xong) or "-", ", ".join(chua) or "-",
+                                                         lenh_doi_lich(goc)))
+        return 0
     try:
         print(chay_lenh(ns, goc))
         return 0

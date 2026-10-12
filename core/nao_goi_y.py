@@ -5,6 +5,10 @@ Phiên 05/10: bộ não (1) thấy bài học "tránh nhãn 雑学" bị video �
 `uu-tien-nguon` để nhân bản khi còn nóng. Cả hai đều là việc ĐỦ RÕ để máy tính, không cần "tư duy": nên `xem`
 in sẵn thành mục "VIỆC BẮT BUỘC XEM HÔM NAY" kèm lệnh chạy được.
 
+12/10/2026: mục "VIỆC BẮT BUỘC" của `nao xem` giờ là CHƯƠNG TRÌNH 5 việc (`core.nao_chuong_trinh`: danh mục kênh,
+radar nổ, săn khoảng trống, bao bì A/B, giữ chân theo đoạn) — tệp này chỉ còn cấp phần "video thắng / đang nóng" và
+hàm tìm nguồn nhân bản (`nguon_nhan_ban`); lệnh bài học cộng/trừ bằng MỘT video không còn in (việc vặt, n = 1).
+
 Tệp này CHỈ ĐỌC (không ghi gì vào `CHANNEL/`, `nao/`), không gọi mạng/AI.
 
     python -m core.nao_goi_y          # in mục này; gốc dữ liệu đổi được bằng biến môi trường MYTOOL_GOC
@@ -400,8 +404,12 @@ def bai_hoc_bi_bac_bo(goc: str, kenh: str, bay_gio: Optional[_dt.datetime] = Non
 # ═══ MỤC CHO `nao xem` ═══════════════════════════════════════════════════════
 
 def dong_bat_buoc(goc: str, kenh_ds: Optional[List[str]] = None, bay_gio: Optional[_dt.datetime] = None) -> List[str]:
-    """Các dòng của mục "VIỆC BẮT BUỘC XEM HÔM NAY": lệnh `bai-hoc tru|cong` + `uu-tien-nguon` chạy được ngay.
-    Mỗi kênh bọc try riêng. Không có gì → một dòng nói rõ."""
+    """Dòng "video THẮNG / ĐANG NÓNG chưa nhân bản" (thước chung) kèm lệnh `uu-tien-nguon` — một phần của mục (b)
+    trong CHƯƠNG TRÌNH của bộ não (`core.nao_chuong_trinh`). Mỗi kênh bọc try riêng. Không có gì → một dòng nói rõ.
+
+    12/10/2026 (`workspace/chan-doan/nao-vong-hoc-2026-10-12.md` mục 4, 5 #7/#11): BỎ các lệnh `bai-hoc tru|cong`
+    dựng từ MỘT video thắng khỏi mục này — đó là việc vặt (não chỉ chép lệnh) và là học bằng n = 1. `bai_hoc_bi_bac_bo`
+    vẫn còn để tra; bài học chỉ đổi khi có so sánh n ≥ 3 (não tự đọc mục BÀI HỌC)."""
     bay_gio = bay_gio or _dt.datetime.now()
     if kenh_ds is None:
         try:
@@ -417,11 +425,6 @@ def dong_bat_buoc(goc: str, kenh_ds: Optional[List[str]] = None, bay_gio: Option
             vs = video_thang_lon(goc, k, bay_gio)
         except Exception:  # noqa: BLE001
             vs = []
-        for b in bai_hoc_bi_bac_bo(goc, k, bay_gio, thang=vs):
-            bai.append("  [BÀI HỌC {0}] {1} {2}: {3} — {4} bài \"{5}\"".format(
-                "BỊ BÁC BỎ" if b["loai"] == "tru" else "ĐƯỢC XÁC NHẬN", k, b["id"], b["video_id"],
-                "bác bỏ" if b["loai"] == "tru" else "xác nhận", _nho(b["bai"], 70)))
-            bai.append("      $ " + b["lenh"])
         for v in vs:
             if v["da_xu_ly"]:
                 continue
@@ -439,7 +442,7 @@ def dong_bat_buoc(goc: str, kenh_ds: Optional[List[str]] = None, bay_gio: Option
             if v["nguon"]:
                 thang_dong.append("      $ " + v["nguon"][0]["lenh"])
     ra = bai + thang_dong
-    return ra or ["  (không có: không bài học nào bị video thắng gần đây bác bỏ/xác nhận, không video thắng lớn chưa xử lý)"]
+    return ra or ["  (không có video THẮNG / ĐANG NÓNG nào chưa xử lý)"]
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -447,7 +450,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:  # noqa: BLE001
         pass
-    print("\n".join(["VIỆC BẮT BUỘC XEM HÔM NAY (gốc: {0})".format(GOC_MAC_DINH)] + dong_bat_buoc(GOC_MAC_DINH)))
+    print("\n".join(["VIDEO THẮNG / ĐANG NÓNG CHƯA NHÂN BẢN (gốc: {0}; chương trình đầy đủ: python -m "
+                     "core.nao_chuong_trinh)".format(GOC_MAC_DINH)] + dong_bat_buoc(GOC_MAC_DINH)))
     return 0
 
 

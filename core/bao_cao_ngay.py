@@ -97,8 +97,11 @@ def _muc_skill(goc: str) -> List[str]:
 # ── 3. YPP ────────────────────────────────────────────────────────────────────
 
 def _muc_ypp(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """12/10/2026: số TRỌN ĐỜI khi có (sub Studio thời gian thực, giờ xem cộng chuỗi ngày) — nhãn ghi rõ nguồn; tổng
+    28 ngày trượt chỉ in kèm, và khi nó tụt thì nói rõ là cửa sổ trượt (ngày cũ rời cửa sổ), KHÔNG phải kênh giảm."""
     from core import ypp  # noqa: PLC0415
     ra = []
+    truot = []
     for k in _cac_kenh(goc):
         r = ypp.du_bao(goc, k, bay_gio)
         if r.get("gio") is None:
@@ -107,7 +110,16 @@ def _muc_ypp(goc: str, bay_gio: _dt.datetime) -> List[str]:
             r.get("trang_thai"), r.get("ngay_du_kien") or "?")
         if r.get("trang_thai") in ("gan", "dang_len") and r.get("ngay_toi") is not None:
             eta = "dự kiến {0} (~{1:.0f} ngày)".format(r.get("ngay_du_kien"), r["ngay_toi"])
-        ra.append("- {0}: {1:.0f}/4000h · {2}/1000 đk · {3}".format(k, float(r["gio"]), r.get("dang_ky"), eta))
+        sub = ("{0}/1000 sub trọn đời".format(r.get("dang_ky")) if r.get("nguon_sub") == "tron_doi"
+               else "{0}/1000 sub (28 ngày trượt — trọn đời chưa rõ)".format(r.get("dang_ky")))
+        gio = ("{0:.0f}/4000h (cộng chuỗi ngày)".format(float(r["gio"])) if r.get("nguon_gio") == "chuoi_ngay"
+               else "{0:.0f}/4000h (28 ngày trượt, cận dưới)".format(float(r["gio"])))
+        ra.append("- {0}: {1} · {2} · {3}".format(k, gio, sub, eta))
+        if r.get("truot_giam"):
+            truot.append(k)
+    if truot:
+        ra.append("- Tổng 28 ngày của {0} nhỏ hơn hôm qua: cửa sổ 28 ngày trượt (ngày nổ cũ rời cửa sổ), không phải "
+                  "mất sub/giờ xem — số trọn đời ở trên mới là tiến độ thật.".format(", ".join(truot)))
     return ra or ["(chưa kênh nào có số liệu)"]
 
 

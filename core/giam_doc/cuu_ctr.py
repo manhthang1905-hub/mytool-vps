@@ -1,9 +1,17 @@
 """Cứu video hỏng cổng CTR ở giờ 52–120 (View = Hiển thị × CTR × Giữ chân — sửa ĐÚNG cổng hỏng).
 
 Điều kiện: video tuổi 52–120h, KHÔNG THẮNG theo thước chung `core.thuoc_thang` (đã phán không thắng ở ≥ 96h, hoặc
-chưa phán mà tín hiệu sớm dưới phân vị 40 của kênh cùng tuổi — `khong_thang`), hiển thị ≥ 500, CTR trang chủ
-(Browse) < 0,8 × mục tiêu CTR của kênh. Hiển thị thấp mà CTR ổn → lỗi ở cổng HIỂN THỊ (chủ đề / nguồn): không sửa, chỉ ghi quan
-sát. Video thắng không bao giờ bị đụng.
+chưa phán mà tín hiệu sớm dưới phân vị 40 của kênh cùng tuổi — `khong_thang`), hiển thị ≥ 500, CTR (trang chủ nếu có
+bảng Browse) DƯỚI CTR CỦA CHÍNH KÊNH (trung vị cùng loại CTR của ≥ `N_CTR_RIENG` video khác của kênh, mỗi video ≥ 500
+hiển thị). Hiển thị thấp mà CTR ổn → lỗi ở cổng HIỂN THỊ (chủ đề / nguồn): không sửa, chỉ ghi quan sát. Video thắng
+không bao giờ bị đụng.
+
+12/10/2026 (`workspace/chan-doan/nao-vong-hoc-2026-10-12.md` mục 1b + 6.4): trước đây so với mục tiêu CTR CỦA NGÁCH
+(6,2%) → một video 4,76% (CAO hơn mọi video của kênh đó) bị xếp hàng đổi tiêu đề. Luật mới: (1) chỉ video dưới CTR của
+CHÍNH kênh; kênh chưa đủ `N_CTR_RIENG` video đo được → KHÔNG đổi (n < 3 không hành động); (2) KHÔNG BAO GIỜ đổi tiêu đề
+sau đăng cho kênh mà traffic ĐỀ XUẤT > `NGUONG_DE_XUAT`% (trung vị các bản chụp cấp kênh gần nhất,
+`core.chi_so_kenh.ti_le_traffic`) — đề xuất bám chữ của video nguồn, đổi tiêu đề là cắt mất nguồn traffic chính. Luật
+(2) chặn cả lúc lập mục lẫn lúc xếp hàng sửa (mục đã duyệt từ trước cũng bị bỏ).
 
 Hai chế độ (khoá kenh.yaml `giam_doc_studio`):
   * false (mặc định) — CHỈ GỢI Ý: giám đốc chọn trong thực đơn, tiêu đề mới vào "Việc của bạn".
@@ -42,6 +50,12 @@ CHI_SO_CHINH = "ctr_browse_sau_sua"
 TUOI = (52.0, 120.0)
 HE_SO_CTR = 0.8
 HIEN_THI_TOI_THIEU = 500
+#: Video của kênh (≥ 500 hiển thị, cùng loại CTR) tối thiểu để biết "CTR của chính kênh" — dưới ngần này không đổi.
+N_CTR_RIENG = 3
+#: CTR video < hệ số này × CTR trung vị của chính kênh mới là "hỏng cổng CTR" (1,0 = dưới trung vị kênh).
+HE_SO_CTR_RIENG = 1.0
+#: % traffic ĐỀ XUẤT cấp kênh mà trên mức này thì không bao giờ đổi tiêu đề sau đăng.
+NGUONG_DE_XUAT = 50.0
 
 TIEU_DE_TOI_DA = 100
 TEP_DUYET = "duyet-sua.json"
@@ -84,13 +98,52 @@ def ap_dung(bs: Any) -> float:
     return 1.0 if bs.ctr_muc_tieu and _trong_khung(bs) else 0.0
 
 
+def ctr_rieng(bs: Any, v: Dict[str, Any], trang_chu: bool) -> Tuple[Optional[float], int]:
+    """`(CTR trung vị, n)` của các video KHÁC của chính kênh — cùng loại CTR với video đang xét (trang chủ: bản chụp
+    MỚI NHẤT ≥ 36h có bảng Browse; chung: bản mới nhất), mỗi video ≥ `HIEN_THI_TOI_THIEU` hiển thị ở bản đó."""
+    import statistics  # noqa: PLC0415
+
+    ds: List[float] = []
+    for o in bs.video:
+        if o.get("id") == v.get("id"):
+            continue
+        if trang_chu:
+            b = ctr_trang_chu(o, 36.0, 1e9)
+            x, imp = (b.get("ctr_browse"), b.get("hien_thi")) if b else (None, None)
+        else:
+            b = moi_nhat(o) or {}
+            x, imp = b.get("ctr"), b.get("hien_thi")
+        if x is not None and (imp or 0) >= HIEN_THI_TOI_THIEU:
+            ds.append(float(x))
+    return (round(statistics.median(ds), 2) if ds else None), len(ds)
+
+
+def pct_de_xuat(bs: Any) -> Optional[float]:
+    """% traffic ĐỀ XUẤT cấp kênh (trung vị các bản chụp kênh gần nhất, `core.chi_so_kenh.ti_le_traffic`). Bảng số
+    dựng tay (test) gán thẳng `bs.pct_de_xuat_kenh`. Không đọc được → None (không chặn)."""
+    gan = getattr(bs, "pct_de_xuat_kenh", None)
+    if gan is not None:
+        return float(gan)
+    if not getattr(bs, "goc", ""):
+        return None
+    return pct_de_xuat_kenh(bs.goc, bs.ma_kenh)
+
+
+def pct_de_xuat_kenh(goc: str, ma: str) -> Optional[float]:
+    try:
+        from .. import chi_so_kenh  # noqa: PLC0415
+
+        return chi_so_kenh.ti_le_traffic(goc, ma).get("de_xuat")
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _chan_doan(bs: Any, v: Dict[str, Any]) -> Dict[str, Any]:
     b = moi_nhat(v) or {}
     tc = ctr_trang_chu(v, 36.0, TUOI[1] + 24)
     imp = b.get("hien_thi") or 0
     ctr = tc["ctr_browse"] if tc else b.get("ctr")
     nhan_ctr = "CTR trang chủ @{0:.0f}h".format(tc["tuoi"]) if tc else "CTR chung (thiếu bảng Browse)"
-    muc = bs.ctr_muc_tieu
     dau = "“{0}” ({1}, {2:.0f}h): {3} hiển thị, {4} {5}".format(
         v["tieu_de"][:40], v["id"], b.get("tuoi", 0), chu_so(imp), nhan_ctr, chu_so(ctr, 1, "%"))
     q = {"video_id": v["id"], "n": 1, "tin_cay": "thap", "ctr": ctr, "hien_thi": imp, "trang_chu": bool(tc)}
@@ -98,17 +151,32 @@ def _chan_doan(bs: Any, v: Dict[str, Any]) -> Dict[str, Any]:
         return dict(q, cau=dau + " — đang THẮNG, không đụng.", cong="thang")
     if imp < HIEN_THI_TOI_THIEU or ctr is None:
         return dict(q, cau=dau + " — chưa đủ hiển thị để phán cổng CTR.", cong="chua_du")
-    if ctr < HE_SO_CTR * muc:
+    dx = pct_de_xuat(bs)
+    if dx is not None and dx > NGUONG_DE_XUAT:
+        return dict(q, pct_de_xuat=dx, cau=dau + " — kênh sống bằng ĐỀ XUẤT ({0} traffic > {1:.0f}%): KHÔNG đổi tiêu "
+                    "đề sau đăng (đổi chữ khỏi video nguồn là cắt nguồn đề xuất).".format(chu_so(dx, 1, "%"),
+                                                                                        NGUONG_DE_XUAT), cong="de_xuat")
+    rieng, n_rieng = ctr_rieng(bs, v, bool(tc))
+    so_ctr, loai = ctr, "trang chủ" if tc else "chung"
+    if tc and (rieng is None or n_rieng < N_CTR_RIENG) and b.get("ctr") is not None:
+        # video cũ của kênh thiếu bảng Browse → so CTR CHUNG với CTR chung của kênh (cùng loại số mới so được)
+        rieng, n_rieng = ctr_rieng(bs, v, False)
+        so_ctr, loai = float(b["ctr"]), "chung"
+    q.update(ctr_rieng=rieng, n_ctr_rieng=n_rieng, loai_ctr_rieng=loai)
+    nhan_rieng = "CTR {0} của chính kênh {1} (trung vị {2} video)".format(loai, chu_so(rieng, 1, "%"), n_rieng)
+    if rieng is None or n_rieng < N_CTR_RIENG:
+        return dict(q, cau=dau + " — chưa đủ {0} video của kênh (mới {1}) để biết CTR riêng: không đổi.".format(
+            N_CTR_RIENG, n_rieng), cong="chua_du")
+    if so_ctr < HE_SO_CTR_RIENG * rieng:
         tr = (" và đã phán KHÔNG THẮNG (thước chung)" if v.get("ket_luan") == "truot"
               else " (tín hiệu sớm yếu: phân vị {0})".format(chu_so(v.get("tin_hieu_som"))) if khong_thang(v)
               else " (chưa phán, tín hiệu sớm không yếu)")
-        return dict(q, cau=dau + " < {0:.0%} mục tiêu {1} — HỎNG CỔNG CTR{2}.".format(HE_SO_CTR, chu_so(muc, 1, "%"), tr),
-                    cong="ctr")
+        return dict(q, cau=dau + " < {0} — HỎNG CỔNG CTR{1}.".format(nhan_rieng, tr), cong="ctr")
     if v.get("ket_luan") == "truot":
         vung = " (phân vị {0} so kênh cùng tuổi @{1}h)".format(chu_so(v.get("phan_vi")), chu_so(v.get("tuoi_do")))
-        return dict(q, cau=dau + " ≥ {0:.0%} mục tiêu {1} mà vẫn không thắng — lỗi ở cổng HIỂN THỊ (chủ đề/nguồn), "
-                    "đổi tiêu đề không cứu được{2}.".format(HE_SO_CTR, chu_so(muc, 1, "%"), vung), cong="hien_thi")
-    return dict(q, cau=dau + " — CTR ổn, chưa có kết luận trượt.", cong="on")
+        return dict(q, cau=dau + " ≥ {0} mà vẫn không thắng — lỗi ở cổng HIỂN THỊ (chủ đề/nguồn), "
+                    "đổi tiêu đề không cứu được{1}.".format(nhan_rieng, vung), cong="hien_thi")
+    return dict(q, cau=dau + " — CTR ổn so với chính kênh ({0}), chưa có kết luận trượt.".format(nhan_rieng), cong="on")
 
 
 def quan_sat(bs: Any) -> List[Dict[str, Any]]:
@@ -142,9 +210,11 @@ def de_xuat(bs: Any, qs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                    "can_noi_dung": True, "chi_goi_y": not bat_studio(bs),
                    "goi_y": {"tieu_de_da_cham": da_cham, "tieu_de_thang_kenh": thang, "cum": v.get("cum"),
                              "pool": _pool(bs, v["id"])},
-                   "chan_doan": {"ctr": q["ctr"], "hien_thi": q["hien_thi"], "trang_chu": q.get("trang_chu")},
-                   "gia_thuyet": "Đổi tiêu đề nâng CTR trang chủ từ {0} lên ≥ {1}.".format(
-                       chu_so(q["ctr"], 1, "%"), chu_so(HE_SO_CTR * bs.ctr_muc_tieu, 1, "%")),
+                   "chan_doan": {"ctr": q["ctr"], "hien_thi": q["hien_thi"], "trang_chu": q.get("trang_chu"),
+                                 "ctr_rieng": q.get("ctr_rieng"), "n_ctr_rieng": q.get("n_ctr_rieng")},
+                   "gia_thuyet": "Đổi tiêu đề nâng CTR {0} từ {1} lên ≥ {2} (CTR trung vị của chính kênh, {3} video)."
+                                 .format("trang chủ" if q.get("trang_chu") else "chung", chu_so(q["ctr"], 1, "%"),
+                                         chu_so(q.get("ctr_rieng"), 1, "%"), q.get("n_ctr_rieng")),
                    "chi_so": CHI_SO_CHINH, "co_mau": 1, "han_ngay": 7,
                    "nen": {"gia_tri": q["ctr"], "n": 1, "tu_video": [v["id"]]}})
     return ra
@@ -304,12 +374,14 @@ def loi_nhac_tieu_de(bs: Any, v: Dict[str, Any], d: Dict[str, Any], so_lieu: Dic
     dong = [
         "CỨU VIDEO CTR THẤP — kênh YouTube {0}. Video {1} KHÔNG THẮNG (thước chung: phân vị hiển thị {2} so video của "
         "kênh cùng tuổi; thắng = top 25%). {3} {4} "
-        "với {5} hiển thị < {6:.0%} mục tiêu {7}: cổng hỏng là CTR (người thấy mà không bấm), không phải hiển thị. "
+        "với {5} hiển thị < CTR trung vị của CHÍNH kênh {7} ({6} video): cổng hỏng là CTR (người thấy mà không bấm), "
+        "không phải hiển thị. "
         "Việc: viết MỘT tiêu đề mới cho CHÍNH video này (cùng nội dung — không hứa điều video không nói) để người "
         "lướt trang chủ bấm vào.".format(
             bs.ma_kenh, v["id"], chu_so(v.get("phan_vi") if v.get("phan_vi") is not None else v.get("tin_hieu_som")),
             "CTR trang chủ" if cd.get("trang_chu") else "CTR chung",
-            chu_so(cd.get("ctr"), 1, "%"), chu_so(cd.get("hien_thi")), HE_SO_CTR, chu_so(bs.ctr_muc_tieu, 1, "%")),
+            chu_so(cd.get("ctr"), 1, "%"), chu_so(cd.get("hien_thi")), cd.get("n_ctr_rieng") or "?",
+            chu_so(cd.get("ctr_rieng"), 1, "%")),
         "TIÊU ĐỀ HIỆN TẠI: “{0}”".format(v.get("tieu_de")),
         "MỤC TIÊU KÊNH\n" + str(bs.muc_tieu or "").strip(),
         "KHUNG TIÊU ĐỀ THẮNG CỦA NGÁCH (docs/kien-thuc, đã chứng minh)\n" + (khung or "(không đọc được)"),
@@ -623,7 +695,17 @@ def dong_bo(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         for ma in kenh:
             ds = doc_duyet(goc, ma)
             doi = False
+            dx = None
+            if any(m.get("trang_thai") in ("duyet", "tu_ap", "cho_duyet") for m in ds):
+                dx = pct_de_xuat_kenh(goc, ma)
             for m in ds:
+                if (m.get("trang_thai") in ("duyet", "tu_ap", "cho_duyet") and dx is not None
+                        and dx > NGUONG_DE_XUAT):
+                    # 12/10/2026: kênh sống bằng ĐỀ XUẤT — không bao giờ đổi tiêu đề sau đăng (kể cả mục duyệt trước).
+                    m.update(trang_thai="bo", ly_do_bo="kênh có {0:.0f}% traffic đề xuất > {1:.0f}% — không đổi tiêu "
+                             "đề sau đăng".format(dx, NGUONG_DE_XUAT), bo_luc=_luc(bay_gio))
+                    doi = True
+                    continue
                 if m.get("trang_thai") in ("duyet", "tu_ap"):  # (1)
                     vh = _viec_hang(m, ma, "tieu_de", tieu_de=m["tieu_de_moi"], tieu_de_cu=m.get("tieu_de_cu", ""),
                                     bay_gio=bay_gio)

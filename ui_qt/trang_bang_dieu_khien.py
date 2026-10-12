@@ -1549,6 +1549,9 @@ class TrangBangDieuKhien(QWidget):
                     buoc, (kq or {}).get("ngay") or "?"))
         elif ma_hanh_dong == "chep_link":
             self._chep_link(str(tham_so.get("url") or ""))
+        elif ma_hanh_dong == "xem_chu":
+            # Hộp chữ chi tiết của một việc (vd danh sách kiểm Studio của kênh không được phát — 12/10/2026).
+            self._app.show_message(str(tham_so.get("tieu_de") or "Chi tiết"), str(tham_so.get("noi_dung") or ""))
         elif ma_hanh_dong == "danh_dau_xong":
             bdk.danh_dau_xong(goc, str(tham_so.get("khoa") or ""))
             self.lam_moi()

@@ -479,6 +479,17 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
     except Exception:  # noqa: BLE001
         uoc = 0
     ra.update(uoc_vnd=uoc, da_chi_hom_nay=da_chi, so_luot_hom_nay=so_luot)
+    # 12/10/2026 — KÊNH KHÔNG ĐƯỢC PHÁT (`core/kenh_khong_phat.py`): ≥ 3 video gần nhất < 50 hiển thị sau ≥ 72h →
+    # không mở lượt MỚI (lý do hiện ở bảng); lượt DỞ vẫn làm nốt nhưng xếp SAU kênh đang được phát (`_nhip_trong_khoa`)
+    # — làn API + kho clip dồn cho kênh sống. Nhịp này cũng là nơi TÍNH LẠI cờ (gác tổng là nơi thứ hai).
+    try:
+        from . import kenh_khong_phat  # noqa: PLC0415
+
+        kp_dung, kp_ly = kenh_khong_phat.dang_dung(goc, ma, bay_gio=bay_gio, tinh=True)
+    except Exception:  # noqa: BLE001 — bộ phát hiện hỏng không được chặn điều phối
+        kp_dung, kp_ly = False, ""
+    if kp_dung:
+        ra["khong_phat"] = True
     if _co_luot_do(goc, ma, bay_gio.date()):
         # 12/10/2026: lượt dở đang CHỜ ENGINE phía máy chủ (đã nhả làn, tiến trình đã thoát —
         # `core/cho_engine.py`) → chưa tới giờ thăm dò thì KHÔNG sinh; tới giờ thì sinh như lượt dở.
@@ -493,7 +504,11 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
             ra.update(chay=True, diem=-1000.0,
                       ly_do="lượt dở — thăm dò lại engine {0}".format(ra["engine_cho"]))
             return ra
-        ra.update(chay=True, diem=-1000.0, ly_do="lượt dở — chạy tiếp")
+        ra.update(chay=True, diem=-1000.0, ly_do="lượt dở — chạy tiếp" + (
+            " (kênh không được phát: xếp sau kênh đang được phát)" if kp_dung else ""))
+        return ra
+    if kp_dung:
+        ra["ly_do"] = kp_ly
         return ra
     if so_luot >= xep_lich.tran_video_ngay(k):
         ra["ly_do"] = "đã đủ {0} lượt hôm nay".format(so_luot)
@@ -759,7 +774,9 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
             ra["chi_thang"] = thang
             if thang >= nst_may:
                 chan = "trần ngân sách tháng máy {0}/{1}".format(thang, nst_may)
-    ung_vien = sorted((c for c in cac if c.get("chay")), key=lambda c: (c["diem"], c["ma"]))
+    # Kênh không được phát (`khong_phat`, chỉ còn lượt dở) xếp SAU mọi kênh đang được phát (12/10/2026).
+    ung_vien = sorted((c for c in cac if c.get("chay")),
+                      key=lambda c: (bool(c.get("khong_phat")), c["diem"], c["ma"]))
     # Van Ổ ĐĨA (01/10/2026, `core/don_dep_mo_rong.van_o`), cạnh van ví: ổ < 10 GB
     # → không sinh lượt MỚI (lượt dở vẫn làm nốt); ổ đủ lại thì nhịp sau tự mở.
     if not chan and ung_vien:

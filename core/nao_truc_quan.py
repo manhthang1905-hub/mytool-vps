@@ -253,7 +253,7 @@ def doc_phien(dong: List[str], toi_da: int = SO_DONG_SUY_NGHI) -> Dict[str, Any]
             if truoc and n and a[:n] == b[:n]:
                 continue   # trùng lời cuối của não (log cắt hai bản ở độ dài khác nhau)
             khoi.append({"loai": "tom_tat", "luc": luc, "dong": _xuong_dong(noi)[:SO_DONG_MOT_DOAN]})
-        elif than.startswith(("nhật ký ngày:", "đuôi đầu ra:", "bản claude")):
+        elif than.startswith(("nhật ký ngày:", "đuôi đầu ra:", "bản claude", "[chờ]")):   # [chờ]: đợi quét Studio
             dong_nhom()
             khoi.append({"loai": "ghi_chu", "luc": luc, "chu": _cat(than, 300)})
         else:

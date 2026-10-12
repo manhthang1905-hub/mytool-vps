@@ -612,8 +612,21 @@ def _chup_kenh(goc: str, ma: str, thu_muc_vm: str, bay_gio: _dt.datetime,
         cai_vm = {}
     dung_may_dang_dom = bool(cai_vm.get("tu_dang")) and str(
         cai_vm.get("cach_dang") or "") in ("dom", "tu_dong")
+    # Kênh không được YouTube phát (12/10/2026, `core/kenh_khong_phat.py`): CHỈ ĐỌC cờ đã tính (ảnh chụp không ghi
+    # đĩa — `_mot_luot` tính lại cờ TRƯỚC khi chụp, cạnh nhịp điều phối). Hỏng → coi như không dừng.
+    khong_phat: Dict[str, Any] = {}
+    if tu_chay_bat:
+        try:
+            from core import kenh_khong_phat  # noqa: PLC0415
+
+            dung_kp, _ly_kp = kenh_khong_phat.dang_dung(goc, ma, bay_gio=bay_gio)
+            khong_phat = {"dung": dung_kp,
+                          "su_co": kenh_khong_phat.su_co(goc, ma, kenh_khong_phat.doc(goc, ma)) if dung_kp else None}
+        except Exception:  # noqa: BLE001
+            khong_phat = {}
     return {
         "tu_chay": tu_chay_bat,
+        "khong_phat": khong_phat,
         "kenh_moi": _la_kenh_moi(goc, ma, bay_gio),
         "ke_hoach": _chup_ke_hoach(goc, ma, thu_muc_vm, bay_gio),
         "runs_hom_nay": list(bao_cao.get("runs") or []),
@@ -799,10 +812,19 @@ def _su_co(loai: str, muc: str, chuyen_gi: str, *,
            "dedupe_khoa": dedupe_khoa}
 
 
+def _kiem_kenh_khong_phat(ma: str, snap: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Kênh không được YouTube phát (`core/kenh_khong_phat.py` — ảnh chụp đã tính sẵn sự cố): báo KHẨN, nhắc lại mỗi
+    24 giờ theo đợt (`dedupe_khoa` + `lap_gio`)."""
+    sc = (snap.get("khong_phat") or {}).get("su_co")
+    return [dict(sc)] if isinstance(sc, dict) and sc.get("chuyen_gi") else []
+
+
 def _kiem_khong_video_moi(ma: str, snap: Dict[str, Any],
                           bay_gio: _dt.datetime) -> List[Dict[str, Any]]:
     if not snap.get("tu_chay"):
         return []
+    if (snap.get("khong_phat") or {}).get("dung"):
+        return []  # máy CỐ Ý dừng làm video mới (kênh không được phát) — sự cố riêng `kenh_khong_phat` đã báo
     da_dang = [d for d in snap.get("ke_hoach") or [] if d.get("_loai") == "da_dang"]
     mocs = [_ghep_ngay_gio(d.get("Ngày đăng", ""), d.get("Giờ đăng", "")) for d in da_dang]
     mocs = [m for m in mocs if m is not None]
@@ -1193,6 +1215,7 @@ def kiem_su_co(anh: Dict[str, Any], *, so_du_vnd: Optional[float] = None) -> Lis
     except (TypeError, ValueError):
         bay_gio = _dt.datetime.now()
     for ma, snap in (anh.get("kenh") or {}).items():
+        _goi("kenh_khong_phat", _kiem_kenh_khong_phat, ma, snap)
         _goi("khong_video_moi", _kiem_khong_video_moi, ma, snap, bay_gio)
         _goi("hen_lich_chua_tai", _kiem_hen_lich_chua_tai, ma, snap, bay_gio)
         _goi("tai_len_loi_lap", _kiem_tai_len_loi_lap, ma, snap)
@@ -1996,7 +2019,25 @@ def _main(argv: Optional[List[str]] = None, *, goc: Optional[str] = None) -> int
 GIAY_TOI_DA_MOT_LUOT = 40 * 60
 
 
+def _tinh_lai_kenh_khong_phat(goc: str) -> None:
+    """Tính lại cờ "kênh không được phát" (`core/kenh_khong_phat.cap_nhat`) cho mọi kênh tự chạy — nơi thứ hai sau
+    nhịp điều phối, để cờ vẫn sống khi điều phối tắt. Mỗi kênh bọc try riêng; hỏng → bỏ qua."""
+    try:
+        from core import kenh_khong_phat, tu_chay as _tc  # noqa: PLC0415
+
+        ds = list(_tc.kenh_tu_chay(goc))
+    except Exception:  # noqa: BLE001
+        return
+    for ma in ds:
+        try:
+            kenh_khong_phat.cap_nhat(goc, ma)
+        except Exception:  # noqa: BLE001
+            continue
+
+
 def _mot_luot(goc: str, thu: bool) -> int:
+    if not thu:
+        _tinh_lai_kenh_khong_phat(goc)
     anh = chup_trang_thai(goc)
     # `so_du_vnd` KHÔNG tự lấy ở đây — `chup_trang_thai`/`kiem_su_co` chủ đích
     # KHÔNG gọi mạng (xem docstring đầu tệp + `NGUONG_VI_SO_NGAY`); kiểm "ví

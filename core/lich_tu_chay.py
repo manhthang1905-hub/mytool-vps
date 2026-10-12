@@ -610,7 +610,8 @@ def huy_dong_bo_git(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> T
 # ── Bộ não (03/10/2026, `core/nao.py`) ───────────────────────────────────────
 #
 # Việc thứ bảy: mỗi sáng một phiên Claude Code "bộ não" (`python -m core.nao phien`) — đọc số, tự chấm các
-# hành động cũ, rồi chỉnh hướng qua CLI an toàn. 04:10 = SAU lượt quét Studio 02:10–03:55, TRƯỚC sản xuất 05:00.
+# hành động cũ, rồi chỉnh hướng qua CLI an toàn. 12/10/2026: 06:45 (trước là 04:10) = SAU lượt quét Studio cuối
+# (~05:40–06:05, mỗi kênh cách nhau 30') — phiên còn tự đợi quét xong (`core.nao.cho_quet_xong`).
 # Cùng nguyên tắc "đã đăng nhập, không /RU SYSTEM" với các việc khác (cần phiên người dùng để tìm claude).
 
 TEN_VIEC_NAO = "ShopAPI-Nao"
@@ -620,12 +621,12 @@ def _lenh_nao(goc: str) -> str:
     return '"{0}" -m core.nao phien'.format(_pythonw_cho(goc))
 
 
-def dang_ky_nao(goc: str, gio: str = "04:10", *,
+def dang_ky_nao(goc: str, gio: str = "06:45", *,
                 chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
     """Đặt lịch `ShopAPI-Nao` (`/SC DAILY /ST <gio>`, `/F` ghi đè). Mỗi ngày chỉ một phiên (khoá + log ngày)."""
     gio = (gio or "").strip()
     if not _MAU_GIO.match(gio):
-        return False, "Giờ phải theo dạng HH:MM (ví dụ 04:10) — nhận “{0}”.".format(gio)
+        return False, "Giờ phải theo dạng HH:MM (ví dụ 06:45) — nhận “{0}”.".format(gio)
     if not os.path.isfile(os.path.join(os.path.abspath(goc), "core", "nao.py")):
         return False, "Không thấy core/nao.py — không đặt lịch bộ não được."
     tr = 'cmd /c cd /d "{0}" && {1}'.format(os.path.abspath(goc), _lenh_nao(goc))

@@ -14,24 +14,38 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
 2. **Chấm mình** — mở `hanh-dong.json` (`python -m core.nao xem-hanh-dong`): hành động nào đã tới hạn kiểm,
    so dự đoán với số thật, ghi đúng/sai (`python -m core.nao cham <id> dung|sai "lý do có số"`).
    Sai thì tự hỏi vì sao — sửa trí nhớ/kỹ năng tương ứng.
-3. **Nhìn tình hình** — ĐỌC MỤC "VIỆC BẮT BUỘC XEM HÔM NAY" Ở ĐẦU `xem` TRƯỚC TIÊN: máy đã tính sẵn bài học bị video thắng
-   bác bỏ/xác nhận (`bai-hoc ... tru|cong`) và video THẮNG LỚN kèm nguồn đối thủ để nhân bản (`uu-tien-nguon`), mỗi mục
-   có lệnh chạy được ngay. Với MỖI mục: hoặc chạy lệnh (sửa `--ly-do/--du-doan` cho đúng ý nếu cần), hoặc ghi rõ trong
-   nhật ký "bỏ qua <mục> vì <lý do có số>". Không được lặng lẽ bỏ qua. `bai-hoc cong|tru` không tốn hạn mức ngày.
-   Lệnh: `python -m core.nao xem` (báo cáo gọn: kênh, video mới, số 48h/7d, bảng điểm tự học,
-   bài học, đối thủ đang nổ, cảnh báo). Cần sâu hơn thì tự đọc dữ liệu trong `CHANNEL/<kênh>/`
-   (chỉ đọc; xem mục "Dữ liệu" bên dưới).
+3. **Nhìn tình hình — CHƯƠNG TRÌNH HÔM NAY** (mục "VIỆC BẮT BUỘC" ở đầu `python -m core.nao xem`). Máy TÍNH SỐ, bạn
+   SUY NGHĨ và QUYẾT. Với MỖI phần dưới đây ghi vào nhật ký một quyết định có số (cỡ mẫu n + ngày kiểm) — chạy lệnh in
+   sẵn khi đồng ý, sửa `--ly-do/--du-doan` khi cần, hoặc "giữ nguyên vì …". Không lặng lẽ bỏ qua. n < 3: nói rõ chưa
+   chắc và KHÔNG hành động.
+   - **(a) Danh mục kênh**: view/ngày 7 ngày + xu hướng, hiển thị @48h/@96h so đường cong CỦA CHÍNH kênh, % bàn giao
+     (khe) mỗi kênh chiếm, YPP bằng sub TRỌN ĐỜI (nhãn ghi rõ "28 ngày trượt" khi chỉ có số đó — số 28 ngày tự tụt khi
+     ngày cũ rời cửa sổ, KHÔNG phải kênh giảm), cờ "KHÔNG ĐƯỢC PHÁT". Quyết chia khe/hạn mức clip; đụng nhịp đăng
+     hoặc cần người (kiểm Studio, nạp kho clip) → `de-xuat`. Kênh không được phát đã bị máy dừng làm video mới và chủ
+     đã được báo kèm danh sách kiểm Studio — đừng đề cử nguồn cho kênh đó.
+   - **(b) Radar nổ**: video 24–72h có độ dốc hiển thị > phân vị 80 của chính kênh → ép 1–2 nguồn CÙNG chủ ngữ hẹp bằng
+     `uu-tien-nguon ... --radar <video_id>` (mã kiểm video có trên radar; KHÔNG tính 3 hành động/ngày; phải vào sản
+     xuất trong 48 giờ, quá hạn tự đóng không tính điểm). Nguồn chỉ "cùng cụm" (không cùng chủ ngữ hẹp) thì cân nhắc kỹ.
+     Kèm danh sách video THẮNG/ĐANG NÓNG chưa nhân bản (lệnh này tính hạn mức ngày).
+   - **(c) Săn khoảng trống** (mỗi tuần một lượt đầy đủ): vùng đề tài theo nghĩa có thị trường lớn + đang lên mà danh
+     mục chưa có → giao kênh chủ vùng (chủ quyền vùng), ≤ 1–2 vùng/tuần, không giao một vùng cho 2 kênh.
+   - **(d) Bao bì A/B**: đề nghị chủ bật "Thử nghiệm và so sánh" bìa trong Studio cho video mới (một `de-xuat` gộp).
+     Đổi tiêu đề sau đăng CHỈ cho video dưới CTR của chính kênh, KHÔNG BAO GIỜ cho kênh > 50% traffic đề xuất (mã chặn).
+   - **(e) Giữ chân theo đoạn** so kênh mẫu (cùng mốc giây): tối đa MỘT thay đổi kịch bản/tuần qua `thu --truc hook`.
+   Báo cáo còn: kênh, video 14 ngày, bảng điểm, bài học, hành động của bạn, đối thủ đang nổ, cảnh báo. Cần sâu hơn thì
+   tự đọc `CHANNEL/<kênh>/` (chỉ đọc; xem mục "Dữ liệu"). Lệnh `bai-hoc cong|tru` chỉ khi có so sánh n ≥ 3 cùng chiều
+   (không cộng/trừ bằng MỘT video).
 4. **Suy nghĩ** — viết ra trong nhật ký:
    - Điều gì THAY ĐỔI so với lần trước? Video nào thắng/trượt, vì sao (≥2 giả thuyết cạnh tranh)?
    - Số nào xác nhận, số nào bác bỏ? Trích số thật, không bịa. Mẫu nhỏ (n<3) thì nói rõ là chưa chắc.
    - Đối thủ đang thắng bằng gì mà mình chưa thử?
    - Kênh nào gần YPP nhất / đang tụt — ưu tiên ở đâu?
-5. **Quyết định ít mà chắc** — tối đa 3 hành động/phiên, mỗi hành động phải có: lý do (có số),
-   **dự đoán đo được** (vd "2 video kế của TL2 thuộc cụm X sẽ có hiển thị 48h ≥ trung vị kênh"),
-   và ngày kiểm. Không có gì đáng làm thì KHÔNG làm — "giữ nguyên" là quyết định tốt.
-   - **Dự đoán phải KHÓ sai một cách trung thực**: so với mốc của CHÍNH kênh (ngưỡng thắng 48h, trung vị
-     hiển thị / CTR / giờ xem 7d của kênh — có trong `xem`), không đặt ngưỡng dễ đạt kiểu "≥150 hiển thị"
-     khi ngưỡng thắng là 6.000. Dự đoán dễ = tự lừa mình, làm quyền tăng oan.
+5. **Quyết định ít mà chắc** — tối đa 3 hành động/phiên (đề cử `--radar` không tính), mỗi hành động phải có: lý do
+   (có số + cỡ mẫu n), **dự đoán đo được** theo THƯỚC CHUNG (vd "video làm từ nguồn này đạt phân vị ≥ 50 hiển thị @96h
+   so kênh"), và ngày kiểm. Không có gì đáng làm thì KHÔNG làm — "giữ nguyên" là quyết định tốt.
+   - **Dự đoán phải KHÓ sai một cách trung thực**: so với mốc của CHÍNH kênh (phân vị hiển thị cùng tuổi, phán ≥ 96h;
+     trung vị hiển thị / CTR / giờ xem 7d của kênh — có trong `xem`), không đặt ngưỡng dễ đạt kiểu "≥150 hiển thị".
+     Không phán ở 48h. Dự đoán dễ = tự lừa mình, làm quyền tăng oan.
    - **Ngày kiểm**: video đã hẹn lịch KHÔNG đổi được — hành động chỉ ảnh hưởng video làm SAU đó. Xem "lịch đăng
      tới" của kênh trong `xem`: ngày kiểm = ngày đăng của video cuối chịu ảnh hưởng + 2 (mốc 48h).
      CLI tự từ chối ngày quá sớm.
@@ -39,11 +53,10 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
      nguồn đề cử được ÉP CHỌN (ghim đầu bảng, biên tập chỉ được phủ quyết, cổng mềm như "nguồn nhỏ/kênh nguồn yếu"
      được bỏ qua; cổng cứng như đã làm/lạc ngách vẫn chặn) và chỉ thành `xong` khi một gói BÀN GIAO dùng đúng link —
      `xem` in "n0xx → <mã gói> → kết quả" để chấm.
-   - **Bài học bị số mới bác bỏ / xác nhận → GHI NGAY** bằng `bai-hoc --kenh K tru <id>` / `cong <id>` (bằng chứng
-     = video_id). Lệnh này KHÔNG tính vào 3 hành động/ngày — đừng để sổ bài học sai nằm đó (vd 05/10: video 【雑学】
-     10.202 hiển thị bác bỏ bài "tránh 雑学" mà não chỉ ghi nhật ký).
-   - Thấy video THẮNG LỚN (hiển thị ≫ ngưỡng kênh) → cân nhắc `uu-tien-nguon` cho nguồn cùng chủ đề/góc ở đối thủ
-     (nhân bản cái thắng khi còn nóng) — "giữ nguyên" chỉ đúng khi thật sự chưa có tín hiệu.
+   - **Bài học**: `bai-hoc --kenh K tru <id>` / `cong <id>` chỉ khi ≥ 3 video cùng chiều bác bỏ/xác nhận (so cùng
+     tuổi, thước chung) — một video là nhiễu. Lệnh này không tính vào 3 hành động/ngày.
+   - Video đang NỔ SỚM (radar) hoặc THẮNG → nhân bản khi còn nóng bằng nguồn cùng chủ ngữ hẹp ở đối thủ
+     ("giữ nguyên" chỉ đúng khi thật sự không có nguồn hợp).
 6. **Ghi nhớ** — cập nhật `tri-nho/` (sự thật bền: tệp khán giả, cái đã chứng minh, cái đã thất bại) và
    `ky-nang/` (cách làm một việc mà bạn đã làm đúng — vd "chẩn đoán video CTR thấp"); kỹ năng sai thì sửa ngay.
    Nhật ký phiên: `nhat-ky/<YYYY-MM-DD>.md` (quan sát → suy nghĩ → quyết định → dự đoán).
@@ -64,7 +77,8 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
 | `thu --kenh K --truc cum\|kieu_tieu_de\|kieu_bia\|hook --gia-tri X --so-video N` | Ép N video tới thử một lựa chọn (khám phá có chủ đích) |
 | `tranh --kenh K --truc ... --gia-tri X --ngay N` | Tạm tránh một lựa chọn N ngày (≤14) |
 | `bai-hoc --kenh K them "..." \| cong <id> \| tru <id>` | Sổ bài học (bằng chứng là video_id) |
-| `uu-tien-nguon --kenh K --link URL --ly-do "..."` | Đề cử 1 video đối thủ cho lần chọn content tới |
+| `uu-tien-nguon --kenh K --link URL --ly-do "..." [--radar VIDEO_ID]` | Đề cử 1 video đối thủ cho lần chọn content tới (`--radar`: video của kênh đang nổ sớm — mã kiểm, không tính hạn mức ngày, phải vào sản xuất ≤ 48h) |
+| `lich` | Giờ phiên (mặc định 06:45, đợi quét Studio xong) + lệnh `schtasks` dời lịch |
 | `de-xuat "..."` | Việc lớn (mở kênh, đổi nhịp, đổi giọng, đổi chiến lược lớn) → "Việc của bạn" chờ chủ duyệt |
 | `cham <id> dung\|sai "..."` | Tự chấm hành động cũ |
 | `huy <id>` | Gỡ một hành động của chính bạn |

@@ -161,9 +161,13 @@ def test_bai_hoc_khong_goi_y_khi_video_khong_thang(tmp_path):
 def test_xem_co_muc_bat_buoc_o_dau_va_khong_vo(tmp_path):
     goc = _goc(tmp_path, TOM_TAT, CONTENT)
     bc = nao.bao_cao(goc, BAY_GIO)
-    assert "VIỆC BẮT BUỘC XEM HÔM NAY" in bc
-    assert bc.index("VIỆC BẮT BUỘC XEM HÔM NAY") < bc.index("== KÊNH ==")
+    assert "VIỆC BẮT BUỘC HÔM NAY — CHƯƠNG TRÌNH" in bc
+    assert bc.index("VIỆC BẮT BUỘC HÔM NAY") < bc.index("== KÊNH ==")
     assert "BÁO CÁO CHO BỘ NÃO" in bc.splitlines()[0]
+    # 12/10/2026: chương trình 5 việc (mã tính, não quyết) thay lệnh in sẵn; không còn lệnh bài học bằng MỘT video
+    for phan in ("(a) DANH MỤC KÊNH", "(b) RADAR NỔ", "(c) SĂN KHOẢNG TRỐNG", "(d) BAO BÌ A/B", "(e) GIỮ CHÂN"):
+        assert phan in bc, phan
+    assert "bai-hoc --kenh" not in bc.split("== KÊNH ==")[0]
 
 
 def test_hong_thi_im_lang(tmp_path, monkeypatch):
