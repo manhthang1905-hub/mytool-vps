@@ -482,8 +482,9 @@ def doc_danh_sach(goc: str, kenh: str) -> Optional[Dict]:
         return None
 
 
-def _cham_v7(goc: str, kenh: str, bc: BaoCao, client, goi_v7: Optional[Callable], log) -> None:
-    """Cuối chuỗi: chấm Công thức V7 trên sổ vừa quét; có ví thì AI thẩm định nhóm đầu bảng rồi chấm lại.
+def _cham_v7(goc: str, kenh: str, bc: BaoCao, client, goi_v7: Optional[Callable], log):
+    """Cuối chuỗi: chấm Công thức V7 trên sổ vừa quét; có ví thì AI thẩm định nhóm đầu bảng rồi chấm lại. Trả kết quả
+    chấm (`cong_thuc_v7.KetQua`) cho phòng thí nghiệm; hỏng → None.
 
     Chủ dự án, 18/09/2026: *"chạy một nút thì mọi thứ sau khi xong v7 cũng phải có số liệu đủ và chuẩn để
     tao còn biết làm video nào tiếp"*. AI ở đây cùng ví với ba chỗ AI khác của chuỗi, và chỉ gửi tiêu đề
@@ -518,8 +519,10 @@ def _cham_v7(goc: str, kenh: str, bc: BaoCao, client, goi_v7: Optional[Callable]
                           if d.loai in (v7.LAM_NGAY, v7.NEN_LAM)],
                      canh_bao=list(kq.canh_bao))
         log("V7: Làm ngay {0} · Nên làm {1}".format(bc.v7["lam_ngay"], bc.v7["nen_lam"]))
+        return kq
     except Exception as loi:  # noqa: BLE001
         log("  V7 hỏng, bảng MỚI/BỨT/VƯỢT vẫn ra: {0}".format(str(loi)[:120]))
+        return None
 
 
 def chay(goc: str, kenh: str, *, lang: Optional[str] = None, phut_muc_tieu: Optional[float] = None,
@@ -640,7 +643,22 @@ def chay(goc: str, kenh: str, *, lang: Optional[str] = None, phut_muc_tieu: Opti
         log("  điền tuyến cho kênh hỏng: {0}".format(str(loi)[:80]))
     luc = _dt.datetime.now()
     bc.moi, bc.moi_chua_tuyen, bc.but, bc.vuot = _xep_hang(goc, kenh, bc.tuyen, hom_nay or luc.date())
-    _cham_v7(goc, kenh, bc, client, goi_v7, log)
+    kq_v7 = _cham_v7(goc, kenh, bc, client, goi_v7, log)
     bc.tep_bao_cao = _viet_bao_cao(goc, kenh, bc, luc)
+    _phong_thi_nghiem(goc, kenh, kq_v7, client, log)
     log("xong: " + bc.tom_tat())
     return bc
+
+
+def _phong_thi_nghiem(goc: str, kenh: str, kq_v7, client, log) -> None:
+    """Phòng thí nghiệm chọn content (`core/phong_thi_nghiem`, 12/10/2026): mọi giả thuyết xếp top-K trên vũ trụ
+    ứng viên của ngày → nhật ký bóng. CHỈ GHI SỐ ĐO, không đổi nguồn sản xuất. kenh.yaml `phong_thi_nghiem: false`
+    (hoặc biến môi trường `MYTOOL_PHONG_THI_NGHIEM=0`) tắt. H-AI chỉ chạy khi lượt có ví (`client`). Hỏng gì cũng chỉ
+    ghi nhật ký — không bao giờ chặn nghiên cứu/sản xuất."""
+    try:
+        from . import phong_thi_nghiem as ptn  # noqa: PLC0415
+
+        if ptn.bat(goc, kenh):
+            ptn.chay_ngay_an_toan(goc, kenh, kq_v7=kq_v7, dung_ai=client is not None, log=log)
+    except Exception as loi:  # noqa: BLE001
+        log("  phòng thí nghiệm hỏng, bỏ qua: {0}".format(str(loi)[:120]))

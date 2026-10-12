@@ -35,6 +35,10 @@ os.environ.setdefault("SHOPAPI_TRAM_CONG", "0")
 # trả MỘT câu cố định cho đường một lượt. Tắt mặc định; bài kiểm hội đồng tự bật (`monkeypatch.setenv`).
 os.environ.setdefault("SHOPAPI_HOI_DONG", "0")
 
+# Phòng thí nghiệm chọn content (`core/phong_thi_nghiem`, 12/10/2026) chạy SAU bước chấm V7 của `mot_nut` — bài kiểm
+# cũ của Một nút không cần nó (thêm đọc đĩa + tệp lạ trong tmp_path). Tắt mặc định; bài kiểm phòng thí nghiệm tự bật.
+os.environ.setdefault("MYTOOL_PHONG_THI_NGHIEM", "0")
+
 # Lưới an toàn thứ ba cho `vm/agent.py` (06/10/2026): fixture `_co_lap_vm_agent_goc` bên dưới chỉ đặt
 # `SHOPAPI_VM_GOC` cho từng BÀI — fixture cấp module (vd `tests/test_vm_bao_tri_so_sach.agent_mod`) nạp
 # `vm/agent.py` TRƯỚC nó, nên `agent.GOC` rơi về `vm/` thật và `ghi()` → `nhip_tim()` ghi đè
