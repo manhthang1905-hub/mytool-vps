@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.186.0** — 2026-10-12 — `vps-jp1` — feat(phong-thi-nghiem): dot 2 — do tang 1 cong bang (dem 1 lan, so cung o), chia khe Thompson phan tang theo kenh (kham pha 15%), luat dan dau/loai, tab Phong thi nghiem (8790), nao doc bang + de xuat gia thuyet
 - **2.185.0** — 2026-10-12 — `vps-jp1` — feat(phong-thi-nghiem): dot 1 — vu tru ung vien 3 nguon + loc doi thu that, kho dac trung, so gia thuyet (7 bo cham), nhat ky bong top-10 hang ngay, do tang thi truong + ghi cong cheo, chay nguoc lich su
 - **2.184.0** — 2026-10-12 — `vps-jp1` — feat(chon-content): V7 chon theo HANG top-10 + trong so theo bang chung (no 30, khuon 15, dang len 0), chia khe V7/VPH, bien tap chi phu quyet (+Brier), ep chon cua nao, kiem trung y mien bien the video thang, chu quyen vung de tai
 - **2.183.0** — 2026-10-12 — `vps-jp1` — feat(bia): soat chinh ta chu bia (AI) truoc khi ve + doc lai chu tren anh; chan dai toi/khung che nhan vat; giam khao loai het thi lam lo bia moi (toi da 3), khong xuat tam 'it chu nhat'
