@@ -20,6 +20,25 @@ Hậu nghiệm Beta, CO VỀ CHUNG (phân tầng 3 mức): tỉ lệ nền toàn
 phân vị CỦA CHÍNH kênh nên tỉ lệ các kênh so được với nhau — riêng kênh chưa được YouTube phát thì mọi video trượt.
 
 Mọi bảng in kèm n và khoảng tin 90%. Không bao giờ phán bằng 1–2 video.
+
+═══ ĐỢT 2 (12/10/2026) ═══
+* TẦNG 1 CÔNG BẰNG (`tang_thi_truong_cong_bang`, thay bản cũ trong bảng xếp hạng — bản cũ giữ để so): mỗi ứng viên
+  tính MỘT lần cho mỗi giả thuyết — ngày ĐẦU TIÊN nó vào top-K (bản cũ đếm một video nằm top 10 ngày thành 10 lần, mỗi
+  lần đo từ một ngày nó đã nổ sẵn); kết quả chính = NỔ +7 ngày (`7n_no`, kiếm thêm ≥ 5 × trung vị kênh nguồn) — không
+  là cổng của giả thuyết nào (cổng đọc TRẠNG THÁI lúc chấm: gấp, độ dài, pool…, không đọc tương lai). Ba mức nền =
+  "rút ngẫu nhiên": (a) từ CÙNG vũ trụ đã lọc của (kênh, ngày) — `nen`/`nang`; (b) cùng vũ trụ nhưng CÙNG Ô gấp ×
+  tuổi × đà (còn tăng/ngày) với chính video được chọn — `nen_tang`/`nang_tang` (gỡ phần "chọn video đã to, còn trẻ,
+  đang tăng thì dĩ nhiên còn tăng" khỏi H-POOL/H-DOT-BIEN — đây là số dùng làm tiên nghiệm và sàn; ô thưa < `N_O_TANG`
+  dòng lùi về gấp × đà, rồi gấp, rồi cả vũ trụ); (c) từ tập QUA CỔNG của chính giả thuyết hôm ấy —
+  `nen_cong`/`nang_cong` (xếp hạng có thêm gì so với cổng). Mẫu nền + tập qua cổng của mỗi (kênh, ngày) nhớ ở
+  `CHANNEL/<k>/phong-thi-nghiem/nen-<ngày>.json` (ảnh chụp kho cố định → tính một lần).
+* TẦNG 2: thêm GHI CÔNG CHÍNH XÁC — lượt sản xuất mà khe được phòng thí nghiệm chia cho giả thuyết h (sổ lượt
+  `nguon.gia_thuyet`, `chia_khe`) ghi kết quả cho đúng h dù nhật ký bóng hôm trước không có nguồn ấy trong top; đếm
+  `n_chinh_xac`, `thang`.
+* HẬU NGHIỆM PHÂN TẦNG + tầng 1 làm tiên nghiệm YẾU: μ_h = (κ₀·g + w₁·m₁_h + Σ điểm)/(κ₀ + w₁ + Σ n), với m₁_h = g +
+  `DELTA_TANG1`·tanh(nâng_tầng_h / `THANG_TANG1`) và w₁ = `KAPPA_TANG1` (= 1 video giả — nhỏ, khai rõ). P(tốt nhất) theo
+  kênh rút HAI BẬC: μ_h ~ Beta(mức danh mục), rồi θ_kh ~ Beta(κ₁μ_h + điểm, κ₁(1 − μ_h) + n − điểm) — kênh co về danh
+  mục và độ bất định của danh mục truyền xuống kênh (cùng cách `chia_khe` rút Thompson).
 """
 
 from __future__ import annotations
@@ -29,6 +48,7 @@ import csv
 import gzip
 import hashlib
 import io
+import json
 import math
 import os
 import random
@@ -46,10 +66,22 @@ CUA_SO_TT: Dict[str, Tuple[float, float, float]] = {"3n": (3.0, 1.5, 1.0), "7n":
                                                     "7n_no": (7.0, 2.5, 5.0)}
 NGUONG_TANG_TT = 1.0
 NGAY_TANG_1 = 60
-#: Luật quyết (đợt 2 sẽ áp — ở đây chỉ in): dẫn đầu P ≥ 0,8 với n ≥ 8; loại P < 0,05 với n ≥ 8.
+#: Luật quyết (áp ở `luat.py`): dẫn đầu P ≥ 0,8 với n ≥ 8; loại P < 0,05 với n ≥ 8.
 P_DAN_DAU, P_LOAI, N_QUYET = 0.8, 0.05, 8
 KHAM_PHA = 0.15
 DIEM_NHAN = {"thang": 1.0, "trung_binh": 0.5, "truot": 0.0}
+#: Tầng 1 công bằng — kết quả chính (nổ +7 ngày), mẫu tập qua cổng mỗi (kênh, ngày, giả thuyết), tầng gấp/tuổi.
+KQ_CHINH = "7n_no"
+MAU_CONG = 400
+TANG_VUOT = (1.0, 2.0, 3.0, 5.0, 8.0, 15.0, 30.0)
+TANG_TUOI = (3.0, 7.0, 30.0)
+#: Ô (gấp × tuổi × đà) của một (kênh, ngày) cần ≥ ngần này dòng có kết quả, không thì lùi về gấp × đà, gấp, cả vũ trụ.
+N_O_TANG = 8
+#: Tiên nghiệm tầng 1 (yếu, khai rõ): trọng số = KAPPA_TANG1 video giả; nâng tầng → lệch tối đa ±DELTA_TANG1 quanh g.
+KAPPA_TANG1 = 1.0
+DELTA_TANG1 = 0.15
+THANG_TANG1 = 0.10
+N_TANG1_TOI_THIEU = 30
 
 
 # ── Beta ────────────────────────────────────────────────────────────────────
@@ -181,9 +213,11 @@ class ChiSoView:
 
     def tim(self, ma: str, t_muc: float, dung_sai: float, sau: float) -> Optional[Tuple[float, float]]:
         ds = self.obs.get(ma) or []
+        lo = bisect.bisect_left(ds, (t_muc - dung_sai, -1e300))
+        hi = bisect.bisect_right(ds, (t_muc + dung_sai, 1e300))
         tot = None
-        for t, v in ds:
-            if t <= sau or abs(t - t_muc) > dung_sai:
+        for t, v in ds[lo:hi]:
+            if t <= sau:
                 continue
             if tot is None or abs(t - t_muc) < abs(tot[0] - t_muc):
                 tot = (t, v)
@@ -286,6 +320,289 @@ def tang_thi_truong(goc: str, logs: Sequence[Dict[str, Any]], kenh_ds: Sequence[
                         for (k2, d), o in nen.items() if k2 == k} for k in {k for k, _d in nen}}}
 
 
+# ── tầng 1 CÔNG BẰNG (đợt 2) ────────────────────────────────────────────────
+
+def o_tang(vuot: Optional[float], tuoi: Optional[float], tang: Any = None) -> Tuple[int, int, int]:
+    """`(tầng gấp, tầng tuổi, còn tăng)` của một ứng viên (-1 = thiếu số) — ô so "cùng cỡ, cùng tuổi, cùng đà" (đà =
+    `Tăng/ngày` của sổ > 0: cổng `tang_duong` của H-POOL; không so cùng đà thì "đang tăng thì còn tăng" lọt vào nâng)."""
+    iv = -1 if vuot is None else bisect.bisect_right(TANG_VUOT, float(vuot))
+    it = -1 if tuoi is None else bisect.bisect_right(TANG_TUOI, float(tuoi))
+    td = -1 if tang is None else (1 if float(tang) > 0 else 0)
+    return iv, it, td
+
+
+def khoa_gt(g: Dict[str, Any]) -> str:
+    return "{0}@{1}".format(g.get("id"), int(g.get("phien_ban") or 1))
+
+
+#: Phiên bản định dạng `nen-<ngày>.json.gz` (2 = thêm tăng/ngày cho ô "cùng đà") — khác thì tính lại.
+PHIEN_BAN_NEN = 2
+
+
+def duong_nen(goc: str, kenh: str, ngay: str) -> str:
+    return os.path.join(c.thu_muc_kenh(goc, kenh), "nen-{0}.json.gz".format(ngay))
+
+
+def _doc_nen(p: str) -> Optional[Dict[str, Any]]:
+    try:
+        with gzip.open(p, "rt", encoding="utf-8") as tep:
+            du = json.load(tep)
+        return du if isinstance(du, dict) and isinstance(du.get("so"), dict) else None
+    except (OSError, ValueError, EOFError):
+        return None
+
+
+def nen_ngay(goc: str, kenh: str, ngay: str, reg: Sequence[Dict[str, Any]], top_ma: Iterable[str]) -> Dict[str, Any]:
+    """Mẫu nền + tập qua cổng của (kênh, ngày) cho tầng 1 công bằng — nhớ ở `nen-<ngày>.json.gz` (ảnh chụp kho cố định,
+    giả thuyết tách theo phiên bản ⇒ tính MỘT lần; thiếu khoá thì đọc lại ảnh chụp đúng một lần):
+
+        {"pb": PHIEN_BAN_NEN, "so": {mã: [view, giờ quét, trung vị kênh nguồn, gấp, tuổi ngày, tăng/ngày] | null},
+         "mau": [mã…] (mẫu nền ≤ MAU_NEN), "cong": {"<gt>@<pb>": {"n": số qua cổng, "mau": [mã…] (≤ MAU_CONG)}}}
+
+    Không có ảnh chụp kho → cái đã nhớ (hoặc {})."""
+    from . import dac_trung  # noqa: PLC0415
+    from . import gia_thuyet as gtm  # noqa: PLC0415
+
+    p = duong_nen(goc, kenh, ngay)
+    cu = _doc_nen(p)
+    if cu is not None and cu.get("pb") != PHIEN_BAN_NEN:
+        cu = None
+    top_ma = {m for m in top_ma if m}
+    can = [g for g in reg if g.get("loai") != gtm.LOAI_LLM and g.get("trang_thai") != gtm.LOAI]
+    if cu is not None and all(khoa_gt(g) in (cu.get("cong") or {}) for g in can) and top_ma <= set(cu["so"]):
+        return cu
+    kho = dac_trung.doc_kho(goc, kenh, ngay)
+    if not kho:
+        return cu or {}
+    theo_ma = {str(d.get("ma") or ""): d for d in kho if d.get("ma")}
+    so_: Dict[str, Any] = dict((cu or {}).get("so") or {})
+
+    def ghi_so(m: str) -> None:
+        if m in so_ and so_[m] is not None:
+            return
+        d = theo_ma.get(m)
+        so_[m] = None if d is None else [d.get("view"), d.get("luc"), d.get("view_tv"), d.get("vuot"),
+                                         d.get("tuoi_ngay"), d.get("tang_ngay")]
+    n = len(theo_ma)
+    mau = [m for m in theo_ma if _trong_mau(m, n)]
+    for m in mau:
+        ghi_so(m)
+    for m in top_ma:
+        ghi_so(m)
+    cong = dict((cu or {}).get("cong") or {})
+    for g in can:
+        ds, n_du = gtm.xep_hang(g, kho, max(1, n))
+        ma_ds = [str(d.get("ma") or "") for d, _x in ds if d.get("ma")]
+        chon = [m for m in ma_ds if _trong_mau(m, len(ma_ds), MAU_CONG)]
+        for m in chon:
+            ghi_so(m)
+        cong[khoa_gt(g)] = {"n": int(n_du), "mau": chon}
+    ra = {"pb": PHIEN_BAN_NEN, "ngay": ngay, "n_kho": n, "so": so_, "mau": mau, "cong": cong}
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        tam = p + ".tmp"
+        with gzip.open(tam, "wt", encoding="utf-8") as tep:
+            json.dump(ra, tep, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tam, p)
+    except OSError:
+        pass
+    return ra
+
+
+def _o_cb() -> Dict[str, Any]:
+    return {w: {"n": 0, "hit": 0, "nen_tong": 0.0, "tang_tong": 0.0, "cong_tong": 0.0, "n_cong": 0, "cong_hit": 0.0}
+            for w in CUA_SO_TT}
+
+
+def _chot_cb(o: Dict[str, Any], n_lap: int = 0) -> Dict[str, Any]:
+    ra: Dict[str, Any] = {}
+    for w, x in o.items():
+        n, h, nc_ = x["n"], x["hit"], x["n_cong"]
+        tl = h / float(n) if n else None
+        nen = x["nen_tong"] / n if n else None
+        tang = x["tang_tong"] / n if n else None
+        cong = x["cong_tong"] / nc_ if nc_ else None
+        tl_cong = x["cong_hit"] / nc_ if nc_ else None
+        ra[w] = {"n": n, "hit": h, "ti_le": lam(tl), "ci90": ci90(1 + h, 1 + n - h),
+                 "nen": lam(nen), "nang": lam(tl - nen) if n else None,
+                 "nen_tang": lam(tang), "nang_tang": lam(tl - tang) if n else None,
+                 "n_cong": nc_, "nen_cong": lam(cong),
+                 "nang_cong": lam(tl_cong - cong) if (nc_ and tl_cong is not None and cong is not None) else None}
+    ra["n_lap_bo"] = n_lap
+    return ra
+
+
+def lam(x: Optional[float]) -> Optional[float]:
+    return None if x is None else round(float(x), 3)
+
+
+def tang_thi_truong_cong_bang(goc: str, logs: Sequence[Dict[str, Any]], kenh_ds: Sequence[str],
+                              reg: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """Tầng 1 CÔNG BẰNG — xem đầu tệp. `{"chung": {gt: {w: …}}, "theo_kenh": {k: {gt: {w: …}}}, "cach": "lan_dau",
+    "kq_chinh": "7n_no"}`; mỗi ô: n (lần ĐẦU vào top), hit, ti_le [CI90], nen/nang (rút ngẫu nhiên cùng vũ trụ),
+    nen_tang/nang_tang (cùng ô gấp × tuổi × đà), nen_cong/nang_cong (từ tập qua cổng của chính giả thuyết), `n_lap_bo`
+    (lần xuất hiện LẶP đã bỏ)."""
+    from .dac_trung import duong_kho, ngay_co_kho  # noqa: PLC0415
+
+    rong = {"chung": {}, "theo_kenh": {}, "cach": "lan_dau", "kq_chinh": KQ_CHINH}
+    if not logs:
+        return rong
+    hien = {g["id"]: g for g in reg}
+    ds_log = sorted((x for x in logs if x.get("kenh") in kenh_ds),
+                    key=lambda x: (x.get("ngay", ""), x.get("kenh", ""), x.get("gt", "")))
+    if not ds_log:
+        return rong
+    # Lần ĐẦU vào top: theo (kênh, gt) và theo gt (cả danh mục — kênh/ngày sớm nhất).
+    dau_k: Dict[Tuple[str, str], Dict[str, Tuple[str, Dict[str, Any]]]] = {}
+    dau_c: Dict[str, Dict[str, Tuple[str, str, Dict[str, Any]]]] = {}
+    lap_k: Dict[Tuple[str, str], int] = {}
+    lap_c: Dict[str, int] = {}
+    top_ngay: Dict[Tuple[str, str], Set[str]] = {}
+    for x in ds_log:
+        k, d, gt = x["kenh"], x["ngay"], x.get("gt", "")
+        for it in x.get("top") or []:
+            ma = str(it.get("ma") or "")
+            if not ma:
+                continue
+            top_ngay.setdefault((k, d), set()).add(ma)
+            m = dau_k.setdefault((k, gt), {})
+            if ma in m:
+                lap_k[(k, gt)] = lap_k.get((k, gt), 0) + 1
+            else:
+                m[ma] = (d, it)
+            mc = dau_c.setdefault(gt, {})
+            if ma in mc:
+                lap_c[gt] = lap_c.get(gt, 0) + 1
+            else:
+                mc[ma] = (d, k, it)
+    nen: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for (k, d), ma_s in sorted(top_ngay.items()):
+        try:
+            nen[(k, d)] = nen_ngay(goc, k, d, reg, ma_s)
+        except Exception:  # noqa: BLE001 — một ngày hỏng không làm đổ cả bảng
+            nen[(k, d)] = {}
+    can: Set[str] = {m for v in dau_k.values() for m in v}
+    for o in nen.values():
+        can.update(o.get("mau") or [])
+        for x in (o.get("cong") or {}).values():
+            can.update(x.get("mau") or [])
+    ngay_log = sorted({x["ngay"] for x in ds_log})
+    tu, den = ngay_log[0], c.cong_ngay(ngay_log[-1], 12)
+    idx = ChiSoView(can)
+    for k in kenh_ds:
+        for d in ngay_co_kho(goc, k):
+            if tu <= d <= den:
+                for m, v, t, _tv in _doc_gon(duong_kho(goc, k, d)):
+                    idx.them(m, t, v)
+    for x in ds_log:
+        for it in x.get("top") or []:
+            idx.them(str(it.get("ma") or ""), c.so(it.get("t")), c.so(it.get("v")))
+
+    nho_kq: Dict[Tuple[Any, ...], Optional[bool]] = {}
+
+    def kq_so(so_: Any, w: str) -> Optional[bool]:
+        if not so_:
+            return None
+        khoa = (so_[0], so_[1], so_[2], so_[3], w)
+        if khoa not in nho_kq:
+            so_ngay, dsai, ng = CUA_SO_TT[w]
+            nho_kq[khoa] = ket_qua_tt(idx, so_[0], c.so(so_[1]), c.so(so_[2]), c.so(so_[3]), so_ngay, dsai, ng)
+        return nho_kq[khoa]
+
+    # Mức nền mỗi (kênh, ngày, cửa sổ): cả mẫu, theo ô tầng, theo tầng gấp; tập qua cổng theo khoá giả thuyết.
+    muc: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+    def muc_cua(k: str, d: str) -> Dict[str, Any]:
+        if (k, d) in muc:
+            return muc[(k, d)]
+        o = nen.get((k, d)) or {}
+        so_ = o.get("so") or {}
+        ra: Dict[str, Any] = {}
+        for w in CUA_SO_TT:
+            tat, o_t, o_d, o_v = [0, 0], {}, {}, {}
+            for m in o.get("mau") or []:
+                s = so_.get(m)
+                y = kq_so([m] + list(s[:3]), w) if s else None
+                if y is None:
+                    continue
+                tat[0] += 1 if y else 0
+                tat[1] += 1
+                iv, it, td = o_tang(c.so(s[3]), c.so(s[4]), c.so(s[5]) if len(s) > 5 else None)
+                for bang_o, khoa in ((o_t, (iv, it, td)), (o_d, (iv, td)), (o_v, iv)):
+                    z = bang_o.setdefault(khoa, [0, 0])
+                    z[0] += 1 if y else 0
+                    z[1] += 1
+            cong = {}
+            for kg, x in (o.get("cong") or {}).items():
+                hh = [kq_so([m] + list(so_[m][:3]), w) for m in x.get("mau") or [] if so_.get(m)]
+                hh = [y for y in hh if y is not None]
+                cong[kg] = (sum(1 for y in hh if y) / float(len(hh))) if hh else None
+            ra[w] = {"vt": (tat[0] / float(tat[1])) if tat[1] else None, "o": o_t, "d": o_d, "v": o_v, "cong": cong}
+        muc[(k, d)] = ra
+        return ra
+
+    def nen_tang(mm: Dict[str, Any], so_ma: Any) -> Optional[float]:
+        if mm["vt"] is None:
+            return None
+        if so_ma:
+            iv, it, td = o_tang(c.so(so_ma[3]), c.so(so_ma[4]), c.so(so_ma[5]) if len(so_ma) > 5 else None)
+            for bang_o, khoa in ((mm["o"], (iv, it, td)), (mm["d"], (iv, td)), (mm["v"], iv)):
+                z = bang_o.get(khoa)
+                if z and z[1] >= N_O_TANG:
+                    return z[0] / float(z[1])
+        return mm["vt"]
+
+    def cong_vao(o: Dict[str, Any], k: str, d: str, gt: str, it: Dict[str, Any]) -> None:
+        g = hien.get(gt)
+        so_ma = ((nen.get((k, d)) or {}).get("so") or {}).get(str(it.get("ma") or ""))
+        for w, (so_ngay, dsai, ng) in CUA_SO_TT.items():
+            y = ket_qua_tt(idx, str(it.get("ma") or ""), c.so(it.get("v")), c.so(it.get("t")), c.so(it.get("tv")),
+                           so_ngay, dsai, ng)
+            mm = muc_cua(k, d)[w]
+            if y is None or mm["vt"] is None:
+                continue
+            x = o[w]
+            x["n"] += 1
+            x["hit"] += 1 if y else 0
+            x["nen_tong"] += mm["vt"]
+            x["tang_tong"] += nen_tang(mm, so_ma)
+            cg = mm["cong"].get(khoa_gt(g)) if g else None
+            if cg is not None:
+                x["n_cong"] += 1
+                x["cong_tong"] += cg
+                x["cong_hit"] += 1 if y else 0
+
+    theo_kenh: Dict[str, Dict[str, Any]] = {}
+    for (k, gt), m in dau_k.items():
+        o = _o_cb()
+        for ma, (d, it) in m.items():
+            cong_vao(o, k, d, gt, it)
+        theo_kenh.setdefault(k, {})[gt] = _chot_cb(o, lap_k.get((k, gt), 0))
+    chung: Dict[str, Any] = {}
+    for gt, m in dau_c.items():
+        o = _o_cb()
+        for ma, (d, k, it) in m.items():
+            cong_vao(o, k, d, gt, it)
+        chung[gt] = _chot_cb(o, lap_c.get(gt, 0))
+    return {"chung": chung, "theo_kenh": theo_kenh, "cach": "lan_dau", "kq_chinh": KQ_CHINH}
+
+
+def tien_nghiem_tang1(t1: Dict[str, Any], g: float, gt_ds: Sequence[str]) -> Dict[str, Tuple[float, float]]:
+    """`{gt: (m₁, w₁)}` — tầng 1 công bằng (nâng TẦNG của kết quả chính, toàn danh mục) đổi thành tiên nghiệm YẾU của
+    tỉ lệ thắng mức danh mục (xem đầu tệp). Thiếu số / n < `N_TANG1_TOI_THIEU` → (g, 0) (không ảnh hưởng)."""
+    ra: Dict[str, Tuple[float, float]] = {}
+    ch = (t1 or {}).get("chung") or {}
+    for gt in gt_ds:
+        o = ((ch.get(gt) or {}).get(KQ_CHINH)) or {}
+        lift = o.get("nang_tang") if o.get("nang_tang") is not None else o.get("nang")
+        if lift is None or int(o.get("n") or 0) < N_TANG1_TOI_THIEU:
+            ra[gt] = (g, 0.0)
+            continue
+        m1 = min(0.98, max(0.02, g + DELTA_TANG1 * math.tanh(float(lift) / THANG_TANG1)))
+        ra[gt] = (round(m1, 4), KAPPA_TANG1)
+    return ra
+
+
 # ── tầng 2 ──────────────────────────────────────────────────────────────────
 
 def ket_qua_san_xuat(goc: str, kenh: str) -> List[Dict[str, Any]]:
@@ -315,7 +632,8 @@ def ket_qua_san_xuat(goc: str, kenh: str) -> List[Dict[str, Any]]:
                 k = None
         nhan = str(getattr(k, "nhan", "") or "") if k is not None else ""
         ra.append({"ma_goi": r["ma_goi"], "ma": r["ma"], "ngay": r["ngay"], "video_id": vid, "nhan": nhan or "chua_du",
-                   "diem": DIEM_NHAN.get(nhan), "cong_thuc": r.get("cong_thuc", "")})
+                   "diem": DIEM_NHAN.get(nhan), "cong_thuc": r.get("cong_thuc", ""),
+                   "gia_thuyet": r.get("gia_thuyet", ""), "ptn_pb": r.get("ptn_pb")})
     return ra
 
 
@@ -336,6 +654,11 @@ def tang_cau_noi(san_xuat: Dict[str, List[Dict[str, Any]]], logs: Sequence[Dict[
     theo_kenh: Dict[str, Dict[str, Dict[str, Any]]] = {}
     nen_kenh: Dict[str, Dict[str, float]] = {}
     khong: Dict[str, int] = {}
+
+    def o_cua(k: str, gt: str) -> Dict[str, Any]:
+        return theo_kenh.setdefault(k, {}).setdefault(gt, {"n": 0, "diem": 0.0, "thang": 0, "n_ngoai": 0,
+                                                           "diem_ngoai": 0.0, "cho": 0, "n_chinh_xac": 0,
+                                                           "cho_chinh_xac": 0, "video": []})
     for k, ds in san_xuat.items():
         nk = nen_kenh.setdefault(k, {"n": 0, "diem": 0.0, "cho": 0})
         for r in ds:
@@ -344,7 +667,15 @@ def tang_cau_noi(san_xuat: Dict[str, List[Dict[str, Any]]], logs: Sequence[Dict[
             else:
                 nk["n"] += 1
                 nk["diem"] += r["diem"]
-            co_log = False
+            # Khe phòng thí nghiệm chia cho h (sổ lượt `nguon.gia_thuyet`, đúng phiên bản) → ghi công CHÍNH XÁC cho h.
+            gt_khe = str(r.get("gia_thuyet") or "")
+            try:
+                pb = int(r["ptn_pb"]) if r.get("ptn_pb") not in (None, "") else None
+            except (TypeError, ValueError):
+                pb = None
+            if gt_khe and (gt_khe not in gts or (pb is not None and pb != gts[gt_khe])):
+                gt_khe = ""
+            co_log = bool(gt_khe)
             for gt in gts:
                 ngay_log = top.get((k, gt)) or {}
                 dung = None
@@ -353,20 +684,24 @@ def tang_cau_noi(san_xuat: Dict[str, List[Dict[str, Any]]], logs: Sequence[Dict[
                     if d in ngay_log:
                         dung = d
                         break
-                if dung is None:
+                chinh_xac = gt == gt_khe
+                if dung is None and not chinh_xac:
                     continue
                 co_log = True
-                o = theo_kenh.setdefault(k, {}).setdefault(gt, {"n": 0, "diem": 0.0, "n_ngoai": 0, "diem_ngoai": 0.0,
-                                                               "cho": 0, "video": []})
-                trong = r["ma"] in ngay_log[dung]
+                o = o_cua(k, gt)
+                trong = chinh_xac or (r["ma"] in ngay_log[dung])
                 if r["diem"] is None:
                     if trong:
                         o["cho"] += 1
+                        o["cho_chinh_xac"] += 1 if chinh_xac else 0
                     continue
                 if trong:
                     o["n"] += 1
                     o["diem"] += r["diem"]
-                    o["video"].append({"ma_goi": r["ma_goi"], "nhan": r["nhan"], "nhat_ky": dung})
+                    o["thang"] += 1 if r.get("nhan") == "thang" else 0
+                    o["n_chinh_xac"] += 1 if chinh_xac else 0
+                    o["video"].append({"ma_goi": r["ma_goi"], "nhan": r["nhan"], "nhat_ky": dung or "",
+                                       "chinh_xac": chinh_xac})
                 else:
                     o["n_ngoai"] += 1
                     o["diem_ngoai"] += r["diem"]
@@ -376,12 +711,42 @@ def tang_cau_noi(san_xuat: Dict[str, List[Dict[str, Any]]], logs: Sequence[Dict[
             "co_nhat_ky": {k: sorted(v) for k, v in co_nk.items()}}
 
 
-def hau_nghiem(cau_noi: Dict[str, Any], gt_ds: Sequence[str], kenh_ds: Sequence[str]) -> Dict[str, Any]:
+def rut_hai_bac(r: random.Random, muc: Tuple[float, float], s: float, n: float,
+                kappa: float = KAPPA_KENH) -> float:
+    """Một lượt rút θ_kh phân tầng: μ ~ Beta(mức danh mục), θ ~ Beta(κμ + điểm, κ(1 − μ) + n − điểm)."""
+    mu = r.betavariate(max(muc[0], 1e-6), max(muc[1], 1e-6))
+    return r.betavariate(max(kappa * mu + s, 1e-6), max(kappa * (1.0 - mu) + n - s, 1e-6))
+
+
+def p_tot_nhat_hai_bac(muc: Dict[str, Tuple[float, float]], du: Dict[str, Tuple[float, float]], hat: str,
+                       n: int = N_MC, kappa: float = KAPPA_KENH) -> Dict[str, float]:
+    """P(θ_kh lớn nhất) rút HAI BẬC (`rut_hai_bac`); `muc[h]` = (a, b) mức danh mục, `du[h]` = (điểm, n) của kênh."""
+    ten = sorted(t for t in du if t in muc)
+    if not ten:
+        return {}
+    if len(ten) == 1:
+        return {ten[0]: 1.0}
+    r = _rng(hat)
+    dem = {t: 0 for t in ten}
+    for _ in range(n):
+        tot, gt = -1.0, ten[0]
+        for t in ten:
+            x = rut_hai_bac(r, muc[t], du[t][0], du[t][1], kappa)
+            if x > tot:
+                tot, gt = x, t
+        dem[gt] += 1
+    return {t: round(dem[t] / float(n), 4) for t in ten}
+
+
+def hau_nghiem(cau_noi: Dict[str, Any], gt_ds: Sequence[str], kenh_ds: Sequence[str],
+               tien_nghiem: Optional[Dict[str, Tuple[float, float]]] = None) -> Dict[str, Any]:
     """Beta phân tầng + P(tốt nhất) — xem đầu tệp. Trả `{"g": ..., "chung": {gt: …}, "theo_kenh": {k: {gt: …}}}`.
 
-    P(tốt nhất) chỉ so giữa các giả thuyết CÓ nhật ký bóng (của kênh ấy / ở bất kỳ kênh nào cho mức chung) — giả thuyết
-    chưa từng chạy (vd. H-AI khi chưa có ví) không có gì để so, chỉ in hậu nghiệm tiên nghiệm, `p_tot_nhat = None`.
-    Khi `cau_noi` không mang `co_nhat_ky` (gọi tay) thì mọi giả thuyết đều được so."""
+    `tien_nghiem` = `{gt: (m₁, w₁)}` (tầng 1 công bằng, `tien_nghiem_tang1`) — cộng w₁ video giả tỉ lệ m₁ vào mức danh
+    mục của giả thuyết; None/thiếu = không có. P(tốt nhất) chỉ so giữa các giả thuyết CÓ nhật ký bóng (của kênh ấy / ở
+    bất kỳ kênh nào cho mức chung) — giả thuyết chưa từng chạy (vd. H-AI khi chưa có ví) không có gì để so, chỉ in hậu
+    nghiệm tiên nghiệm, `p_tot_nhat = None`. Khi `cau_noi` không mang `co_nhat_ky` (gọi tay) thì mọi giả thuyết đều được
+    so. P(tốt nhất) theo kênh rút hai bậc (`p_tot_nhat_hai_bac`)."""
     co_nk = cau_noi.get("co_nhat_ky")
     co_chung = set(gt_ds) if co_nk is None else {g for ds in co_nk.values() for g in ds}
     nen = cau_noi.get("nen_kenh") or {}
@@ -394,10 +759,14 @@ def hau_nghiem(cau_noi: Dict[str, Any], gt_ds: Sequence[str], kenh_ds: Sequence[
     for gt in gt_ds:
         s = sum(float((tk.get(k) or {}).get(gt, {}).get("diem") or 0) for k in tk)
         n = sum(float((tk.get(k) or {}).get(gt, {}).get("n") or 0) for k in tk)
-        a, b = KAPPA_CHUNG * g + s, KAPPA_CHUNG * (1 - g) + n - s
+        m1, w1 = (tien_nghiem or {}).get(gt) or (g, 0.0)
+        a, b = KAPPA_CHUNG * g + w1 * m1 + s, KAPPA_CHUNG * (1 - g) + w1 * (1 - m1) + n - s
         mu[gt] = a / (a + b)
-        chung[gt] = {"n": int(n), "diem": round(s, 2), "a": round(a, 3), "b": round(b, 3), "tb": round(mu[gt], 3),
-                     "ci90": ci90(a, b)}
+        chung[gt] = {"n": int(n), "diem": round(s, 2),
+                     "thang": int(sum(int((tk.get(k) or {}).get(gt, {}).get("thang") or 0) for k in tk)),
+                     "n_chinh_xac": int(sum(int((tk.get(k) or {}).get(gt, {}).get("n_chinh_xac") or 0) for k in tk)),
+                     "a": round(a, 3), "b": round(b, 3), "tb": round(mu[gt], 3), "ci90": ci90(a, b),
+                     "tang1_m": round(m1, 3), "tang1_w": w1}
     pc = p_tot_nhat({gt: (chung[gt]["a"], chung[gt]["b"]) for gt in gt_ds if gt in co_chung}, "chung")
     for gt in gt_ds:
         chung[gt]["p_tot_nhat"] = pc.get(gt)
@@ -410,12 +779,15 @@ def hau_nghiem(cau_noi: Dict[str, Any], gt_ds: Sequence[str], kenh_ds: Sequence[
             s, n = float(o.get("diem") or 0), float(o.get("n") or 0)
             a, b = KAPPA_KENH * mu[gt] + s, KAPPA_KENH * (1 - mu[gt]) + n - s
             no, so_ = float(o.get("n_ngoai") or 0), float(o.get("diem_ngoai") or 0)
-            m[gt] = {"n": int(n), "diem": round(s, 2), "cho": int(o.get("cho") or 0), "a": round(a, 3),
+            m[gt] = {"n": int(n), "diem": round(s, 2), "thang": int(o.get("thang") or 0),
+                     "n_chinh_xac": int(o.get("n_chinh_xac") or 0), "cho": int(o.get("cho") or 0), "a": round(a, 3),
                      "b": round(b, 3), "tb": round(a / (a + b), 3), "ci90": ci90(a, b),
                      "ti_le_tho": round(s / n, 3) if n else None, "n_ngoai": int(no),
                      "ti_le_ngoai": round(so_ / no, 3) if no else None, "video": o.get("video") or []}
         co_k = set(gt_ds) if co_nk is None else set(co_nk.get(k) or [])
-        pk = p_tot_nhat({gt: (m[gt]["a"], m[gt]["b"]) for gt in gt_ds if gt in co_k}, "kenh:" + k)
+        pk = p_tot_nhat_hai_bac({gt: (chung[gt]["a"], chung[gt]["b"]) for gt in gt_ds},
+                                {gt: (float(m[gt]["diem"]), float(m[gt]["n"])) for gt in gt_ds if gt in co_k},
+                                "kenh:" + k)
         for gt in gt_ds:
             m[gt]["p_tot_nhat"] = pk.get(gt)
             m[gt]["co_nhat_ky"] = gt in co_k
@@ -462,10 +834,18 @@ def kenh_phong_thi_nghiem(goc: str) -> List[str]:
         return []
 
 
+def _g_danh_muc(nen_kenh: Dict[str, Any]) -> float:
+    S = sum(float(x.get("diem") or 0) for x in nen_kenh.values())
+    N = sum(float(x.get("n") or 0) for x in nen_kenh.values())
+    return (S + 1.0) / (N + 2.0)
+
+
 def chay(goc: str, *, kenh_ds: Optional[Sequence[str]] = None, ghi: bool = True,
-         log: Any = None) -> Dict[str, Any]:
-    """Tính lại bảng xếp hạng (tầng 1 + 2) từ nhật ký bóng, ảnh chụp kho và kết quả sản xuất; ghi
-    `workspace/phong-thi-nghiem/bang-xep-hang.json`."""
+         log: Any = None, so_sanh_cu: bool = False, ap_luat: bool = True) -> Dict[str, Any]:
+    """Tính lại bảng xếp hạng (tầng 1 công bằng + tầng 2 + hậu nghiệm có tiên nghiệm tầng 1) từ nhật ký bóng, ảnh chụp
+    kho và kết quả sản xuất; ghi `workspace/phong-thi-nghiem/bang-xep-hang.json`, một dòng lịch sử
+    (`lich-su-xep-hang.jsonl`, mỗi ngày một dòng — để báo cáo não in độ thay đổi) rồi áp LUẬT QUYẾT (`luat.ap_dung`:
+    dẫn đầu / loại / tốt nghiệp, ghi sổ quyết định). `so_sanh_cu=True` thêm `tang1_cu` (cách đo đợt 1, để so)."""
     from . import gia_thuyet as gtm  # noqa: PLC0415
     from . import nhat_ky  # noqa: PLC0415
 
@@ -476,7 +856,8 @@ def chay(goc: str, *, kenh_ds: Optional[Sequence[str]] = None, ghi: bool = True,
     tu1 = c.cong_ngay(c.hom_nay(), -NGAY_TANG_1)
     logs = nhat_ky.doc(goc, kenh=kenh_ds)
     logs_hien = [x for x in logs if hien.get(x.get("gt")) == int(x.get("pb") or 1)]
-    t1 = tang_thi_truong(goc, [x for x in logs_hien if x["ngay"] >= tu1], kenh_ds)
+    logs_1 = [x for x in logs_hien if x["ngay"] >= tu1]
+    t1 = tang_thi_truong_cong_bang(goc, logs_1, kenh_ds, reg)
     sx = {}
     for kk in kenh_ds:
         try:
@@ -486,26 +867,78 @@ def chay(goc: str, *, kenh_ds: Optional[Sequence[str]] = None, ghi: bool = True,
             if log:
                 log("  phòng thí nghiệm: không đọc được kết quả sản xuất {0}: {1}".format(kk, str(loi)[:100]))
     t2 = tang_cau_noi(sx, logs_hien, {g: hien[g] for g in con})
-    hn = hau_nghiem(t2, con, kenh_ds)
+    tn = tien_nghiem_tang1(t1, _g_danh_muc(t2["nen_kenh"]), con)
+    hn = hau_nghiem(t2, con, kenh_ds, tien_nghiem=tn)
     hn["co_nhat_ky"] = t2.get("co_nhat_ky") or {}
     gan = c.cong_ngay(c.hom_nay(), -LUI_NHAT_KY)
     co_gan: Dict[str, List[str]] = {}
+    ngay_bong: Dict[str, Dict[str, int]] = {}
+    ngay_bong_set: Dict[Tuple[str, str], Set[str]] = {}
     for x in logs_hien:
-        if x["ngay"] >= gan and x.get("top"):     # chỉ giả thuyết THẬT SỰ có ứng viên gần đây mới chọn được khe
+        if not x.get("top"):
+            continue
+        ngay_bong_set.setdefault((x["kenh"], x["gt"]), set()).add(x["ngay"])
+        if x["ngay"] >= gan:     # chỉ giả thuyết THẬT SỰ có ứng viên gần đây mới chọn được khe
             co_gan.setdefault(x["kenh"], [])
             if x["gt"] not in co_gan[x["kenh"]]:
                 co_gan[x["kenh"]].append(x["gt"])
-    bang = {"phien_ban": 1, "luc": c.luc_iso(), "k": k, "kenh": kenh_ds,
+    for (kk, gt), ds in ngay_bong_set.items():
+        ngay_bong.setdefault(kk, {})[gt] = len(ds)
+    bang = {"phien_ban": 2, "luc": c.luc_iso(), "ngay": c.hom_nay(), "k": k, "kenh": kenh_ds,
             "gia_thuyet": {g["id"]: {"mo_ta": g.get("mo_ta", ""), "trang_thai": g["trang_thai"],
-                                     "phien_ban": g["phien_ban"], "loai": g["loai"]} for g in reg},
+                                     "phien_ban": g["phien_ban"], "loai": g["loai"],
+                                     "tao_boi": g.get("tao_boi", ""), "tao_luc": g.get("tao_luc", "")} for g in reg},
             "tham_so": {"kappa_chung": KAPPA_CHUNG, "kappa_kenh": KAPPA_KENH, "n_mc": N_MC,
                         "lui_nhat_ky": LUI_NHAT_KY, "cua_so_tt": CUA_SO_TT, "nguong_tang_tt": NGUONG_TANG_TT,
-                        "p_dan_dau": P_DAN_DAU, "p_loai": P_LOAI, "n_quyet": N_QUYET, "kham_pha": KHAM_PHA},
-            "so_nhat_ky": len(logs_hien), "nhat_ky_gan": co_gan,
-            "tang1": t1, "tang2": {"nen_kenh": t2["nen_kenh"], "khong_nhat_ky": t2["khong_nhat_ky"], **hn}}
+                        "p_dan_dau": P_DAN_DAU, "p_loai": P_LOAI, "n_quyet": N_QUYET, "kham_pha": KHAM_PHA,
+                        "kq_chinh": KQ_CHINH, "kappa_tang1": KAPPA_TANG1, "delta_tang1": DELTA_TANG1,
+                        "thang_tang1": THANG_TANG1, "n_tang1": N_TANG1_TOI_THIEU},
+            "so_nhat_ky": len(logs_hien), "nhat_ky_gan": co_gan, "ngay_bong": ngay_bong,
+            "tang1": t1, "tien_nghiem_tang1": {gt: {"m": m, "w": w} for gt, (m, w) in tn.items()},
+            "tang2": {"nen_kenh": t2["nen_kenh"], "khong_nhat_ky": t2["khong_nhat_ky"], **hn}}
+    if so_sanh_cu:
+        bang["tang1_cu"] = tang_thi_truong(goc, logs_1, kenh_ds)
+    if ap_luat:
+        try:
+            from . import luat  # noqa: PLC0415
+
+            bang["quyet_dinh"] = luat.ap_dung(goc, bang, ghi=ghi, log=log)
+        except Exception as loi:  # noqa: BLE001 — luật hỏng không được làm mất bảng xếp hạng
+            if log:
+                log("  phòng thí nghiệm: áp luật quyết hỏng: {0}".format(str(loi)[:160]))
     if ghi:
         c.ghi_json(duong_bang(goc), bang)
+        try:
+            ghi_lich_su(goc, bang)
+        except OSError:
+            pass
     return bang
+
+
+TEP_LICH_SU = "lich-su-xep-hang.jsonl"
+
+
+def tom_bang(bang: Dict[str, Any]) -> Dict[str, Any]:
+    """Ảnh gọn của bảng (mỗi kênh × giả thuyết: n, điểm, TB, P(tốt nhất)) — dòng lịch sử."""
+    t2 = bang.get("tang2") or {}
+
+    def gon(m: Dict[str, Any]) -> Dict[str, List[Any]]:
+        return {gt: [o.get("n"), o.get("diem"), o.get("tb"), o.get("p_tot_nhat")] for gt, o in (m or {}).items()}
+    return {"ngay": bang.get("ngay") or str(bang.get("luc") or "")[:10], "luc": bang.get("luc"),
+            "chung": gon(t2.get("chung") or {}),
+            "kenh": {k: gon(m) for k, m in (t2.get("theo_kenh") or {}).items()}}
+
+
+def ghi_lich_su(goc: str, bang: Dict[str, Any]) -> None:
+    """Một dòng/ngày (lần tính cuối trong ngày THAY dòng cùng ngày — đọc lại, bỏ dòng cùng ngày, ghi đè nguyên tử)."""
+    p = os.path.join(c.thu_muc_chung(goc), TEP_LICH_SU)
+    moi = tom_bang(bang)
+    cu = [x for x in c.doc_jsonl(p) if x.get("ngay") != moi["ngay"]][-120:]
+    c.ghi_nguyen_tu(p, "".join(json.dumps(x, ensure_ascii=False, separators=(",", ":")) + "\n" for x in cu + [moi]))
+
+
+def doc_lich_su(goc: str) -> List[Dict[str, Any]]:
+    return c.doc_jsonl(os.path.join(c.thu_muc_chung(goc), TEP_LICH_SU))
 
 
 def doc_bang(goc: str) -> Dict[str, Any]:
@@ -523,7 +956,8 @@ def posterior(goc: str, kenh: str, *, bang: Optional[Dict[str, Any]] = None) -> 
 
 def chon_gia_thuyet_cho_khe(goc: str, kenh: str, *, rng: Optional[random.Random] = None,
                             kham_pha: float = KHAM_PHA, bang: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """KHUNG cho đợt 2 (CHƯA nối vào sản xuất): chọn giả thuyết cho MỘT khe sản xuất của kênh bằng Thompson sampling
+    """KHUNG đợt 1 (giữ cho bài kiểm cũ / dòng lệnh `--khe`; sản xuất đợt 2 dùng `chia_khe.phan_bo` — rút hai bậc, cửa
+    giả thuyết mới, luật quyết): chọn giả thuyết cho MỘT khe sản xuất của kênh bằng Thompson sampling
     trên hậu nghiệm (kênh × giả thuyết), sàn khám phá `kham_pha` cho giả thuyết không dẫn đầu. Chỉ xét giả thuyết chưa
     bị loại và có nhật ký bóng (top không rỗng) của kênh trong `LUI_NHAT_KY` ngày gần nhất — chạy được thật, có ứng
     viên để giao cho khe (`nhat_ky.moi_nhat`). Trả

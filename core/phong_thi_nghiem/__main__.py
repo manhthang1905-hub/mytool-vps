@@ -23,8 +23,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--nguoc", action="store_true", help="chạy ngược lịch sử + báo cáo")
     p.add_argument("--tu", default="")
     p.add_argument("--den", default="")
-    p.add_argument("--danh-gia", action="store_true", help="chỉ tính lại bảng xếp hạng")
-    p.add_argument("--khe", action="store_true", help="in giả thuyết khung Thompson chọn cho một khe (không áp)")
+    p.add_argument("--danh-gia", action="store_true", help="chỉ tính lại bảng xếp hạng (+ luật quyết)")
+    p.add_argument("--so-sanh-cu", action="store_true", help="--danh-gia: tính thêm tầng 1 cách đo đợt 1 để so")
+    p.add_argument("--bao-cao", action="store_true", help="--danh-gia: ghi báo cáo đợt 2 vào workspace/chan-doan/")
+    p.add_argument("--khe", action="store_true", help="in chia khe (Thompson phân tầng) cho một khe + tỉ phần dự kiến "
+                                                      "(không áp)")
     p.add_argument("--ghi-vao", default="", help="gốc RIÊNG để ghi dữ liệu phòng thí nghiệm (chạy thử; đọc vẫn từ --goc)")
     a = p.parse_args(argv)
     if a.ghi_vao:
@@ -48,14 +51,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         r = chay_nguoc(a.goc, kenh_ds, tu=a.tu, den=a.den, log=print)
         print("Báo cáo:", r.get("bao_cao"))
     if a.danh_gia and not (a.ngay or a.nguoc):
-        b = danh_gia.chay(a.goc, kenh_ds=kenh_ds, log=print)
+        b = danh_gia.chay(a.goc, kenh_ds=kenh_ds, log=print, so_sanh_cu=a.so_sanh_cu)
         for gt, o in sorted(((b.get("tang2") or {}).get("chung") or {}).items()):
             print("{0:<15} n={1:<3} điểm={2:<5} TB={3} CI90={4} P(tốt nhất)={5}".format(
                 gt, o.get("n"), o.get("diem"), o.get("tb"), o.get("ci90"), o.get("p_tot_nhat")))
+        if a.bao_cao:
+            from . import bao_cao  # noqa: PLC0415
+
+            print("Báo cáo:", bao_cao.ghi_dot_2(a.goc, b, kenh_ds=kenh_ds))
     if a.khe:
+        from . import chia_khe  # noqa: PLC0415
+        from ._chung import hom_nay  # noqa: PLC0415
+
+        b = danh_gia.doc_bang(a.goc)
         for k in kenh_ds:
-            r = danh_gia.chon_gia_thuyet_cho_khe(a.goc, k)
-            print(k, r.get("gia_thuyet"), r.get("cach"), r.get("ly_do"))
+            tt = chia_khe.tom_tat_kenh(a.goc, k, ngay=hom_nay(), bang=b)
+            r = chia_khe.rut_vi_du(a.goc, k, ngay=hom_nay(), bang=b)
+            print(json.dumps({"kenh": k, "bat": tt["bat"], "vi_sao": tt["vi_sao"], "khe_vi_du": r.get("gia_thuyet"),
+                              "cach": r.get("cach"), "rut": r.get("rut"), "thu_tu": r.get("thu_tu"),
+                              "ti_le_khe": tt["ti_le_khe"], "chan": tt["chan"]}, ensure_ascii=False))
     if not (a.ngay or a.nguoc or a.danh_gia or a.khe):
         p.print_help()
     return 0

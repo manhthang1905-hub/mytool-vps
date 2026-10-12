@@ -1276,12 +1276,16 @@ def _uu_tien_co_kho(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
         log("  giữ nguồn bộ não ép chọn “{0}” (không đổi theo kho lời thoại).".format(
             str(ds[0].get("tieu_de") or ds[0].get("ma") or "?")[:60]))
         return ds[0]
+    # 12/10/2026 — phòng thí nghiệm chia khe: chỉ đổi trong CÙNG bảng giả thuyết với đầu bảng (khe đã chia cho giả
+    # thuyết ấy; đổi sang dòng của giả thuyết dự phòng chỉ vì có lời thoại sẵn sẽ làm sai phép đo).
+    nhom = [d for d in ds[1:TOP_N_UU_TIEN_KHO]
+            if "gia_thuyet_khe" not in ds[0] or d.get("gia_thuyet") == ds[0].get("gia_thuyet")]
     try:
         from . import loi_thoai as kho  # noqa: PLC0415 — nhập muộn như các module khác ở đây
 
         if kho.co_loi_thoai(goc, ma_kenh, str(ds[0].get("ma") or "")):
             return ds[0]
-        for d in ds[1:TOP_N_UU_TIEN_KHO]:
+        for d in nhom:
             if kho.co_loi_thoai(goc, ma_kenh, str(d.get("ma") or "")):
                 log("  đổi nguồn trong nhóm đầu bảng: “{0}” ĐÃ CÓ lời thoại trong kho (trình "
                    "duyệt kênh hút sẵn), còn “{1}” thì chưa — YouTube đang chặn địa chỉ VPS "
@@ -2925,6 +2929,19 @@ def _chay_mot_ngay_trong_khoa(
         # (`core/chien_luoc/ket_qua.py`) nối được. Dòng không qua bộ trộn thì công thức = `nguon`.
         nguon.setdefault("cong_thuc", "chon_tay" if nguon.get("chon_tay") else str(nguon.get("nguon") or ""))
         nguon.setdefault("tham_do", False)
+        # 12/10/2026 — phòng thí nghiệm chia khe: `gia_thuyet` (bảng đã ra nguồn) vào sổ lượt để tầng 2 ghi công đúng
+        # giả thuyết; não ép chọn / chọn tay thì không ghi công (`chia_khe.chot_nguon`).
+        try:
+            from .phong_thi_nghiem import chia_khe as _ptn_khe  # noqa: PLC0415
+
+            _ptn_khe.chot_nguon(nguon)
+            if nguon.get("gia_thuyet_khe"):
+                log("  phòng thí nghiệm: khe của {0}, nguồn từ bảng {1}{2}.".format(
+                    nguon.get("gia_thuyet_khe"), nguon.get("gia_thuyet") or nguon.get("gia_thuyet_bo") or "—",
+                    " (không ghi công: {0})".format((nguon.get("ptn") or {}).get("khong_ghi_cong"))
+                    if (nguon.get("ptn") or {}).get("khong_ghi_cong") else ""))
+        except Exception:  # noqa: BLE001 — sổ phòng thí nghiệm hỏng không chặn lượt
+            pass
         # Mirror `ui_qt/trang_auto.py _chay` (nhánh nhiều link): mỗi nguồn một
         # `dau_vao` với đúng ba khoá `link`/`tieu_de`/`chu_bia`, tiêu đề để
         # trống để khâu kịch bản của kênh tự đặt theo `che_do_tieu_de`.

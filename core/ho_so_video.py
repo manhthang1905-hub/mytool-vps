@@ -447,7 +447,12 @@ def nguon_cua_goi(goc: str, kenh: str) -> Dict[str, Dict[str, Any]]:
                           "tieu_de": str(ng.get("tieu_de") or ""),
                           "cong_thuc": str(ng.get("cong_thuc") or ng.get("nguon") or ""),
                           "tham_do": bool(ng.get("tham_do")), "nguon": str(ng.get("nguon") or ""),
-                          "ngay": ngay, "bo": bool(run.get("bo"))}
+                          "ngay": ngay, "bo": bool(run.get("bo")),
+                          # 12/10/2026 — phòng thí nghiệm chia khe: giả thuyết đã ra nguồn (ghi công chính xác).
+                          "gia_thuyet": str(ng.get("gia_thuyet") or ""),
+                          "gia_thuyet_khe": str(ng.get("gia_thuyet_khe") or ""),
+                          "ptn_pb": ng.get("ptn_pb", (ng.get("ptn") or {}).get("pb")
+                                       if isinstance(ng.get("ptn"), dict) else None)}
     for duong in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", kenh, "*", "trang-thai.json")):
         du = _doc_json(duong)
         if not isinstance(du, dict):

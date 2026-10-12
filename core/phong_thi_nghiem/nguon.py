@@ -201,7 +201,8 @@ def nhan_tai_moc(vm: Dict[str, Dict[str, Any]], moc: Optional[float]) -> Dict[st
 # ── sổ lượt sản xuất ────────────────────────────────────────────────────────
 
 def luot_san_xuat(goc: str, kenh: str) -> List[Dict[str, Any]]:
-    """`[{ma_goi, ma (nguồn), ngay, bo, video_id, cong_thuc, tieu_de}]` — sổ `tu-chay/*.json` nối hồ sơ video."""
+    """`[{ma_goi, ma (nguồn), ngay, bo, video_id, cong_thuc, tieu_de, gia_thuyet, ptn_pb}]` — sổ `tu-chay/*.json` nối
+    hồ sơ video (`gia_thuyet` = khe phòng thí nghiệm chia cho giả thuyết nào, đợt 2)."""
     try:
         from .. import ho_so_video  # noqa: PLC0415
         from ..chien_luoc import ket_qua  # noqa: PLC0415
@@ -216,7 +217,7 @@ def luot_san_xuat(goc: str, kenh: str) -> List[Dict[str, Any]]:
         ra.append({"ma_goi": ma_goi, "ma": str(g.get("ma") or ""), "ngay": str(g.get("ngay") or ""),
                    "bo": bool(g.get("bo")), "video_id": str(h.get("video_id") or ""),
                    "cong_thuc": str(g.get("cong_thuc") or ""), "tieu_de": str(g.get("tieu_de") or ""),
-                   "ho_so": h})
+                   "gia_thuyet": str(g.get("gia_thuyet") or ""), "ptn_pb": g.get("ptn_pb"), "ho_so": h})
     return ra
 
 

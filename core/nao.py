@@ -1059,6 +1059,14 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
 
     phan("MỞ KÊNH MỚI (số do mã tính — luật số kênh; chỉ ĐỀ XUẤT, mở bằng `python -m core.mo_kenh`)", mo_kenh_moi)
 
+    def phong_thi_nghiem() -> List[str]:
+        from .phong_thi_nghiem import bao_cao_nao  # noqa: PLC0415
+
+        return bao_cao_nao.dong_nao(goc)
+
+    phan("PHÒNG THÍ NGHIỆM CHỌN CONTENT (giả thuyết × kênh: n, TB [CI90], P(tốt nhất) (Δ so ngày trước); quyết định; "
+         "việc sắp tới ngưỡng — đề xuất giả thuyết mới bằng `gia-thuyet-moi`)", phong_thi_nghiem)
+
     d.append("")
     d.append("== ĐỌC SÂU (chỉ đọc) ==")
     d.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")
@@ -1420,6 +1428,30 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
         tra_khoa(goc)
 
 
+def de_xuat_gia_thuyet(goc: str, ns: argparse.Namespace) -> str:
+    """`gia-thuyet-moi`: thêm một giả thuyết `trong_so` vào sổ phòng thí nghiệm (trạng thái bóng — chưa nhận khe sản
+    xuất tới khi luật `phong_thi_nghiem.luat.du_thu` cho). Không tính vào hạn mức hành động/ngày (không đổi sản xuất
+    ngay); hạn mức riêng: ≤ 2 đề xuất / 7 ngày, ≤ 6 giả thuyết của não đang chạy bóng. Lỗi → `TuChoi`."""
+    from .phong_thi_nghiem import gia_thuyet as gtm  # noqa: PLC0415
+
+    if getattr(ns, "dac_trung", False):
+        so_, chu = gtm.dac_trung_hop_le()
+        return ("ĐẶC TRƯNG SỐ (trọng số + cổng): {0}\nĐẶC TRƯNG CHỮ (chỉ cổng: co/khong/==/!=): {1}\nVí dụ: --trong-so "
+                "\"log_pool_cum_xem:1,log_vuot:0.8,dai_tot:0.5\" --cong \"vuot>=3; tang_duong co; vung_cua_anh_em "
+                "khong\" --tran \"log_vuot:3.912\"").format(", ".join(so_), ", ".join(chu))
+    try:
+        kq = gtm.de_xuat(goc, ns.id, mo_ta=ns.mo_ta, trong_so=gtm.phan_tich_cap(ns.trong_so),
+                         cong=gtm.phan_tich_cong(ns.cong), tran=gtm.phan_tich_cap(ns.tran), ly_do=ns.ly_do,
+                         tac_gia="nao")
+    except ValueError as loi:
+        raise TuChoi(str(loi)) from None
+    g = kq["gia_thuyet"]
+    thu = "; ".join("{0} {1}: {2} qua cổng".format(x["kenh"], x["ngay"], x["n_du"]) for x in kq.get("thu") or [])
+    return ("ĐÃ GHI giả thuyết {0} (bóng, phiên bản 1): {1}\n  thử trên kho gần nhất: {2}\n  Mã sẽ ghi nhật ký bóng mỗi "
+            "ngày; sau ≥ 7 ngày + qua sàn tầng 1 thì được 1 khe/kênh/tuần. Xem: `python -m core.nao phong-thi-nghiem`."
+            .format(g["id"], g["mo_ta"], thu or "chưa có ảnh chụp kho"))
+
+
 # ═══ CLI ═════════════════════════════════════════════════════════════════════
 
 def _parser() -> argparse.ArgumentParser:
@@ -1466,6 +1498,16 @@ def _parser() -> argparse.ArgumentParser:
     c.add_argument("ghi_chu")
     h = s.add_parser("huy", help="gỡ hành động đang mở")
     h.add_argument("id")
+    pt = s.add_parser("phong-thi-nghiem", help="mục phòng thí nghiệm (bảng xếp hạng, quyết định, sắp tới ngưỡng)")
+    pt.add_argument("--kenh", action="append", default=[])
+    gm = s.add_parser("gia-thuyet-moi", help="đề xuất MỘT giả thuyết chọn content mới (dạng dữ liệu, chạy bóng trước)")
+    gm.add_argument("--id", default="", help="H-TEN (chữ HOA/số/gạch)")
+    gm.add_argument("--mo-ta", default="", help="một câu: giả thuyết là gì")
+    gm.add_argument("--trong-so", default="", help="đặc_trưng:hệ_số,... (điểm = Σ hệ số × giá trị)")
+    gm.add_argument("--cong", default="", help="điều kiện cách nhau bằng ; — f>=số | f<=số | f co | f khong")
+    gm.add_argument("--tran", default="", help="đặc_trưng:trần,... (giá trị bị kẹp trước khi nhân)")
+    gm.add_argument("--ly-do", default="", help="lý lẽ + số: vì sao bộ chấm này nhặt đúng thứ sẽ thắng")
+    gm.add_argument("--dac-trung", action="store_true", help="chỉ in danh sách đặc trưng dùng được")
     ph = s.add_parser("phien", help="chạy một phiên não (claude không giao diện)")
     ph.add_argument("--ep", action="store_true", help="bỏ giới hạn một phiên/ngày")
     ph.add_argument("--thu", action="store_true", help="chỉ in lệnh, không chạy")
@@ -1483,6 +1525,12 @@ def chay_lenh(ns: argparse.Namespace, goc: str = GOC, bay_gio: Optional[_dt.date
         if not _kenh_ton_tai(goc, ns.kenh):
             raise TuChoi("kênh “{0}” không tồn tại".format(ns.kenh))
         return "\n".join(["BẢNG ĐIỂM — {0}".format(ns.kenh)] + dong_bang_diem(goc, ns.kenh))
+    if l == "phong-thi-nghiem":
+        from .phong_thi_nghiem import bao_cao_nao  # noqa: PLC0415
+
+        return "\n".join(["PHÒNG THÍ NGHIỆM CHỌN CONTENT"] + bao_cao_nao.dong_nao(goc, kenh_ds=ns.kenh or None))
+    if l == "gia-thuyet-moi":
+        return de_xuat_gia_thuyet(goc, ns)
     chung = dict(ly_do=getattr(ns, "ly_do", ""), du_doan=getattr(ns, "du_doan", ""),
                  kiem_ngay=getattr(ns, "kiem_ngay", ""), bay_gio=bay_gio)
     if l == "thu":

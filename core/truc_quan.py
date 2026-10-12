@@ -6,7 +6,8 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan            # mở http://127.0.0.1:8790  (trang: ui_web/truc-quan.html)
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
-Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
+Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`) · `/phong-thi-nghiem` phòng thí
+nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
 """
 from __future__ import annotations
@@ -336,6 +337,15 @@ class _Xu(BaseHTTPRequestHandler):
                     return self._gui(200, "application/json; charset=utf-8", json.dumps(du, ensure_ascii=False).encode("utf-8"))
                 except Exception as loi:  # noqa: BLE001
                     return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/phong-thi-nghiem.json"):      # tab Phòng thí nghiệm (nhớ đệm 5 phút)
+            try:
+                if GOC not in sys.path:
+                    sys.path.insert(0, GOC)
+                from core.phong_thi_nghiem import truc_quan as ptn_tq  # noqa: PLC0415
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(ptn_tq.tinh_nho(GOC), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/gioi-thieu.json"):      # nội dung trình chiếu (riêng máy → mặc định)
             return self._gui(200, "application/json; charset=utf-8",
                              json.dumps(noi_dung_gioi_thieu(), ensure_ascii=False).encode("utf-8"))
@@ -354,6 +364,7 @@ class _Xu(BaseHTTPRequestHandler):
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         ten = ("truc-quan.html" if self.path.startswith("/hau-can") else
                "nao.html" if self.path.startswith("/nao") else
+               "phong-thi-nghiem.html" if self.path.startswith("/phong-thi-nghiem") else
                "gioi-thieu.html" if self.path.startswith("/gioi-thieu") else "chien-truong.html")
         p = os.path.join(GOC, "ui_web", ten)
         try:

@@ -12,6 +12,9 @@ kenh.yaml (phẳng — `kenh.doc_yaml` tối giản không đọc khoá lồng):
     chien_luoc_tu_hoc: false        # true → dồn tỉ trọng theo kết quả thật (cần ≥ 6 video đã đo)
     chien_luoc_chia: "khe"          # "khe" (mặc định 12/10/2026): mỗi lượt công thức THIẾU KHE nhất so tỉ trọng dẫn
                                     # đầu (cả bảng của nó trước); "tron" = vòng xoay theo thứ hạng như cũ
+    phong_thi_nghiem_chia_khe: true # (đợt 2 phòng thí nghiệm) mỗi khe chọn MỘT giả thuyết bằng Thompson phân tầng
+                                    # thay tỉ trọng trên — `core/phong_thi_nghiem/chia_khe.py` (mặc định BẬT cho
+                                    # các kênh `chia_khe.KENH_MAC_DINH`; kênh chưa có số → tỉ trọng như cũ)
 
 Tất định: cùng đĩa + cùng ngày + cùng số lượt đã mở → cùng bảng, để trạm `/loi-thoai/can-lay` và
 vòng chọn nguồn thấy MỘT bảng (không dùng số ngẫu nhiên, không dùng `hash()` của Python — hàm ấy
@@ -265,15 +268,20 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
     kh = ke_hoach(nc, tham_do=tham_do)
     for g in kh.ghi_chu:
         nc.ghi("  chiến lược: {0}.".format(g))
+    lab = _chia_khe_bat(nc)
+    kh_goc = kh
+    if lab and kh.cu:
+        kh = _ke_hoach_phong_thi_nghiem(nc) or kh
     if kh.cu:
         ten = next(iter(kh.trong_so))
         nc.ghi("  đang dùng công thức {0} vì {1}.".format(ten.upper(), kh.ly_do))
         return _ep_de_cu_nao(nc, _bang(nc, ten)[0])
 
     ts = kh.trong_so
-    nc.ghi("  đang dùng chiến lược {0} ({1}){2}.".format(
+    nc.ghi("  đang dùng chiến lược {0} ({1}){2}{3}.".format(
         " + ".join("{0} {1:.0%}".format(t.upper(), w) for t, w in ts.items()), kh.ly_do,
-        " — lượt THĂM DÒ: bảng {0} đứng trước".format(kh.tham_do.upper()) if kh.tham_do else ""))
+        " — lượt THĂM DÒ: bảng {0} đứng trước".format(kh.tham_do.upper()) if kh.tham_do else "",
+        " (PHÒNG THÍ NGHIỆM chia khe — tỉ trọng/thăm dò này chỉ dùng khi không chia được)" if lab else ""))
     bang: Dict[str, List[Dict[str, Any]]] = {}
     cam = tuple(ts)
     for ten in ts:
@@ -291,9 +299,27 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
             if khac:
                 d["tin_hieu"]["cong_thuc_khac"] = khac
 
+    ptn = _ptn_chuan_bi(nc, bang) if lab else None
+    if lab and ptn is None and kh is not kh_goc:
+        # Kế hoạch V7+VPH chỉ dựng cho phòng thí nghiệm mà không chia khe được → luật cũ y hệt (một công thức).
+        ten = next(iter(kh_goc.trong_so))
+        nc.ghi("  đang dùng công thức {0} vì {1}.".format(ten.upper(), kh_goc.ly_do))
+        return _ep_de_cu_nao(nc, _bang(nc, ten)[0])
+
     _ap_he_so_cum(nc, bang)
     _ap_tan_cong(nc, bang)
     _ap_chu_quyen(nc, bang)
+
+    if ptn is not None:
+        try:
+            from ..phong_thi_nghiem import chia_khe  # noqa: PLC0415
+
+            ra = nc.loc(chia_khe.tron(nc, bang, ptn))
+            nc.ghi("  chiến lược: {0} ứng viên sau chia khe phòng thí nghiệm.".format(len(ra)))
+            return _ep_de_cu_nao(nc, ra)
+        except Exception as loi:  # noqa: BLE001 — chia khe hỏng thì luật cũ, không đứng kênh
+            nc.ghi("  (phòng thí nghiệm chia khe hỏng: {0} — dùng tỉ trọng kenh.yaml)".format(str(loi)[:120]))
+            _canh_bao(nc, "phong_thi_nghiem.chia_khe", loi)
 
     if kh.tham_do and nc.giai_doan == "moi":
         bang[kh.tham_do] = _uu_tien_cum_chua_thu(nc, bang[kh.tham_do])
@@ -316,6 +342,49 @@ def xep_hang(nc: Any, *, tham_do: Optional[bool] = None) -> List[Dict[str, Any]]
     nc.ghi("  chiến lược: {0} ứng viên sau trộn ({1}).".format(
         len(ra), ", ".join("{0} {1}".format(t, len(bang[t])) for t in ts)))
     return _ep_de_cu_nao(nc, ra)
+
+
+# ── phòng thí nghiệm chia khe (đợt 2, 12/10/2026) ───────────────────────────
+
+def _canh_bao(nc: Any, nguon: str, loi: Any) -> None:
+    try:
+        from .. import tu_hoc  # noqa: PLC0415
+
+        tu_hoc.canh_bao(nc.goc, nguon, loi, nc.ma_kenh)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _chia_khe_bat(nc: Any) -> bool:
+    """Cờ `phong_thi_nghiem_chia_khe` của kênh (`core/phong_thi_nghiem/chia_khe.bat`). Hỏng → tắt (luật cũ)."""
+    try:
+        from ..phong_thi_nghiem import chia_khe  # noqa: PLC0415
+
+        return bool(chia_khe.bat(nc.goc, nc.ma_kenh)[0])
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _ke_hoach_phong_thi_nghiem(nc: Any) -> Optional[KeHoach]:
+    """Kênh KHÔNG khai `chien_luoc` mà bật chia khe: dựng bảng V7 + VPH (công thức dùng được) để phòng thí nghiệm chia;
+    không chia được thì bộ điều phối trả về đúng luật cũ một công thức."""
+    so = so_dang_ky()
+    ts = {t: 1.0 for t in ("v7", "vph") if t in so and _ap_dung(so[t], nc) > 0}
+    if not ts:
+        return None
+    ts = _chuan_hoa(ts)
+    return KeHoach(ts, "phòng thí nghiệm chia khe", cu=False, khai=dict(ts))
+
+
+def _ptn_chuan_bi(nc: Any, bang: Dict[str, List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+    try:
+        from ..phong_thi_nghiem import chia_khe  # noqa: PLC0415
+
+        return chia_khe.chuan_bi(nc, bang)
+    except Exception as loi:  # noqa: BLE001 — phòng thí nghiệm KHÔNG BAO GIỜ chặn chọn nguồn
+        nc.ghi("  (phòng thí nghiệm chia khe hỏng: {0} — dùng tỉ trọng kenh.yaml)".format(str(loi)[:120]))
+        _canh_bao(nc, "phong_thi_nghiem.chia_khe", loi)
+        return None
 
 
 # ── chia khe (12/10/2026) ───────────────────────────────────────────────────

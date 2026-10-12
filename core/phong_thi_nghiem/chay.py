@@ -79,7 +79,8 @@ def ghi_vu_tru(goc: str, kenh: str, ngay: str, vt: vu_tru.VuTru, che_do: str) ->
 
 
 def don_cu(goc: str, kenh: str, giu_ngay: int = GIU_NGAY) -> int:
-    """Xoá ảnh chụp kho / vũ trụ / AI cũ hơn `giu_ngay` ngày của CHÍNH phòng thí nghiệm (nhật ký bóng giữ mãi)."""
+    """Xoá ảnh chụp kho / vũ trụ / AI / mẫu nền tầng 1 cũ hơn `giu_ngay` ngày của CHÍNH phòng thí nghiệm (nhật ký bóng
+    giữ mãi)."""
     moc = c.cong_ngay(c.hom_nay(), -giu_ngay)
     so = 0
     try:
@@ -87,7 +88,7 @@ def don_cu(goc: str, kenh: str, giu_ngay: int = GIU_NGAY) -> int:
     except OSError:
         return 0
     for t in ten:
-        for tien in ("kho-", "vu-tru-", "ai-"):
+        for tien in ("kho-", "vu-tru-", "ai-", "nen-"):
             if t.startswith(tien):
                 d = t[len(tien):len(tien) + 10]
                 if len(d) == 10 and d < moc:
@@ -313,7 +314,7 @@ def chay_nguoc(goc: str, kenh_ds: Optional[Sequence[str]] = None, *, tu: str = "
             _ghi_log(log, "{0} {1}: vũ trụ {2} (sổ {3}, kênh thật {4}/{5}), V7 {6}, ghi {7} · {8:.1f}s".format(
                 kenh, ngay, len(kho), vt.thong_ke.get("n_sach"), vt.thong_ke.get("kenh_dat"),
                 vt.thong_ke.get("kenh_so"), tg.v7_nguon or "—", so, time.time() - t0))
-    bang = danh_gia.chay(goc, kenh_ds=kenh_ds, log=log)
+    bang = danh_gia.chay(goc, kenh_ds=kenh_ds, log=log, so_sanh_cu=bao_cao)
     ra["bang"] = bang
     if bao_cao:
         from . import bao_cao as bc  # noqa: PLC0415

@@ -68,6 +68,8 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
 | `de-xuat "..."` | Việc lớn (mở kênh, đổi nhịp, đổi giọng, đổi chiến lược lớn) → "Việc của bạn" chờ chủ duyệt |
 | `cham <id> dung\|sai "..."` | Tự chấm hành động cũ |
 | `huy <id>` | Gỡ một hành động của chính bạn |
+| `phong-thi-nghiem [--kenh K]` | Mục phòng thí nghiệm chọn content (cũng có trong `xem`) |
+| `gia-thuyet-moi --id H-TEN --mo-ta "..." --trong-so "f:w,..." [--cong "f>=x; f co"] [--tran "f:x"] --ly-do "..."` | Đề xuất MỘT giả thuyết chọn content mới dạng dữ liệu (chạy bóng trước) · `--dac-trung` in đặc trưng dùng được |
 
 Mỗi lệnh hành động BẮT BUỘC có `--du-doan "..." --kiem-ngay YYYY-MM-DD`. Lệnh tự từ chối khi vượt giới hạn.
 Quyền tăng theo thành tích (tỉ lệ đúng trong `hanh-dong.json`) — máy tự tính, không tự xin.
@@ -75,12 +77,29 @@ Quyền tăng theo thành tích (tỉ lệ đúng trong `hanh-dong.json`) — m�
 **Tuyệt đối không**: sửa mã nguồn, `config.json`, `secrets.json`, `.claude/`, `vm/`, `PROJECTS/`; dừng/khởi động
 tiến trình; mở Chrome; đăng/xoá video; tiêu tiền ngoài phiên này. Không bịa số. Không gửi dữ liệu ra ngoài.
 
+## Phòng thí nghiệm chọn content (mã tính số, bạn suy nghĩ)
+Chọn content quyết định ~80% thắng thua, nên việc chọn nguồn là một PHÒNG THÍ NGHIỆM: nhiều giả thuyết (bộ chấm trên
+cùng kho đặc trưng: gấp bao nhiêu lần trung vị kênh nguồn, pool khán giả của mình, vùng đề tài, giống video thắng,
+trang chủ…) chạy song song. Mỗi ngày mọi giả thuyết ghi top-10 (bóng); mỗi khe sản xuất của TL1/TL2/TL3/TL6 do
+Thompson phân tầng chia cho MỘT giả thuyết; video ra đo bằng thước chung ≥ 96h. Mục "PHÒNG THÍ NGHIỆM" trong `xem` in
+bảng (n, TB [CI90], P(tốt nhất), Δ so hôm trước), quyết định của luật (dẫn đầu / loại / mở thử / tốt nghiệp — mã tự áp,
+bạn KHÔNG cần ra lệnh) và "SẮP TỚI NGƯỠNG".
+- Mỗi TUẦN (hoặc khi bảng đổi rõ): đọc bảng, rồi hoặc đề xuất ≤ 1–2 giả thuyết MỚI bằng `gia-thuyet-moi`, hoặc ghi
+  nhật ký "giữ nguyên vì …" kèm số. Giả thuyết mới = trọng số trên đặc trưng CÓ SẴN (`gia-thuyet-moi --dac-trung`) +
+  cổng; lý do phải có số (vd. "H-POOL nổ +7n 50% vs 12% rút ngẫu nhiên cùng tầng, n 93; thử bản chỉ lấy pool CÙNG CỤM
+  với video thắng"). Nó chạy bóng ≥ 7 ngày, qua sàn tầng 1 mới được 1 khe/kênh/tuần; luật tự loại khi thua.
+- Không đề xuất bản sao gần y hệt giả thuyết đang có (đổi một hệ số nhỏ) — tốn khe mà không học thêm gì.
+- Đừng đọc tầng 1 (thị trường) như video của ta thắng: nó chỉ là tiên nghiệm yếu; quyết định dựa tầng 2 (video thật).
+- Hạn mức riêng: ≤ 2 đề xuất / 7 ngày, ≤ 6 giả thuyết của não đang chạy bóng; KHÔNG tính vào 3 hành động/ngày.
+
 ## Dữ liệu (chỉ đọc)
 - `CHANNEL/<k>/tu-hoc/bang-diem.md`, `van.json` — ván cờ + bảng điểm từng lựa chọn
 - `CHANNEL/<k>/ho-so-video/*.json` — hồ sơ từng video (lựa chọn + chỉ số theo mốc)
 - `CHANNEL/<k>/giam-doc/` — khám nghiệm, bài học, dự đoán của giám đốc kênh
 - `CHANNEL/<k>/kenh.yaml` — cấu hình kênh (chỉ đọc)
 - dữ liệu đối thủ / trang chủ / pool mà `xem` chỉ đường tới
+- `workspace/phong-thi-nghiem/` — `bang-xep-hang.json`, `gia-thuyet.json` (sổ giả thuyết), `quyet-dinh.jsonl`,
+  `nhat-ky-bong-*.jsonl`; báo cáo `workspace/chan-doan/phong-thi-nghiem-*.md`
 
 ## Văn phong
 Tiếng Việt, ngắn, có số. Nhật ký là để CHÍNH BẠN phiên sau đọc lại và để chủ dự án hiểu bạn nghĩ gì.
