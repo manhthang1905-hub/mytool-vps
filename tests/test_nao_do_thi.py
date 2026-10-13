@@ -269,7 +269,8 @@ def test_trang_do_thi_va_thu_vien_tu_chua():
     with _may_chu() as url:
         loai, trang = _lay(url + "/nao-do-thi")
         trang = trang.decode("utf-8")
-        assert loai.startswith("text/html") and 'class="tab on" href="/nao-do-thi"' in trang
+        # 13/10/2026: gộp vào tab Não (chủ: "cùng 1 chức năng") — trang bản đồ sáng tab Não, nhúng được ?nhung=1
+        assert loai.startswith("text/html") and 'class="tab on" href="/nao"' in trang and "nhung=1" in trang
         assert "/vendor/force-graph.min.js" in trang and "/nao-bo-phan/song.json" in trang
         assert "/nao-bo-phan/no-ron.json" in trang and "emitParticle" in trang
         assert "/nao.json" in _lay(url + "/nao")[1].decode("utf-8")         # tab Não cũ vẫn đúng trang
@@ -278,6 +279,8 @@ def test_trang_do_thi_va_thu_vien_tu_chua():
     assert not re.search(r"""(src|href)=["']https?://""", trang)            # không tải gì từ mạng ngoài
     for duong in re.findall(r"""(?:src|href)=["']/vendor/([^"'?]+)""", trang):
         assert os.path.isfile(os.path.join(truc_quan.VENDOR, duong)), duong
-    for ten in ("chien-truong.html", "truc-quan.html", "nao.html", "phong-thi-nghiem.html", "gioi-thieu.html"):
+    for ten in ("chien-truong.html", "truc-quan.html", "phong-thi-nghiem.html", "gioi-thieu.html"):
         with io.open(os.path.join(truc_quan.GOC, "ui_web", ten), encoding="utf-8") as tep:
-            assert 'href="/nao-do-thi"' in tep.read(), ten
+            assert 'href="/nao-do-thi"' not in tep.read(), ten           # không còn tab riêng
+    with io.open(os.path.join(truc_quan.GOC, "ui_web", "nao.html"), encoding="utf-8") as tep:
+        assert 'src="/nao-do-thi?nhung=1"' in tep.read()                  # tab Não nhúng bản đồ ở đầu trang

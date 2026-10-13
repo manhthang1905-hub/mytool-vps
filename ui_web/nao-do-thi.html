@@ -10,6 +10,7 @@
 :root{--ai:#a78bfa}
 nav.tabs a.tab.on:after{background:var(--ai);box-shadow:0 0 12px var(--ai)} nav.tabs a.tab.on svg{color:var(--ai)}
 html,body{height:100%;overflow:hidden}
+.nhung .thanh-tren{display:none}.nhung .san{height:100vh}
 .san{position:relative;height:calc(100vh - 58px);overflow:hidden;background:radial-gradient(1000px 700px at 50% 48%,rgba(124,58,237,.11),transparent 70%)}
 #do-thi{position:absolute;inset:0}
 .lop{position:absolute;z-index:5}
@@ -63,13 +64,13 @@ html,body{height:100%;overflow:hidden}
 </style>
 </head>
 <body>
+<script>/* 13/10/2026: tab Não nhúng trang này (?nhung=1) — ẩn thanh tab, chiếm trọn khung */if(/[?&]nhung=1/.test(location.search))document.documentElement.classList.add("nhung")</script>
 <header class="thanh-tren">
   <div class="logo"><span class="huy-hieu" id="logo-ic"></span><span class="chu-logo">MYTOOL<small>Trung tâm chỉ huy</small></span></div>
   <nav class="tabs" aria-label="Trang">
     <a class="tab" href="/"><svg class="ic" viewBox="0 0 24 24" data-ic="map"></svg><span>Chiến trường</span></a>
     <a class="tab" href="/hau-can"><svg class="ic" viewBox="0 0 24 24" data-ic="factory"></svg><span>Hậu cần</span></a>
-    <a class="tab" href="/nao"><svg class="ic" viewBox="0 0 24 24" data-ic="brain"></svg><span>Não</span></a>
-    <a class="tab on" href="/nao-do-thi" aria-current="page"><svg class="ic" viewBox="0 0 24 24" data-ic="pulse"></svg><span>Đồ thị não</span></a>
+    <a class="tab on" href="/nao" aria-current="page"><svg class="ic" viewBox="0 0 24 24" data-ic="brain"></svg><span>Não</span></a>
     <a class="tab" href="/phong-thi-nghiem"><svg class="ic" viewBox="0 0 24 24" data-ic="flask"></svg><span>Phòng thí nghiệm</span></a>
     <a class="tab" href="/gioi-thieu"><svg class="ic" viewBox="0 0 24 24" data-ic="play"></svg><span>Giới thiệu</span></a>
   </nav>

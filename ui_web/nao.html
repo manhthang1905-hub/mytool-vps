@@ -175,7 +175,6 @@ table.nbp tr.yen td{opacity:.5}
     <a class="tab" href="/"><svg class="ic" viewBox="0 0 24 24" data-ic="map"></svg><span>Chiến trường</span></a>
     <a class="tab" href="/hau-can"><svg class="ic" viewBox="0 0 24 24" data-ic="factory"></svg><span>Hậu cần</span></a>
     <a class="tab on" href="/nao" aria-current="page"><svg class="ic" viewBox="0 0 24 24" data-ic="brain"></svg><span>Não</span></a>
-    <a class="tab" href="/nao-do-thi"><svg class="ic" viewBox="0 0 24 24" data-ic="pulse"></svg><span>Đồ thị não</span></a>
     <a class="tab" href="/phong-thi-nghiem"><svg class="ic" viewBox="0 0 24 24" data-ic="flask"></svg><span>Phòng thí nghiệm</span></a>
     <a class="tab" href="/gioi-thieu"><svg class="ic" viewBox="0 0 24 24" data-ic="play"></svg><span>Giới thiệu</span></a>
   </nav>
@@ -184,6 +183,11 @@ table.nbp tr.yen td{opacity:.5}
 </header>
 
 <main class="trang">
+  <!-- 13/10/2026 (chủ: "tab Não và tab Đồ thị não là cùng 1 chức năng — tích hợp đi"): bản đồ não sống nằm NGAY ĐẦU tab Não -->
+  <section class="panel goc tim" aria-label="Bản đồ não sống" style="margin-bottom:16px;padding:0;overflow:hidden">
+    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="pulse" style="color:var(--ai)"></svg>Bản đồ não sống — 15 bộ phận, điều đã học và xung thần kinh thời gian thực</h2><a class="nut" href="/nao-do-thi" style="margin-left:auto"><svg class="ic" viewBox="0 0 24 24" data-ic="pulse"></svg>Toàn màn hình</a></div>
+    <iframe src="/nao-do-thi?nhung=1" title="Bản đồ não sống" loading="lazy" style="display:block;width:100%;height:72vh;border:0;background:transparent"></iframe>
+  </section>
   <section class="panel co-van goc tim vao" id="co-van" aria-label="Cố vấn chiến lược"></section>
   <section class="o-ds" id="o-ds" aria-label="Chỉ số"></section>
   <section class="panel goc tim" aria-label="Lời tiên tri" style="margin-bottom:16px">
@@ -227,7 +231,7 @@ table.nbp tr.yen td{opacity:.5}
   </section>
 
   <section class="panel goc tim" style="margin-top:16px" aria-label="Não bộ phận">
-    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="brain" style="color:var(--ai)"></svg>Não bộ phận — mỗi bộ phận một bộ não tự gom, tự ngủ rút bài học</h2><span class="phu" id="nbp-phu" style="margin-left:auto"></span><a class="nut" href="/nao-do-thi"><svg class="ic" viewBox="0 0 24 24" data-ic="pulse"></svg>Đồ thị thần kinh sống</a></div>
+    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="brain" style="color:var(--ai)"></svg>Não bộ phận — mỗi bộ phận một bộ não tự gom, tự ngủ rút bài học</h2><span class="phu" id="nbp-phu" style="margin-left:auto"></span><a class="nut" href="/nao-do-thi"><svg class="ic" viewBox="0 0 24 24" data-ic="pulse"></svg>Bản đồ não toàn màn hình</a></div>
     <div class="nbp-cuon" id="nbp-bang"><div class="trong">đang tải…</div></div>
     <div class="nbp-luoi">
       <div><div class="mo nho" style="margin-bottom:4px">Lỗi đang tăng — sự cố khác nhau 48h so với 5 ngày trước (cảnh báo không tính)</div><div id="nbp-loi"></div></div>

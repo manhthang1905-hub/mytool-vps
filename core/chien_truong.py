@@ -336,9 +336,24 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
         except Exception:  # noqa: BLE001
             mai = {}
         cum_mai = _cum(v7, ch, mai.get("tieu_de") or "") if mai.get("co") else ""
+        # 13/10/2026 (chủ: "chỉ số kênh ở 8790 chưa đúng"): thẻ kênh vẽ "Giờ xem X / 4.000 · Đăng ký X / 1.000" (YPP)
+        # mà trước đây lấy TỔNG 28 NGÀY TRƯỢT của Studio (TL4: 564 đăng ký thay vì 716 trọn đời; "giờ/ngày" = hiệu
+        # hai cửa sổ 28 ngày, ra số âm). Nay cùng nguồn YPP với mọi bộ phận (`core.chi_so_kenh`): đăng ký TRỌN ĐỜI,
+        # giờ xem 365 ngày (ước từ chuỗi ngày), giờ/ngày = trung bình 7 ngày chốt. Thiếu số → lùi bản 28 ngày cũ.
+        try:
+            from core import chi_so_kenh  # noqa: PLC0415
+            sub_td = (chi_so_kenh.sub_tron_doi(GOC, k) or {}).get("so")
+            gio_ck = chi_so_kenh.gio_xem(GOC, k) or {}
+        except Exception:  # noqa: BLE001
+            sub_td, gio_ck = None, {}
         quan.append({
-            "ma": k, "ten": _ten_kenh(k), "gio_xem": _so(cuoi.get("Giờ xem")), "dang_ky": _so(cuoi.get("Đăng ký")),
-            "view_28": _so(cuoi.get("Lượt xem")), "gio_tang": _so(cuoi.get("Giờ xem")) - _so(truoc.get("Giờ xem")),
+            "ma": k, "ten": _ten_kenh(k),
+            "gio_xem": gio_ck["gio_365"] if gio_ck.get("gio_365") is not None else _so(cuoi.get("Giờ xem")),
+            "dang_ky": float(sub_td) if sub_td is not None else _so(cuoi.get("Đăng ký")),
+            "view_28": _so(cuoi.get("Lượt xem")),
+            "gio_tang": gio_ck["toc_7"] if gio_ck.get("toc_7") is not None
+            else _so(cuoi.get("Giờ xem")) - _so(truoc.get("Giờ xem")),
+            "gio_xem_28": _so(cuoi.get("Giờ xem")), "dang_ky_28": _so(cuoi.get("Đăng ký")),
             "luc_so": cuoi.get("Lúc chụp") or "", "mat_tran": sorted(mat_tran, key=lambda x: -mat_tran[x])[:3],
             "tan_cong": cum_mai, "video_mai": (mai.get("tieu_de") or "")[:80], "ngay_mai": mai.get("ngay") or "",
             "da_hen": bool(mai.get("da_hen")), "tot_nhat": tot, "so_video": len(rows),

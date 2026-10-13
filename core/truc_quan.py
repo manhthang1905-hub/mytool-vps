@@ -101,6 +101,7 @@ def _video_mai(kenh: str, tu_ngay: Optional[_dt.date] = None) -> Dict[str, Any]:
     def g(r, c):
         return r[o[c]].strip() if c in o and o[c] < len(r) else ""
     mai = tu_ngay or (_dt.date.today() + _dt.timedelta(days=1))
+    bay_gio = _dt.datetime.now()
     ung = []
     for r in hang:
         try:
@@ -108,10 +109,18 @@ def _video_mai(kenh: str, tu_ngay: Optional[_dt.date] = None) -> Dict[str, Any]:
         except ValueError:
             continue
         if d >= mai and not g(r, "Trạng thái đăng").startswith("Bỏ"):
-            ung.append((d, r))
+            try:
+                hh, mm = (int(x) for x in g(r, "Giờ đăng").split(":")[:2])
+                luc = _dt.datetime.combine(d, _dt.time(hh, mm))
+            except (ValueError, TypeError):
+                luc = _dt.datetime.combine(d, _dt.time(23, 59))
+            # 13/10/2026: video hôm nay ĐÃ QUA giờ đăng không còn là "video mai" (trước đây 05:00 sáng vẫn hiện tới tối)
+            if luc <= bay_gio:
+                continue
+            ung.append((luc, d, r))
     if not ung:
         return {"co": False, "ngay": mai.strftime("%d/%m")}
-    d, r = min(ung, key=lambda x: x[0])
+    _luc, d, r = min(ung, key=lambda x: x[0])
     tt = g(r, "Trạng thái đăng").upper()
     return {"co": True, "ma": g(r, "Mã gói"), "ngay": d.strftime("%d/%m"), "gio": g(r, "Giờ đăng"),
             "tieu_de": g(r, "Tiêu đề")[:90], "da_hen": tt.startswith("ĐÃ ĐĂNG"), "dang_dang": tt.startswith("ĐANG ĐĂNG")}
