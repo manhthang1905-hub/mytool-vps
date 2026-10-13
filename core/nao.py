@@ -1230,6 +1230,15 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
     phan("PHÒNG THÍ NGHIỆM CHỌN CONTENT (giả thuyết × kênh: n, TB [CI90], P(tốt nhất) (Δ so ngày trước); quyết định; "
          "việc sắp tới ngưỡng — đề xuất giả thuyết mới bằng `gia-thuyet-moi`)", phong_thi_nghiem)
 
+    try:  # 13/10/2026: não bộ phận (`core/nao_bo_phan`, chỉ đọc chỉ mục) — hỏng / chưa có thì không in gì
+        from . import nao_bo_phan  # noqa: PLC0415
+
+        loi_bp = nao_bo_phan.dong_loi_dang_tang(goc, 5)
+        if loi_bp:
+            d.extend(["", "== NÃO BỘ PHẬN — lỗi đang tăng (đang xảy ra / tái phát, số lần 7 ngày) =="] + loi_bp)
+    except Exception:  # noqa: BLE001
+        pass
+
     d.append("")
     d.append("== ĐỌC SÂU (chỉ đọc) ==")
     d.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")
