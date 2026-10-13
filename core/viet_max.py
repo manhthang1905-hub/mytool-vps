@@ -342,11 +342,14 @@ def goi_tin_nhan_max(tin_nhan: Sequence[Dict[str, Any]], *, goc: str = "", toi_d
                      khoa: str = "", on_log: Optional[Callable[[str], None]] = None,
                      kiem_dung: Optional[Callable[[], None]] = None,
                      ngu: Callable[[float], None] = time.sleep,
-                     viet: Optional[Callable[..., str]] = None) -> str:
-    """Một lượt `goi_van_ban` đi đường thuê bao: gói hội thoại, đi thang model, trả chữ."""
+                     viet: Optional[Callable[..., str]] = None,
+                     lui_vi: Optional[bool] = None) -> str:
+    """Một lượt `goi_van_ban` đi đường thuê bao: gói hội thoại, đi thang model, trả chữ. `lui_vi` (mặc định
+    `cho_lui_vi`) → cạn/hỏng ném `MaxKhongDung` để `goi_van_ban` viết bằng ShopAPI."""
     goc = goc or GOC_TOOL
     loi_nhac, anh = phang_tin_nhan(tin_nhan)
-    goi = dung_goi_chat_max(goc, on_log=on_log, kiem_dung=kiem_dung, ngu=ngu, viet=viet)
+    goi = dung_goi_chat_max(goc, on_log=on_log, kiem_dung=kiem_dung, ngu=ngu, viet=viet,
+                            lui_vi=cho_lui_vi(goc) if lui_vi is None else bool(lui_vi))
     return goi(loi_nhac, khoa=khoa, toi_da_token=int(toi_da_token or 0), anh=anh)
 
 
@@ -1094,10 +1097,13 @@ _DAU_HET_HAN_MUC = (
     "exhausted", "upgrade to increase",
     # Nguyên văn bản Claude Code hiện tại (đo lượt 0052).
     "switch to another model", "manage usage credits",
+    # 13/10/2026: "You've hit your weekly limit · resets Oct 18, 11pm" (kèm 429) bị đọc thành nghẽn tạm → 1,5 giờ
+    # thử lại Opus đã cạn, không tụt bậc, không lùi ví.
+    "weekly limit",
 )
 
-#: `reached your Fable 5 limit`, `reach your weekly limit` — tên model nằm chen giữa.
-_MAU_HET_HAN_MUC = re.compile(r"reach\w*\s+your\s+[^.]{0,60}limit", re.I)
+#: `reached your Fable 5 limit`, `reach your weekly limit`, `hit your weekly limit` — tên model nằm chen giữa.
+_MAU_HET_HAN_MUC = re.compile(r"(?:reach\w*|hit)\s+your\s+[^.]{0,60}limit", re.I)
 
 #: Chữ chỉ là NGHẼN TẠM — chỉ xét ĐẾN khi không có dấu mạnh nào ở trên.
 _DAU_NGHEN_TAM = ("overloaded", "529", "too many requests", "rate limit",
@@ -1266,6 +1272,29 @@ GIAY_CHO_CAN_THANG_TOI_DA = 6 * 3600.0
 NHIP_NGU_CAN_THANG = 10.0
 
 
+class MaxKhongDung(RuntimeError):
+    """13/10/2026 — Claude Max cạn hạn mức (`can`) hoặc hỏng sau `SO_LAN_TRUOC_LUI_VI` lần: nơi gọi có đường ví
+    (`goi_van_ban`) bắt lỗi này rồi viết bằng ShopAPI (luật chủ 13/10)."""
+
+    def __init__(self, chu: str, *, can: bool = False, loi: Optional[BaseException] = None):
+        super().__init__(chu)
+        self.can = can
+        self.loi = loi
+
+
+#: Luật chủ 13/10/2026: *"nếu về sau gặp tình huống Claude Max 20 hết token hoặc lỗi thì sẽ dùng ShopAPI"* — thay luật
+#: 24/08 "không bao giờ lùi ví". Hỏng mấy lần (kể cả lần đầu) thì lùi ví; cạn cả thang thì lùi NGAY, không đợi.
+SO_LAN_TRUOC_LUI_VI = 2
+
+
+def cho_lui_vi(goc: str = "") -> bool:
+    """`workspace/cai-dat.json: viet_lui_vi` (mặc định BẬT từ 13/10/2026)."""
+    try:
+        return bool(_cai(goc or GOC_TOOL).get("viet_lui_vi", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def dung_goi_chat_max(goc: str, *,
                       on_log: Optional[Callable[[str], None]] = None,
                       kiem_dung: Optional[Callable[[], None]] = None,
@@ -1276,8 +1305,12 @@ def dung_goi_chat_max(goc: str, *,
                       bay_gio: Callable[[], float] = time.time,
                       cho_can_thang_toi_da: float = GIAY_CHO_CAN_THANG_TOI_DA,
                       viec: str = "",
+                      lui_vi: bool = False,
                       ) -> Callable[..., str]:
     """Dựng hàm `goi_chat` đi **chỉ Claude Code**, hỏng thì thử lại.
+
+    `lui_vi=True` (13/10/2026, nơi gọi có đường ví): cạn cả thang → ném `MaxKhongDung(can=True)` NGAY (không đợi hạn
+    mức mở lại); hỏng `SO_LAN_TRUOC_LUI_VI` lần → `MaxKhongDung`. `lui_vi=False`: hành vi cũ dưới đây.
 
     ═══ KHÔNG CÓ ĐƯỜNG LUI VỀ VÍ ═══
 
@@ -1353,12 +1386,21 @@ def dung_goi_chat_max(goc: str, *,
         loi_cuoi: Optional[BaseException] = None
         lan = 0
         da_cho_can = 0.0
+        if lui_vi and _ca_thang_dang_khoa(goc, bay_gio()):
+            raise MaxKhongDung("thuê bao Claude Max đang cạn hạn mức ở mọi model (mở lại khoảng {0})".format(
+                _gio_ngan(_moc_mo_som_nhat(goc, bay_gio()))), can=True)
         while True:
             chu, loi, can = _di_het_thang(loi_nhac, anh, them)
             if chu is not None:
                 _danh_dau_ok(goc, bay_gio())
                 return chu
             loi_cuoi = loi or loi_cuoi
+            if lui_vi and can:
+                _bao_can_thang(goc, _moc_mo_som_nhat(goc, bay_gio()), bay_gio())
+                raise MaxKhongDung("thuê bao Claude Max vừa cạn hạn mức ở mọi model", can=True, loi=loi_cuoi)
+            if lui_vi and lan + 1 >= SO_LAN_TRUOC_LUI_VI:
+                raise MaxKhongDung("Claude Max không viết được sau {0} lần ({1})".format(
+                    lan + 1, str(loi_cuoi)[:160]), loi=loi_cuoi)
             if can and da_cho_can < cho_can_thang_toi_da:
                 # ═══ CẠN CẢ THANG: ĐỢI HẠN MỨC MỞ LẠI, BÁO NGƯỜI, RỒI TỰ CHẠY TIẾP ═══
                 #

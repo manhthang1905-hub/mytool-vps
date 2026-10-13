@@ -92,6 +92,9 @@ MUC = (
     # (30/09/2026) "Tự cập nhật" / "Hỏi bản mới" đã chuyển vào khung Cập nhật
     # (`ui_qt/cap_nhat.py: BangCapNhat`) — công tắc thật là `tu_dong_cap_nhat`
     # trong `cap-nhat.json`, không còn ô trùng ở đây.
+    ("viet_lui_vi", "Claude Max hết lượt hoặc lỗi thì viết bằng ví ShopAPI",
+     "Bật (mặc định từ 13/10/2026): thuê bao Claude cạn hạn mức, hoặc viết hỏng 2 lần, thì lượt ấy tự viết bằng ví "
+     "ShopAPI để video không đứng. Tắt: không bao giờ tiêu ví cho chữ — đợi hạn mức mở lại (có thể nhiều giờ)."),
     ("bao_su_co", "Hiện thông báo khi tool gặp lỗi",
      "Tắt thì lỗi vẫn được ghi lại đầy đủ vào workspace/su-co.log, chỉ là "
      "không hiện lên màn hình. Hợp khi bạn để tool chạy qua đêm."),

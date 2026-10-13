@@ -457,13 +457,24 @@ def goi_van_ban(
         except Exception as loi:  # noqa: BLE001 — dò đường hỏng (lỗi mã) thì đi ví như cũ, có ghi
             duong, ly_do = "vi", ""
             ghi("  (không dò được đường viết chữ: {0} — đi ví)".format(str(loi)[:100]))
+        # ═══ LUẬT CHỦ 13/10/2026: CLAUDE MAX HẾT TOKEN HOẶC LỖI → VIẾT BẰNG SHOPAPI ═══
+        # (thay luật 24/08 "không bao giờ lùi ví"). Đêm 13/10 thuê bao chạm hạn mức TUẦN, 1,5 giờ mọi lượt viết hỏng.
         if duong == "loi":
-            raise RuntimeError(ly_do)
-        if duong == "max":
-            from .viet_max import goi_tin_nhan_max  # noqa: PLC0415
+            from .viet_max import cho_lui_vi  # noqa: PLC0415
 
-            return goi_tin_nhan_max(tin_nhan, goc=goc, toi_da_token=toi_da_token, khoa=khoa,
-                                    on_log=on_log, kiem_dung=kiem_dung, ngu=ngu)
+            if client is None or not cho_lui_vi(goc):
+                raise RuntimeError(ly_do)
+            ghi("  Claude Max không dùng được ({0}) — viết bằng ShopAPI.".format(str(ly_do)[:120]))
+        if duong == "max":
+            from .viet_max import MaxKhongDung, goi_tin_nhan_max  # noqa: PLC0415
+
+            try:
+                return goi_tin_nhan_max(tin_nhan, goc=goc, toi_da_token=toi_da_token, khoa=khoa,
+                                        on_log=on_log, kiem_dung=kiem_dung, ngu=ngu)
+            except MaxKhongDung as loi_max:
+                if client is None:
+                    raise
+                ghi("  {0} — viết bằng ShopAPI (luật chủ 13/10).".format(str(loi_max)[:160]))
 
     khoa_goc = khoa or str(uuid.uuid4())
     tin_nhan = gop_he_thong_vao_nguoi_dung(tin_nhan)

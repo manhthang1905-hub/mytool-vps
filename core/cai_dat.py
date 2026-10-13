@@ -189,6 +189,10 @@ MAC_DINH: Dict[str, Any] = {
     # cả chất lượng lẫn tiền; máy khách không có thì "tu_dong" chính là ví như cũ.
     # Lời nhắc ẢNH/CLIP và chấm ảnh nhà máy vẫn đi ví ở mọi lựa chọn.
     "viet_chu_bang": "tu_dong",
+    # 13/10/2026 — chủ dự án: "Claude Max 20 hết token hoặc lỗi thì dùng ShopAPI". Bật (mặc định): thuê bao cạn hạn
+    # mức (cả thang) hoặc hỏng `viet_max.SO_LAN_TRUOC_LUI_VI` lần thì lượt ấy viết bằng ví ShopAPI. Tắt = luật cũ
+    # 24/08 (không bao giờ lùi ví, đợi hạn mức mở lại).
+    "viet_lui_vi": True,
     # Model đầu thang của đường thuê bao (chủ dự án chọn Opus 5.5). Cạn hạn mức
     # thì tụt bậc: opus-5 → sonnet-5-5 → sonnet-5 (`viet_max.THANG_MO_HINH`).
     "claude_max_mo_hinh": "claude-opus-5-5",

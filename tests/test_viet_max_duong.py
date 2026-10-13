@@ -230,10 +230,19 @@ class TestGoiVanBanReDuong:
         assert not dang_qua_vi() and c.goi == 2
 
     def test_cai_dat_ep_thue_bao_ma_thieu_claude_thi_nem_loi_khong_tieu_vi(self, tmp_path, monkeypatch):
+        """Luật cũ 24/08 — giờ chỉ còn khi chủ TẮT `viet_lui_vi` (13/10/2026: mặc định lùi ví)."""
         _co_max(monkeypatch, co=False)
         cai_dat.dat(str(tmp_path), "viet_chu_bang", "claude_max")
+        cai_dat.dat(str(tmp_path), "viet_lui_vi", False)
         with pytest.raises(RuntimeError, match="chưa có Claude Code"):
             goi_van_ban(_ClientCam(), tin_nhan_viet("x"), goc=str(tmp_path))
+
+    def test_ep_thue_bao_ma_thieu_claude_thi_lui_vi_mac_dinh(self, tmp_path, monkeypatch):
+        """Luật chủ 13/10/2026: Claude Max hết token hoặc lỗi → ShopAPI."""
+        _co_max(monkeypatch, co=False)
+        cai_dat.dat(str(tmp_path), "viet_chu_bang", "claude_max")
+        c = _ClientVi()
+        assert goi_van_ban(c, tin_nhan_viet("x"), goc=str(tmp_path)) == "chữ từ ví" and c.goi == 1
 
     def test_may_khach_khong_thue_bao_thi_vi_nhu_cu(self, tmp_path, monkeypatch):
         _co_max(monkeypatch, co=False)
