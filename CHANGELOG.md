@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.191.0** — 2026-10-13 — `vps-jp1` — fix(ban-giao,ghim): kenh tu chay thieu thu_muc_done mac dinh DONE/<ma> (TL4-T7/0001 xong ma khong ban giao); nhan huy hieu ghim theo chu o giao dien binh luan moi (ghim that len ma bao hong)
 - **2.190.1** — 2026-10-13 — `vps-jp1` — fix(kenh-khong-phat): luat chu 13/10 — can 10 video lien khong duoc phan phoi moi bao, KHONG dung san xuat (cu lam cu dang), loi bao de nghi doi mail (kenh moi tren tai khoan Google khac)
 - **2.190.0** — 2026-10-13 — `vps-jp1` — feat(doi-thu-chung): so doi thu chung ca nhom (1 dong/kenh, quet + AI kiem ngach 1 lan, giu moi ghi chu tay), het quet lai khi kenh moi bat; ghi kenh-do.json theo dot (het ghi lai 27MB moi kenh); radar dot bien toan thi truong + ep chon ch…
 - **2.189.0** — 2026-10-12 — `vps-jp1` — feat(sub): do sub/1k dung (bo o trong khong tinh 0), don bay chuyen doi sub cho kenh gan YPP — cau moi giua bai 25-40% + hua video tiep (A/B), MHKT bat buoc nut Dang ky, binh luan hoi + moi nhe (A/B), link video lien quan trong mo ta; nao …
