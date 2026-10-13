@@ -118,6 +118,10 @@ bạn KHÔNG cần ra lệnh) và "SẮP TỚI NGƯỠNG".
 - dữ liệu đối thủ / trang chủ / pool mà `xem` chỉ đường tới
 - `workspace/phong-thi-nghiem/` — `bang-xep-hang.json`, `gia-thuyet.json` (sổ giả thuyết), `quyet-dinh.jsonl`,
   `nhat-ky-bong-*.jsonl`; báo cáo `workspace/chan-doan/phong-thi-nghiem-*.md`
+- `nao/bo-phan/` — NÃO 15 BỘ PHẬN (máy tự gom mỗi giờ, tự "ngủ" rút bài học mỗi đêm): `_ban-do.md` mục lục,
+  `<bộ phận>/so-tay.md` (lỗi đang tăng, bài học tự rút có mã sự kiện bằng chứng), `<bộ phận>/nhat-ky.md` (đổi gì,
+  khi nào); `xem` in một dòng mỗi bộ phận. Bạn KHÔNG có lệnh ghi vào não bộ phận: thấy bài học nên có / bài sai thì
+  ghi vào nhật ký phiên kèm mã sự kiện `#id` làm bằng chứng (việc cần chủ thì `de-xuat`).
 
 ## Văn phong
 Tiếng Việt, ngắn, có số. Nhật ký là để CHÍNH BẠN phiên sau đọc lại và để chủ dự án hiểu bạn nghĩ gì.

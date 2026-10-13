@@ -18,8 +18,8 @@ from collections import Counter
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from . import kho
-from ._chung import (GOC, KHAU_BO_PHAN, NGAY_GOM_DAU, NHAN_KHAU, bam, cac_kenh, chu_ky, doc_json, jdong as _jdong,
-                     luc_tu, tim_kenh)
+from ._chung import (GOC, KHAU_BO_PHAN, NGAY_GOM_DAU, NHAN_KHAU, PHIEN_KY, bam, cac_kenh, chu_ky, chu_ky_su_kien,
+                     doc_json, jdong as _jdong, luc_tu, tim_kenh)
 
 _LO = 500   # số dòng mỗi lần chèn
 
@@ -153,9 +153,10 @@ def doc_chat_luong(duong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
     for l in d.get("loi") or []:
         if isinstance(l, dict) and l.get("ma"):
             ma = str(l["ma"])                 # chữ ký theo MÃ kiểm (chi tiết có số đổi từng video)
+            so = {"ma": ma, "muc": l.get("muc"), "sua": l.get("sua"), "diem": d.get("diem")}
             yield ngu.sk("kiem-chat-luong", "loi", luc, "qa|{0}|{1}".format(k, ma), "{0} ({1}): {2}".format(
-                ma, l.get("muc") or "", l.get("chi_tiet") or ""), kenh=kenh, ma_goi=goi, chu_ky_=bam("qa:" + ma),
-                so={"ma": ma, "muc": l.get("muc"), "sua": l.get("sua"), "diem": d.get("diem")})
+                ma, l.get("muc") or "", l.get("chi_tiet") or ""), kenh=kenh, ma_goi=goi,
+                chu_ky_=chu_ky_su_kien(ngu.nguon, "loi", "", so, ()), so=so)
     for s in d.get("da_sua") or []:
         yield ngu.sk("kiem-chat-luong", "sua", luc, "qa-sua|{0}|{1}".format(k, bam(str(s))),
                      "đã tự sửa: {0}".format(s), kenh=kenh, ma_goi=goi)
@@ -209,8 +210,9 @@ _RE_DOM = re.compile(r"^(DU PHONG|TU CHUA)\s+([\w.-]+)\s*:?\s*(.*)$")
 
 def dong_nhat_ky_vm(bo_phan: str) -> Callable[[str, Ngu], Iterator[Optional[kho.Dong]]]:
     """Nhật ký máy DOM (`dang-dom.log`, `cmt-dom.log`): dòng `DU PHONG`/`TU CHUA <khoá>` = bộ chọn chính hụt (chữ ký
-    theo KHOÁ bộ chọn — trôi DOM gom về một nơ-ron) + dòng ERROR. Dòng không ghi tên kênh thì lấy kênh được nhắc gần
-    nhất trong cùng nhật ký (máy DOM làm lần lượt từng kênh)."""
+    theo KHOÁ bộ chọn — trôi DOM gom về một nơ-ron; DU PHONG = dự phòng đã cứu, là CẢNH BÁO, nơ-ron riêng với TU CHUA)
+    + dòng ERROR. Dòng không ghi tên kênh thì lấy kênh được nhắc gần nhất trong cùng nhật ký (máy DOM làm lần lượt
+    từng kênh)."""
     def doc(dong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
         m = _RE_VM.match(dong)
         if not m:
@@ -222,9 +224,10 @@ def dong_nhat_ky_vm(bo_phan: str) -> Callable[[str, Ngu], Iterator[Optional[kho.
         khoa = "{0}|{1}|{2}".format(ngu.nguon, ts, bam(van))
         k = _RE_DOM.match(van)
         if k:
+            so = {"khoa_dom": k.group(2), "kieu": k.group(1)}
             yield ngu.sk(bo_phan, "loi", luc_tu(ts), khoa, "bộ chọn {0}: {1} — {2}".format(k.group(2), k.group(1),
-                         k.group(3)), kenh=kenh or str(ngu.trang.get("kenh") or ""), chu_ky_=bam("dom:" + k.group(2)),
-                         so={"khoa_dom": k.group(2), "kieu": k.group(1)})
+                         k.group(3)), kenh=kenh or str(ngu.trang.get("kenh") or ""),
+                         chu_ky_=chu_ky_su_kien(ngu.nguon, "loi", "", so, ()), so=so)
         elif muc == "ERROR":
             yield ngu.loi(bo_phan, van, luc_tu(ts), khoa, kenh=kenh, ma_goi=_tim_goi(van, kenh))
     return doc
@@ -236,10 +239,11 @@ def dong_tu_chua(dong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
     d = _jdong(dong)
     kd, ket = str(d.get("khoa") or ""), str(d.get("ket") or "")
     if kd:
+        so = {"khoa_dom": kd, "ket": ket, "chon": d.get("chon")}
         yield ngu.sk("dang-video", "sua" if ket == "chua" else "loi", luc_tu(d.get("luc")),
                      "tu-chua|{0}|{1}|{2}|{3}".format(d.get("luc"), kd, ket, bam(str(d.get("chon")))),
                      "bộ chọn {0}: tự chữa {1} — {2}".format(kd, ket, d.get("ly_do") or d.get("chon") or ""), kenh="",
-                     chu_ky_=bam("dom:" + kd), so={"khoa_dom": kd, "ket": ket, "chon": d.get("chon")})
+                     chu_ky_=chu_ky_su_kien(ngu.nguon, "loi", "", so, ()), so=so)
 
 
 # ── gác tổng, viết Max, radar, ván tự học, nhật ký tự chạy ─────────────────────
@@ -272,11 +276,13 @@ def dong_gac_tong(dong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
                  ma_goi=_tim_goi(cau, kenh), so={"loai": lo, "muc": d.get("muc")})
 
 
-#: Tên việc viết Max → bộ phận (khớp chuỗi con theo thứ tự; còn lại là kịch bản).
-VIEC_BO_PHAN = (("thumb", "bia"), ("bia", "bia"), ("tieu-de", "tieu-de"), ("seo", "tieu-de"),
-                ("binh-luan", "binh-luan"), ("bien-tap", "chon-content"), ("cum", "chon-content"),
-                ("y-kien", "chon-content"), ("trung-y", "chon-content"), ("chien-truong", "chon-content"),
-                ("phong-thi-nghiem", "chon-content"), ("giam-doc", "dieu-phoi"))
+#: Tên việc viết Max → bộ phận (khớp chuỗi con theo thứ tự, `_` coi như `-`; còn lại là kịch bản). Việc không tên
+#: được `viet_max` ghi là `@<mô-đun gọi>` (từ 13/10/2026) — tên mô-đun cũng khớp bảng này.
+VIEC_BO_PHAN = (("nao-bo-phan", "dieu-phoi"), ("thumb", "bia"), ("bia", "bia"), ("tieu-de", "tieu-de"),
+                ("seo", "tieu-de"), ("binh-luan", "binh-luan"), ("bien-tap", "chon-content"),
+                ("chon-content", "chon-content"), ("cum", "chon-content"), ("y-kien", "chon-content"),
+                ("trung-y", "chon-content"), ("chien-truong", "chon-content"), ("phong-thi-nghiem", "chon-content"),
+                ("doi-thu", "doi-thu"), ("chi-so", "chi-so-studio"), ("giam-doc", "dieu-phoi"))
 
 
 def dong_viet_max(dong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
@@ -284,7 +290,7 @@ def dong_viet_max(dong: str, ngu: Ngu) -> Iterator[Optional[kho.Dong]]:
     if not d.get("luc"):
         return
     viec = str(d.get("viec") or "")
-    bp = next((b for k, b in VIEC_BO_PHAN if k in viec), "kich-ban")
+    bp = next((b for k, b in VIEC_BO_PHAN if k in viec.replace("_", "-")), "kich-ban")
     so = {x: d.get(x) for x in ("ok", "giay", "token_vao", "token_ra", "usd_uoc", "mo_hinh", "effort", "luot")}
     khoa = "viet-max|{0}|{1}|{2}".format(d.get("luc"), d.get("pid"), bam(viec))
     kenh = tim_kenh(viec, ngu.kenh_ds)
@@ -469,9 +475,38 @@ def gom_su_kien(con: sqlite3.Connection, goc: str, bay_gio: Optional[float] = No
     return {"tep": dict(doc_tep), "canh_bao": dict(canh_bao)}
 
 
+def ky_lai(con: sqlite3.Connection, kenh_ds: Sequence[str]) -> Dict[str, int]:
+    """Tính lại chữ ký mọi sự kiện `loi`/`sua` DO BỘ GOM tạo (nguồn trong `NGUON`) theo luật hiện hành
+    (`chu_ky_su_kien`); khoá có đuôi `|<chữ ký cũ>` đổi theo để lần gom sau không chèn trùng (đụng khoá có sẵn = cùng
+    một sự kiện → giữ khoá cũ). Không xoá dòng nào. Ghi `meta.phien_ky`."""
+    nguon_gom = {n[0] for n in NGUON}
+    dem: Counter = Counter()
+    for id_, nguon, loai, nd, so, ck, khoa in con.execute(
+            "SELECT id, nguon, loai, noi_dung, so, chu_ky, khoa FROM su_kien WHERE loai IN ('loi', 'sua')").fetchall():
+        if nguon not in nguon_gom:
+            continue
+        dem["xet"] += 1
+        try:
+            moi = chu_ky_su_kien(nguon, loai, nd, json.loads(so or "{}"), kenh_ds, ck or "")
+        except ValueError:
+            continue
+        if moi == (ck or ""):
+            continue
+        k_moi = khoa[:-len(ck)] + moi if ck and str(khoa).endswith("|" + ck) else khoa
+        try:
+            con.execute("UPDATE su_kien SET chu_ky = ?, khoa = ? WHERE id = ?", (moi, k_moi, id_))
+        except sqlite3.IntegrityError:
+            con.execute("UPDATE su_kien SET chu_ky = ? WHERE id = ?", (moi, id_))
+            dem["giu_khoa"] += 1
+        dem["doi"] += 1
+    kho.dat_meta(con, "phien_ky", PHIEN_KY)
+    con.commit()
+    return dict(dem)
+
+
 def gom(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None) -> Dict[str, Any]:
     """Một lượt gom đầy đủ: sự kiện (đọc ở `goc`) → nơ-ron + sổ tay + bản đồ + chỉ mục (ghi ở `ra`, mặc định
-    `goc`). Trả bảng tóm tắt (xem `__main__.in_tom_tat`)."""
+    `goc`). Luật ký đổi (`PHIEN_KY`) thì `ky_lai` một lần TRƯỚC khi gom. Trả bảng tóm tắt (`__main__.in_tom_tat`)."""
     from . import no_ron  # noqa: PLC0415
 
     t0 = time.time()
@@ -479,8 +514,11 @@ def gom(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None) -> Dict[s
     ra = ra or goc
     con = kho.mo(ra, cho=5.0)
     try:
+        ky = ky_lai(con, cac_kenh(goc)) if kho.doc_meta(con, "phien_ky") != str(PHIEN_KY) else {}
         truoc = con.execute("SELECT COALESCE(MAX(id), 0) FROM su_kien").fetchone()[0]
         tk = gom_su_kien(con, goc, bay_gio)
+        if ky.get("doi"):
+            tk["ky_lai"] = ky
         them: Dict[str, Dict[str, int]] = {}
         for bp, loai, n in con.execute("SELECT bo_phan, loai, COUNT(*) FROM su_kien WHERE id > ? GROUP BY 1, 2",
                                        (truoc,)):

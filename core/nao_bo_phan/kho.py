@@ -1,8 +1,10 @@
 """Kho SQLite `nao/bo-phan.db` (WAL) + `ghi()` — ký ức thô của mọi bộ phận.
 
 Bảng: `su_kien` (ký ức thô, KHÔNG BAO GIỜ xoá), `con_tro` (đã gom mỗi tệp tới đâu), `dung` (quyết định nào đã được
-đưa những nơ-ron nào — chấm công về sau). Bảng chỉ mục (`no_ron`, `chi_muc_tri`, `chi_muc_viet`, `lien_ket`) dựng
-lại được hoàn toàn từ vault markdown (`no_ron.dung_lai_chi_muc`).
+đưa những nơ-ron nào — chấm công về sau; MỘT dòng mỗi quyết định), `giac_ngu` (mỗi lần một bộ phận ngủ: lệnh đề xuất
+/ áp / bỏ + lý do, giây, token), `meta` (phiên luật ký, ngày soát). Bảng chỉ mục (`no_ron`, `chi_muc_tri`,
+`chi_muc_viet`, `lien_ket`) dựng lại được hoàn toàn từ vault markdown (`no_ron.dung_lai_chi_muc`). Cột mới của bảng
+cũ được `mo()` thêm bằng `ALTER TABLE` (kho cũ không phải dựng lại).
 """
 
 from __future__ import annotations
@@ -33,7 +35,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chi_muc_tri USING fts5(id UNINDEXED, bo_phan 
 CREATE VIRTUAL TABLE IF NOT EXISTS chi_muc_viet USING fts5(id UNINDEXED, bo_phan UNINDEXED, van,
     tokenize='unicode61 remove_diacritics 2');
 CREATE TABLE IF NOT EXISTS lien_ket(tu TEXT, toi TEXT, PRIMARY KEY(tu, toi));
+CREATE TABLE IF NOT EXISTS giac_ngu(id INTEGER PRIMARY KEY, luc REAL, bo_phan TEXT, tu_id INTEGER, den_id INTEGER,
+    de_xuat INTEGER DEFAULT 0, ap INTEGER DEFAULT 0, bo INTEGER DEFAULT 0, giay REAL, ky_tu INTEGER,
+    token_vao INTEGER, token_ra INTEGER, chi_tiet TEXT DEFAULT '{}', loi TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS meta(khoa TEXT PRIMARY KEY, gia_tri TEXT);
 """
+#: Cột thêm sau đợt 1 (bảng, cột, kiểu) — kho cũ được thêm bằng ALTER TABLE, giá trị điền ở lượt dựng chỉ mục sau.
+_COT_MOI = (("no_ron", "muc", "TEXT DEFAULT 'loi'"), ("no_ron", "nguon", "TEXT DEFAULT ''"),
+            ("no_ron", "su_co_48", "INTEGER DEFAULT 0"), ("no_ron", "ti_le_tang", "REAL DEFAULT 0"),
+            ("no_ron", "vao_loi_nhac", "INTEGER DEFAULT 0"))
 _DA_DUNG: set = set()
 
 #: Một dòng sự kiện đúng thứ tự cột của `CHEN`.
@@ -50,8 +60,21 @@ def mo(goc: str, cho: float = 1.0) -> sqlite3.Connection:
     con = sqlite3.connect(p, timeout=cho)
     if moi or p not in _DA_DUNG:
         con.executescript(_LUOC_DO)
+        for bang, cot, kieu in _COT_MOI:
+            if cot not in {r[1] for r in con.execute("PRAGMA table_info({0})".format(bang))}:
+                con.execute("ALTER TABLE {0} ADD COLUMN {1} {2}".format(bang, cot, kieu))
+        con.commit()
         _DA_DUNG.add(p)
     return con
+
+
+def doc_meta(con: sqlite3.Connection, khoa: str) -> str:
+    r = con.execute("SELECT gia_tri FROM meta WHERE khoa = ?", (khoa,)).fetchone()
+    return str(r[0]) if r else ""
+
+
+def dat_meta(con: sqlite3.Connection, khoa: str, gia_tri: Any) -> None:
+    con.execute("INSERT OR REPLACE INTO meta(khoa, gia_tri) VALUES (?,?)", (khoa, str(gia_tri)))
 
 
 def dong_su_kien(bo_phan: str, loai: str, *, luc: Optional[float] = None, kenh: str = "", ma_goi: str = "",

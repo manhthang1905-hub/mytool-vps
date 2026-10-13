@@ -153,6 +153,19 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
 .phieu .thanh{flex:1;display:flex;height:6px;border-radius:4px;overflow:hidden;background:rgba(125,160,215,.12)}
 .phieu .thanh b{background:var(--tot)} .phieu .thanh i{background:var(--hong)}
 .bh .chan{font-size:11px;color:var(--mo2);margin-top:auto}
+/* ---- não bộ phận (đợt 2, chỉ đọc) ---- */
+.nbp-cuon{overflow-x:auto;padding:4px 12px 10px}
+table.nbp{width:100%;border-collapse:separate;border-spacing:0 5px;font-size:12.5px;min-width:820px}
+table.nbp th{font:600 10px var(--f-hud);letter-spacing:.12em;text-transform:uppercase;color:var(--mo2);text-align:left;padding:2px 8px;white-space:nowrap}
+table.nbp td{padding:7px 8px;background:var(--the2);border-top:1px solid var(--vien);border-bottom:1px solid var(--vien);font-variant-numeric:tabular-nums}
+table.nbp td:first-child{border-left:1px solid var(--vien);border-radius:10px 0 0 10px}
+table.nbp td:last-child{border-right:1px solid var(--vien);border-radius:0 10px 10px 0}
+table.nbp tr{cursor:pointer} table.nbp tr.on td{border-color:var(--ai);box-shadow:inset 0 0 0 1px rgba(167,139,250,.25)}
+table.nbp tr.yen td{opacity:.5}
+.nbp-luoi{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:16px;padding:6px 16px 16px}
+@media (max-width:1000px){.nbp-luoi{grid-template-columns:minmax(0,1fr)}}
+.nbp-loi{font-size:12px;padding:6px 0;border-top:1px dashed rgba(125,160,215,.14);color:var(--mo)}
+.nbp-so-tay{margin:0;max-height:460px;overflow:auto;white-space:pre-wrap;font:12px/1.5 var(--f-ma);padding:10px 12px;border-radius:12px;background:#0b1220;border:1px solid var(--vien)}
 </style>
 </head>
 <body>
@@ -210,6 +223,15 @@ select{background:var(--the3);color:var(--chu);border:1px solid var(--vien2);bor
     <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="scroll" style="color:var(--vang)"></svg>Kho bài học đang áp</h2><span class="phu" id="bh-tom" style="margin-left:auto"></span></div>
     <div class="loc-hang" id="bh-loc"></div>
     <div class="bh-ds" id="bai-hoc"></div>
+  </section>
+
+  <section class="panel goc tim" style="margin-top:16px" aria-label="Não bộ phận">
+    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="brain" style="color:var(--ai)"></svg>Não bộ phận — mỗi bộ phận một bộ não tự gom, tự ngủ rút bài học</h2><span class="phu" id="nbp-phu" style="margin-left:auto"></span></div>
+    <div class="nbp-cuon" id="nbp-bang"><div class="trong">đang tải…</div></div>
+    <div class="nbp-luoi">
+      <div><div class="mo nho" style="margin-bottom:4px">Lỗi đang tăng — sự cố khác nhau 48h so với 5 ngày trước (cảnh báo không tính)</div><div id="nbp-loi"></div></div>
+      <div><div class="mo nho" style="margin-bottom:4px" id="nbp-ten">Sổ tay — bấm một dòng ở bảng</div><pre class="nbp-so-tay" id="nbp-so-tay">(chưa chọn bộ phận)</pre></div>
+    </div>
   </section>
 </main>
 
@@ -426,7 +448,38 @@ function baiHoc() {
   }).join("") || '<div class="trong">sổ bài học trống</div>';
 }
 
+let NBP_BP = null;
+try { NBP_BP = localStorage.getItem("nbp-bp"); } catch (e) { /* trình duyệt chặn lưu trữ — bỏ qua */ }
+function veNbp(N) {
+  const bang = document.getElementById("nbp-bang");
+  if (!N || N.loi) { bang.innerHTML = `<div class="trong">không đọc được não bộ phận${N && N.loi ? ": " + esc(N.loi) : ""}</div>`; return; }
+  if (!N.co_kho) { bang.innerHTML = '<div class="trong">Chưa có não bộ phận (chạy <code>python -m core.nao_bo_phan gom</code>).</div>'; return; }
+  const c = (o, ...k) => k.reduce((t, x) => t + ((o || {})[x] || 0), 0), ds = N.bo_phan || [];
+  document.getElementById("nbp-phu").textContent = `${ds.length} bộ phận · ${esc(N.ban_do)} · ${esc((N.luc || "").slice(11, 16))}`;
+  bang.innerHTML = `<table class="nbp"><thead><tr><th>Bộ phận</th><th>Sự kiện 7 ngày</th><th>Lỗi đang / tái phát</th><th>Tạm lặng</th><th>Đã hết</th><th>Cảnh báo</th><th>Bài tự rút: đang dùng · ứng viên · thử thách · nghỉ</th><th>Bản chiếu</th><th>Ngủ cuối</th></tr></thead><tbody>` +
+    ds.map(x => `<tr data-bp="${esc(x.ma)}" class="${x.ma === NBP_BP ? "on" : ""} ${x.su_kien_7 || c(x.loi, "dang-xay-ra", "tai-phat") ? "" : "yen"}">
+      <td><b style="font:700 12.5px var(--f-hud)">${esc(x.ten)}</b><div class="mo nho">${esc(x.ma)}</div></td><td>${so(x.su_kien_7)}</td>
+      <td>${c(x.loi, "dang-xay-ra", "tai-phat") ? `<span class="chip dich">${so(c(x.loi, "dang-xay-ra"))} · ${so(c(x.loi, "tai-phat"))}</span>` : "0"}</td>
+      <td>${so(c(x.loi, "tam-lang"))}</td><td>${so(c(x.loi, "da-het"))}</td><td>${x.canh_bao ? `<span class="chip vang">${so(x.canh_bao)}</span>` : "0"}</td>
+      <td>${so(c(x.bai_ngu, "dang-dung"))} · ${so(c(x.bai_ngu, "ung-vien"))} · ${so(c(x.bai_ngu, "thu-thach"))} · ${so(c(x.bai_ngu, "nghi"))}</td>
+      <td>${so(x.ban_chieu)}</td><td>${x.ngu_cuoi ? esc(x.ngu_cuoi.slice(5)) + ` <span class="mo nho">(áp ${so(x.ngu_ap)})</span>` : '<span class="mo nho">chưa</span>'}</td></tr>`).join("") + "</tbody></table>";
+  bang.querySelectorAll("tr[data-bp]").forEach(r => r.addEventListener("click", () => {
+    NBP_BP = r.dataset.bp; try { localStorage.setItem("nbp-bp", NBP_BP); } catch (e) { /* bỏ qua */ } taiNbp();
+  }));
+  document.getElementById("nbp-loi").innerHTML = (N.loi_dang_tang || []).map(x => `<div class="nbp-loi">${esc(x.dong)}</div>`).join("") || '<div class="trong">không có lỗi đang xảy ra</div>';
+  const ct = N.chi_tiet;
+  if (ct && !ct.loi) {
+    document.getElementById("nbp-ten").textContent = `Sổ tay — ${ct.ten} (nao/bo-phan/${ct.ma}/so-tay.md)`;
+    document.getElementById("nbp-so-tay").textContent = ct.so_tay || "(chưa có sổ tay — chạy gom)";
+  }
+}
+async function taiNbp() {
+  try { veNbp(await MT.taiJSON("/nao-bo-phan.json" + (NBP_BP ? "?bo_phan=" + encodeURIComponent(NBP_BP) : ""))); }
+  catch (e) { veNbp({loi: e.message}); }
+}
+
 async function tai() {
+  taiNbp();
   try {
     DU = await MT.taiJSON("/nao.json");
     if (DU.loi && !DU.diem) throw new Error(DU.loi);

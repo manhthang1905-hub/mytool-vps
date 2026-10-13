@@ -81,6 +81,7 @@ def _cay(tmp_path, bg):
     _ghi(j("vm", "logs", "dang-dom.log"), "".join([
         _ts(bg, 4) + ",100 INFO: mở Chrome kênh KB theo agent\n",
         _ts(bg, 4) + ",200 INFO: DU PHONG nut_thumbnail: khớp bằng chu (Tải tệp lên)\n",
+        _ts(bg, 4) + ",250 INFO: TU CHUA nut_thumbnail: khớp bằng bộ chọn tự chữa ytcp-x\n",
         _ts(bg, 4) + ",300 WARNING: CẢNH BÁO kế hoạch trùng tiêu đề\n"]))
     _ghi(j("vm", "logs", "tu-chua-dom.jsonl"), _jsonl([
         {"luc": _ts(bg, 4), "khoa": "nut_thumbnail", "ket": "chua", "chon": "ytcp-x", "ly_do": "đổi bộ chọn"}]))
@@ -158,8 +159,9 @@ def test_gom_moi_nguon(tmp_path):
         assert d(nguon="cmt-dom.log", bo_phan="binh-luan", loai="loi") == 2
         dom = C.bam("dom:nut_thumbnail")
         assert con.execute("SELECT bo_phan, kenh FROM su_kien WHERE nguon='dang-dom.log'").fetchall() == \
-            [("dang-video", "KB")]                                       # kênh = kênh nhắc gần nhất; WARNING bỏ
+            [("dang-video", "KB")] * 2                                   # kênh = kênh nhắc gần nhất; WARNING bỏ
         assert d(chu_ky=dom, loai="loi") == 1 and d(chu_ky=dom, loai="sua", nguon="tu-chua-dom") == 1
+        assert d(chu_ky=C.bam("dom-du-phong:nut_thumbnail"), loai="loi") == 1   # DU PHONG: nơ-ron cảnh báo riêng
         # gác tổng: bộ phận theo loại; quá cũ bị lọc; dòng hỏng bỏ qua; tệp cũ không đọc
         gac = sorted(r[0] for r in con.execute("SELECT bo_phan || ':' || loai FROM su_kien WHERE nguon='gac-tong'"))
         assert gac == ["dang-video:loi", "dieu-phoi:do", "dieu-phoi:loi", "suc-khoe-may:loi", "suc-khoe-may:sua"]
@@ -236,11 +238,13 @@ def test_vault_obsidian(tmp_path):
     assert dau["trang_thai"] == C.DANG and dau["kenh"] == ["KA"] and dau["nguon"] == ["so-ngay"]
     assert than.startswith("# tải kết quả hỏng (#) cho job <ma>") and "## Quan sát" in than and "## Liên kết" in than
     assert tk["no_ron"]["giong-doc"][C.DANG] == 1 and tk["chi_muc"]["loi"] >= 10
-    # cách sửa đã thử gắn vào nơ-ron trôi DOM cùng khoá bộ chọn
+    # cách sửa đã thử gắn vào nơ-ron TU CHUA cùng khoá bộ chọn; DU PHONG là nơ-ron CẢNH BÁO riêng
     dom = C.doc_chu(os.path.join(v, "dang-video", "loi", C.bam("dom:nut_thumbnail") + ".md"))
-    assert "## Cách sửa đã thử" in dom and "chưa đủ 7 ngày" in dom
+    assert "## Cách sửa đã thử" in dom and "chưa đủ 7 ngày" in dom and "muc: loi" in dom
+    dp = C.doc_chu(os.path.join(v, "dang-video", "loi", C.bam("dom-du-phong:nut_thumbnail") + ".md"))
+    assert "muc: canh-bao" in dp and "[[bo-phan/thuc-the/bo-chon/nut_thumbnail|bộ chọn nut_thumbnail]]" in dp
     with _db(goc) as con:
         assert con.execute("SELECT COUNT(*) FROM lien_ket WHERE tu LIKE 'giong-doc/loi/%' AND "
                            "toi = 'thuc-the/kenh/KA'").fetchone()[0] == 1
-    assert nbp.nho(goc, "dang-video", "nut_thumbnail Tải tệp lên KB")[0]["id"] == \
+    assert nbp.nho(goc, "dang-video", "nut_thumbnail tự chữa ytcp-x")[0]["id"] == \
         "dang-video/loi/" + C.bam("dom:nut_thumbnail")

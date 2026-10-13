@@ -43,6 +43,39 @@ UNG_VIEN, DANG_DUNG, THU_THACH, NGHI = "ung-vien", "dang-dung", "thu-thach", "ng
 TEN_TRANG_THAI = {DANG: "đang xảy ra", TAI_PHAT: "tái phát", TAM_LANG: "tạm lặng", DA_HET: "đã hết",
                   UNG_VIEN: "ứng viên", DANG_DUNG: "đang dùng", THU_THACH: "thử thách", NGHI: "nghỉ"}
 
+#: Mức nơ-ron lỗi: `canh-bao` khi MỌI sự kiện của nó là cảnh báo (dòng DU PHONG — bộ chọn dự phòng đã cứu; mục kiểm
+#: chất lượng mức `canh_bao` — không chặn video); trọng số truy xuất nhân `TRONG_CANH_BAO`, không vào "lỗi đang tăng".
+LOI, CANH_BAO = "loi", "canh-bao"
+TRONG_CANH_BAO = 0.3
+#: Phiên luật ký: đổi luật chữ ký (chuẩn hoá, tách DU PHONG…) thì tăng số này — lượt gom sau tự `ky_lai` một lần.
+PHIEN_KY = 2
+
+#: ═══ GIẤC NGỦ (đợt 2) ═══ bộ phận có ≥ ngần này sự kiện mới mới được ngủ; mỗi đêm tối đa ngần này bộ phận (bận
+#: nhất trước = cũng là trần số lượt gọi LLM); mỗi bộ phận giữ tối đa ngần này bài học tự rút còn sống.
+SU_KIEN_MOI_TOI_THIEU = 20
+BO_PHAN_TOI_DA_DEM = 6
+BAI_HOC_TOI_DA = 60
+LENH_TOI_DA = 5
+TRAN_TO_SO = 15000
+NGAY_TO_SO = 30
+NGAY_CAP = 3
+NGAY_CU = 30
+GIONG_TRUNG = 0.6
+NGUON_NGU = "ngu"
+
+#: Khâu viết (ô `dung_cho` của `core.chien_luoc.bai_hoc`) → bộ phận có não bơm vào lời nhắc.
+DUNG_CHO_BO_PHAN = {"chon": "chon-content", "bien_tap": "chon-content", "kich_ban": "kich-ban",
+                    "tieu_de": "tieu-de", "bia": "bia"}
+#: Mã kiểm chất lượng (tiền tố) → bộ phận làm ra thứ bị kiểm — nơ-ron kiểm chất lượng "liên quan" bộ phận ấy.
+MA_KIEM_BO_PHAN = (("kb_", "kich-ban"), ("meta_", "tieu-de"), ("pd_", "giong-doc"), ("clip_", "anh-clip"),
+                   ("hinh_", "dung-video"), ("am_", "dung-video"))
+
+#: Nốt thực thể: loại → tên đọc. Nơ-ron nối vào nốt thực thể để "sáng cùng" (lan 1 bước) và để Obsidian vẽ đồ thị.
+THUC_THE = {"kenh": "kênh", "khau": "khâu", "engine": "engine", "bo-chon": "bộ chọn", "ma-kiem": "mã kiểm"}
+ENGINE = (("veo3", re.compile(r"\bveo ?3?\b", re.I)), ("seedance", re.compile(r"seedance", re.I)),
+          ("elevenlabs", re.compile(r"elevenlabs", re.I)), ("tts", re.compile(r"\btts\b", re.I)),
+          ("shopapi", re.compile(r"shopapi", re.I)), ("claude-max", re.compile(r"claude (?:max|code)", re.I)))
+
 #: Khâu sản xuất (`core.auto.KHAU`) → bộ phận; nhãn khâu in trong nhật ký → mã khâu.
 KHAU_BO_PHAN = {"kich-ban": "kich-ban", "hook": "kich-ban", "tieu-de": "tieu-de", "seo": "tieu-de",
                 "giong-doc": "giong-doc", "phu-de": "giong-doc", "bang-canh": "anh-clip", "anh": "anh-clip",
@@ -167,6 +200,45 @@ def chu_ky(van: Any, kenh_ds: Sequence[str] = ()) -> str:
     return bam(chuan_hoa(van, kenh_ds))
 
 
+def chu_ky_su_kien(nguon: str, loai: str, noi_dung: Any, so: Dict[str, Any], kenh_ds: Sequence[str],
+                   cu: str = "") -> str:
+    """Luật ký MỘT chỗ (bộ gom + `ky_lai`): khoá bộ chọn → `dom:` (DU PHONG riêng `dom-du-phong:`), mã kiểm chất
+    lượng → `qa:`, lỗi còn lại → câu đã chuẩn hoá; sự kiện khác giữ chữ ký cũ."""
+    if so.get("khoa_dom"):
+        return bam(("dom-du-phong:" if so.get("kieu") == "DU PHONG" else "dom:") + str(so["khoa_dom"]))
+    if nguon == "chat-luong" and so.get("ma") and loai == "loi":
+        return bam("qa:" + str(so["ma"]))
+    return chu_ky(noi_dung, kenh_ds) if loai == "loi" and noi_dung else cu
+
+
+def la_canh_bao(nguon: str, so: Dict[str, Any]) -> bool:
+    """Sự kiện cảnh báo: dòng DU PHONG (bộ chọn dự phòng đã cứu) hoặc mục kiểm chất lượng mức `canh_bao`."""
+    return so.get("kieu") == "DU PHONG" or (nguon == "chat-luong" and so.get("muc") == "canh_bao")
+
+
+def thuc_the(nguon: str, noi_dung: Any, so: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Thực thể (ngoài kênh) của một sự kiện: khâu, bộ chọn, mã kiểm, engine (nhắc tên trong câu; viết Max = claude-max)."""
+    ra = [("khau", str(so["khau"]))] if so.get("khau") else []
+    if so.get("khoa_dom"):
+        ra.append(("bo-chon", str(so["khoa_dom"])))
+    if nguon == "chat-luong" and so.get("ma"):
+        ra.append(("ma-kiem", str(so["ma"])))
+    van = str(noi_dung or "")
+    ra += [("engine", ten) for ten, re_ in ENGINE if re_.search(van) or (ten == "claude-max" and nguon == "viet-max")]
+    return ra
+
+
+def bo_ba(van: Any) -> set:
+    """Tập cụm 3 ký tự của câu đã hạ chữ thường, số → `#`, gộp trắng — đo câu na ná (Jaccard)."""
+    s = " ".join(re.sub(r"\d+", "#", str(van or "").lower()).split())
+    return {s[i:i + 3] for i in range(max(0, len(s) - 2))}
+
+
+def giong(a: Any, b: Any) -> float:
+    x, y = bo_ba(a), bo_ba(b)
+    return len(x & y) / len(x | y) if x and y else 0.0
+
+
 # ── tệp ──────────────────────────────────────────────────────────────────────
 
 def doc_json(duong: str) -> Any:
@@ -256,6 +328,27 @@ def lk(dich: str, chu: str = "") -> str:
 
 def lk_kenh(kenh: str) -> str:
     return lk("thuc-the/kenh/" + ten_tep(kenh), kenh)
+
+
+def lk_the(the: str) -> str:
+    """`"khau/anh"` → `[[bo-phan/thuc-the/khau/anh|khâu anh]]`."""
+    loai, _, ten = the.partition("/")
+    return lk("thuc-the/{0}/{1}".format(loai, ten_tep(ten)), "{0} {1}".format(THUC_THE.get(loai, loai), ten))
+
+
+def ghi_nhat_ky(vault: str, bp: str, tieu_de: str, dong: Sequence[str], tran: int = 25) -> bool:
+    """Nối MỘT khối vào `<bộ phận>/nhat-ky.md` (append-only; tạo tệp khi chưa có). Không có dòng → không ghi."""
+    if not dong:
+        return False
+    p = os.path.join(vault, bp, "nhat-ky.md")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    dau = "" if os.path.isfile(p) else ve_ghi_chu({"loai": "nhat-ky", "bo_phan": bp}, (
+        "# Nhật ký não — {0}\n\nChỉ nối thêm: mỗi lượt gom / ngủ / soát ghi một khối khi não bộ phận này đổi "
+        "(nơ-ron mới, đổi trạng thái, lệnh đã áp).").format(BO_PHAN.get(bp, bp)))
+    dong = list(dong[:tran]) + (["- … còn {0} dòng".format(len(dong) - tran)] if len(dong) > tran else [])
+    with io.open(p, "a", encoding="utf-8", newline="\n") as tep:
+        tep.write(dau + "\n## {0}\n".format(tieu_de) + "\n".join(dong) + "\n")
+    return True
 
 
 def ten_tep(chu: str) -> str:

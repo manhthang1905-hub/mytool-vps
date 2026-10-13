@@ -1239,6 +1239,26 @@ def _gio_ngan(moc: float) -> str:
         return "?"
 
 
+#: Mô-đun "ống dẫn" bỏ qua khi tìm nơi gọi thật (`noi_goi`).
+_ONG_DAN = ("core.viet_max", "core.goi_van_ban", "threading", "concurrent.futures.thread", "contextlib")
+
+
+def noi_goi(so_mo_dun: int = 2) -> str:
+    """Việc KHÔNG tên → `@<mô-đun gọi gần nhất>[<<mô-đun gọi nó>]` (vd. `@core.tu_chay<core.bien_tap_content`) để sổ
+    dùng — và não bộ phận đọc sổ ấy — biết lượt viết thuộc khâu nào (13/10/2026: 258/888 lượt không tên). Chỉ đọc
+    khung ngăn xếp, không bao giờ ném lỗi."""
+    try:
+        f, ds = sys._getframe(1), []  # noqa: SLF001
+        while f is not None and len(ds) < so_mo_dun:
+            ten = str(f.f_globals.get("__name__") or "")
+            if ten and ten not in _ONG_DAN and ten not in ds:
+                ds.append(ten)
+            f = f.f_back
+        return "@" + "<".join(ds) if ds else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 #: Cạn CẢ thang thì đợi tới giờ mở lại gần nhất, cộng dồn tối đa ngần này giây
 #: cho MỘT lượt viết (cửa sổ hạn mức của gói Max là 5 tiếng) — rồi mới ném lỗi.
 GIAY_CHO_CAN_THANG_TOI_DA = 6 * 3600.0
@@ -1328,7 +1348,7 @@ def dung_goi_chat_max(goc: str, *,
 
     def goi(loi_nhac: str, mo_hinh: str = MO_HINH_TOT_NHAT,
             khoa: str = "", toi_da_token: int = 8192, anh: Any = "") -> str:
-        them = {"gio_han": gio_han_theo_token(toi_da_token), "viec": str(khoa or viec or "")[:120],
+        them = {"gio_han": gio_han_theo_token(toi_da_token), "viec": str(khoa or viec or noi_goi())[:120],
                 "effort": muc_suy_nghi(goc), "on_log": on_log}
         loi_cuoi: Optional[BaseException] = None
         lan = 0

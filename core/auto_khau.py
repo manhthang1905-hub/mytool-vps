@@ -3433,6 +3433,11 @@ def _khoi_khan_gia(bc: "BoiCanh", k: Kenh, d: str) -> Dict[str, str]:
     bh = _bai_kham_nghiem(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "kich_ban")
     if bh:
         st += "\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH (số thật; bài ghi \"đang kiểm, chưa chắc\" mới có ít video — chỉ là giả thuyết):\n" + bh
+    ma_k = str(getattr(k, "ma", "") or "")       # 13/10/2026: não bộ phận "kịch bản" — chưa có não thì y hệt từng byte
+    nao = _khoi_nao(str(getattr(bc, "goc", "") or ""), ma_k, "kich_ban",
+                    "{0}-{1}".format(ma_k, os.path.basename(os.path.normpath(d))) if d else "", "kịch bản " + ma_k)
+    if nao:
+        st += "\n\n" + nao
     return {"BINH_LUAN_GOC": bl or "(không có)", "SU_THAT_KENH": st,
             "BAI_HOC": _khoi_bai_hoc_kich_ban(bc, k)}
 
@@ -3461,6 +3466,22 @@ def _bai_kham_nghiem(goc: str, ma: str, dung_cho: str) -> str:
                 or khoi_kham_nghiem(goc, re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), dung_cho))
     except Exception as loi:  # noqa: BLE001
         _canh_bao_hoc(goc, "bai_kham_nghiem:" + dung_cho, loi, ma)
+        return ""
+
+
+def _khoi_nao(goc: str, ma: str, dung_cho: str, ma_goi: str = "", ngu_canh: str = "") -> str:
+    """Khối "BÀI HỌC TỪ NÃO BỘ PHẬN" (`core.nao_bo_phan.khoi_loi_nhac`, 13/10/2026) cho khâu `dung_cho` — bài học
+    giấc ngủ tự rút (có mã sự kiện bằng chứng) + lỗi đang có của bộ phận, chỉ của kênh này (bản thử `…-v2` = kênh
+    gốc); mã quyết định `<gói|kênh>:<khâu>:<ngày>` (15% đối chứng, chấm công về sau). Chưa có não / hỏng → "" — lời
+    nhắc y hệt từng byte như trước."""
+    if not goc or not ma:
+        return ""
+    try:
+        from .nao_bo_phan import khoi_loi_nhac  # noqa: PLC0415
+
+        return khoi_loi_nhac(goc, dung_cho, ngu_canh, "{0}:{1}:{2}".format(
+            ma_goi or ma, dung_cho, time.strftime("%Y-%m-%d")), kenh=ma)
+    except Exception:  # noqa: BLE001
         return ""
 
 
@@ -4665,6 +4686,11 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
     bai_td = _bai_kham_nghiem(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "tieu_de")
     khoi_bai_td = ("\n\nBÀI HỌC TỪ KHÁM NGHIỆM VIDEO CỦA KÊNH VỀ TIÊU ĐỀ (số thật; bài ghi \"đang kiểm, chưa chắc\" "
                    "chỉ là giả thuyết):\n" + bai_td) if bai_td else ""
+    # 13/10/2026: não bộ phận "tiêu đề / SEO" — chưa có não thì "" → hai lời nhắc y hệt từng byte.
+    nao_td = _khoi_nao(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "tieu_de",
+                       "{0}-{1}".format(luot.ma_kenh, luot.ma_luot) if getattr(luot, "ma_luot", "") else "", sach)
+    if nao_td:
+        khoi_bai_td += "\n\n" + nao_td
 
     if k.nan_khuon_tieu_de:
         mau = tieu_de_thang_cua_kenh(bc.goc, k.ma)
@@ -8968,6 +8994,12 @@ def _loi_nhac_bia(bc: BoiCanh, luot: LuotChay, khuon: str, tieu_de: str,
         bai_hoc_anh_bia = ((bai_hoc_anh_bia + "\n\n") if bai_hoc_anh_bia else "") + (
             "## LESSONS FROM THIS CHANNEL'S VIDEO POST-MORTEMS (measured; lines marked \"đang kiểm, chưa chắc\" "
             "are hypotheses)\n" + bai_kn_bia)
+    # 13/10/2026: não bộ phận "bìa" — chưa có não thì "" (lời nhắc không đổi).
+    nao_bia = _khoi_nao(str(getattr(bc, "goc", "") or ""), str(getattr(getattr(bc, "kenh", None), "ma", "") or ""),
+                        "bia", "{0}-{1}".format(luot.ma_kenh, luot.ma_luot) if getattr(luot, "ma_luot", "") else "",
+                        "{0} {1}".format(tieu_de, chu_bia))
+    if nao_bia:
+        bai_hoc_anh_bia = ((bai_hoc_anh_bia + "\n\n") if bai_hoc_anh_bia else "") + nao_bia
     loi_nhac = _thay(khuon, {
         "TITLE": tieu_de, "THUMB": chu_bia,
         "SCRIPT_OPENING": mo_dau,

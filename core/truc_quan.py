@@ -6,7 +6,8 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan            # mở http://127.0.0.1:8790  (trang: ui_web/truc-quan.html)
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
-Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`) · `/phong-thi-nghiem` phòng thí
+Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`; panel Não bộ phận đọc
+`/nao-bo-phan.json` — `core.nao_bo_phan.truc_quan`) · `/phong-thi-nghiem` phòng thí
 nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
 `core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
@@ -311,6 +312,17 @@ class _Xu(BaseHTTPRequestHandler):
                 from core import nao_truc_quan  # noqa: PLC0415
                 return self._gui(200, "application/json; charset=utf-8",
                                  json.dumps(nao_truc_quan.tinh_nho(), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/nao-bo-phan.json"):      # panel Não bộ phận (tab Não; nhớ đệm 5 phút; ?bo_phan=X → sổ tay)
+            try:
+                if GOC not in sys.path:
+                    sys.path.insert(0, GOC)
+                from urllib.parse import parse_qs, urlsplit  # noqa: PLC0415
+                from core.nao_bo_phan import truc_quan as nbp_tq  # noqa: PLC0415
+                bp = (parse_qs(urlsplit(self.path).query).get("bo_phan") or [""])[0]
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(nbp_tq.tinh_nho(GOC, bp), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith(("/anh-bia/", "/logo/")):     # ảnh bìa đã chọn / logo kênh — chỉ tệp trên máy, đường kiểm chặt

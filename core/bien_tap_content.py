@@ -1293,6 +1293,18 @@ def _muc_tieu_gon(goc: str, ma_kenh: str, nc: Any) -> str:
     return "\n".join(dong[:3])
 
 
+def _khoi_nao(goc: str, ma_kenh: str, bay_gio: _dt.datetime) -> str:
+    """Khối não bộ phận "chọn content" (`core.nao_bo_phan.khoi_loi_nhac`) — mã quyết định `<kênh>:bien_tap:<ngày>`
+    (15% đối chứng). Chưa có não / hỏng → ""."""
+    try:
+        from .nao_bo_phan import khoi_loi_nhac  # noqa: PLC0415
+
+        return khoi_loi_nhac(goc, "bien_tap", "chọn content " + ma_kenh,
+                             "{0}:bien_tap:{1}".format(ma_kenh, bay_gio.strftime("%Y-%m-%d")), kenh=ma_kenh)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _boi_canh_gon(goc: str, ma_kenh: str, bay_gio: _dt.datetime, cu: Dict[str, str],
                   an_toan: Callable[[Callable[[], str]], str]) -> Dict[str, str]:
     """Khối thêm cho đề bài gọn. Không trùng khối cũ: bài học kênh bỏ trục `bien_tap` (đã ở TỰ SỬA) và
@@ -1335,9 +1347,11 @@ def _boi_canh_gon(goc: str, ma_kenh: str, bay_gio: _dt.datetime, cu: Dict[str, s
     ra = {
         "_de_bai": DE_BAI_GON,
         "muc_tieu": an_toan(lambda: _muc_tieu_gon(goc, ma_kenh, nc)),
-        "bai_hoc_kenh": an_toan(lambda: bai_hoc.khoi_chu(
-            goc, ma_kenh, "bien_tap", pham_vi=("kenh",), bo_truc=("bien_tap", "insight_nhom"),
-            bay_gio=bay_gio)) or "(kênh chưa có bài học đủ n ≥ 3)",
+        # 13/10/2026: + khối não bộ phận "chọn content" (bài tự rút có bằng chứng; chưa có não → "" → y hệt như cũ)
+        "bai_hoc_kenh": "\n\n".join(x for x in (
+            an_toan(lambda: bai_hoc.khoi_chu(goc, ma_kenh, "bien_tap", pham_vi=("kenh",),
+                                             bo_truc=("bien_tap", "insight_nhom"), bay_gio=bay_gio)),
+            an_toan(lambda: _khoi_nao(goc, ma_kenh, bay_gio))) if x) or "(kênh chưa có bài học đủ n ≥ 3)",
         "nguon_giu_roi": an_toan(lambda: bai_hoc.khoi_nguon_giu_roi(goc, ma_kenh)) or "(chưa nối được nguồn nào)",
         "ngon_ngu": _TEN_TIENG.get(ngon_ngu.lower(), ngon_ngu),
         "khan_gia_mo_ta": str(_gia_tri(goc, ma_kenh, nc, "khan_gia_mo_ta", MAC_DINH_KHAN_GIA)),

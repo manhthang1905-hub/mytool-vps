@@ -1230,23 +1230,31 @@ def bao_cao(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None, toi_da_dong:
     phan("PHÒNG THÍ NGHIỆM CHỌN CONTENT (giả thuyết × kênh: n, TB [CI90], P(tốt nhất) (Δ so ngày trước); quyết định; "
          "việc sắp tới ngưỡng — đề xuất giả thuyết mới bằng `gia-thuyet-moi`)", phong_thi_nghiem)
 
+    # Đuôi báo cáo (não bộ phận + ĐỌC SÂU) LUÔN giữ — 13/10/2026: báo cáo thật chạm trần `toi_da_dong` nên mục cuối
+    # bị cắt mất; giờ cắt khúc giữa thay vì đuôi.
+    cuoi: List[str] = []
     try:  # 13/10/2026: não bộ phận (`core/nao_bo_phan`, chỉ đọc chỉ mục) — hỏng / chưa có thì không in gì
         from . import nao_bo_phan  # noqa: PLC0415
 
         loi_bp = nao_bo_phan.dong_loi_dang_tang(goc, 5)
         if loi_bp:
-            d.extend(["", "== NÃO BỘ PHẬN — lỗi đang tăng (đang xảy ra / tái phát, số lần 7 ngày) =="] + loi_bp)
+            cuoi.extend(["", "== NÃO BỘ PHẬN — lỗi đang tăng (sự cố khác nhau 48h so với 5 ngày trước; cảnh báo "
+                             "không tính) =="] + loi_bp)
+        bp = nao_bo_phan.dong_bo_phan(goc)          # đợt 2: một dòng mỗi bộ phận (bài tự rút, lỗi, lần ngủ cuối)
+        if bp:
+            cuoi.extend(["", "== NÃO BỘ PHẬN — từng bộ phận (đọc sổ tay khi cần; đề xuất bài học bằng mã sự kiện "
+                             "#id) =="] + bp)
     except Exception:  # noqa: BLE001
         pass
 
-    d.append("")
-    d.append("== ĐỌC SÂU (chỉ đọc) ==")
-    d.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")
-    d.append("  Đối thủ: CHANNEL/_NHOM/*/nghien-cuu/quet-kenh/*.json (mỗi tệp một kênh đối thủ), trang-chu-ai.json, kenh-ai.json")
-    d.append("  Nhóm: CHANNEL/_NHOM/*/INSIGHT-CHON-CONTENT.md · Trí nhớ: nao/tri-nho/ · Nhật ký: nao/nhat-ky/")
-    if len(d) > toi_da_dong:
-        d = d[:toi_da_dong - 1] + ["… (cắt bớt cho gọn; đọc tệp ở trên để xem thêm)"]
-    return "\n".join(d)
+    cuoi.append("")
+    cuoi.append("== ĐỌC SÂU (chỉ đọc) ==")
+    cuoi.append("  CHANNEL/<kênh>/tu-hoc/{bang-diem.md,van.json} · ho-so-video/*.json · giam-doc/ · chi-so/ · kenh.yaml")
+    cuoi.append("  Đối thủ: CHANNEL/_NHOM/*/nghien-cuu/quet-kenh/*.json (mỗi tệp một kênh đối thủ), trang-chu-ai.json, kenh-ai.json")
+    cuoi.append("  Nhóm: CHANNEL/_NHOM/*/INSIGHT-CHON-CONTENT.md · Trí nhớ: nao/tri-nho/ · Nhật ký: nao/nhat-ky/")
+    if len(d) + len(cuoi) > toi_da_dong:
+        d = d[:max(0, toi_da_dong - 1 - len(cuoi))] + ["… (cắt bớt cho gọn; đọc tệp ở trên để xem thêm)"]
+    return "\n".join(d + cuoi)
 
 
 # ═══ LỆNH HÀNH ĐỘNG ═════════════════════════════════════════════════════════

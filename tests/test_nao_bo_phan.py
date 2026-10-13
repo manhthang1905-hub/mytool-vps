@@ -187,7 +187,8 @@ def test_loi_dang_tang_va_nao_xem(tmp_path):
 
     goc = _vault_mau(tmp_path)
     dong = nbp.dong_loi_dang_tang(goc, 5)
-    assert dong[0].startswith("  - [giong-doc] 6×/7 ngày, 1 kênh: cổng ShopAPI") and len(dong) == 4
+    assert dong[0].startswith("  - [giong-doc] 6×/7 ngày, 1 kênh, ") and "sự cố/48h" in dong[0]
+    assert ": cổng ShopAPI" in dong[0] and len(dong) == 4
     bc = nao.bao_cao(goc, dt.datetime.now())
     assert "NÃO BỘ PHẬN — lỗi đang tăng" in bc and "cổng ShopAPI" in bc
     # kho hỏng → `xem` không in mục này, không vỡ
