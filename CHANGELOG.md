@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.193.0** — 2026-10-13 — `vps-jp1` — feat(nao-bo-phan): dot 1 — nao chung cho 15 bo phan: ghi su kien, gom tang dan tu cac so san co, no-ron loi (dang xay ra/tam lang/da het/tai phat), ban chieu bai hoc, so tay bo phan, chi muc FTS5, nho() ~5ms; nao xem in loi dang tang
 - **2.192.0** — 2026-10-13 — `vps-jp1` — feat(doi-thu-chung): phan tang doi thu (loi/dang len/nhe/ngoai) + quet theo tang — 1812 la tri nho hop thu, khong phai so doi thu; tang 1: 60 quet hang ngay, 2: 168 ~2,4 ngay, 3: 118 hang tuan, ngoai 1466
 - **2.191.0** — 2026-10-13 — `vps-jp1` — fix(ban-giao,ghim): kenh tu chay thieu thu_muc_done mac dinh DONE/<ma> (TL4-T7/0001 xong ma khong ban giao); nhan huy hieu ghim theo chu o giao dien binh luan moi (ghim that len ma bao hong)
 - **2.190.1** — 2026-10-13 — `vps-jp1` — fix(kenh-khong-phat): luat chu 13/10 — can 10 video lien khong duoc phan phoi moi bao, KHONG dung san xuat (cu lam cu dang), loi bao de nghi doi mail (kenh moi tren tai khoan Google khac)
