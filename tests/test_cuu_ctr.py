@@ -530,8 +530,11 @@ def test_luat_bia_cam_anh_that_va_nhan_vat_30_phan_tram():
     from core import bia_theo_khuon as btk
     from core import chon_bia
 
+    # 13/10/2026: khuôn ĐO được cỡ nhân vật (bìa thật của chính kênh) → theo khuôn; không đo → luật ≥30%
     p = btk.loi_nhac_theo_khuon({"nhan_vat": {"vi_tri": "trai", "co_pct": 15}}, phong_cach="flat", bien_the={})
-    assert "NO real people" in p and "30% of the frame height" in p and "about 30% of frame height" in p
+    assert "NO real people" in p and "about 15% of frame height" in p and btk.NHAN_VAT_LON not in p
+    p = btk.loi_nhac_theo_khuon({"nhan_vat": {"vi_tri": "trai"}}, phong_cach="flat", bien_the={})
+    assert "NO real people" in p and "30% of the frame height" in p
     q = btk.loi_nhac_chuan_ngach({"chu": {}, "nhan_vat": {"bieu_cam_ro": True}}, bo_ao={}, bien_the={})
     assert "NO real people" in q and "at least 30% of the frame" in q
     ket = chon_bia._KetQuaCham(so=1, loi_nang=["anh_that"])

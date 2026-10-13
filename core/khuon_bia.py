@@ -29,6 +29,15 @@ mặc định `False`) — kênh chưa đủ dữ liệu riêng thì coi như CH
 để `core/chon_bia.py` chuyển sang THĂM DÒ CÓ CHỦ ĐÍCH (ngưỡng khám phá rộng
 hơn) thay vì giả vờ đã có một khuôn không chắc đúng gu.
 
+═══ 13/10/2026 — ỨNG VIÊN TỪ VIDEO THẬT (`chi-so/`) + LUẬT BẰNG CHỨNG MỘT CÂU ═══
+
+TL4-T7 (kênh kiếm tiền) chuyển về máy này 12/10: mọi video thắng của nó làm ở máy khác nên KHÔNG có hồ sơ
+→ không có khuôn → mọi bìa máy này làm cho TL4 theo chuẩn ngách chung (chữ trần), không theo khuôn hộp đỏ thắng
+thật của kênh. Giờ ứng viên gồm cả video THẬT đã đăng đo trong `chi-so/` (`cong_thuc_v7.video_cua_kenh`, đã lọc
+`ngay_bat_dau`; bản chụp muộn nhất, video ≥36h tuổi), bìa lấy từ YouTube (`anh_that`). Khuôn chọn trước hết bằng
+`bia_theo_khuon.du_bang_chung` (CTR ≥ 7% và ≥10.000 hiển thị, HOẶC ≥50.000 hiển thị và CTR ≥ trung vị kênh) —
+CTR cao nhất, hoà thì nhiều hiển thị hơn; không ai đạt mới tới luật trung vị cũ bên dưới.
+
 Không gọi mạng trừ khi CẦN tải ảnh bìa đối chứng (`anh_da_dang`, một lần rồi
 lưu vĩnh viễn) hoặc mô tả khuôn bằng AI (`cap_nhat`, chỉ khi người thắng vừa
 đổi) — cả hai đều rất hiếm khi xảy ra (một lần/kênh cho tới khi có video mới
@@ -135,7 +144,7 @@ def _ung_vien_cua_kenh(goc: str, kenh: str) -> List[UngVienThang]:
     try:
         ten_tep = sorted(t for t in os.listdir(thu_muc) if t.endswith(".json"))
     except OSError:
-        return ra
+        ten_tep = []  # kênh chưa có hồ sơ nào (làm ở máy khác) — vẫn còn video thật trong `chi-so/`
     for ten in ten_tep:
         ma_goi = ten[:-len(".json")]
         ho_so = ho_so_video.doc_ho_so(goc, kenh, ma_goi)
@@ -169,7 +178,49 @@ def _ung_vien_cua_kenh(goc: str, kenh: str) -> List[UngVienThang]:
             avd_pct=m.get("avd_pct"), moc_gio=gio,
             tep_anh_luot=str(thumb.get("tep") or "") if isinstance(thumb, dict) else "",
         ))
+    # 13/10/2026: + video THẬT của kênh chưa có trong hồ sơ (làm ở máy khác / đăng tay) — xem đầu tệp.
+    co = {u.video_id for u in ra}
+    ra.extend(u for u in _ung_vien_that(goc, kenh) if u.video_id not in co)
     return ra
+
+
+def _ung_vien_that(goc: str, kenh: str) -> List[UngVienThang]:
+    """Video đã đăng của `kenh` đo trong `chi-so/` — `cong_thuc_v7.video_cua_kenh` (bộ đọc chung: đã lọc
+    `kenh.yaml: ngay_bat_dau`, chuỗi bản chụp đã làm sạch). Mỗi video: bản chụp MUỘN NHẤT có CTR, chỉ khi
+    video đã ≥ `_MOC_GIO_THAP` giờ tuổi (CTR sớm còn nhảy). Không có `chi-so/` → rỗng."""
+    try:
+        from . import cong_thuc_v7  # noqa: PLC0415 — nạp muộn, tránh vòng nhập
+        ds = cong_thuc_v7.video_cua_kenh(goc, kenh)
+    except Exception:  # noqa: BLE001 — chưa quét Studio lần nào là bình thường
+        return []
+    ra: List[UngVienThang] = []
+    for vm in ds:
+        diem = [d for d in (getattr(getattr(vm, "chuoi", None), "diem", None) or [])
+                if d.ctr is not None and d.hien_thi is not None]
+        if not diem or diem[-1].tuoi < _MOC_GIO_THAP:
+            continue
+        d = diem[-1]
+        ra.append(UngVienThang(kenh=kenh, ma_goi="", video_id=str(vm.ma), tieu_de=str(vm.tieu_de or ""),
+                               ctr=float(d.ctr), impressions=float(d.hien_thi), avd_pct=None,
+                               moc_gio=round(float(d.tuoi), 1)))
+    return ra
+
+
+def trung_vi_ctr_that(ds: List[UngVienThang]) -> Optional[float]:
+    """Trung vị CTR các video ≥ `NGUONG_IMPRESSIONS` hiển thị — vế "hiển thị lớn" của luật bằng chứng."""
+    cac = [u.ctr for u in ds if u.impressions >= NGUONG_IMPRESSIONS]
+    return round(statistics.median(cac), 4) if cac else None
+
+
+def _thang_bang_chung(goc: str, kenh: str, ds: List[UngVienThang]) -> Optional[UngVienThang]:
+    """Ứng viên CTR cao nhất (hoà → nhiều hiển thị hơn) thoả `bia_theo_khuon.du_bang_chung`."""
+    from . import bia_theo_khuon as _btk  # noqa: PLC0415
+    ch = _btk.cau_hinh_kenh(goc, kenh)
+    tv = trung_vi_ctr_that(ds)
+    dat = [u for u in ds if _btk.du_bang_chung(
+        u.ctr, u.impressions, ctr_min=float(ch["bia_khai_thac_ctr_min"]), imp_min=float(ch["bia_khai_thac_imp_min"]),
+        imp_lon=float(ch["bia_khai_thac_imp_lon"]), trung_vi=tv)]
+    return max(dat, key=lambda u: (u.ctr, u.impressions)) if dat else None
 
 
 def _trung_vi_ctr(ds: List[UngVienThang]) -> Optional[float]:
@@ -206,6 +257,9 @@ def tim_video_thang(goc: str, kenh: str,
     này. Tắt thì kênh chưa đủ mẫu riêng coi như CHƯA CÓ khuôn (trả `None`),
     KHÔNG suy diễn từ trung vị nhóm lẫn không mượn video của kênh khác.
 
+    13/10/2026: trước hết LUẬT BẰNG CHỨNG (`bia_theo_khuon.du_bang_chung`, ứng viên gồm cả video thật trong
+    `chi-so/`) — ai đạt thì CTR cao nhất thắng. Không ai đạt mới tới luật tương đối cũ dưới đây.
+
     Ngưỡng theo quyết định 7 bản thiết kế: impressions ≥ 1.000, mốc 36-96h giờ,
     CTR ≥ max(1,3×trung vị, trung vị+1,5 điểm %). Trung vị dùng để so là trung
     vị CỦA CHÍNH KÊNH khi kênh có ≥3 điểm chụp đủ tuổi; ít hơn thì (chỉ khi
@@ -223,30 +277,28 @@ def tim_video_thang(goc: str, kenh: str,
             cho_phep_muon_nhom = False
 
     rieng = _ung_vien_cua_kenh(goc, kenh)
+    tv_that = trung_vi_ctr_that(rieng)
+
+    # 1) LUẬT BẰNG CHỨNG (13/10/2026, thay nhánh "bằng chứng tuyệt đối" 30/09) — bìa đủ bằng chứng của CHÍNH
+    #    kênh thắng trước mọi luật tương đối: khuôn này mới là khuôn được KHAI THÁC (`trang_thai_khai_thac`
+    #    dùng đúng luật này). TL3-T7/vea03c3caae 9,73% / 19.618; TL4-T7 (không hồ sơ) từ `chi-so/`.
+    try:
+        thang = _thang_bang_chung(goc, kenh, rieng)
+    except Exception:  # noqa: BLE001 — đọc ngưỡng hỏng: rơi về luật trung vị như cũ
+        thang = None
+    if thang is not None:
+        return _ket_qua(thang, nguon="kenh", nguong_median=tv_that or 0.0, so_mau=len(rieng),
+                        trung_vi_that=tv_that)
+
+    # 2) Luật TƯƠNG ĐỐI cũ (≥3 mẫu): thắng rõ trung vị của chính kênh — khuôn cho tấm `khuon_thang` lúc thăm dò.
     tv_rieng = _trung_vi_ctr(rieng)
     du_mau_rieng = len(rieng) >= 3
 
     if du_mau_rieng and tv_rieng is not None:
         thang = _thang_theo_nguong(rieng, tv_rieng)
         if thang is not None:
-            return _ket_qua(thang, nguon="kenh", nguong_median=tv_rieng, so_mau=len(rieng))
-
-    # 30/09/2026 — kênh CHƯA đủ 3 mẫu chín nhưng có một video mà BẰNG CHỨNG TUYỆT
-    # ĐỐI đã đủ (ngưỡng khai thác `bia_theo_khuon`: CTR ≥ 7%, ≥10.000 hiển thị —
-    # TL3-T7/vea03c3caae 9,73% / 19.618): đó là khuôn CỦA CHÍNH KÊNH, không cần
-    # trung vị. Trước đây nhánh này rơi vào `return None` khi tắt mượn nhóm, nên
-    # khuôn TL3 không bao giờ được làm mới (và không bao giờ tả lại từ ảnh thật).
-    if not du_mau_rieng and rieng:
-        try:
-            from . import bia_theo_khuon as _btk  # noqa: PLC0415
-            ch = _btk.cau_hinh_kenh(goc, kenh)
-            ctr_min, imp_min = float(ch["bia_khai_thac_ctr_min"]), float(ch["bia_khai_thac_imp_min"])
-        except Exception:  # noqa: BLE001
-            ctr_min, imp_min = 7.0, 10000.0
-        du_bang_chung = [u for u in rieng if u.ctr >= ctr_min and u.impressions >= imp_min]
-        if du_bang_chung:
-            thang = max(du_bang_chung, key=lambda u: u.ctr)
-            return _ket_qua(thang, nguon="kenh", nguong_median=ctr_min, so_mau=len(rieng))
+            return _ket_qua(thang, nguon="kenh", nguong_median=tv_rieng, so_mau=len(rieng),
+                            trung_vi_that=tv_that)
 
     if not cho_phep_muon_nhom:
         # Chưa đủ mẫu riêng (hoặc mẫu riêng không ai đạt ngưỡng) và kênh KHÔNG
@@ -276,7 +328,8 @@ def tim_video_thang(goc: str, kenh: str,
         return None
     thang_rieng_theo_nhom = _thang_theo_nguong(rieng, tv_nhom)
     if thang_rieng_theo_nhom is not None:
-        return _ket_qua(thang_rieng_theo_nhom, nguon="kenh", nguong_median=tv_nhom, so_mau=len(rieng))
+        return _ket_qua(thang_rieng_theo_nhom, nguon="kenh", nguong_median=tv_nhom, so_mau=len(rieng),
+                        trung_vi_that=tv_that)
 
     # Kênh này không có video nào thắng — mượn ứng viên CAO NHẤT đạt ngưỡng
     # của MỘT KÊNH KHÁC trong nhóm (không phải "video cao nhất cả nhóm" gộp
@@ -288,12 +341,14 @@ def tim_video_thang(goc: str, kenh: str,
     return None
 
 
-def _ket_qua(u: UngVienThang, *, nguon: str, nguong_median: float, so_mau: int) -> Dict[str, Any]:
+def _ket_qua(u: UngVienThang, *, nguon: str, nguong_median: float, so_mau: int,
+             trung_vi_that: Optional[float] = None) -> Dict[str, Any]:
     return {
         "kenh_goc": u.kenh, "ma_goi": u.ma_goi, "video_id": u.video_id,
         "tieu_de": u.tieu_de, "ctr": u.ctr, "impressions": u.impressions,
         "avd_pct": u.avd_pct, "moc_gio": u.moc_gio, "tep_anh_luot": u.tep_anh_luot,
         "nguon": nguon, "trung_vi_dung": round(nguong_median, 4), "so_mau": so_mau,
+        "trung_vi_ctr_that": trung_vi_that,
     }
 
 
@@ -505,7 +560,7 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
                                        impressions=thang["impressions"],
                                        moc_gio=thang.get("moc_gio") or 0.0)
             if khuon_moi:
-                khuon_chu = khuon_moi
+                khuon_chu = _bo_sung_mau_khoi(goc, kenh, khuon_moi)
         except Exception:  # noqa: BLE001 — mô tả hỏng thì giữ khuôn cũ (nếu có), không chặn
             pass
 
@@ -541,6 +596,9 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
         "nguon": thang["nguon"], "tep": duong_anh,
         "sha1": sha1_moi,
         "khuon_chu": khuon_chu, "ngay_so_lieu": hom_nay, "lich_su": lich_su,
+        # 13/10/2026: trung vị CTR video thật của kênh lúc chọn khuôn — vế "hiển thị lớn" của luật bằng chứng
+        # khi `bia_theo_khuon.trang_thai_khai_thac` xét khai thác.
+        "trung_vi_ctr_that": thang.get("trung_vi_ctr_that"),
     }
     # ═══ BÌA THẬT, VÒNG THỬ, VÒNG HỌC (30/09/2026, `core/bia_theo_khuon.py`) ═══
     ta_tu_anh_that = bool(duong_that) and (phai_ta_lai and goi_chat is not None or cu.get("anh_that"))
@@ -577,6 +635,24 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
         except Exception:  # noqa: BLE001 — dòng markdown chỉ là tiện đọc, không chặn
             pass
     return moi
+
+
+def _bo_sung_mau_khoi(goc: str, kenh: str, kc: Dict[str, Any]) -> Dict[str, Any]:
+    """Tầng có HỘP chữ mà lượt nhìn ảnh không đọc ra màu hộp → màu hộp kênh khai trong `style.yaml`
+    (`thumb_text_hex`). Kênh không khai → để trống (bộ vẽ dùng khối nền tối cũ)."""
+    tang = [t for t in ((kc.get("chu") or {}).get("tang") or [])
+            if isinstance(t, dict) and t.get("khoi_nen") and not t.get("mau_khoi")]
+    if not tang:
+        return kc
+    try:
+        from .kenh import TEP_STYLE, doc_yaml  # noqa: PLC0415
+        m = re.search(r"#[0-9a-fA-F]{6}", str((doc_yaml(os.path.join(duong_kenh(goc, kenh), TEP_STYLE)) or {})
+                                              .get("thumb_text_hex") or ""))
+    except Exception:  # noqa: BLE001
+        m = None
+    for t in tang if m else []:
+        t["mau_khoi"] = m.group(0).upper()
+    return kc
 
 
 def ghi_ket_qua_thu(goc: str, kenh: str, *, dat: bool, chi_tiet: Dict[str, Any]) -> None:

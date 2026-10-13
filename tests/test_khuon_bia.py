@@ -317,6 +317,101 @@ def test_doc_bai_hoc_anh_bia_placeholder_khi_khuon_het_hieu_luc(tmp_path):
         "(kênh chưa có dữ liệu thumbnail riêng — đang thử nghiệm nhiều kiểu)")
 
 
+# ── 5. 13/10/2026 — ứng viên từ video THẬT (`chi-so/`) + luật bằng chứng một câu ──
+
+
+def _ghi_chi_so(goc: str, kenh: str, ma: str, *, ngay: str, moc, tieu_de: str = "") -> None:
+    """Một video THẬT trong `chi-so/<ma>/<Nh>/` (không hồ sơ) — `moc` = [(giờ, hiển thị, ctr), …]."""
+    for gio, imp, ctr in moc:
+        d = os.path.join(duong_kenh(goc, kenh), "chi-so", ma, "{0}h".format(gio))
+        os.makedirs(d, exist_ok=True)
+        with io.open(os.path.join(d, "tong-quan.json"), "w", encoding="utf-8") as tep:
+            json.dump({"impressions": imp, "ctr": ctr, "views": imp * ctr / 100.0}, tep)
+        with io.open(os.path.join(d, "_thong-tin.json"), "w", encoding="utf-8") as tep:
+            json.dump({"tieu_de": tieu_de or ma, "ngay_dang": ngay + "T11:00:00.000Z"}, tep)
+
+
+def _kenh_that(goc: str, ma: str = "K4", ngay_bat_dau: str = "") -> None:
+    _ghi_kenh_yaml(goc, ma)
+    if ngay_bat_dau:
+        with io.open(os.path.join(duong_kenh(goc, ma), TEP_KENH), "a", encoding="utf-8") as tep:
+            tep.write('ngay_bat_dau: "{0}"\n'.format(ngay_bat_dau))
+    for i, (imp, ctr) in enumerate([(5000, 3.0), (8000, 4.0), (9000, 4.5), (6000, 5.0), (7000, 5.5)]):
+        _ghi_chi_so(goc, ma, "vidNEN{0:05d}".format(i), ngay="2026-09-0{0}".format(i + 1),
+                    moc=[(48, imp / 2, ctr + 1), (200, imp, ctr)])
+
+
+def test_ung_vien_tu_chi_so_khong_can_ho_so(tmp_path):
+    """Kênh chuyển máy: KHÔNG có hồ sơ nào, mọi video thắng chỉ có trong `chi-so/` — vẫn ra khuôn (bản chụp
+    MUỘN NHẤT), `ma_goi` rỗng."""
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidTHANG001", ngay="2026-09-20", tieu_de="video thắng",
+                moc=[(48, 9000, 9.0), (300, 31666, 7.71)])
+    thang = kb.tim_video_thang(goc, "K4")
+    assert thang is not None and thang["video_id"] == "vidTHANG001"
+    assert thang["ma_goi"] == "" and thang["nguon"] == "kenh"
+    assert thang["ctr"] == 7.71 and thang["impressions"] == 31666
+    assert thang["trung_vi_ctr_that"] is not None
+
+
+def test_ngay_bat_dau_loai_video_doi_truoc(tmp_path):
+    goc = str(tmp_path)
+    _kenh_that(goc, ngay_bat_dau="2026-08-22")
+    _ghi_chi_so(goc, "K4", "vidCU000001", ngay="2018-12-27", moc=[(400, 35701, 7.97)])
+    assert kb.tim_video_thang(goc, "K4") is None, "video đời trước của kênh không được làm khuôn"
+
+
+def test_video_chua_du_36h_khong_lam_ung_vien(tmp_path):
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidNON00001", ngay="2026-10-12", moc=[(20, 40000, 12.0)])
+    assert kb.tim_video_thang(goc, "K4") is None
+
+
+def test_luat_bang_chung_hien_thi_lon_tren_trung_vi(tmp_path):
+    """CTR 5,9% / 106k hiển thị (trên trung vị kênh 4,5%) ĐẠT; 9% / 3k hiển thị (CTR cao, ít hiển thị) không."""
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidLON00001", ngay="2026-09-10", moc=[(300, 106000, 5.9)])
+    _ghi_chi_so(goc, "K4", "vidIT000001", ngay="2026-09-11", moc=[(300, 3000, 9.0)])
+    thang = kb.tim_video_thang(goc, "K4")
+    assert thang is not None and thang["video_id"] == "vidLON00001"
+    assert thang["trung_vi_ctr_that"] < 5.9
+
+
+def test_luat_bang_chung_chon_ctr_cao_nhat_trong_cac_ung_vien_dat(tmp_path):
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidLON00001", ngay="2026-09-10", moc=[(300, 106000, 5.9)])
+    _ghi_chi_so(goc, "K4", "vidCAO00001", ngay="2026-09-12", moc=[(300, 31666, 7.71)])
+    assert kb.tim_video_thang(goc, "K4")["video_id"] == "vidCAO00001"
+
+
+def test_hien_thi_lon_duoi_trung_vi_khong_dat(tmp_path):
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidLON00002", ngay="2026-09-10", moc=[(300, 200000, 3.2)])
+    assert kb.tim_video_thang(goc, "K4") is None
+
+
+def test_cap_nhat_khuon_tu_chi_so_dung_bia_that_va_ghi_trung_vi(tmp_path):
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidTHANG001", ngay="2026-09-20", moc=[(300, 31666, 7.71)])
+    url_da_tai = []
+
+    def tai(url):
+        url_da_tai.append(url)
+        return b"\xff\xd8\xff\xe0FAKE-JPEG"
+    ket = kb.cap_nhat(goc, "K4", _goi_chat_gia({}), tai_anh=tai)
+    assert ket["video_id"] == "vidTHANG001" and ket["anh_that"] is True
+    assert url_da_tai and "vidTHANG001" in url_da_tai[0]
+    assert ket["tep"].endswith("vidTHANG001-that.jpg")
+    assert ket["trung_vi_ctr_that"] is not None
+    assert ket["thu"]["trang_thai"] == "cho_thu", "khuôn mới vẫn phải qua vòng tạo thử"
+
+
 def test_doc_bai_hoc_anh_bia_co_so_do_va_khuon_chu(tmp_path):
     goc = str(tmp_path)
     _ghi_kenh_yaml(goc, "K3")

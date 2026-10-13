@@ -9273,7 +9273,10 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
     kênh, chủ kênh 30/09/2026): 4 tấm theo khuôn cho CHÍNH đề tài này (2 mô hình
     vẽ chữ + 2 code vẽ chữ), chấm từng mục so với bìa thật; ≥3/4 tấm đạt ≥5/6 mục
     và đúng chính tả → khuôn "dat". Kết quả ghi vào khuôn (`khuon_bia.ghi_ket_qua_thu`),
-    ảnh ở `7-thumbnail/_thu-khuon/`."""
+    ảnh ở `7-thumbnail/_thu-khuon/`.
+
+    13/10/2026: thử ĐÚNG cách kênh sẽ vẽ chữ lúc khai thác — `kenh.yaml: bia_ve_chu` "ma" → cả 4 tấm code vẽ
+    chữ, "mo_hinh" → cả 4 mô hình vẽ, "tron" (mặc định) → xen kẽ như cũ."""
     from . import bia_theo_khuon as _btk, khuon_bia as _kb  # noqa: PLC0415
     from .cham_anh import data_url  # noqa: PLC0415
     khuon = kh.get("khuon") or {}
@@ -9296,9 +9299,10 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
     chu_mong = "".join(_btk.chu_cua_tang(t) for t in bt["chu_tang"])
     bo_ao = _bo_ao_kenh(bc)
     hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)), khuon["tep"])
+    ve_cfg = str((kh.get("cau_hinh") or {}).get("bia_ve_chu") or "tron")
     ket = []
     for i, b in enumerate(bt["bien_the"]):
-        ma_ve = i % 2 == 1
+        ma_ve = ve_cfg == "ma" or (ve_cfg != "mo_hinh" and i % 2 == 1)
         ln = bd(_btk.loi_nhac_theo_khuon(kc, phong_cach=bo_ao["phong_cach"], bien_the=b,
                                          chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve, cam=bo_ao["cam"]))
         tep = os.path.join(thu, "thu_{0}.png".format(i + 1))

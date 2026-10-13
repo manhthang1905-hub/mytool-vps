@@ -258,7 +258,8 @@ drawn — do not correct it; empty if none), and \
 text does not match the expected text above), "sai_chinh_ta" (a wrong kanji, typo or misspelled \
 word in the text on the tile — even if it matches the expected text), "chu_vo" (text \
 broken/overlapping/unreadable), "dai_toi" (a dark or grey see-through band/box laid over a large part \
-of the picture or over the character), \
+of the picture or over the character — solid opaque coloured boxes sitting tightly behind individual text \
+lines are a text style, NOT dai_toi), \
 "nhan_vat_di_dang" (a character/face is deformed or has extra/missing limbs), "anh_that" (a REAL \
 person, a photograph or a photo-realistic human/face anywhere in the tile, even in the background — the \
 channel only uses drawn illustration).
