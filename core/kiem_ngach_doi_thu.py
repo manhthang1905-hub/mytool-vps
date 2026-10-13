@@ -909,6 +909,15 @@ def kiem(goc: str, cac_kenh: Sequence[str], client: Any, *, sua: Sequence[str] =
         lay_kenh = _lay_kenh_mac_dinh(goc, cac_kenh[0])
     if lay_kenh is not None:
         can_moi = [h for h in hop.values() if not h["theo_doi"]]
+        # 13/10/2026 — TẦNG ĐỐI THỦ: kênh tầng "ngoài" của sổ chung (hết ở mọi kênh ta) chỉ đo lại hằng tháng
+        # (`so_doi_thu_chung.den_han_do_lai`); không nhóm / chưa có tầng → đo như cũ.
+        try:
+            from . import so_doi_thu_chung as sdc  # noqa: PLC0415
+
+            den_han = sdc.den_han_do_lai(goc, cac_kenh[0], [h["link"] for h in can_moi])
+            can_moi = [h for h in can_moi if h["link"] in den_han]
+        except Exception:  # noqa: BLE001
+            pass
         if toi_da_lam_moi is not None:
             can_moi = can_moi[:max(0, int(toi_da_lam_moi))]
         if can_moi:

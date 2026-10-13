@@ -50,10 +50,41 @@ Khoá chuẩn = mã kênh `UC…` khi biết (ảnh chụp `kenh-do.json`, `quet
    quay về hộp thư (y luật cũ của `nhom_kenh.dong_bo_doi_thu`).
 
 Nơi gọi: `chot_doi_thu.chot` (đầu lượt chấm hộp thư: gộp + gieo; cuối lượt: gộp lại), `mot_nut.chay` (gộp sau
-bước quét), `radar_dot_bien` (đọc + cập nhật `lien_quan`). Kênh không khai `nhom` → không có sổ chung (sổ riêng của
+bước quét + lọc lượt quét theo tầng), `radar_dot_bien` (đọc + cập nhật `lien_quan`, xếp tầng 1–2 trước),
+`kiem_ngach_doi_thu.kiem` (đo lại kênh hết theo hạn tầng). Kênh không khai `nhom` → không có sổ chung (sổ riêng của
 nó vẫn là danh bạ duy nhất), mọi hàm ở đây là không-làm-gì.
 
-    python -m core.so_doi_thu_chung --nhom <nhóm> [--goc <cây>] [--ghi] [--gieo] [--lien-quan]   # mặc định chạy thử
+═══ TẦNG ĐỐI THỦ (13/10/2026) ═══
+
+Chủ dự án: *"1812 là quá nhiều — thị trường không thể có nhiều đối thủ thế, có gì lẫn lộn; phân tầng đối thủ để theo
+dõi hiệu quả"*. Kiểm toán 13/10: 1.812 dòng = MỌI kênh từng rơi vào hộp thư CHỈ-NỐI-THÊM của nhóm (≈ 96% từ trang chủ
+máy ảo, `nhom_kenh.dong_bo_doi_thu` hợp hộp thư nên dòng nào cũng nằm ở cả 8 sổ riêng) — sổ là TRÍ NHỚ "đã xét / đã
+từ chối", không phải danh sách đối thủ: 1.274 bỏ (1.181 AI lạc ngách, 90 sai tiếng), 251 hết, 287 theo dõi. Đối thủ
+thật là phần trong ngách + còn sống; tầng cho biết quét nó dày đến đâu (`phan_tang`, tính lại mỗi lần gộp):
+
+    1  lõi      trong ngách, còn đăng ≤ `NGAY_SONG_TANG` ngày, đủ cỡ (Subs ≥ `SUBS_TANG_1` hoặc View TV ≥
+                `VIEW_TV_TANG_1`) hoặc có mặt trong pool đề xuất / trang chủ dày của kênh ta; xếp điểm, trần
+                `TRAN_TANG_1` kênh — quét hằng ngày
+    2  đang lên trong ngách, còn sống, chưa vào tầng 1 nhưng có tín hiệu: radar nổ ≤ `NGAY_DOT_BIEN_TANG` ngày
+                (`radar/quyet-dinh.jsonl`, bảng radar — dính `NGAY_DOT_BIEN_TANG` ngày: video nổ ở tầng 3 kéo kênh
+                lên tầng 2 ngay lần gộp sau), video gần ≥ `BUNG_TANG_2` × trung vị, kênh trẻ view/tháng cao,
+                Vượt quy mô cao; + phần dư đủ cỡ tầng 1 ngoài trần — 2–3 ngày/lần
+    3  nhẹ      trong ngách nhưng nhỏ / chưa tín hiệu / im lâu / chưa đo được ngày đăng — tuần/lần
+    ngoai       bỏ / hết / tạm ngưng ở MỌI kênh ta, kênh chết, sai tiếng — không quét; kênh hết đo lại hằng tháng
+                (`den_han_do_lai`), chết / sai tiếng / lạc ngách không đo lại (y luật cũ)
+
+Kênh bạn đưa không bao giờ dưới tầng 2 và không ra `ngoai` trừ khi chết / hết / sai tiếng (luật sức sống thắng bạn
+đưa — y thứ tự `_phan_quyet_gieo`). Ngưỡng là hằng số ở đầu tệp. Ngày đăng mới nhất lấy từ ảnh chụp kênh của kho nhóm
+(`kenh-do.json`, `quet-kenh/`) — cột `Đăng gần nhất` của sổ riêng phần lớn trống / cũ.
+
+Hạn quét (`NGAY_QUET_TANG`, `loc_quet` — bước 3 của `mot_nut`): kênh đến hạn theo tầng tính từ lần quét content gần
+nhất của CHÍNH kênh ta (mốc từng kênh `cai-dat.json` → `quet_kenh`, `quet_doi_thu` ghi — không dùng Quét lúc của danh
+bạ vì lượt chấm hộp thư cũng ghi nó); ảnh chụp nhóm còn tươi (kênh anh em vừa quét, `nghien_cuu_chung.HAN_QUET_GIO`)
+thì lấy luôn — miễn phí; trang chủ máy ảo vừa đẩy video mới của kênh → quét sớm; một kênh hai link (`@handle` +
+`/channel/UC…`) chỉ quét một lần. `Tăng/ngày` chia cho khoảng quét của CHÍNH kênh (`doi_thu_kenh.gop_bang`).
+`MYTOOL_QUET_THEO_TANG=0` tắt (quét mọi kênh theo dõi như cũ). Nút "Quét đối thủ" bấm tay vẫn quét đủ.
+
+    python -m core.so_doi_thu_chung --nhom <nhóm> [--goc <cây>] [--ghi] [--gieo] [--tang [N]]   # mặc định chạy thử
 
 Không mạng, không AI, không Qt. Ghi nguyên tử dưới khoá ngắn (`nghien_cuu_chung._KhoaNgan`).
 """
@@ -64,17 +95,20 @@ import csv
 import datetime as _dt
 import io
 import json
+import math
 import os
 import re
+import statistics
 import sys
 import time
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from urllib.parse import unquote
 
 from . import danh_ba_doi_thu as db
 
 __all__ = ["TEP", "TEP_CSV", "COT_SO_CHUNG", "COT_SO_RIENG", "duong", "doc", "gop", "ap_vao_so",
            "dong_bo_truoc_chot", "gop_sau", "phan_loai_ghi_chu", "tra", "thanh_vien_nhom", "nhom_cua",
-           "thong_ke_so"]
+           "thong_ke_so", "TANG", "NGAY_QUET_TANG", "phan_tang", "loc_quet", "den_han_do_lai"]
 
 TEP = "doi-thu-chung.json"
 TEP_CSV = "doi-thu-chung.csv"
@@ -94,6 +128,44 @@ LOP_GIEO_RIENG = ("ban_dua", "het", "chet", "lech_tieng")
 _UU_TIEN = {"chet": 6, "lech_tieng": 5, "het": 4, "bo": 3, "giu": 2, "nghi": 1}
 _RE_NGAY = re.compile(r"(\d{1,2})/(\d{1,2})(?:/(\d{4}))?")
 _RE_UC = re.compile(r"^(UC[\w-]{20,24})$")
+#: Mã kênh trong link GỐC — `db.khoa` hạ chữ thường mọi khoá ASCII, mà mã UC… phân biệt hoa thường.
+_RE_UC_LINK = re.compile(r"/channel/(UC[\w-]{20,24})(?![\w-])")
+
+# ── tầng đối thủ (xem "TẦNG ĐỐI THỦ" đầu tệp) ────────────────────────────────
+TANG_1, TANG_2, TANG_3, NGOAI = "1", "2", "3", "ngoai"
+TANG = (TANG_1, TANG_2, TANG_3, NGOAI)
+#: Còn sống = video mới nhất (ảnh chụp kênh / Đăng gần nhất) cách hôm nay ≤ ngần này ngày (= `kiem_ngach_doi_thu.NGAY_IM`).
+NGAY_SONG_TANG = 30
+#: Đủ cỡ tầng 1: Subs ≥ … HOẶC View TV (trung vị view lần quét) ≥ …
+SUBS_TANG_1 = 10_000
+VIEW_TV_TANG_1 = 5_000
+#: … hoặc có mặt DÀY ở khán giả ta: ≥ ngần này video trong pool đề xuất Studio, hay ≥ ngần này dòng trang chủ máy ảo
+#: (28 ngày, cộng cả nhóm — trung vị kênh nhỏ còn sống là ~20 dòng, nên ngưỡng phải cao mới là "dày").
+POOL_TANG_1 = 5
+TC_TANG_1 = 200
+#: Trần tầng 1 (xếp theo điểm) — quét hằng ngày phải rẻ. Phần dư đủ cỡ → tầng 2; dư chỉ nhờ có mặt mà nhỏ → tầng 3.
+TRAN_TANG_1 = 60
+#: Tín hiệu đột biến radar (mức ≥ `MUC_DOT_BIEN_TANG`) còn kéo kênh lên tầng 2 ngần này ngày.
+NGAY_DOT_BIEN_TANG = 14
+MUC_DOT_BIEN_TANG = 2
+#: Video ≤ 30 ngày tuổi (ảnh chụp) ≥ ngần này × trung vị view của kênh VÀ ≥ `BUNG_VIEW_TANG_2` view — sàn tuyệt đối vì
+#: kênh nhỏ trung vị vài trăm view thì ×5 là chuyện thường (đo 13/10: 139/217 kênh nhỏ có ×5 ở ≥ 3.000 view).
+BUNG_TANG_2 = 5.0
+BUNG_VIEW_TANG_2 = 20_000
+#: Kênh trẻ (ảnh chụp đủ mọi video, video cũ nhất ≤ ngần này tháng) có view/tháng ≥ …
+THANG_TRE_TANG_2 = 6.0
+VIEW_THANG_TRE_TANG_2 = 50_000
+#: Vượt quy mô (video nhiều view nhất ÷ subs) ≥ … ở kênh còn sống, và video ấy ≥ `VIEW_VUOT_TANG_2` view (≈ vượt × subs):
+#: kênh 300 subs có video 2.000 view đã là ×7 — chưa phải tín hiệu.
+VUOT_TANG_2 = 5.0
+VIEW_VUOT_TANG_2 = 50_000
+#: Hạn quét lại (ngày) theo tầng, tính từ lần quét gần nhất của chính kênh ta — hơi dưới 1/2,5/7/30 ngày để lượt
+#: nghiên cứu chạy sớm vài giờ không lỡ nhịp. Kênh chưa có tầng (mới vào sổ) → quét ngay.
+NGAY_QUET_TANG = {TANG_1: 0.75, TANG_2: 2.4, TANG_3: 6.5, NGOAI: 29.5}
+#: Trang chủ máy ảo của kênh ta đẩy video đăng ≤ ngần này ngày của một đối thủ chưa tới hạn → quét nó ngay lượt này.
+NGAY_VIDEO_MOI_TRANG_CHU = 3
+#: Thứ tự quét trong một lượt: tầng 1 → kênh mới → tầng 2 → 3 → ngoài.
+_HANG_TANG = {TANG_1: 0, "": 1, TANG_2: 2, TANG_3: 3, NGOAI: 4}
 
 
 # ── đường / nhóm ─────────────────────────────────────────────────────────────
@@ -252,7 +324,67 @@ def phan_loai_ghi_chu(ghi: str, quet: str = "") -> Tuple[str, str]:
 
 # ── bí danh (mã kênh UC…) ────────────────────────────────────────────────────
 
-_NHO_BI_DANH: Dict[str, Tuple[Tuple[float, ...], Dict[str, str]]] = {}
+_NHO_BI_DANH: Dict[str, Tuple[Tuple[float, ...], Dict[str, str], Dict[str, Dict[str, Any]]]] = {}
+
+
+def _tom_anh(ch: Dict[str, Any], luc: float) -> Optional[Dict[str, Any]]:
+    """Tóm một ảnh chụp kênh (`youtube.Channel` dạng dict) → số cho tầng: `{luc, moi, cu, du, n, tv, vt, bung,
+    bung_view, subs}` (`moi`/`cu` = ngày đăng video mới / cũ nhất; `vt` = view/tháng của video ≤ 90 ngày tuổi lúc
+    chụp; `bung` = video ≤ 30 ngày tuổi lúc chụp nhiều view nhất ÷ trung vị view của ảnh chụp)."""
+    vs = [v for v in ((ch or {}).get("videos") or []) if isinstance(v, dict)]
+    if not vs:
+        return None
+    ngay: List[Tuple[_dt.date, int]] = []
+    views: List[int] = []
+    for v in vs:
+        try:
+            w = int(v.get("views"))
+        except (TypeError, ValueError):
+            w = -1
+        if w >= 0:
+            views.append(w)
+        try:
+            ngay.append((_dt.date.fromisoformat(str(v.get("upload_date") or "")[:10]), w))
+        except ValueError:
+            continue
+    try:
+        d0 = _dt.date.fromtimestamp(luc) if luc > 0 else None
+    except (OverflowError, OSError, ValueError):
+        d0 = None
+    if d0 is None:   # ảnh chụp không ghi ngày đo → mốc là video mới nhất (không coi mọi video là "gần")
+        d0 = max(d for d, _w in ngay) if ngay else _dt.date.today()
+    tv = float(statistics.median(views)) if views else 0.0
+    # ngày đăng của yt-dlp là xấp xỉ — có thể lệch sau ngày chụp vài ngày
+    gan = [w for d, w in ngay if -3 <= (d0 - d).days <= 30 and w >= 0]
+    vt = sum(w for d, w in ngay if -3 <= (d0 - d).days <= 90 and w >= 0) / (90 / 30.44)
+    try:
+        subs = int((ch or {}).get("subscribers"))
+    except (TypeError, ValueError):
+        subs = -1
+    return {"luc": float(luc), "moi": max(d for d, _w in ngay).isoformat() if ngay else "",
+            "cu": min(d for d, _w in ngay).isoformat() if ngay else "", "du": bool((ch or {}).get("complete")),
+            "n": len(vs), "tv": tv, "vt": round(vt), "bung": (max(gan) / tv) if (gan and tv > 0) else 0.0,
+            "bung_view": max(gan) if gan else 0, "subs": subs}
+
+
+def _gop_tom(tom: Dict[str, Dict[str, Any]], ch: Dict[str, Any], luc: float, quet: bool) -> None:
+    """Ảnh chụp mới nhất của mỗi mã kênh thắng; `moi` = ngày đăng mới nhất từng thấy; `quet` = lần quét content gần
+    nhất của nhóm (ảnh chụp `quet-kenh/`)."""
+    cid = str((ch or {}).get("channel_id") or "").strip()
+    if not _RE_UC.match(cid):
+        return
+    t = _tom_anh(ch, luc)
+    if t is None:
+        return
+    cu = tom.get(cid)
+    if cu is None or t["luc"] >= cu["luc"]:
+        t["moi"] = max(t["moi"], (cu or {}).get("moi") or "")
+        t["quet"] = max(float((cu or {}).get("quet") or 0.0), luc if quet else 0.0)
+        tom[cid] = t
+    else:
+        cu["moi"] = max(cu.get("moi") or "", t["moi"])
+        if quet:
+            cu["quet"] = max(float(cu.get("quet") or 0.0), luc)
 
 
 def _them_bi_danh(ra: Dict[str, str], ch: Dict[str, Any]) -> None:
@@ -268,16 +400,24 @@ def _them_bi_danh(ra: Dict[str, str], ch: Dict[str, Any]) -> None:
             ra.setdefault(k, cid)
 
 
-def bang_bi_danh(goc: str, nhom: str, cu: Optional[Dict[str, str]] = None) -> Dict[str, str]:
-    """`{khoá link: "UC…"}` từ ảnh chụp kênh của kho nhóm (`kenh-do.json`, `quet-kenh/*.json`) + bí danh đã nhớ.
-    `kenh-do.json` ~27 MB → nhớ trong tiến trình theo giờ sửa tệp."""
-    ra: Dict[str, str] = dict(cu or {})
+def _ep_ngay_kho(ngay: Any) -> float:
+    """"2026-10-12" (ngày đo của `kenh-do.json`) → epoch 12:00 giờ máy ngày ấy; hỏng → 0."""
+    try:
+        d = _dt.date.fromisoformat(str(ngay or "")[:10])
+    except ValueError:
+        return 0.0
+    return time.mktime(_dt.datetime(d.year, d.month, d.day, 12, 0).timetuple())
+
+
+def _anh_chup(goc: str, nhom: str) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
+    """`({khoá link: "UC…"}, {"UC…": tóm ảnh chụp})` từ ảnh chụp kênh của kho nhóm (`kenh-do.json`,
+    `quet-kenh/*.json`). `kenh-do.json` ~27 MB → nhớ trong tiến trình theo giờ sửa tệp / thư mục."""
     try:
         from . import nghien_cuu_chung as ncc  # noqa: PLC0415
 
         kho = os.path.join(thu_muc(goc, nhom), ncc.THU_MUC)
     except Exception:  # noqa: BLE001
-        return ra
+        return {}, {}
     p_do = os.path.join(kho, ncc.TEP_KENH_DO)
     d_q = os.path.join(kho, ncc.THU_MUC_QUET)
     try:
@@ -291,11 +431,13 @@ def bang_bi_danh(goc: str, nhom: str, cu: Optional[Dict[str, str]] = None) -> Di
     nho = _NHO_BI_DANH.get(kho)
     if nho is None or nho[0] != dau:
         moi: Dict[str, str] = {}
+        tom: Dict[str, Dict[str, Any]] = {}
         du = _doc_json(p_do, {}) or {}
         if isinstance(du, dict):
             for m in du.values():
                 if isinstance(m, dict):
                     _them_bi_danh(moi, m.get("ch") or {})
+                    _gop_tom(tom, m.get("ch") or {}, _ep_ngay_kho(m.get("ngay")), False)
         try:
             ten = os.listdir(d_q)
         except OSError:
@@ -305,21 +447,43 @@ def bang_bi_danh(goc: str, nhom: str, cu: Optional[Dict[str, str]] = None) -> Di
                 m = _doc_json(os.path.join(d_q, t), {}) or {}
                 if isinstance(m, dict):
                     _them_bi_danh(moi, m.get("ch") or {})
-        _NHO_BI_DANH[kho] = (dau, moi)
+                    try:
+                        luc = float(m.get("luc") or 0.0)
+                    except (TypeError, ValueError):
+                        luc = 0.0
+                    _gop_tom(tom, m.get("ch") or {}, luc, True)
+        _NHO_BI_DANH[kho] = (dau, moi, tom)
         nho = _NHO_BI_DANH[kho]
-    for k, v in nho[1].items():
+    return nho[1], nho[2]
+
+
+def bang_bi_danh(goc: str, nhom: str, cu: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """`{khoá link: "UC…"}` từ ảnh chụp kênh của kho nhóm (`kenh-do.json`, `quet-kenh/*.json`) + bí danh đã nhớ."""
+    ra: Dict[str, str] = dict(cu or {})
+    for k, v in _anh_chup(goc, nhom)[0].items():
         ra.setdefault(k, v)
     return ra
 
 
 def khoa_chuan(link: str, bi_danh: Dict[str, str]) -> str:
-    """Khoá chuẩn của một link kênh: mã `UC…` khi biết, không thì `danh_ba_doi_thu.khoa`."""
+    """Khoá chuẩn của một link kênh: mã `UC…` khi biết, không thì `danh_ba_doi_thu.khoa`.
+
+    `db.khoa` hạ chữ thường khoá ASCII (`@Handle` ≡ `@handle` thật), nhưng mã kênh UC… PHÂN BIỆT hoa thường — trước
+    13/10 link `/channel/UC…` chưa có ảnh chụp ra khoá `channel/uc…` (3 dòng sổ thật), lệch với dòng `UC…` của cùng
+    kênh khi ảnh chụp về sau. Lấy lại mã từ link GỐC.
+
+    >>> khoa_chuan("https://www.youtube.com/channel/UCfakeTangAaaaaaaaaaaaaa/videos", {})
+    'UCfakeTangAaaaaaaaaaaaaa'
+    """
     k = db.khoa(link)
     if not k:
         return ""
     if k in bi_danh:
         return bi_danh[k]
     if k.lower().startswith("channel/"):
+        m = _RE_UC_LINK.search(unquote(str(link or "")))
+        if m:
+            return m.group(1)
         uc = k.split("/", 1)[1]
         if _RE_UC.match(uc):
             return uc
@@ -373,8 +537,10 @@ def _o(dong: Sequence[str], o: Dict[str, int], ten: str) -> str:
 
 # ── gộp ──────────────────────────────────────────────────────────────────────
 
-def _dung_lai(goc: str, nhom: str, thanh_vien: Sequence[str], cu: Dict[str, Any]) -> Dict[str, Any]:
-    """Dựng sổ chung TỪ ĐẦU (luật 1). `cu` = sổ cũ — chỉ mang sang bí danh, mốc gieo, lần đầu thấy, liên quan."""
+def _dung_lai(goc: str, nhom: str, thanh_vien: Sequence[str], cu: Dict[str, Any],
+              lien_quan: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None) -> Dict[str, Any]:
+    """Dựng sổ chung TỪ ĐẦU (luật 1). `cu` = sổ cũ — chỉ mang sang bí danh, mốc gieo, lần đầu thấy, liên quan, mốc
+    đột biến của tầng. `lien_quan` (radar vừa tính) đè phần liên quan TRƯỚC khi xếp tầng."""
     bi = bang_bi_danh(goc, nhom, cu.get("bi_danh") or {})
     kenh_cu = cu.get("kenh") or {}
     for e in kenh_cu.values():   # bí danh suy từ sổ cũ: mọi link của một dòng UC… là bí danh của mã ấy
@@ -397,6 +563,9 @@ def _dung_lai(goc: str, nhom: str, thanh_vien: Sequence[str], cu: Dict[str, Any]
             k = khoa_chuan(link, bi)
             if not k:
                 continue
+            if _RE_UC.match(k):
+                # khoá thường của link (`channel/uc…`) → mã gốc: kho `kenh-ai.json` ghi khoá link hạ chữ thường
+                bi.setdefault(db.khoa(link), k)
             n_dong += 1
             e = kenh.get(k)
             if e is None:
@@ -485,6 +654,11 @@ def _dung_lai(goc: str, nhom: str, thanh_vien: Sequence[str], cu: Dict[str, Any]
                 bi[kk] = k
     du = {"phien_ban": PHIEN_BAN, "nhom": nhom, "luc": time.strftime("%Y-%m-%d %H:%M:%S"),
           "thanh_vien": list(thanh_vien), "bi_danh": bi, "gieo": dict(cu.get("gieo") or {}), "kenh": kenh}
+    _ap_lien_quan(du, lien_quan)
+    try:
+        phan_tang(du, goc=goc, nhom=nhom, cu=cu)
+    except Exception:  # noqa: BLE001 — tầng hỏng không được làm hỏng sổ (lượt quét thiếu tầng = quét như cũ)
+        pass
     du["thong_ke"] = thong_ke_so(du, n_dong=n_dong)
     return du
 
@@ -547,7 +721,12 @@ def thong_ke_so(du: Dict[str, Any], *, n_dong: Optional[int] = None) -> Dict[str
         tt[e.get("trang_thai") or "?"] = tt.get(e.get("trang_thai") or "?", 0) + 1
         g = (e.get("gieo") or {}).get("lop") or "khong"
         gieo[g] = gieo.get(g, 0) + 1
+    tang: Dict[str, int] = {}
+    for e in kenh.values():
+        if e.get("tang"):
+            tang[e["tang"]] = tang.get(e["tang"], 0) + 1
     ra = {"kenh": len(kenh), "trang_thai": tt, "gieo_duoc": gieo,
+          "tang": {t: tang.get(t, 0) for t in TANG} if tang else {},
           "uc": sum(1 for e in kenh.values() if e.get("uc")),
           "ban_dua": sum(1 for e in kenh.values() if e.get("ban_dua")),
           "ghi_chu_rieng": sum(1 for e in kenh.values() for x in (e.get("theo_kenh") or {}).values() if x.get("ghi"))}
@@ -564,12 +743,9 @@ def gop(goc: str, nhom: str, *, thanh_vien: Optional[Sequence[str]] = None, ghi:
     if not nhom or not tv:
         return {}
     if not ghi:
-        du = _dung_lai(goc, nhom, tv, doc(goc, nhom))
-        _ap_lien_quan(du, lien_quan)
-        return du
+        return _dung_lai(goc, nhom, tv, doc(goc, nhom), lien_quan=lien_quan)
     with _khoa_ghi(goc, nhom):
-        du = _dung_lai(goc, nhom, tv, doc(goc, nhom))
-        _ap_lien_quan(du, lien_quan)
+        du = _dung_lai(goc, nhom, tv, doc(goc, nhom), lien_quan=lien_quan)
         _ghi(goc, nhom, du)
     return du
 
@@ -579,6 +755,383 @@ def _ap_lien_quan(du: Dict[str, Any], lien_quan: Optional[Dict[str, Dict[str, Di
         e = (du.get("kenh") or {}).get(k)
         if e is not None and isinstance(x, dict):
             e["lien_quan"] = x
+
+
+# ── tầng đối thủ ─────────────────────────────────────────────────────────────
+
+def _so_f(x: Any) -> float:
+    try:
+        v = float(str(x).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return v if math.isfinite(v) else 0.0
+
+
+def _gon(x: float) -> str:
+    """46900 → "46,9k" — lý do tầng phải ngắn."""
+    if x >= 1e6:
+        return "{0:.1f}M".format(x / 1e6).replace(".", ",")
+    if x >= 1e3:
+        return "{0:.1f}k".format(x / 1e3).replace(".", ",")
+    return "{0:.0f}".format(x)
+
+
+def _dang_theo(x: Dict[str, Any]) -> bool:
+    """Dòng sổ riêng (hoặc một dòng trùng của nó) đang được quét — trạng thái trống tính là theo dõi (y
+    `danh_ba_doi_thu.dang_theo_doi`)."""
+    return any((d.get("tt") or db.THEO_DOI) == db.THEO_DOI for d in [x] + list(x.get("trung") or []))
+
+
+def _khoa_theo_ten(kenh: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    """`{tên kênh: khoá}` — hai kênh trùng tên (12 cặp ở sổ thật) thì kênh nhiều kênh ta theo dõi hơn thắng."""
+    ra: Dict[str, str] = {}
+    hang: Dict[str, int] = {}
+    for k, e in kenh.items():
+        n = sum(1 for x in (e.get("theo_kenh") or {}).values() if _dang_theo(x))
+        for t in [e.get("ten")] + list(e.get("ten_khac") or []):
+            t = str(t or "").strip()
+            if t and (t not in ra or n > hang[t]):
+                ra[t], hang[t] = k, n
+    return ra
+
+
+def _tin_hieu_radar(goc: str, nhom: str, du: Dict[str, Any], hom_nay: _dt.date) -> Dict[str, Dict[str, Any]]:
+    """`{khoá: {ngay, muc, boi, nguon}}` — video nổ (mức ≥ `MUC_DOT_BIEN_TANG`) trong `NGAY_DOT_BIEN_TANG` ngày:
+    bảng radar mới nhất + sổ quyết định của radar (`core/radar_dot_bien.py`)."""
+    try:
+        from . import radar_dot_bien as rdb  # noqa: PLC0415
+
+        d = os.path.join(thu_muc(goc, nhom), rdb.THU_MUC)
+        p_moi, p_qd = os.path.join(d, rdb.TEP_MOI), os.path.join(d, rdb.TEP_QUYET)
+    except Exception:  # noqa: BLE001
+        return {}
+    kenh = du.get("kenh") or {}
+    ten = _khoa_theo_ten(kenh)
+    moc = (hom_nay - _dt.timedelta(days=NGAY_DOT_BIEN_TANG)).isoformat()
+    ra: Dict[str, Dict[str, Any]] = {}
+
+    def them(k: str, ngay: str, muc: float, boi: float, nguon: str) -> None:
+        if not k or k not in kenh or len(ngay) < 10 or ngay < moc or muc < MUC_DOT_BIEN_TANG:
+            return
+        cu = ra.get(k)
+        if cu is None or (ngay, boi) > (cu["ngay"], cu["boi"]):
+            ra[k] = {"ngay": ngay, "muc": int(muc), "boi": round(boi, 1), "nguon": nguon}
+    bang = _doc_json(p_moi, {}) or {}
+    if isinstance(bang, dict):
+        ngay = str(bang.get("luc") or "")[:10]
+        for x in bang.get("dong") or []:
+            if isinstance(x, dict):
+                k = str(x.get("kenh_khoa") or "")
+                if k not in kenh:
+                    k = ten.get(str(x.get("kenh_nguon") or "").strip(), "")
+                them(k, ngay, _so_f(x.get("muc")), _so_f(x.get("boi")), "radar")
+    try:
+        with io.open(p_qd, encoding="utf-8") as tep:
+            for dong in tep:
+                try:
+                    x = json.loads(dong)
+                except ValueError:
+                    continue
+                if isinstance(x, dict):
+                    them(ten.get(str(x.get("kenh_nguon") or "").strip(), ""), str(x.get("luc") or "")[:10],
+                         _so_f(x.get("muc")), _so_f(x.get("boi")), "quyết định radar")
+    except OSError:
+        pass
+    return ra
+
+
+def _dat_tang(e: Dict[str, Any], tang: str, ly_do: str) -> None:
+    e["tang"] = tang
+    e["tang_ly_do"] = ly_do[:220]
+
+
+def phan_tang(du: Dict[str, Any], *, goc: str = "", nhom: str = "", cu: Optional[Dict[str, Any]] = None,
+              hom_nay: Optional[_dt.date] = None, anh: Optional[Dict[str, Dict[str, Any]]] = None,
+              radar: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, int]:
+    """Xếp tầng mọi dòng sổ chung (luật ở "TẦNG ĐỐI THỦ" đầu tệp) → ghi `tang`, `tang_ly_do`, `tang_diem`,
+    `dang_moi` (ngày đăng mới nhất biết được), `dot_bien` (mốc nổ radar, dính `NGAY_DOT_BIEN_TANG` ngày qua các lần
+    gộp) vào từng dòng. Không đụng phần nào khác của dòng (ghi chú, phán quyết riêng). Trả `{tầng: số kênh}`.
+    `anh` (`{"UC…": tóm ảnh chụp}`) / `radar` (`{khoá: tín hiệu}`) để `None` → đọc từ kho nhóm `goc`/`nhom`."""
+    kenh = du.get("kenh") or {}
+    hom_nay = hom_nay or _dt.date.today()
+    if anh is None:
+        anh = _anh_chup(goc, nhom)[1] if (goc and nhom) else {}
+    if radar is None:
+        radar = _tin_hieu_radar(goc, nhom, du, hom_nay) if (goc and nhom) else {}
+    kenh_cu = (cu or {}).get("kenh") or {}
+    moc_db = (hom_nay - _dt.timedelta(days=NGAY_DOT_BIEN_TANG)).isoformat()
+    ung: List[Tuple[float, str]] = []
+    tam: Dict[str, Tuple[str, List[str], bool]] = {}   # khoá → (số đo, tín hiệu đang lên, đủ cỡ / bạn đưa)
+    for k, e in kenh.items():
+        so = e.get("so") or {}
+        a = anh.get(k) or (anh.get(str(e.get("uc") or "")) if e.get("uc") else None) or {}
+        moi = max(str(a.get("moi") or ""), str(so.get("Đăng gần nhất") or "")[:10])
+        e["dang_moi"] = moi
+        try:
+            im: Optional[int] = (hom_nay - _dt.date.fromisoformat(moi)).days if moi else None
+        except ValueError:
+            im = None
+        dot = radar.get(k)
+        dcu = (kenh_cu.get(k) or {}).get("dot_bien")
+        if isinstance(dcu, dict) and str(dcu.get("ngay") or "") >= moc_db \
+                and (dot is None or str(dcu.get("ngay") or "") > str(dot.get("ngay") or "")):
+            dot = dcu
+        if dot:
+            e["dot_bien"] = dict(dot)
+        else:
+            e.pop("dot_bien", None)
+        song = (e.get("song") or {}).get("ket")
+        bd = bool(e.get("ban_dua"))
+        theo = [m for m, x in (e.get("theo_kenh") or {}).items() if isinstance(x, dict) and _dang_theo(x)]
+        if song in ("chet", "lech_tieng"):
+            e.pop("tang_diem", None)
+            _dat_tang(e, NGOAI, "ngoài: kênh chết / không xem được — không quét lại" if song == "chet"
+                      else "ngoài: sai tiếng — không quét lại")
+            continue
+        if song == "het":
+            e.pop("tang_diem", None)
+            _dat_tang(e, NGOAI, "ngoài: hết (không còn làm / không phát triển){0} — đo lại hằng tháng".format(
+                " · bạn đưa" if bd else ""))
+            continue
+        if not theo and not bd:
+            e.pop("tang_diem", None)
+            tt = e.get("trang_thai") or ""
+            _dat_tang(e, NGOAI, "ngoài: " + {db.BO: "bỏ ở mọi kênh ta (lạc ngách) — không quét lại",
+                                             db.HET: "hết ở mọi kênh ta — đo lại hằng tháng",
+                                             db.TAM_NGUNG: "tạm ngưng ở mọi kênh ta"}.get(
+                tt, "không kênh ta nào theo dõi"))
+            continue
+        subs = _so_f(so.get("Subs")) or float(max(0, int(a.get("subs") or 0)))
+        tv = _so_f(so.get("View TV")) or float(a.get("tv") or 0.0)
+        lq = e.get("lien_quan") or {}
+        tc = sum(int(_so_f((x or {}).get("tc"))) for x in lq.values() if isinstance(x, dict))
+        pool = sum(int(_so_f((x or {}).get("pool"))) for x in lq.values() if isinstance(x, dict))
+        # video nổ trên radar ≤ 7 ngày tuổi → kênh vừa đăng, dù ảnh chụp cũ
+        song_ok = (im is not None and im <= NGAY_SONG_TANG) or bool(dot)
+        tin: List[str] = []
+        if dot:
+            tin.append("radar ×{0} {1}".format(_gon(_so_f(dot.get("boi"))), _dd_mm(dot.get("ngay"))))
+        try:
+            anh_moi = (hom_nay - _dt.date.fromtimestamp(float(a.get("luc") or 0))).days <= 30
+        except (OverflowError, OSError, ValueError):
+            anh_moi = False
+        if anh_moi and float(a.get("bung") or 0) >= BUNG_TANG_2 and float(a.get("bung_view") or 0) >= BUNG_VIEW_TANG_2:
+            tin.append("video gần ×{0:.0f} trung vị".format(float(a["bung"])))
+        thang = None
+        if a.get("du") and a.get("cu"):
+            try:
+                thang = (hom_nay - _dt.date.fromisoformat(str(a["cu"]))).days / 30.44
+            except ValueError:
+                thang = None
+        vt = float(a.get("vt") or 0.0)
+        if thang is None and _so_f(so.get("Tuổi (tháng)")):
+            thang, vt = _so_f(so.get("Tuổi (tháng)")), max(vt, _so_f(so.get("View/tháng")))
+        if thang is not None and thang <= THANG_TRE_TANG_2 and vt >= VIEW_THANG_TRE_TANG_2:
+            tin.append("kênh trẻ {0:.0f} tháng, {1}/tháng".format(max(thang, 1.0), _gon(vt)))
+        vuot = _so_f(so.get("Vượt quy mô"))
+        if vuot >= VUOT_TANG_2 and vuot * subs >= VIEW_VUOT_TANG_2:
+            tin.append("vượt quy mô ×{0:.0f}".format(vuot))
+        info = "{0} subs · view TV {1} · {2}".format(_gon(subs), _gon(tv), "im {0} ngày".format(im) if im is not None
+                                                     else "chưa rõ ngày đăng")
+        if tc or pool:
+            info += " · trang chủ {0} · pool {1}".format(tc, pool)
+        diem = (math.log10(max(tv, 1.0)) + 0.5 * math.log10(max(subs, 1.0)) + 0.4 * math.log10(1.0 + tc)
+                + 0.6 * math.log10(1.0 + pool) + (0.5 if dot else 0.0) + (0.3 if bd else 0.0)
+                - (0.01 * min(im, 60) if im is not None else 0.3))
+        e["tang_diem"] = round(diem, 3)
+        lon = subs >= SUBS_TANG_1 or tv >= VIEW_TV_TANG_1
+        tam[k] = (info, tin, lon or bd)
+        co_mat = pool >= POOL_TANG_1 or tc >= TC_TANG_1
+        if song_ok and (lon or co_mat):
+            ung.append((diem, k))
+        elif song_ok and tin:
+            _dat_tang(e, TANG_2, "đang lên: {0} — {1}".format(" · ".join(tin), info))
+        else:
+            ly = ("im {0} ngày".format(im) if im is not None and not song_ok
+                  else "chưa đo được ngày đăng" if im is None else "nhỏ, chưa có tín hiệu")
+            if bd:
+                _dat_tang(e, TANG_2, "bạn đưa — luôn ≥ tầng 2 ({0}) — {1}".format(ly, info))
+            else:
+                _dat_tang(e, TANG_3, "nhẹ: {0} — {1}".format(ly, info))
+    ung.sort(key=lambda x: (-x[0], x[1]))
+    for i, (_d, k) in enumerate(ung, 1):
+        info, tin, lon = tam[k]
+        if i <= TRAN_TANG_1:
+            _dat_tang(kenh[k], TANG_1, "lõi #{0}: {1}{2}".format(i, info, (" · " + " · ".join(tin)) if tin else ""))
+        elif lon:
+            _dat_tang(kenh[k], TANG_2, "đủ cỡ tầng 1, ngoài trần {0} (hạng {1}): {2}{3}".format(
+                TRAN_TANG_1, i, info, (" · " + " · ".join(tin)) if tin else ""))
+        elif tin:
+            _dat_tang(kenh[k], TANG_2, "đang lên: {0} — {1}".format(" · ".join(tin), info))
+        else:
+            _dat_tang(kenh[k], TANG_3, "nhẹ: có mặt ở khán giả ta nhưng nhỏ, ngoài trần {0} — {1}".format(
+                TRAN_TANG_1, info))
+    dem = {t: 0 for t in TANG}
+    for e in kenh.values():
+        if e.get("tang") in dem:
+            dem[e["tang"]] += 1
+    return dem
+
+
+def _ep_luc(s: Any) -> Optional[float]:
+    """"2026-10-12 22:43" (giờ máy) → epoch; hỏng → None."""
+    s = str(s or "").strip().replace("T", " ")
+    for dang, dai in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16), ("%Y-%m-%d", 10)):
+        try:
+            return time.mktime(_dt.datetime.strptime(s[:dai], dang).timetuple())
+        except ValueError:
+            continue
+    return None
+
+
+def _tat_theo_tang() -> bool:
+    return str(os.environ.get("MYTOOL_QUET_THEO_TANG", "")).strip().lower() in ("0", "false", "tat", "tắt", "off", "no")
+
+
+def _trang_chu_gan(goc: str, kenh: str, bi: Dict[str, str]) -> Dict[str, float]:
+    """`{khoá: epoch}` — lần gần nhất trang chủ máy ảo của `kenh` đẩy video MỚI (đăng ≤ `NGAY_VIDEO_MOI_TRANG_CHU`
+    ngày trước lúc quét; không Short, không bị loại) của kênh đối thủ — dấu hiệu sớm nhất của một video sắp nổ."""
+    from .doi_thu_kenh import thu_muc_nghien_cuu  # noqa: PLC0415
+
+    ra: Dict[str, float] = {}
+    try:
+        csv.field_size_limit(10_000_000)
+        with io.open(os.path.join(thu_muc_nghien_cuu(goc, kenh), "trang-chu.csv"), encoding="utf-8-sig",
+                     newline="") as tep:
+            for r in csv.DictReader(tep):
+                if str(r.get("Short") or "").strip() or str(r.get("Bị loại") or "").strip():
+                    continue
+                t = _ep_luc(r.get("Lúc quét"))
+                dang = _ep_luc(str(r.get("Đăng") or "")[:10])
+                if t is None or dang is None or t - dang > (NGAY_VIDEO_MOI_TRANG_CHU + 1) * 86400.0:
+                    continue
+                k = khoa_chuan(str(r.get("Link kênh") or ""), bi)
+                if k and t > ra.get(k, 0.0):
+                    ra[k] = t
+    except (OSError, ValueError, csv.Error):
+        return {}
+    return ra
+
+
+def loc_quet(goc: str, kenh: str, links: Sequence[str], *, du: Optional[Dict[str, Any]] = None,
+             bay_gio: Optional[float] = None, on_log: Optional[Callable[[str], None]] = None,
+             trang_chu: Optional[Dict[str, float]] = None) -> Tuple[List[str], Dict[str, Any]]:
+    """Bước 3 của `mot_nut` (quét content đối thủ): trong `links` (kênh `theo dõi` của `kenh`) chỉ giữ kênh ĐẾN HẠN
+    theo tầng — đã qua `NGAY_QUET_TANG[tầng]` ngày từ lần quét content gần nhất của CHÍNH sổ `kenh`
+    (`quet_doi_thu.moc_quet_kenh`; kênh chưa có mốc = chưa quét → quét ngay) — xếp tầng 1 → kênh mới → 2 → 3 → ngoài;
+    một kênh hai link (`@handle` + `/channel/UC…`) chỉ giữ một. Đến hạn sớm khi: ảnh chụp nhóm (`quet-kenh/`) còn
+    tươi mà sổ này chưa ăn (kênh anh em vừa quét — miễn phí), hoặc trang chủ máy ảo của `kenh` vừa đẩy video mới của
+    nó sau lần quét trước (`trang_chu` = `{khoá: epoch}`, để `None` → đọc `trang-chu.csv`). Sổ chưa có mốc từng kênh
+    nào (bản trước 13/10) → quét đủ một lượt để ghi mốc. Trả `(link sẽ quét, đếm)`. Không nhóm / sổ chung chưa có tầng
+    / `MYTOOL_QUET_THEO_TANG=0` / lỗi → nguyên `links` (quét như cũ). Không bao giờ ném."""
+    links = [str(l).strip() for l in links if str(l).strip()]
+    dem: Dict[str, Any] = {"vao": len(links), "quet": len(links), "hoan": 0, "trung": 0, "theo_tang": {}, "som": {}}
+    try:
+        if _tat_theo_tang() or not links:
+            return links, dem
+        nhom = nhom_cua(goc, kenh)
+        if not nhom:
+            return links, dem
+        du = du if du is not None else doc(goc, nhom)
+        kenh_du = du.get("kenh") or {}
+        if not kenh_du or not any(e.get("tang") for e in kenh_du.values()):
+            return links, dem
+        from . import nghien_cuu_chung as ncc  # noqa: PLC0415
+        from .quet_doi_thu import moc_quet_kenh  # noqa: PLC0415
+
+        bi = du.get("bi_danh") or {}
+        bay_gio = float(bay_gio or time.time())
+        anh = _anh_chup(goc, nhom)[1]
+        moc = moc_quet_kenh(goc, kenh)
+        rieng: Dict[str, float] = {}
+        for kk, t in moc.items():
+            k = khoa_chuan("https://www.youtube.com/" + kk, bi)
+            if k and t > rieng.get(k, 0.0):
+                rieng[k] = t
+        tc = (trang_chu if trang_chu is not None else _trang_chu_gan(goc, kenh, bi)) if moc else {}
+        tuoi_anh = max(0.0, float(ncc.HAN_QUET_GIO) - 1.0) * 3600.0   # chừa 1 giờ cho chính lượt quét
+        chon: List[Tuple[int, int, str]] = []
+        thay: Set[str] = set()
+        for i, l in enumerate(links):
+            k = khoa_chuan(l, bi) or l
+            if k in thay:
+                dem["trung"] += 1
+                continue
+            thay.add(k)
+            e = kenh_du.get(k)
+            t = str((e or {}).get("tang") or "")
+            han = NGAY_QUET_TANG.get(t)
+            q = rieng.get(k)
+            a = float((anh.get(k) or {}).get("quet") or 0.0)
+            ly = ""
+            if e is None or han is None:
+                ly = "mới"
+            elif not moc:
+                ly = "chưa có mốc từng kênh"
+            elif q is None:
+                ly = "chưa quét"
+            elif bay_gio - q >= han * 86400.0:
+                ly = "đến hạn"
+            elif a and q < a - 60.0 and bay_gio - a < tuoi_anh:
+                ly = "ảnh chụp nhóm còn tươi"
+            elif t != TANG_1 and tc.get(k, 0.0) > q:   # tầng 1 đã quét hằng ngày — không đánh thức thêm
+                ly = "trang chủ vừa thấy"
+            x = dem["theo_tang"].setdefault(t or "moi", [0, 0])
+            x[1] += 1
+            if ly:
+                x[0] += 1
+                if ly not in ("đến hạn", "mới", "chưa quét", "chưa có mốc từng kênh"):
+                    dem["som"][ly] = dem["som"].get(ly, 0) + 1
+                chon.append((_HANG_TANG.get(t, 1), i, l))
+            else:
+                dem["hoan"] += 1
+        chon.sort()
+        ra = [l for _h, _i, l in chon]
+        dem["quet"] = len(ra)
+        if on_log is not None:
+            on_log("  quét theo tầng: {0} · {1} kênh tới hạn / {2} theo dõi{3}{4} — hoãn {5} kênh chưa tới hạn".format(
+                " · ".join("{0} {1}/{2}".format("tầng " + t if t in TANG[:3] else t, x[0], x[1])
+                           for t, x in sorted(dem["theo_tang"].items(), key=lambda kv: _HANG_TANG.get(
+                               "" if kv[0] == "moi" else kv[0], 9))),
+                len(ra), len(thay), (" · sớm: " + ", ".join("{0} {1}".format(a, b) for a, b in dem["som"].items()))
+                if dem["som"] else "", " · bỏ {0} link trùng kênh".format(dem["trung"]) if dem["trung"] else "",
+                dem["hoan"]))
+        return ra, dem
+    except Exception as loi:  # noqa: BLE001 — lọc hỏng thì quét đủ như cũ
+        if on_log is not None:
+            on_log("  quét theo tầng hỏng, quét đủ như cũ: {0}".format(str(loi)[:120]))
+        dem.update(quet=len(links), hoan=0)
+        return links, dem
+
+
+def den_han_do_lai(goc: str, kenh: str, links: Sequence[str], *, du: Optional[Dict[str, Any]] = None,
+                   bay_gio: Optional[float] = None) -> Set[str]:
+    """Link kênh hết / bỏ-vì-sức-sống mà đợt kiểm (`kiem_ngach_doi_thu.kiem`) nên đo lại bằng ảnh chụp mới: dòng sổ
+    chung ở tầng `ngoai` chỉ đo lại khi ảnh chụp gần nhất của nhóm cũ hơn `NGAY_QUET_TANG["ngoai"]` ngày (hằng tháng);
+    dòng không ở `ngoai` (kênh anh em còn theo dõi) / chưa có tầng / không ảnh chụp → đo như cũ. Không nhóm / lỗi →
+    mọi link."""
+    tat_ca = {str(l) for l in links}
+    try:
+        nhom = nhom_cua(goc, kenh)
+        if not nhom or _tat_theo_tang():
+            return tat_ca
+        du = du if du is not None else doc(goc, nhom)
+        kenh_du = du.get("kenh") or {}
+        if not kenh_du:
+            return tat_ca
+        bi = du.get("bi_danh") or {}
+        anh = _anh_chup(goc, nhom)[1]
+        bay_gio = float(bay_gio or time.time())
+        ra: Set[str] = set()
+        for l in tat_ca:
+            k = khoa_chuan(l, bi)
+            e = kenh_du.get(k) or {}
+            luc = float((anh.get(k) or {}).get("luc") or 0.0)
+            if e.get("tang") != NGOAI or not luc or bay_gio - luc >= NGAY_QUET_TANG[NGOAI] * 86400.0:
+                ra.add(l)
+        return ra
+    except Exception:  # noqa: BLE001
+        return tat_ca
 
 
 # ── gieo vào sổ riêng ────────────────────────────────────────────────────────
@@ -771,26 +1324,29 @@ def tra(goc: str, nhom: str, link: str, *, du: Optional[Dict[str, Any]] = None) 
 
 # ── bản đọc CSV ──────────────────────────────────────────────────────────────
 
-COT_CSV = ("Kênh", "Trạng thái chung", "Ngách (AI)", "Ngày phán", "Sức sống", "Bạn đưa", "AI", "Subs", "View TV",
-           "Dài TV", "Số video", "View/tháng", "Im lặng", "Đăng gần nhất", "Quét lúc", "Lần đầu thấy",
-           "Kênh ta theo dõi", "Kênh ta bỏ/hết", "Tuyến (theo kênh ta)", "Trang chủ/pool kênh ta", "Lý do ngách",
-           "Mã kênh", "Link kênh")
+COT_CSV = ("Kênh", "Tầng", "Trạng thái chung", "Ngách (AI)", "Ngày phán", "Sức sống", "Bạn đưa", "AI", "Subs",
+           "View TV", "Dài TV", "Số video", "View/tháng", "Im lặng", "Đăng gần nhất", "Quét lúc", "Lần đầu thấy",
+           "Kênh ta theo dõi", "Kênh ta bỏ/hết", "Tuyến (theo kênh ta)", "Trang chủ/pool kênh ta", "Lý do tầng",
+           "Lý do ngách", "Mã kênh", "Link kênh")
+#: Thứ tự dòng của bản đọc: tầng 1 → 2 → 3 → ngoài (sổ cũ chưa có tầng: theo dõi trước), điểm tầng giảm dần.
+_HANG_CSV = {TANG_1: 0, TANG_2: 1, TANG_3: 2, NGOAI: 3}
 
 
 def _ghi_csv(p: str, du: Dict[str, Any]) -> None:
     rows = []
-    for k, e in sorted((du.get("kenh") or {}).items(), key=lambda kv: (kv[1].get("trang_thai") != db.THEO_DOI,
-                                                                         str(kv[1].get("ten") or ""))):
+    for k, e in sorted((du.get("kenh") or {}).items(), key=lambda kv: (
+            _HANG_CSV.get(str(kv[1].get("tang") or ""), 4), kv[1].get("trang_thai") != db.THEO_DOI,
+            -float(kv[1].get("tang_diem") or 0.0), str(kv[1].get("ten") or ""))):
         tk = e.get("theo_kenh") or {}
         so = e.get("so") or {}
         lq = e.get("lien_quan") or {}
         rows.append({
-            "Kênh": e.get("ten", ""), "Trạng thái chung": e.get("trang_thai", ""),
+            "Kênh": e.get("ten", ""), "Tầng": e.get("tang", ""), "Trạng thái chung": e.get("trang_thai", ""),
             "Ngách (AI)": (e.get("ngach") or {}).get("ket", ""), "Ngày phán": (e.get("ngach") or {}).get("ngay", ""),
             "Sức sống": (e.get("song") or {}).get("ket", ""), "Bạn đưa": "x" if e.get("ban_dua") else "",
             "AI": so.get("AI", ""), "Subs": so.get("Subs", ""), "View TV": so.get("View TV", ""),
             "Dài TV": so.get("Dài TV", ""), "Số video": so.get("Số video", ""), "View/tháng": so.get("View/tháng", ""),
-            "Im lặng": so.get("Im lặng", ""), "Đăng gần nhất": so.get("Đăng gần nhất", ""),
+            "Im lặng": so.get("Im lặng", ""), "Đăng gần nhất": e.get("dang_moi") or so.get("Đăng gần nhất", ""),
             "Quét lúc": e.get("quet_luc", ""), "Lần đầu thấy": e.get("lan_dau", ""),
             "Kênh ta theo dõi": " ".join(sorted(m for m, x in tk.items() if (x.get("tt") or db.THEO_DOI) == db.THEO_DOI)),
             "Kênh ta bỏ/hết": " ".join(sorted(m for m, x in tk.items() if x.get("tt") in (db.BO, db.HET))),
@@ -798,6 +1354,7 @@ def _ghi_csv(p: str, du: Dict[str, Any]) -> None:
                                               if x.get("tuyen"))[:200],
             "Trang chủ/pool kênh ta": " · ".join("{0}:{1}/{2}".format(m, int(x.get("tc") or 0), int(x.get("pool") or 0))
                                                 for m, x in sorted(lq.items()) if x.get("tc") or x.get("pool"))[:200],
+            "Lý do tầng": str(e.get("tang_ly_do") or ""),
             "Lý do ngách": str((e.get("ngach") or {}).get("ly_do") or "")[:160], "Mã kênh": e.get("uc", ""),
             "Link kênh": e.get("link", "")})
     tam = p + ".{0}.tmp".format(os.getpid())
@@ -811,6 +1368,21 @@ def _ghi_csv(p: str, du: Dict[str, Any]) -> None:
 
 # ── dòng lệnh ────────────────────────────────────────────────────────────────
 
+def _in_tang(du: Dict[str, Any], n: int) -> None:
+    """Số kênh từng tầng + `n` tên đầu mỗi tầng (xếp theo điểm tầng) — chỉ TÊN, không mã kênh."""
+    kenh = du.get("kenh") or {}
+    tk = (du.get("thong_ke") or {}).get("tang") or {}
+    print("nhóm {0} · {1} kênh trong sổ · tầng 1: {2} · tầng 2: {3} · tầng 3: {4} · ngoài: {5}".format(
+        du.get("nhom"), len(kenh), tk.get(TANG_1, 0), tk.get(TANG_2, 0), tk.get(TANG_3, 0), tk.get(NGOAI, 0)))
+    print("hạn quét (ngày): " + " · ".join("{0} {1:g}".format(t, NGAY_QUET_TANG[t]) for t in TANG))
+    for t in TANG:
+        ds = sorted((e for e in kenh.values() if e.get("tang") == t),
+                    key=lambda e: (-float(e.get("tang_diem") or 0.0), str(e.get("ten") or "")))
+        print("── tầng {0} ({1}):".format(t, len(ds)))
+        for i, e in enumerate(ds[:n], 1):
+            print("  {0:2d}. {1} — {2}".format(i, e.get("ten") or "?", e.get("tang_ly_do") or ""))
+
+
 def _main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse  # noqa: PLC0415
 
@@ -823,6 +1395,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--nhom", default="")
     p.add_argument("--ghi", action="store_true", help="ghi sổ chung (mặc định chỉ in thống kê)")
     p.add_argument("--gieo", action="store_true", help="gieo vào sổ riêng mọi kênh (cần --ghi)")
+    p.add_argument("--tang", nargs="?", type=int, const=10, default=0, metavar="N",
+                   help="in số kênh từng tầng + N tên đầu mỗi tầng (mặc định 10), bỏ phần gieo")
     a = p.parse_args(list(argv) if argv is not None else None)
     nhom = a.nhom
     if not nhom:
@@ -834,6 +1408,9 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
     tv = thanh_vien_nhom(a.goc, nhom)
     du = gop(a.goc, nhom, thanh_vien=tv, ghi=bool(a.ghi))
+    if a.tang:
+        _in_tang(du, int(a.tang))
+        return 0
     print(json.dumps({"nhom": nhom, "thanh_vien": tv, "thong_ke": du.get("thong_ke")}, ensure_ascii=False, indent=1))
     for k in tv:
         dem = ap_vao_so(a.goc, k, du=du, ghi=bool(a.ghi and a.gieo))

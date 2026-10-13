@@ -311,7 +311,9 @@ function radar(R) {
   }
   const n = co[0], tk = n.thong_ke || {}, dm = n.dem_muc || {}, ch = n.cau_hinh || {}, dc = n.duong_cong || {}, so_dt = n.so_doi_thu || {};
   document.getElementById("radar-phu").textContent = `nhóm ${n.nhom} · bảng ${(n.luc || "").replace("T", " ").slice(5, 16)}`;
-  dau.innerHTML = `<span class="chip">${ic("users")}${so(so_dt.kenh)} kênh đối thủ (sổ chung)</span><span class="chip">${ic("film")}${so(tk.video)} video · ${so(tk.co_nen)} đo được ≤ 7 ngày</span>
+  const tg = so_dt.tang || {};
+  const chipTang = Object.keys(tg).length ? `<span class="chip" title="tầng 1 lõi: quét hằng ngày · 2 đang lên: 2–3 ngày · 3 nhẹ: tuần/lần · ngoài: bỏ/hết/chết/sai tiếng — không quét (hết đo lại hằng tháng)">${ic("flag")}tầng 1: ${so(tg["1"])} · 2: ${so(tg["2"])} · 3: ${so(tg["3"])} · ngoài: ${so(tg["ngoai"])}</span>` : "";
+  dau.innerHTML = `<span class="chip">${ic("users")}${so(so_dt.kenh)} kênh đối thủ (sổ chung)</span>${chipTang}<span class="chip">${ic("film")}${so(tk.video)} video · ${so(tk.co_nen)} đo được ≤ 7 ngày</span>
     <span class="chip xanh">${ic("trend")}đột biến ${so(dm["1"])}</span><span class="chip vang">${ic("flame")}nổ ${so(dm["2"])}</span><span class="chip dich">${ic("zap")}siêu nổ ${so(dm["3"])}</span>
     <span class="chip ${n.ep_hom_nay ? "vang" : ""}">${ic("target")}ép chọn hôm nay ${so(n.ep_hom_nay)}</span>
     <span class="cong" title="kỳ vọng = nền kênh (trung vị view video ≥ 14 ngày) × đường cong tuổi (của chính kênh khi đủ ≥ 5 video quan sát, không thì của ngách)">mức ≥ ${(ch.muc || []).join("× / ")}× · ép chọn ≥ ${so(ch.ep_boi)}× trong ${so(ch.ep_tuoi_gio)}h, ≥ ${MT.fmt(ch.ep_view_toi_thieu)} view, ${so(ch.ep_moi_kenh_ngay)}/kênh/ngày · ${so(dc.kenh_rieng)} kênh có đường cong riêng</span>`;
@@ -322,7 +324,7 @@ function radar(R) {
       const hien = [(d.trang_chu || []).length ? `trang chủ ${d.trang_chu.length}` : "", (d.pool || []).length ? `pool ${d.pool.length}` : ""].filter(Boolean).join(" · ");
       return `<tr><td><b style="font:700 12px var(--f-hud)">${i + 1}</b></td>
         <td><span class="boi m${d.muc || 0}" title="${so(d.view)} view ÷ kỳ vọng ${so(d.ky_vong)} (${esc(d.ky_vong_nguon)})">×${so(d.boi, d.boi >= 10 ? 0 : 1)}<small>${esc(d.ten_muc || "")}</small></span></td>
-        <td class="vd"><a href="${esc(d.link)}" target="_blank" rel="noopener" title="${esc(d.tieu_de)}">${esc(d.tieu_de || d.ma)}</a><small>${esc(d.kenh_nguon || "")} · ${MT.fmt(d.view)} view${d.dai_phut ? " · " + so(d.dai_phut, 0) + " phút" : ""}${d.kenh_ai === "có" ? " · kênh AI" : ""}${hien ? " · " + hien : ""}</small></td>
+        <td class="vd"><a href="${esc(d.link)}" target="_blank" rel="noopener" title="${esc(d.tieu_de)}">${esc(d.tieu_de || d.ma)}</a><small>${esc(d.kenh_nguon || "")}${d.kenh_tang ? " (tầng " + esc(d.kenh_tang === "ngoai" ? "ngoài" : d.kenh_tang) + ")" : ""} · ${MT.fmt(d.view)} view${d.dai_phut ? " · " + so(d.dai_phut, 0) + " phút" : ""}${d.kenh_ai === "có" ? " · kênh AI" : ""}${hien ? " · " + hien : ""}</small></td>
         <td>${so(d.tuoi_gio, 0)}h${d.trong_cua_so ? ' <span class="chip dich" style="padding:0 6px">24–72h</span>' : ""}</td>
         <td>${MT.fmt(d.toc_do)}/giờ${d.tang_toc != null ? `<div class="ci-chu">${d.tang_toc >= 1 ? "▲ tăng tốc" : "gần"} ×${so(d.tang_toc, 1)}</div>` : ""}</td>
         <td><span class="chip">${esc(d.cum || "—")}</span><div class="ci-chu">${esc(d.ten_vung || d.vung || "chưa có vùng")}</div></td>

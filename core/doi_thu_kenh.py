@@ -466,12 +466,17 @@ def gop_bang(cot: Sequence[str],
              cu: Sequence[Sequence[str]],
              moi: Sequence[Sequence[str]],
              *,
-             ngay_cach_nhau: float = 0.0) -> List[List[str]]:
+             ngay_cach_nhau: float = 0.0,
+             ngay_cach_theo_link: Optional[Dict[str, float]] = None) -> List[List[str]]:
     """Gộp lượt quét mới vào bảng cũ — ba luật ở đầu file, bằng mã.
 
     `cot`/`cu` là bảng đang có (cột tuỳ khách); `moi` là bảng `COT_VIDEO`
     10 cột do `KetQua.bang_video()` trả về. `ngay_cach_nhau` là số ngày từ
     lượt quét trước (0 nếu là lượt đầu) — dùng để tính `Tăng/ngày`.
+
+    `ngay_cach_theo_link` (13/10/2026, quét theo TẦNG đối thủ): `{Link video: số ngày từ lần quét trước của CHÍNH
+    kênh đăng video ấy}` — kênh tầng 3 quét tuần/lần mà chia Δview cho 1 ngày của cả sổ là thổi `Tăng/ngày` lên 7×.
+    Link không có trong đó → `ngay_cach_nhau`.
     """
     cot = list(cot)
     o = {ten: cot.index(ten) for ten in cot}
@@ -509,7 +514,8 @@ def gop_bang(cot: Sequence[str],
             # tính ra chứ không phải chữ khách gõ.
             dich[o[COT_ANH]] = dia_chi_anh(dich[o_link])
 
-    tinh_tang = ngay_cach_nhau >= _NGAY_TOI_THIEU and COT_TANG in o
+    co_cot_tang = COT_TANG in o
+    theo_link = ngay_cach_theo_link or {}
 
     ket: List[List[str]] = []
     da_gop = set()
@@ -533,7 +539,8 @@ def gop_bang(cot: Sequence[str],
             if (COT_VIET in o and "Tiêu đề video" in o
                     and dong[o["Tiêu đề video"]] != tieu_de_cu):
                 dong[o[COT_VIET]] = ""
-            if tinh_tang and view_cu is not None:
+            ngay = float(theo_link.get(link, ngay_cach_nhau))
+            if co_cot_tang and ngay >= _NGAY_TOI_THIEU and view_cu is not None:
                 view_moi = _so_nguyen(dong[o["View"]])
                 if view_moi is not None:
                     lech = view_moi - view_cu
@@ -544,7 +551,7 @@ def gop_bang(cot: Sequence[str],
                     # đội lốt tín hiệu.
                     if abs(lech) <= _bac_lam_tron(view_moi):
                         lech = 0
-                    dong[o[COT_TANG]] = str(int(round(lech / ngay_cach_nhau)))
+                    dong[o[COT_TANG]] = str(int(round(lech / ngay)))
                     if COT_VIEW_TRUOC in o:
                         dong[o[COT_VIEW_TRUOC]] = str(view_cu)
             da_gop.add(link)

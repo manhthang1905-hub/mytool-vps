@@ -13,7 +13,8 @@ lịch của trạm khi gói trang chủ về.
 
 1. `trang_chu.hoan_thien`  — tra video trang chủ, lọc tâm lý bằng từ khoá, kênh sạch vào hộp thư.
 2. `chot_doi_thu.chot`     — chấm cả hộp thư bằng bốn cửa, ghi thẳng trạng thái + lý do vào danh bạ.
-3. `quet_doi_thu.quet`     — quét content của MỌI kênh đang theo dõi (lượt sau mới có "Tăng/ngày").
+3. `quet_doi_thu.quet`     — quét content kênh đang theo dõi (lượt sau mới có "Tăng/ngày"); kênh có nhóm chỉ quét
+                             đối thủ đến hạn theo TẦNG (`so_doi_thu_chung.loc_quet`, 13/10/2026).
 4. `phan_tuyen.sua_so_theo_luat_cung` — luật cứng lên nhãn tuyến đang có (雑学 → khác, tuổi → trung niên).
 5. `da_lam`                — đánh lại cột "Đã làm" (AUTO + da-lam.txt).
 6. `cham_diem_content.cham_bang` — chấm, rồi rút ba danh sách và ghi `nghien-cuu/bao-cao-mot-nut.md`:
@@ -605,8 +606,17 @@ def chay(goc: str, kenh: str, *, lang: Optional[str] = None, phut_muc_tieu: Opti
     log("2/7 chốt hộp thư vào danh bạ (bốn cửa máy{0})…".format(" + cửa AI" if client is not None else ""))
     bc.chot = chot_doi_thu.chot(goc, kenh, **tham_chot)
 
-    log("3/7 quét content mọi kênh đang theo dõi…")
+    log("3/7 quét content kênh đang theo dõi (theo tầng đối thủ)…")
     links = db.dang_theo_doi(goc, kenh)
+    # 13/10/2026 — TẦNG ĐỐI THỦ (`so_doi_thu_chung.loc_quet`): kênh nhóm chỉ quét đối thủ ĐẾN HẠN theo tầng (lõi hằng
+    # ngày, đang lên 2–3 ngày, nhẹ hằng tuần), tầng 1 trước; trang chủ vừa đẩy video mới / ảnh chụp nhóm còn tươi thì
+    # quét sớm. Kênh không nhóm / sổ chung chưa có tầng / hỏng → quét đủ như cũ.
+    try:
+        from . import so_doi_thu_chung  # noqa: PLC0415
+
+        links, _dem_tang = so_doi_thu_chung.loc_quet(goc, kenh, links, on_log=log)
+    except Exception as loi:  # noqa: BLE001
+        log("  lọc quét theo tầng hỏng, quét đủ: {0}".format(str(loi)[:100]))
     bc.quet = quet_doi_thu.quet(goc, kenh, links, so_video=so_video, lang=lang, lay=lay_du_lieu,
                                 cancel=cancel, on_log=log)
     # 12/10/2026 — số đo vừa quét → sổ đối thủ CHUNG của nhóm; video đối thủ đang nổ mà radar thị trường gán cho kênh

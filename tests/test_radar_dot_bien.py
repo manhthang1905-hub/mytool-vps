@@ -264,6 +264,26 @@ def test_nap_vao_so_content_kenh_duoc_gan(tmp_path):
     assert rd.nap_vao_so(goc, "B") == 0
 
 
+def test_tang_kenh_nguon_tren_radar_va_video_no_keo_tang_3_len_tang_2(tmp_path):
+    """Tầng đối thủ (13/10/2026): dòng radar mang tầng kênh nguồn; video nổ của kênh tầng 3 KHÔNG bị bỏ và kéo kênh lên
+    tầng 2 ngay lần gộp sổ chung cuối lượt radar; cắt bảng `so_dong` không bỏ video nổ nào."""
+    from core import so_doi_thu_chung as sdc
+
+    goc = str(tmp_path)
+    _cay_radar(goc)
+    cu = [_video("vidRadarC{0:02d}".format(i), 100 + i, 20 + i) for i in range(10)]
+    _content(goc, "A", cu + [_video(MA_NO, 8000, 2, tuyen="tep-b"), _video("vidRadarNo2", 6000, 2)])
+    du0 = sdc.gop(goc, NHOM)
+    (k, e0), = du0["kenh"].items()
+    assert e0["tang"] == "3", e0.get("tang_ly_do")
+    kq = rd.tinh(goc, NHOM, ch=dict(rd.cau_hinh(goc), so_dong=1), ghi_quan_sat=False)
+    assert len(kq["dong"]) == 2 and all(d["muc"] >= 2 and d["kenh_tang"] == "3" for d in kq["dong"])
+    rd.chay(goc, NHOM, ghi=True, ep=False)
+    e = sdc.doc(goc, NHOM)["kenh"][k]
+    assert e["tang"] == "2" and e["dot_bien"]["muc"] == 3 and "radar" in e["tang_ly_do"], e.get("tang_ly_do")
+    assert rd.truc_quan(goc)["nhom"][0]["so_doi_thu"]["tang"]["2"] == 1
+
+
 def test_chay_neu_cu_hoan_trong_luot_nhom(tmp_path):
     goc = str(tmp_path)
     _cay_radar(goc)

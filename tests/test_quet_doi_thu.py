@@ -70,6 +70,22 @@ def test_luot_hai_khong_nhan_dong_va_co_tang_ngay(tmp_path):
     assert dong[o["Tăng/ngày"]].strip(), "lượt hai phải ra Tăng/ngày — thước NHANH của bộ chấm"
 
 
+def test_moc_quet_tung_kenh_va_tang_ngay_theo_khoang_cua_kenh(tmp_path):
+    """Quét theo tầng (13/10/2026): kênh bị hoãn một tuần trong khi cả sổ quét hằng ngày — `Tăng/ngày` phải chia cho
+    7 ngày của CHÍNH kênh, không phải 1 ngày của cả sổ; lượt quét ghi mốc từng kênh vào `cai-dat.json`."""
+    goc = _goc(tmp_path)
+    qdt.quet(goc, KENH, [LINK], lang="ja", lay=_lay((1000, 1000, 9000)))
+    moc = qdt.moc_quet_kenh(goc, KENH)
+    assert abs(moc[db.khoa(LINK)] - time.time()) < 120
+    so.luu_cai(goc, KENH, quet_luc=time.time() - 86400, quet_kenh={db.khoa(LINK): time.time() - 7 * 86400})
+    qdt.quet(goc, KENH, [LINK], lang="ja", lay=_lay((1000, 1000, 15000)))
+    cot, hang = so.doc_bang(goc, KENH)
+    o = {c: i for i, c in enumerate(cot)}
+    dong = next(h for h in hang if h[o["Link video"]].endswith("zure02"))
+    assert dong[o["Tăng/ngày"]] == "857", dong[o["Tăng/ngày"]]          # 6.000 view / 7 ngày, không phải 6.000/1
+    assert time.time() - qdt.moc_quet_kenh(goc, KENH)[db.khoa(LINK)] < 120
+
+
 def test_khong_co_link_thi_khong_dung_so(tmp_path):
     goc = _goc(tmp_path)
     assert qdt.quet(goc, KENH, [], lay=_lay()) == {"kenh": 0, "video": 0, "dong_truoc": 0, "dong_sau": 0}

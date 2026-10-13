@@ -31,7 +31,9 @@ Video đã được kênh nào trong nhóm làm / giữ nguồn → "đã làm b
 ═══ HÀNH ĐỘNG ═══
 
 * Mọi lượt: bảng xếp hạng `CHANNEL/_NHOM/<nhóm>/radar/radar-moi-nhat.json` (+ `radar-<ngày>.json`), giả thuyết
-  phòng thí nghiệm H-RADAR đọc đặc trưng `radar_*` (`phong_thi_nghiem.dac_trung`).
+  phòng thí nghiệm H-RADAR đọc đặc trưng `radar_*` (`phong_thi_nghiem.dac_trung`). Kênh nguồn tầng 1–2 của sổ chung
+  (`so_doi_thu_chung.phan_tang`) được cộng điểm xếp hạng (`DIEM_TANG`) → AI đọc nghĩa / ép chọn xét trước; video nổ
+  (mức ≥ 2) không bao giờ bị cắt khỏi bảng, và kéo kênh tầng 3 lên tầng 2 ở lần gộp sổ chung ngay sau lượt radar.
 * CỰC MẠNH (mặc định ≥ 10× trong ≤ 72 giờ, ≥ 3.000 view, dài 8–40 phút, video đúng ngách, kênh hợp tệp, chưa kênh
   anh em nào làm/giữ/được đề cử): ÉP CHỌN cho kênh được gán qua đường ép chọn của bộ não
   (`nao.tao_ep_chon_radar` → `uu-tien-nguon` có `radar_thi_truong`, phải vào sản xuất ≤ 48 giờ). Trần: 1 / kênh /
@@ -113,6 +115,11 @@ TEN_MUC = {0: "", 1: "đột biến", 2: "nổ", 3: "siêu nổ"}
 #: Trần của "gấp" khi XẾP HẠNG (không đổi mức): kênh nền 15 view ra video 4.000 view là ×270 — tín hiệu thật nhưng
 #: không mạnh hơn video ×170 ở 62.000 view; phần còn lại do log10(view) phân xử.
 TRAN_BOI_DIEM = 200.0
+#: Cộng điểm xếp hạng theo TẦNG của kênh nguồn ở sổ đối thủ chung (13/10/2026, `so_doi_thu_chung.phan_tang`): lõi /
+#: đang lên lên trước khi ngang ngửa — nhưng chỉ là một phần nhỏ của điểm (log gấp ~1–5): video nổ thật của kênh tầng 3
+#: vẫn vượt video nhàng nhàng của tầng 1, và dòng mức ≥ 2 không bao giờ bị cắt khỏi bảng (`so_dong`). Kênh tầng 3 có
+#: video nổ → lần gộp sổ chung sau lên tầng 2 (tín hiệu `dot_bien`).
+DIEM_TANG = {"1": 0.3, "2": 0.15}
 
 
 # ── tiện ích ────────────────────────────────────────────────────────────────
@@ -743,12 +750,22 @@ def _nen_kenh(hop: Dict[str, Dict[str, Any]], ch: Dict[str, Any]) -> Dict[str, f
     return ra
 
 
+#: Hai kênh trùng TÊN (sổ content nối với danh bạ bằng tên; sổ thật 13/10 có 12 cặp, vd. một kênh theo dõi + một kênh
+#: đã bỏ): dòng tầng cao hơn / đang theo dõi thắng — không thì video của kênh theo dõi bị gạt "kênh lạc ngách".
+_HANG_TEN = {"1": 0, "2": 1, "3": 2}
+
+
 def _theo_ten(so_chung: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     ra: Dict[str, Dict[str, Any]] = {}
+
+    def hang(e: Dict[str, Any]) -> Tuple[int, int]:
+        return _HANG_TEN.get(str(e.get("tang") or ""), 3), 0 if e.get("trang_thai") == "theo dõi" else 1
     for e in (so_chung.get("kenh") or {}).values():
         for t in [e.get("ten")] + list(e.get("ten_khac") or []):
             if t:
-                ra.setdefault(str(t).strip(), e)
+                t = str(t).strip()
+                if t not in ra or hang(e) < hang(ra[t]):
+                    ra[t] = e
     return ra
 
 
@@ -842,7 +859,7 @@ def tinh(goc: str, nhom: str, *, bay_gio: Optional[float] = None, ch: Optional[D
             "ma": ma, "link": o.get("link") or "https://www.youtube.com/watch?v=" + ma, "tieu_de": o.get("tieu_de", ""),
             "tieu_de_viet": o.get("tieu_de_viet", ""), "kenh_nguon": o["kenh_nguon"],
             "kenh_khoa": e.get("khoa", ""), "kenh_ngach": ngach or "?", "kenh_trang_thai": e.get("trang_thai", ""),
-            "kenh_ban_dua": bool(e.get("ban_dua")),
+            "kenh_ban_dua": bool(e.get("ban_dua")), "kenh_tang": str(e.get("tang") or ""),
             "kenh_ai": (e.get("so") or {}).get("AI", ""), "kenh_subs": _so((e.get("so") or {}).get("Subs")),
             "view": float(o["view"]), "ngay_dang": o.get("ngay_dang", ""), "dai_phut": o.get("dai_phut"),
             "tuoi_gio": round(gio, 1), "nen": round(float(b), 1), "nen_nguon": nguon_nen,
@@ -857,15 +874,18 @@ def tinh(goc: str, nhom: str, *, bay_gio: Optional[float] = None, ch: Optional[D
             "co_o": o.get("co_o") or {}, "mo_ta": o.get("mo_ta", ""), "luc_quan_sat": o.get("luc"),
         })
     # điểm xếp hạng: log(gấp, trần ×200 — kênh nền vài chục view thổi phồng tỉ số) × độ tươi + cỡ thị trường
-    # (log10 view) + hiện diện ở khán giả ta + đang tăng tốc
+    # (log10 view) + hiện diện ở khán giả ta + đang tăng tốc + tầng kênh nguồn (`DIEM_TANG`)
     for d in dong:
         g = d["tuoi_gio"]
         tuoi_he = 1.0 if g <= 72 else (0.75 if g <= 120 else 0.55)
         d["diem"] = round(math.log(max(min(d["boi"], TRAN_BOI_DIEM), 1.0)) * tuoi_he
                           + 0.35 * math.log10(max(d["view"], 1.0)) + 0.15 * math.log1p(d["trang_chu_ngay"])
-                          + (0.15 if d["pool"] else 0.0) + (0.1 if (d.get("tang_toc") or 0) >= 1.0 else 0.0), 4)
+                          + (0.15 if d["pool"] else 0.0) + (0.1 if (d.get("tang_toc") or 0) >= 1.0 else 0.0)
+                          + DIEM_TANG.get(d.get("kenh_tang") or "", 0.0), 4)
     dong.sort(key=lambda d: (-d["diem"], -d["boi"], d["ma"]))
-    dong = dong[:max(1, int(ch.get("so_dong") or 60))]
+    so_dong = max(1, int(ch.get("so_dong") or 60))
+    # cắt bảng theo `so_dong` nhưng KHÔNG bỏ video nổ (mức ≥ 2) nào — kể cả của kênh tầng 3
+    dong = dong[:so_dong] + [d for d in dong[so_dong:] if d["muc"] >= 2]
     # nhãn AI (đệm; gọi mới chỉ khi có `goi`) — trước khi gán kênh
     ai = _hoi_ai(goc, nhom, tv, dong, ch, goi if ch.get("ai_bat") else None, ghi)
     for d in dong:
@@ -1412,7 +1432,7 @@ def truc_quan(goc: str) -> Dict[str, Any]:
             x = {k: d.get(k) for k in ("ma", "link", "tieu_de", "tieu_de_viet", "kenh_nguon", "view", "boi",
                                        "muc", "ten_muc", "tuoi_gio", "ky_vong", "ky_vong_nguon", "toc_do",
                                        "toc_do_gan", "tang_toc", "trong_cua_so", "cum", "vung", "ten_vung",
-                                       "gan", "ly_do_gan", "trang_chu", "pool", "dai_phut", "kenh_ai")}
+                                       "gan", "ly_do_gan", "trang_chu", "pool", "dai_phut", "kenh_ai", "kenh_tang")}
             x.update(trang_thai=ma_tt, trang_thai_chu=chu_tt)
             dong.append(x)
         tk = kq.get("thong_ke") or {}
