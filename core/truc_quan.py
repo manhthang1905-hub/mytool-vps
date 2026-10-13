@@ -7,8 +7,9 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
 Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`; panel Não bộ phận đọc
-`/nao-bo-phan.json` — `core.nao_bo_phan.truc_quan`) · `/phong-thi-nghiem` phòng thí
-nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
+`/nao-bo-phan.json` — `core.nao_bo_phan.truc_quan`) · `/nao-do-thi` đồ thị thần kinh não bộ phận (force-graph;
+`/nao-bo-phan/do-thi.json`, `/nao-bo-phan/song.json`, `/nao-bo-phan/no-ron.json` — `core.nao_bo_phan.do_thi`)
+· `/phong-thi-nghiem` phòng thí nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
 `core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
 """
@@ -328,6 +329,24 @@ class _Xu(BaseHTTPRequestHandler):
                                  json.dumps(nbp_tq.tinh_nho(GOC, bp), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/nao-bo-phan/"):      # trang Đồ thị não: đồ thị (60 giây) · xung mới · chữ một nốt
+            try:
+                if GOC not in sys.path:
+                    sys.path.insert(0, GOC)
+                from urllib.parse import parse_qs, urlsplit  # noqa: PLC0415
+                from core.nao_bo_phan import do_thi  # noqa: PLC0415
+                u = urlsplit(self.path)
+                q = {k: v[0] for k, v in parse_qs(u.query).items()}
+                so = lambda k: int(q[k]) if q.get(k, "").lstrip("-").isdigit() else -1  # noqa: E731
+                du = (do_thi.do_thi_nho(GOC) if u.path == "/nao-bo-phan/do-thi.json" else
+                      do_thi.song(GOC, so("tu"), so("dung"), so("ngu")) if u.path == "/nao-bo-phan/song.json" else
+                      do_thi.no_ron(GOC, q.get("id", "")) if u.path == "/nao-bo-phan/no-ron.json" else None)
+                if du is None:
+                    return self._gui(404, "application/json; charset=utf-8",
+                                     json.dumps({"loi": "không có"}, ensure_ascii=False).encode("utf-8"))
+                return self._gui(200, "application/json; charset=utf-8", json.dumps(du, ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith(("/anh-bia/", "/logo/")):     # ảnh bìa đã chọn / logo kênh — chỉ tệp trên máy, đường kiểm chặt
             from core import tuong_truc_quan as tq4  # noqa: PLC0415
             from urllib.parse import unquote  # noqa: PLC0415
@@ -388,6 +407,7 @@ class _Xu(BaseHTTPRequestHandler):
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         ten = ("truc-quan.html" if self.path.startswith("/hau-can") else
+               "nao-do-thi.html" if self.path.startswith("/nao-do-thi") else
                "nao.html" if self.path.startswith("/nao") else
                "phong-thi-nghiem.html" if self.path.startswith("/phong-thi-nghiem") else
                "gioi-thieu.html" if self.path.startswith("/gioi-thieu") else "chien-truong.html")

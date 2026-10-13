@@ -49,6 +49,8 @@ thuê bao Claude Max), khối bài học vào lời nhắc của khâu viết (`
     python -X utf8 -m core.nao_bo_phan nho --bo-phan X "<ngữ cảnh>"
     python -X utf8 -m core.nao_bo_phan ky-lai                    # tính lại chữ ký theo luật hiện hành
     python -X utf8 -m core.nao_bo_phan dung-lai-chi-muc          # dựng lại chỉ mục từ vault
+
+    http://127.0.0.1:8790/nao-do-thi     # đồ thị thần kinh sống (force-graph) — `do_thi.py`, chỉ đọc kho + vault
 """
 
 from __future__ import annotations
