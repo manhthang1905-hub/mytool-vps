@@ -519,6 +519,20 @@ _JS_LUONG = r"""
   const roots = Y.goc(); let rows = [];
   for (const s of (specLuong.chon || [])) { try { rows = Y.qsa(roots, s).filter(Y.hien); } catch (e) {} if (rows.length) break; }
   const one = (r, spec) => { for (const s of ((spec || {}).chon || [])) { try { const x = Y.trong(r, s); if (x.length) return x[0]; } catch (e) {} } return null; };
+  // 13/10/2026: giao diện bình luận mới (ytd-comment-view-model) bỏ ytd-pinned-comment-badge-renderer —
+  // huy hiệu chỉ còn dòng chữ "@kênh đã ghim" / "Pinned by @kênh". Đọc theo chữ: ngoài #content-text, có '@'.
+  const ghimChu = (r, spec) => {
+    const mau = (spec || {}).chu_ghim || [];
+    if (!mau.length) return false;
+    let ds = [];
+    try { ds = Y.trong(r, 'span[role="text"], #pinned-comment-badge, yt-formatted-string'); } catch (e) { return false; }
+    for (const el of ds) {
+      if (el.closest && el.closest('#content-text')) continue;
+      const t = String(el.innerText || '').trim();
+      if (t && t.length < 120 && t.indexOf('@') >= 0 && mau.some(m => t.indexOf(m) >= 0) && Y.hien(el)) return true;
+    }
+    return false;
+  };
   return rows.slice(0, gioiHan).map(r => {
     const nd = one(r, specNd), tg = one(r, specTg), gh = one(r, specGhim);
     const hrefs = Y.trong(r, 'a[href]').map(a => a.href);
@@ -529,7 +543,7 @@ _JS_LUONG = r"""
     let a = tg ? (tg.closest ? tg.closest('a') : null) : null;
     if (!a && tg && tg.querySelector) a = tg.querySelector('a');
     o.tac_gia_href = tg ? String(tg.href || (a && a.href) || '') : '';
-    o.ghim = !!(gh && Y.hien(gh));
+    o.ghim = !!(gh && Y.hien(gh)) || ghimChu(r, specGhim);
     const cidEl = Y.trong(r, '[comment-id]')[0];
     o.comment_id = cidEl ? String(cidEl.getAttribute('comment-id') || '') : '';
     o.la_chu = !!(Y.trong(r, '.channel-owner, ytcp-author-comment-badge[is-creator]').length &&

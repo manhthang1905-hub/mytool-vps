@@ -776,7 +776,15 @@
       "chon": [
         "ytd-pinned-comment-badge-renderer",
         "#pinned-comment-badge ytd-pinned-comment-badge-renderer"
-      ]
+      ],
+      "chu_ghim": [
+        "ghim",
+        "Pinned",
+        "pinned",
+        "固定",
+        "고정"
+      ],
+      "ghi_chu": "13/10/2026: giao diện mới không còn ytd-pinned-comment-badge-renderer — huy hiệu là chữ '@kênh đã ghim' (span role=text); máy đọc theo chu_ghim, ngoài #content-text, có '@'"
     },
     "xem_menu": {
       "chon": [

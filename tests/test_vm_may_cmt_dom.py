@@ -651,3 +651,15 @@ class TestAgent:
         # kênh không tu_dang → không làm gì
         ag._GHIM_SOM["luc"] = 0.0
         assert ag.chay_ghim_som({}, {"K": {"tu_dang": False}}, ["K"], bay + 3600, chay_con=con) is False
+
+
+def test_huy_hieu_ghim_doc_theo_chu_giao_dien_moi():
+    """13/10/2026 TL1-T7: giao diện bình luận mới (ytd-comment-view-model) bỏ
+    `ytd-pinned-comment-badge-renderer` — huy hiệu chỉ còn dòng chữ "@kênh đã ghim". Bấm Ghim
+    xong, ghim THẬT đã lên (ảnh bằng chứng) mà máy báo "tải lại KHÔNG thấy huy hiệu ghim"."""
+    spec = (BO.get("phan_tu") or {}).get("xem_huy_hieu_ghim") or {}
+    mau = spec.get("chu_ghim") or []
+    for ngon_ngu in ("ghim", "Pinned", "固定"):
+        assert ngon_ngu in mau
+    js = mcd._JS_LUONG
+    assert "chu_ghim" in js and "#content-text" in js and "'@'" in js

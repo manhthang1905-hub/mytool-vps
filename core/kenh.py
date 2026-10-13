@@ -1003,7 +1003,10 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         # Cho phép ghi `DONE/TL1-T7` để cả thư mục MyTool có thể chuyển sang
         # ổ/máy khác. Đường tương đối luôn bám gốc MyTool, không bám thư mục
         # hiện hành (Task Scheduler thường chạy từ System32).
-        thu_muc_done=_duong_tu_goc(goc, cai.get("thu_muc_done")),
+        # 13/10/2026: kênh TỰ CHẠY không khai khoá → mặc định `DONE/<mã>` (TL4-T7 bật tu_chay mà thiếu
+        # khoá: lượt 0001 dựng xong, không bàn giao, L3 bỏ lượt). Khai tường minh `""` vẫn là "không bàn giao".
+        thu_muc_done=_duong_tu_goc(goc, cai.get("thu_muc_done") if "thu_muc_done" in cai or not _tu_chay_val
+                                   else "DONE/" + str(cai.get("ma") or ma)),
         video_moi_ngay=max(1, int(_so(cai.get("video_moi_ngay"), 1))),
         chu_ky_dang_ngay=max(1, int(_so(cai.get("chu_ky_dang_ngay"), 1))),
         san_xuat_truoc_gio=max(0, int(_so(cai.get("san_xuat_truoc_gio"), 0))),
