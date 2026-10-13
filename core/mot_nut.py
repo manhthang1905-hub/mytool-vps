@@ -609,6 +609,15 @@ def chay(goc: str, kenh: str, *, lang: Optional[str] = None, phut_muc_tieu: Opti
     links = db.dang_theo_doi(goc, kenh)
     bc.quet = quet_doi_thu.quet(goc, kenh, links, so_video=so_video, lang=lang, lay=lay_du_lieu,
                                 cancel=cancel, on_log=log)
+    # 12/10/2026 — số đo vừa quét → sổ đối thủ CHUNG của nhóm; video đối thủ đang nổ mà radar thị trường gán cho kênh
+    # này (`core/radar_dot_bien.py`) mà sổ content chưa có → chép vào (trước gán tuyến/V7 để chúng được chấm).
+    try:
+        from . import radar_dot_bien, so_doi_thu_chung  # noqa: PLC0415
+
+        so_doi_thu_chung.gop_sau(goc, kenh, on_log=log)
+        radar_dot_bien.nap_vao_so(goc, kenh, log=log)
+    except Exception as loi:  # noqa: BLE001 — sổ chung / radar hỏng không chặn chuỗi
+        log("  sổ chung / radar: bỏ qua ({0})".format(str(loi)[:100]))
 
     # 4a. Tệp → tuyến con bằng TỪ KHOÁ trước (miễn phí, lặp lại được): dòng nhận ra thì có cả tệp lẫn
     # chủ đề; AI ở 4b chỉ còn phần máy không nhận ra. (06/09: phân theo tệp khán giả, có tuyến con.)
@@ -646,8 +655,21 @@ def chay(goc: str, kenh: str, *, lang: Optional[str] = None, phut_muc_tieu: Opti
     kq_v7 = _cham_v7(goc, kenh, bc, client, goi_v7, log)
     bc.tep_bao_cao = _viet_bao_cao(goc, kenh, bc, luc)
     _phong_thi_nghiem(goc, kenh, kq_v7, client, log)
+    _radar_thi_truong(goc, kenh, client, log)
     log("xong: " + bc.tom_tat())
     return bc
+
+
+def _radar_thi_truong(goc: str, kenh: str, client, log) -> None:
+    """Radar đột biến thị trường của NHÓM (`core/radar_dot_bien.py`) nếu bảng cũ hơn `gio_chay_lai` giờ — lượt nghiên
+    cứu nhóm (`nghien_cuu_nhom.chay_nhom`) hoãn bước này cho tới khi mọi kênh anh em quét xong rồi chạy một lần.
+    Lượt lẻ không có ví (chạy thử, nút Một nút) chỉ dựng bảng — không ép chọn."""
+    try:
+        from . import radar_dot_bien  # noqa: PLC0415
+
+        radar_dot_bien.chay_neu_cu(goc, kenh, dung_ai=client is not None, ep=client is not None, log=log)
+    except Exception as loi:  # noqa: BLE001
+        log("  radar thị trường hỏng, bỏ qua: {0}".format(str(loi)[:120]))
 
 
 def _phong_thi_nghiem(goc: str, kenh: str, kq_v7, client, log) -> None:

@@ -186,8 +186,6 @@ def chay_nhom(goc: str, ma_kenh: str, *, client: Any, chay_mot_nut: Callable[...
     Trả `{"ban": True, "giu": {...}}` khi lượt khác đang nghiên cứu cho nhóm, hoặc
     `{"ban": False, "phut": {kênh: phút}, "loi": {kênh: lỗi}}`. Lỗi của CHÍNH
     `ma_kenh` nằm ở `loi[ma_kenh]` (nơi gọi quyết định dừng lượt)."""
-    from . import tu_chay  # noqa: PLC0415
-
     ok, giu = _giu_khoa_nhom(goc, ma_kenh)
     if not ok:
         return {"ban": True, "giu": giu}
@@ -197,32 +195,29 @@ def chay_nhom(goc: str, ma_kenh: str, *, client: Any, chay_mot_nut: Callable[...
         if len(danh_sach) > 1:
             on_log("  [NGHIÊN CỨU NHÓM] làm luôn cho kênh anh em đã cũ: {0}".format(
                 ", ".join(danh_sach[1:])))
-        for ma in danh_sach:
-            if cancel is not None and getattr(cancel, "is_set", lambda: False)():
-                break
-            giu_kenh = ma != ma_kenh
-            if giu_kenh:
-                ok_k, ly_do_k = tu_chay._giu_khoa(goc, ma)  # noqa: SLF001
-                if not ok_k:
-                    on_log("  [NGHIÊN CỨU NHÓM] bỏ qua {0}: {1}.".format(ma, ly_do_k))
-                    continue
-            bat_dau = time.time()
-            tien_to = "" if ma == ma_kenh else "[{0}] ".format(ma)
-            try:
-                c = client
-                if c is not None and co_danh_ba is not None and not co_danh_ba(ma):
-                    c = None
-                chay_mot_nut(goc, ma, client=c, on_log=lambda d, t=tien_to: on_log(t + str(d)),
-                             cancel=cancel)
-            except Exception as loi:  # noqa: BLE001 — một kênh hỏng không kéo cả nhóm
-                ra["loi"][ma] = str(loi)[:400]
-                on_log("  [NGHIÊN CỨU NHÓM] {0} hỏng: {1}".format(ma, str(loi)[:200]))
-            finally:
-                if giu_kenh:
-                    tu_chay._nha_khoa(goc, ma)  # noqa: SLF001
-            phut = (time.time() - bat_dau) / 60.0
-            ra["phut"][ma] = round(phut, 1)
-            on_log("  [NGHIÊN CỨU NHÓM] {0} xong trong {1:.1f} phút.".format(ma, phut))
+        try:
+            from . import radar_dot_bien as _radar  # noqa: PLC0415
+
+            hoan_radar = _radar.hoan()
+        except Exception:  # noqa: BLE001
+            _radar, hoan_radar = None, None
+        if hoan_radar is not None:
+            hoan_radar.__enter__()
+        try:
+            _chay_tung_kenh(goc, ma_kenh, danh_sach, client=client, chay_mot_nut=chay_mot_nut, on_log=on_log,
+                            cancel=cancel, co_danh_ba=co_danh_ba, ra=ra)
+        finally:
+            if hoan_radar is not None:
+                hoan_radar.__exit__(None, None, None)
+        # 12/10/2026 — RADAR ĐỘT BIẾN THỊ TRƯỜNG: một lần cho cả nhóm, SAU khi mọi kênh đã quét (số mới nhất), trước
+        # khi nhả khoá nhóm. Ca cực mạnh được ép chọn ngay cho kênh hợp (`core/radar_dot_bien.py`). Không chặn gì.
+        if _radar is not None and not (cancel is not None and getattr(cancel, "is_set", lambda: False)()):
+            nhom = ncc.nhom_cua(goc, ma_kenh)
+            if nhom:
+                # Không ví (chạy thử `--thu`) → chỉ bảng xếp hạng, không ép chọn.
+                kq = _radar.chay_an_toan(goc, nhom, dung_ai=client is not None, ep=client is not None, log=on_log)
+                ra["radar"] = {"dong": len(kq.get("dong") or []), "ep": sum(
+                    1 for q in kq.get("quyet_dinh") or [] if q.get("quyet") == "ep_chon"), "loi": kq.get("loi", "")}
         try:
             ncc.ghi_json_gop(_duong_trang_thai(goc, ma_kenh), {
                 "lan_cuoi": {"luc": _dt.datetime.now().isoformat(timespec="seconds"),
@@ -232,6 +227,40 @@ def chay_nhom(goc: str, ma_kenh: str, *, client: Any, chay_mot_nut: Callable[...
     finally:
         _nha_khoa_nhom(goc, ma_kenh)
     return ra
+
+
+def _chay_tung_kenh(goc: str, ma_kenh: str, danh_sach: List[str], *, client: Any, chay_mot_nut: Callable[..., Any],
+                    on_log: Callable[[str], None], cancel: Any, co_danh_ba: Optional[Callable[[str], bool]],
+                    ra: Dict[str, Any]) -> None:
+    """Chuỗi một nút cho từng kênh trong `danh_sach` (kênh anh em: giành khoá kênh trước) — ghi `ra["phut"/"loi"]`."""
+    from . import tu_chay  # noqa: PLC0415
+
+    for ma in danh_sach:
+        if cancel is not None and getattr(cancel, "is_set", lambda: False)():
+            break
+        giu_kenh = ma != ma_kenh
+        if giu_kenh:
+            ok_k, ly_do_k = tu_chay._giu_khoa(goc, ma)  # noqa: SLF001
+            if not ok_k:
+                on_log("  [NGHIÊN CỨU NHÓM] bỏ qua {0}: {1}.".format(ma, ly_do_k))
+                continue
+        bat_dau = time.time()
+        tien_to = "" if ma == ma_kenh else "[{0}] ".format(ma)
+        try:
+            c = client
+            if c is not None and co_danh_ba is not None and not co_danh_ba(ma):
+                c = None
+            chay_mot_nut(goc, ma, client=c, on_log=lambda d, t=tien_to: on_log(t + str(d)),
+                         cancel=cancel)
+        except Exception as loi:  # noqa: BLE001 — một kênh hỏng không kéo cả nhóm
+            ra["loi"][ma] = str(loi)[:400]
+            on_log("  [NGHIÊN CỨU NHÓM] {0} hỏng: {1}".format(ma, str(loi)[:200]))
+        finally:
+            if giu_kenh:
+                tu_chay._nha_khoa(goc, ma)  # noqa: SLF001
+        phut = (time.time() - bat_dau) / 60.0
+        ra["phut"][ma] = round(phut, 1)
+        on_log("  [NGHIÊN CỨU NHÓM] {0} xong trong {1:.1f} phút.".format(ma, phut))
 
 
 # ── giữ nguồn (G4) ───────────────────────────────────────────────────────────

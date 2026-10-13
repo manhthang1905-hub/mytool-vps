@@ -100,6 +100,19 @@ table.xh tr.dau-khe td:first-child{box-shadow:inset 3px 0 0 var(--lab)}
 .qd .so{margin-top:5px;display:flex;flex-wrap:wrap;gap:5px}
 .luoi{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start;margin-top:16px}
 @media (max-width:1150px){.luoi{grid-template-columns:minmax(0,1fr)}}
+/* ---- radar đột biến ---- */
+.radar-dau{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:10px 16px 0}
+.radar-dau .cong{font-size:11.5px;color:var(--mo2);margin-left:auto}
+table.xh.radar{min-width:980px}
+.boi{display:inline-flex;align-items:baseline;gap:3px;padding:3px 8px;border-radius:9px;font:700 13px var(--f-hud);white-space:nowrap;
+  background:rgba(125,160,215,.1);color:var(--chu)}
+.boi.m1{background:rgba(96,165,250,.14);color:var(--xanh)} .boi.m2{background:rgba(251,191,36,.16);color:var(--vang)}
+.boi.m3{background:rgba(242,95,92,.18);color:#ff8a87;box-shadow:0 0 12px -4px var(--dich)}
+.boi small{font:600 9.5px var(--f-hud);letter-spacing:.06em;opacity:.85}
+.vd a{color:var(--chu);text-decoration:none;font-size:12.5px;display:block;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vd a:hover{color:var(--lab)} .vd small{display:block;font-size:10.5px;color:var(--mo2);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gan-k b{font:700 12px var(--f-hud)} .gan-k small{display:block;font-size:10.5px;color:var(--mo2);max-width:220px;white-space:normal}
+.radar-tt{max-width:230px;white-space:normal}
 </style>
 </head>
 <body>
@@ -119,6 +132,12 @@ table.xh tr.dau-khe td:first-child{box-shadow:inset 3px 0 0 var(--lab)}
 <main class="trang">
   <section class="panel dau-lab goc vao" id="dau" aria-label="Phòng thí nghiệm"></section>
   <section class="o-ds" id="o-ds" aria-label="Chỉ số"></section>
+
+  <section class="panel goc dich" style="margin-bottom:16px" aria-label="Radar đột biến">
+    <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="radar" style="color:var(--dich)"></svg>Radar đột biến — video đối thủ đang nổ ở tuổi thật</h2><span class="phu" id="radar-phu" style="margin-left:auto"></span></div>
+    <div class="radar-dau" id="radar-dau"></div>
+    <div class="cuon" id="radar"></div>
+  </section>
 
   <section class="panel goc" aria-label="Bảng xếp hạng theo kênh">
     <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="trophy" style="color:var(--lab)"></svg>Bảng xếp hạng giả thuyết theo kênh</h2><span class="phu" id="xh-phu" style="margin-left:auto"></span></div>
@@ -152,7 +171,7 @@ document.querySelectorAll("svg[data-ic]").forEach(s => { s.innerHTML = MT.icTho(
 document.getElementById("logo-ic").innerHTML = ic("swords", "lon");
 let DU = null, KENH = null;
 try { KENH = localStorage.getItem("ptn-kenh"); } catch (e) { /* trình duyệt chặn lưu trữ — bỏ qua */ }
-const MAU = {"H-V7": "#60a5fa", "H-VPH": "#f5a524", "H-POOL": "#2ee6c5", "H-DOT-BIEN": "#f25f5c", "H-NHAN-BAN": "#a78bfa", "H-KHOANG-TRONG": "#fbbf24", "H-AI": "#f472b6"};
+const MAU = {"H-V7": "#60a5fa", "H-VPH": "#f5a524", "H-POOL": "#2ee6c5", "H-DOT-BIEN": "#f25f5c", "H-NHAN-BAN": "#a78bfa", "H-KHOANG-TRONG": "#fbbf24", "H-AI": "#f472b6", "H-RADAR": "#fb7185"};
 const mau = g => MAU[g] || `hsl(${MT.bam(g) % 360} 70% 62%)`;
 const pt = (x, le) => x == null ? "—" : so(100 * x, le == null ? 0 : le) + "%";
 const nang = x => x == null ? "—" : (x >= 0 ? "+" : "−") + so(Math.abs(100 * x), 0);
@@ -280,8 +299,40 @@ function bangChung() {
         <td>${so(r.n)} <span class="mo nho">(${so(r.n_chinh_xac)})</span></td><td>${so(r.thang)}</td><td>${oCi(r.ci90, r.tb, g)}</td><td>${oP(r.p, null, ts)}</td></tr>`; }).join("") + "</tbody></table>";
 }
 
+const TT_RADAR = {ep_chon: ["vang", "zap", "Đã ép chọn"], dang_lam: ["ta", "factory", "Đang làm"], da_lam: ["xanh", "check", "Đã làm"],
+  cho: ["tim", "hourglass", "Chờ"], bo: ["", "x", "Bỏ"], theo_doi: ["", "eye", "Theo dõi"]};
+function radar(R) {
+  const box = document.getElementById("radar"), dau = document.getElementById("radar-dau");
+  const ds = (R && R.nhom) || [], co = ds.filter(n => n.co);
+  if (!co.length) {
+    dau.innerHTML = "";
+    box.innerHTML = `<div class="trong">${R && R.loi ? "không đọc được radar: " + esc(R.loi) : "Radar chưa chạy — chạy ở lượt nghiên cứu nhóm kế tiếp (hoặc <code>python -m core.radar_dot_bien --ghi</code>)."}</div>`;
+    return;
+  }
+  const n = co[0], tk = n.thong_ke || {}, dm = n.dem_muc || {}, ch = n.cau_hinh || {}, dc = n.duong_cong || {}, so_dt = n.so_doi_thu || {};
+  document.getElementById("radar-phu").textContent = `nhóm ${n.nhom} · bảng ${(n.luc || "").replace("T", " ").slice(5, 16)}`;
+  dau.innerHTML = `<span class="chip">${ic("users")}${so(so_dt.kenh)} kênh đối thủ (sổ chung)</span><span class="chip">${ic("film")}${so(tk.video)} video · ${so(tk.co_nen)} đo được ≤ 7 ngày</span>
+    <span class="chip xanh">${ic("trend")}đột biến ${so(dm["1"])}</span><span class="chip vang">${ic("flame")}nổ ${so(dm["2"])}</span><span class="chip dich">${ic("zap")}siêu nổ ${so(dm["3"])}</span>
+    <span class="chip ${n.ep_hom_nay ? "vang" : ""}">${ic("target")}ép chọn hôm nay ${so(n.ep_hom_nay)}</span>
+    <span class="cong" title="kỳ vọng = nền kênh (trung vị view video ≥ 14 ngày) × đường cong tuổi (của chính kênh khi đủ ≥ 5 video quan sát, không thì của ngách)">mức ≥ ${(ch.muc || []).join("× / ")}× · ép chọn ≥ ${so(ch.ep_boi)}× trong ${so(ch.ep_tuoi_gio)}h, ≥ ${MT.fmt(ch.ep_view_toi_thieu)} view, ${so(ch.ep_moi_kenh_ngay)}/kênh/ngày · ${so(dc.kenh_rieng)} kênh có đường cong riêng</span>`;
+  const dong = n.dong || [];
+  box.innerHTML = !dong.length ? '<div class="trong">Không video đối thủ nào vượt ngưỡng đột biến hôm nay.</div>' :
+    `<table class="xh radar"><thead><tr><th>#</th><th>× kỳ vọng</th><th>Video đối thủ</th><th>Tuổi</th><th>Tốc độ</th><th>Cụm · vùng</th><th>Gán cho</th><th>Trạng thái</th></tr></thead><tbody>` +
+    dong.map((d, i) => { const t = TT_RADAR[d.trang_thai] || ["", "flag", d.trang_thai];
+      const hien = [(d.trang_chu || []).length ? `trang chủ ${d.trang_chu.length}` : "", (d.pool || []).length ? `pool ${d.pool.length}` : ""].filter(Boolean).join(" · ");
+      return `<tr><td><b style="font:700 12px var(--f-hud)">${i + 1}</b></td>
+        <td><span class="boi m${d.muc || 0}" title="${so(d.view)} view ÷ kỳ vọng ${so(d.ky_vong)} (${esc(d.ky_vong_nguon)})">×${so(d.boi, d.boi >= 10 ? 0 : 1)}<small>${esc(d.ten_muc || "")}</small></span></td>
+        <td class="vd"><a href="${esc(d.link)}" target="_blank" rel="noopener" title="${esc(d.tieu_de)}">${esc(d.tieu_de || d.ma)}</a><small>${esc(d.kenh_nguon || "")} · ${MT.fmt(d.view)} view${d.dai_phut ? " · " + so(d.dai_phut, 0) + " phút" : ""}${d.kenh_ai === "có" ? " · kênh AI" : ""}${hien ? " · " + hien : ""}</small></td>
+        <td>${so(d.tuoi_gio, 0)}h${d.trong_cua_so ? ' <span class="chip dich" style="padding:0 6px">24–72h</span>' : ""}</td>
+        <td>${MT.fmt(d.toc_do)}/giờ${d.tang_toc != null ? `<div class="ci-chu">${d.tang_toc >= 1 ? "▲ tăng tốc" : "gần"} ×${so(d.tang_toc, 1)}</div>` : ""}</td>
+        <td><span class="chip">${esc(d.cum || "—")}</span><div class="ci-chu">${esc(d.ten_vung || d.vung || "chưa có vùng")}</div></td>
+        <td class="gan-k">${d.gan ? `<b>${esc(d.gan)}</b>` : '<span class="mo nho">—</span>'}<small>${esc(d.ly_do_gan || "")}</small></td>
+        <td class="radar-tt"><span class="chip ${t[0]}">${ic(t[1])}${t[2]}</span><div class="ci-chu">${esc(d.trang_thai_chu || "")}</div></td></tr>`; }).join("") + "</tbody></table>";
+}
+
 async function tai() {
   try {
+    MT.taiJSON("/radar-dot-bien.json").then(radar).catch(e => radar({loi: e.message}));
     DU = await MT.taiJSON("/phong-thi-nghiem.json");
     if (DU.loi && !DU.kenh) throw new Error(DU.loi);
     MT.song(DU.luc);

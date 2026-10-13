@@ -751,6 +751,15 @@ def dong_giu_chan(goc: str, kenh_ds: Sequence[str], bay_gio: _dt.datetime) -> Li
     return ra
 
 
+# ═══ (f) RADAR THỊ TRƯỜNG ════════════════════════════════════════════════════
+
+def _dong_radar_thi_truong(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """Bảng radar đột biến thị trường mới nhất của mỗi nhóm (`core/radar_dot_bien.py` — chỉ đọc, không tính lại)."""
+    from . import radar_dot_bien  # noqa: PLC0415
+
+    return radar_dot_bien.dong_cho_nao(goc, bay_gio) or ["- chưa có nhóm kênh / bảng radar"]
+
+
 # ═══ GỘP ═════════════════════════════════════════════════════════════════════
 
 def chuong_trinh(goc: str, kenh_ds: Optional[Sequence[str]] = None,
@@ -775,7 +784,9 @@ def chuong_trinh(goc: str, kenh_ds: Optional[Sequence[str]] = None,
                       lambda: dong_radar(goc, kenh_ds, bay_gio) + dong_thang(goc, kenh_ds, bay_gio)),
                      ("(c) SĂN KHOẢNG TRỐNG CHỦ ĐỀ (mỗi tuần)", lambda: dong_khoang_trong(goc, bay_gio, ghi)),
                      ("(d) BAO BÌ A/B", lambda: dong_bao_bi(goc, kenh_ds, bay_gio)),
-                     ("(e) GIỮ CHÂN THEO ĐOẠN so kênh mẫu", lambda: dong_giu_chan(goc, kenh_ds, bay_gio))):
+                     ("(e) GIỮ CHÂN THEO ĐOẠN so kênh mẫu", lambda: dong_giu_chan(goc, kenh_ds, bay_gio)),
+                     ("(f) RADAR THỊ TRƯỜNG — video ĐỐI THỦ đang nổ ở tuổi thật (máy đã ép chọn ca cực mạnh)",
+                      lambda: _dong_radar_thi_truong(goc, bay_gio))):
         ra.append("")
         ra.append("-- " + ten + " --")
         try:

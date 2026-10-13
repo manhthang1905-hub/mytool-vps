@@ -441,7 +441,21 @@ def tron(nc: Any, bang: Dict[str, List[Dict[str, Any]]], ke: Dict[str, Any]) -> 
 
 def chot_nguon(nguon: Any) -> None:
     """Chuẩn hoá nguồn ĐÃ CHỌN trước khi vào sổ lượt: bộ não ép chọn / chọn tay → không ghi công chính xác cho giả thuyết
-    (giữ `gia_thuyet_bo` để tra). Thêm `ptn_pb` phẳng cho sổ đọc nhanh."""
+    (giữ `gia_thuyet_bo` để tra). Thêm `ptn_pb` phẳng cho sổ đọc nhanh.
+
+    Ngoại lệ (12/10/2026): nguồn ép chọn của RADAR THỊ TRƯỜNG (`nao.tao_ep_chon_radar`, dòng mang `radar_thi_truong`)
+    là một giả thuyết đo được — ghi công CHÍNH XÁC cho `gia_thuyet_radar` (H-RADAR), kể cả khi kênh không chia khe."""
+    if isinstance(nguon, dict) and nguon.get("radar_thi_truong") and nguon.get("gia_thuyet_radar"):
+        gt = str(nguon.get("gia_thuyet_radar"))
+        if nguon.get("gia_thuyet") and nguon.get("gia_thuyet") != gt:
+            nguon["gia_thuyet_bo"] = nguon.get("gia_thuyet", "")
+        nguon["gia_thuyet"] = gt
+        ptn = dict(nguon.get("ptn") or {})
+        ptn["ghi_cong"] = "radar thị trường"
+        ptn["pb"] = None   # pb rỗng = phiên bản hiện tại của sổ giả thuyết (`danh_gia.tang_cau_noi`)
+        nguon["ptn"] = ptn
+        nguon["ptn_pb"] = None
+        return
     if not isinstance(nguon, dict) or "gia_thuyet_khe" not in nguon:
         return
     if nguon.get("ep_chon") or nguon.get("chon_tay"):

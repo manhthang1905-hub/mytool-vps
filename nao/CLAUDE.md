@@ -32,6 +32,10 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
    - **(d) Bao bì A/B**: đề nghị chủ bật "Thử nghiệm và so sánh" bìa trong Studio cho video mới (một `de-xuat` gộp).
      Đổi tiêu đề sau đăng CHỈ cho video dưới CTR của chính kênh, KHÔNG BAO GIỜ cho kênh > 50% traffic đề xuất (mã chặn).
    - **(e) Giữ chân theo đoạn** so kênh mẫu (cùng mốc giây): tối đa MỘT thay đổi kịch bản/tuần qua `thu --truc hook`.
+   - **(f) Radar thị trường** (`core/radar_dot_bien.py`): video ĐỐI THỦ đang nổ ở tuổi thật (× kỳ vọng theo đường cong
+     của chính kênh nguồn), đã gán kênh ta hợp tệp. Ca cực mạnh (≥ 10× trong ≤ 72h, ≥ 3.000 view, hợp tệp, chưa ai
+     làm) MÁY đã tự ép chọn (1/kênh/ngày, ghi công H-RADAR — không tính vào hạn mức hay tỉ lệ đúng của bạn). Việc của
+     bạn: xem dòng "chờ"/"nổ" còn lại có đáng `uu-tien-nguon` thường không (tính hạn mức ngày), hoặc ghi "giữ nguyên vì …".
    Báo cáo còn: kênh, video 14 ngày, bảng điểm, bài học, hành động của bạn, đối thủ đang nổ, cảnh báo. Cần sâu hơn thì
    tự đọc `CHANNEL/<kênh>/` (chỉ đọc; xem mục "Dữ liệu"). Lệnh `bai-hoc cong|tru` chỉ khi có so sánh n ≥ 3 cùng chiều
    (không cộng/trừ bằng MỘT video).

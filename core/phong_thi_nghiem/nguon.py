@@ -56,6 +56,8 @@ class TheGioi:
     lich_su_view: Dict[str, List[Tuple[float, float]]] = field(default_factory=dict)
     luc_quet_sach: Optional[float] = None
     ghi_chu: List[str] = field(default_factory=list)
+    #: Radar đột biến thị trường của nhóm (`core/radar_dot_bien.dac_trung_cho_kenh`): mã → radar_boi/muc/cua_minh/tuoi.
+    radar: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 # ── sổ content / sổ đối thủ theo ngày ───────────────────────────────────────
@@ -636,6 +638,12 @@ def dung_the_gioi(nk: NguonKenh, ngay: str, *, che_do: str = "nguoc", moc: Optio
     tg.vung_ai, tg.ban_do_vung = vung if vung is not None else doc_vung(goc)
     tg.thi_truong = thi_truong_ngay(lich_su if lich_su is not None else lich_su_thi_truong(goc), ngay)
     tg.lich_su_view = lich_su_view or {}
+    try:   # radar thị trường: bảng mới nhất (hằng ngày) / bảng của đúng ngày (chạy ngược — không có thì rỗng)
+        from .. import radar_dot_bien  # noqa: PLC0415
+
+        tg.radar = radar_dot_bien.dac_trung_cho_kenh(goc, kenh, None if che_do == "that" else ngay)
+    except Exception:  # noqa: BLE001
+        tg.radar = {}
     try:
         p = os.path.join(c.thu_muc_nghien_cuu(goc, kenh), "cai-dat.json")
         tg.luc_quet_sach = float((c.doc_json(p, {}) or {}).get("quet_luc") or 0) or None

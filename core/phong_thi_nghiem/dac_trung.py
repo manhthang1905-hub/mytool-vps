@@ -20,9 +20,12 @@
                  thắng/nguồn của nó), giong_thang_ai (AI V7: % trùng đề tài khi video trùng là video thắng),
                  giong_minh_chu (giống nhất với MỌI video/nguồn đã làm — chống làm lại y hệt), co_thang (kênh có thắng)
   đà            da_tang_3n (view tăng/ngày ~3 ngày qua ÷ trung vị kênh, từ ảnh chụp trước)
+  radar         radar_boi (gấp × kỳ vọng ở tuổi thật), radar_muc (1–3), radar_cua_minh (radar gán cho kênh này),
+                radar_tuoi_gio — bảng radar thị trường của nhóm (`core/radar_dot_bien.py`, 12/10/2026)
 
 Đặc trưng DẪN XUẤT (`mo_rong`, tính lại khi đọc ảnh chụp — không ghi): log_vuot, log_view, dai_tot (12–21 phút),
-dai_tam (8–30), tang_duong, log_pool_*, log_thi_truong, vung_chua_chu, co_doi_thu/co_pool/co_trang_chu, tre_*.
+dai_tam (8–30), tang_duong, log_pool_*, log_thi_truong, vung_chua_chu, co_doi_thu/co_pool/co_trang_chu, tre_*,
+log_radar_boi, radar_tre (radar đo lúc ≤ 72h).
 
 Hàm thuần trên `TheGioi` + `VuTru`. Không mạng, không AI.
 """
@@ -58,6 +61,9 @@ COT_KHO = [
     "trong_pool", "pool_xem", "pool_hien_thi", "pool_so_video", "pool_diem", "pool_thang_xem", "pool_cum_xem",
     "pool_kenh_xem", "tc_ngay", "tc_lan", "tc_kenh", "tc_cach_ngay", "thang_cum", "giong_thang_chu",
     "giong_thang_ai", "giong_minh_chu", "co_thang", "da_tang_3n", "tuyen_nhan",
+    # 12/10/2026 — radar đột biến thị trường (`core/radar_dot_bien.py`): gấp × kỳ vọng ở tuổi thật (so đường cong
+    # của chính kênh nguồn / của ngách), mức 1–3, radar gán video cho CHÍNH kênh này, tuổi lúc đo (giờ).
+    "radar_boi", "radar_muc", "radar_cua_minh", "radar_tuoi_gio",
 ]
 #: Cột chữ (còn lại là số; đọc lại ảnh chụp thì đổi về float/None). `tieu_de_viet`/`mo_ta` chỉ có trong bộ nhớ
 #: (H-AI đọc) — không ghi vào ảnh chụp cho nhẹ đĩa (~6.000 dòng/kênh/ngày).
@@ -374,6 +380,11 @@ def dung_kho(tg: TheGioi, vt: VuTru) -> List[Dict[str, Any]]:
             tr = _view_truoc(ls, d["luc"])
             if tr is not None and d["luc"] > tr[0]:
                 d["da_tang_3n"] = round((view - tr[1]) / ((d["luc"] - tr[0]) / c.NGAY_GIAY) / tv, 3)
+        rd = (getattr(tg, "radar", None) or {}).get(ma) or {}
+        d["radar_boi"] = rd.get("radar_boi")
+        d["radar_muc"] = rd.get("radar_muc") if rd else 0.0
+        d["radar_cua_minh"] = rd.get("radar_cua_minh") if rd else 0.0
+        d["radar_tuoi_gio"] = rd.get("radar_tuoi_gio")
         ra.append(mo_rong(d))
     for u in vt.ung_vien:
         u.pop("_tc_ngay", None)
@@ -411,6 +422,9 @@ def mo_rong(d: Dict[str, Any]) -> Dict[str, Any]:
     d["tre_3n"] = 1.0 if (tuoi is not None and tuoi <= 3) else 0.0
     d["tre_7n"] = 1.0 if (tuoi is not None and tuoi <= 7) else 0.0
     d["tre_30n"] = 1.0 if (tuoi is not None and tuoi <= 30) else 0.0
+    d["log_radar_boi"] = _log(d.get("radar_boi"))
+    rt = d.get("radar_tuoi_gio")
+    d["radar_tre"] = 1.0 if (rt is not None and rt <= 72) else 0.0
     return d
 
 

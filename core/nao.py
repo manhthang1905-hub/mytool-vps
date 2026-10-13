@@ -70,7 +70,7 @@ CHI_DAO_PHIEN = (
     "dòng, có số + ngày; nếu thật sự không có gì mới thì ghi một dòng nói rõ như vậy). Ghi trí nhớ/nhật ký BẰNG công cụ "
     "Write/Edit, không chỉ nói là đã ghi. (3) `thu`/`tranh` chỉ có hiệu lực ở các trục cum, kieu_tieu_de, kieu_bia, hook. "
     "(4) Làm ít mà chắc; mẫu n<3 thì nói rõ là chưa chắc và đừng dùng làm lý do duy nhất của một hành động. "
-    "(5) Mục VIỆC BẮT BUỘC là CHƯƠNG TRÌNH (a)–(e): với MỖI phần ghi một quyết định có số (n, ngày kiểm) — lệnh in "
+    "(5) Mục VIỆC BẮT BUỘC là CHƯƠNG TRÌNH (a)–(f): với MỖI phần ghi một quyết định có số (n, ngày kiểm) — lệnh in "
     "sẵn chỉ là gợi ý của máy, chạy khi bạn đồng ý, sửa khi cần, bỏ thì ghi lý do; việc chỉ người làm được thì `de-xuat`.")
 DONG_GIOI_THIEU_TRI_NHO = ("# Trí nhớ của bộ não\n\nSự thật bền về từng kênh (tệp khán giả, cái đã chứng minh, "
                            "cái đã thất bại). Mỗi mục một dòng, có số và ngày.\n")
@@ -231,8 +231,9 @@ def _ngay(chu: Any) -> Optional[_dt.date]:
 
 
 def ti_le_dung(ds: List[Dict[str, Any]]) -> Tuple[int, int]:
-    """`(số đúng, số đã chấm)` — chỉ tính hành động có dự đoán (không tính ghi cộng/trừ)."""
-    da = [d for d in ds if d.get("cham") in ("dung", "sai") and not d.get("khong_tinh")]
+    """`(số đúng, số đã chấm)` — chỉ tính hành động có dự đoán (không tính ghi cộng/trừ, không tính đề cử MÁY tạo —
+    `tu_dong`, vd radar thị trường: phòng thí nghiệm đo chúng, không phải quyền của não)."""
+    da = [d for d in ds if d.get("cham") in ("dung", "sai") and not d.get("khong_tinh") and not d.get("tu_dong")]
     return sum(1 for d in da if d["cham"] == "dung"), len(da)
 
 
@@ -559,11 +560,96 @@ GIO_RADAR_SAN_XUAT = 48
 
 
 def _radar_qua_han(d: Dict[str, Any], bay_gio: _dt.datetime) -> bool:
-    """Đề cử radar còn mở, CHƯA được chọn vào lượt nào, đã quá `han_san_xuat`."""
+    """Đề cử radar (của ta `radar` hoặc THỊ TRƯỜNG `radar_thi_truong`) còn mở, CHƯA được chọn vào lượt nào, đã quá
+    `han_san_xuat`."""
     ts = d.get("tham_so") or {}
     han = str(ts.get("han_san_xuat") or "")
-    return bool(d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo" and ts.get("radar") and han
+    return bool(d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo"
+                and (ts.get("radar") or ts.get("radar_thi_truong")) and han
                 and not ts.get("chon_luc") and han[:19] < bay_gio.replace(microsecond=0).isoformat())
+
+
+#: Đề cử RADAR THỊ TRƯỜNG (`core.radar_dot_bien`) do MÁY tạo: tối đa ngần này mỗi kênh mỗi ngày.
+RADAR_TT_MOI_KENH_NGAY = 1
+#: Giả thuyết phòng thí nghiệm được ghi công khi nguồn radar thị trường vào sản xuất (`chia_khe.chot_nguon`).
+GT_RADAR = "H-RADAR"
+
+
+def tao_ep_chon_radar(goc: str, kenh: str, link: str, ma: str, *, ly_do: str, du_doan: str,
+                      so_lieu: Optional[Dict[str, Any]] = None, nguon_dong: Optional[Dict[str, Any]] = None,
+                      toi_da_ngay: int = RADAR_TT_MOI_KENH_NGAY,
+                      bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """ĐƯỜNG ÉP CHỌN của RADAR THỊ TRƯỜNG (12/10/2026): video đối thủ nổ cực mạnh → một `uu-tien-nguon` MÁY tạo
+    (`tu_dong: "radar"`), có `radar_thi_truong` = mã video, phải vào sản xuất ≤ `GIO_RADAR_SAN_XUAT` giờ (quá hạn tự
+    đóng không tính). Kiểm BẰNG MÃ: kênh có thật, link http, mã 11 ký tự, ≤ `toi_da_ngay` đề cử radar thị trường mỗi
+    kênh mỗi ngày, không trùng đề cử đang mở/đã làm của bất kỳ kênh nào. Ngoài hạn mức ngày của não, không vào tỉ lệ
+    đúng của não. Ném `TuChoi` kèm lý do."""
+    with _khoa_hd(goc):
+        bay_gio = bay_gio or _dt.datetime.now()
+        hom = _hom_nay(bay_gio)
+        ds = doc_hanh_dong(goc)
+        don_het_han(goc, ds, bay_gio)
+        if not _kenh_ton_tai(goc, kenh):
+            raise TuChoi("kênh “{0}” không tồn tại".format(kenh))
+        if not re.match(r"^https?://", str(link or "")):
+            raise TuChoi("link phải là địa chỉ http(s) của video đối thủ")
+        if not re.match(r"^[\w-]{11}$", str(ma or "")):
+            raise TuChoi("mã video không hợp lệ")
+        if len((ly_do or "").strip()) < 10 or len((du_doan or "").strip()) < 10:
+            raise TuChoi("thiếu lý do / dự đoán có số")
+        da = [d for d in ds if d.get("lenh") == "uu-tien-nguon" and (d.get("tham_so") or {}).get("radar_thi_truong")
+              and (d.get("tham_so") or {}).get("kenh") == kenh and str(d.get("luc") or "")[:10] == hom
+              and d.get("trang_thai") != "huy"]
+        if len(da) >= max(1, int(toi_da_ngay)):
+            raise TuChoi("{0} đã có {1} đề cử radar thị trường hôm nay (trần {2})".format(kenh, len(da), toi_da_ngay))
+        khoa = _khoa_link(link)
+        for d in ds:
+            ts = d.get("tham_so") or {}
+            if d.get("lenh") == "uu-tien-nguon" and _khoa_link(ts.get("link")) == khoa and d.get("trang_thai") == "mo":
+                raise TuChoi("nguồn đã có đề cử đang mở {0} cho {1}".format(d.get("id"), ts.get("kenh")))
+        n_id = 1 + max([int(m.group(1)) for d in ds for m in [re.match(r"^n(\d+)$", str(d.get("id") or ""))] if m]
+                       or [0])
+        hd = {"id": "n{0:03d}".format(n_id), "luc": bay_gio.replace(microsecond=0).isoformat(), "lenh": "uu-tien-nguon",
+              "tham_so": {"kenh": kenh, "link": str(link), "radar_thi_truong": str(ma),
+                          "han_san_xuat": (bay_gio + _dt.timedelta(hours=GIO_RADAR_SAN_XUAT)).replace(
+                              microsecond=0).isoformat(),
+                          "radar_so": dict(so_lieu or {}), "nguon_dong": dict(nguon_dong or {})},
+              "ly_do": str(ly_do).strip()[:600], "du_doan": str(du_doan).strip()[:300],
+              "kiem_ngay": (bay_gio.date() + _dt.timedelta(days=6)).isoformat(), "trang_thai": "mo",
+              "cham": None, "ghi_chu_cham": "", "ngoai_han_muc": True, "tu_dong": "radar"}
+        ds.append(hd)
+        ghi_hanh_dong(goc, ds)
+        return hd
+
+
+def _gan_radar(u: Dict[str, Any], hd: Dict[str, Any]) -> Dict[str, Any]:
+    """Dòng ứng viên của một đề cử RADAR THỊ TRƯỜNG: ghi công phòng thí nghiệm cho `GT_RADAR` (`chia_khe.chot_nguon`
+    giữ công này) + số đo radar để tra."""
+    ts = hd.get("tham_so") or {}
+    so = dict(ts.get("radar_so") or {})
+    u["radar_thi_truong"] = {"id": hd.get("id"), "ma": ts.get("radar_thi_truong"), "boi": so.get("boi"),
+                             "muc": so.get("muc"), "tuoi_gio": so.get("tuoi_gio"), "ky_vong": so.get("ky_vong")}
+    u["gia_thuyet_radar"] = GT_RADAR
+    u["tin_hieu"] = dict(u.get("tin_hieu") or {}, radar_thi_truong=hd.get("id"))
+    return u
+
+
+def _dong_radar(hd: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Dòng chuẩn dựng từ `nguon_dong` của đề cử radar thị trường khi video CHƯA có trong sổ content của kênh (radar
+    thấy nó ở sổ kênh anh em) — để nguồn nổ vào sản xuất ngay lượt kế, không đợi lượt nghiên cứu sau."""
+    ts = hd.get("tham_so") or {}
+    n = ts.get("nguon_dong") or {}
+    ma, link = str(n.get("ma") or ts.get("radar_thi_truong") or ""), str(n.get("link") or ts.get("link") or "")
+    if not ma or not link:
+        return None
+    so = ts.get("radar_so") or {}
+    return {"nguon": "radar", "cong_thuc": "radar", "tham_do": False, "ma": ma, "link": link,
+            "tieu_de": str(n.get("tieu_de") or ""), "kenh": str(n.get("kenh") or ""), "diem": 0.0, "loai": "RADAR",
+            "diem_cum": 0.0, "thua_huong": "", "cum": list(n.get("cum") or []), "view": float(n.get("view") or 0),
+            "vuot": n.get("boi"), "dai_giay": n.get("dai_giay"), "hang_v7": 999, "dot_bien": n.get("boi"),
+            "tuoi_gio": n.get("tuoi_gio"),
+            "ly_do": ["radar thị trường: ×{0} kỳ vọng ở {1}h ({2} view; nguồn ở sổ kênh anh em)".format(
+                so.get("boi"), so.get("tuoi_gio"), so.get("view"))]}
 
 
 def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -602,10 +688,21 @@ def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     them: List[Dict[str, Any]] = []
     for hd in thieu:
         khoa = _khoa_link((hd.get("tham_so") or {}).get("link"))
+        la_radar_tt = bool((hd.get("tham_so") or {}).get("radar_thi_truong"))
         if khoa in (getattr(nc, "loai_tru", None) or ()):
             nc.ghi("  [bộ não] đề cử {0}: nguồn đã làm / đang được kênh anh em giữ — không ép.".format(hd.get("id")))
             continue
         x = bang.get(khoa)
+        if x is None and la_radar_tt:
+            # Radar thị trường thấy video ở sổ của kênh ANH EM — dựng dòng từ số đo đã ghi trong đề cử (cổng
+            # chất lượng phía sau vẫn chạy: biên tập phủ quyết, trùng ý, kho lời thoại, giữ nguồn nhóm).
+            u = _dong_radar(hd)
+            if u is not None:
+                u.update(tin_hieu={"ep_chon_nao": hd.get("id")}, ep_chon=True)
+                u["ly_do"] = list(u.get("ly_do") or []) + ["RADAR THỊ TRƯỜNG ÉP CHỌN {0}: {1}".format(
+                    hd.get("id"), (hd.get("ly_do") or "")[:200])]
+                them.append(_gan_radar(u, hd))
+                continue
         if x is None:
             nc.ghi("  [bộ não] đề cử {0}: nguồn chưa có trong sổ content của kênh — không ép được (cần quét/thêm vào "
                    "hộp thư trước).".format(hd.get("id")))
@@ -618,10 +715,11 @@ def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                      if str(getattr(u, "ma", "") or "") == khoa), 0)
         u = ct_v7._dong(d, v7, so, hang or 999)
         u.update(cong_thuc="v7", tham_do=False, tin_hieu={"ep_chon_nao": hd.get("id")}, ep_chon=True)
-        u["ly_do"] = list(u.get("ly_do") or []) + ["bộ não ÉP CHỌN {0}{1}: {2}".format(
-            hd.get("id"), " (bỏ qua cổng mềm “{0}”)".format(ly[:60]) if ly else
+        u["ly_do"] = list(u.get("ly_do") or []) + ["{0} ÉP CHỌN {1}{2}: {3}".format(
+            "RADAR THỊ TRƯỜNG" if la_radar_tt else "bộ não", hd.get("id"),
+            " (bỏ qua cổng mềm “{0}”)".format(ly[:60]) if ly else
             " (hạng V7 {0}, ngoài top)".format(hang) if hang else "", (hd.get("ly_do") or "")[:160])]
-        them.append(u)
+        them.append(_gan_radar(u, hd) if la_radar_tt else u)
     if not them:
         return ds
     them = nc.loc(them)
@@ -655,6 +753,8 @@ def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -
             u["bo_nao"] = d.get("ly_do") or "đề cử của bộ não"
             u["ep_chon"] = True
             u["de_cu_nao"] = d.get("id")
+            if (d.get("tham_so") or {}).get("radar_thi_truong"):
+                u = _gan_radar(u, d)
             dau.append(u)
             _DE_CU_THAY.setdefault(kenh, set()).add(d["id"])
             if log:

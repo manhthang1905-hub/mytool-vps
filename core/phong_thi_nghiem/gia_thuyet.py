@@ -84,6 +84,15 @@ HAT_GIONG: List[Dict[str, Any]] = [
      "mo_ta": "AI đọc: xác suất một bản làm lại trên kênh này THẮNG (thước chung), đọc tiêu đề + mô tả nguồn, số "
               "nguồn, tệp khán giả và video thắng/trượt của kênh. Chỉ chấm nhóm đầu bảng của các giả thuyết khác",
      "tham_so": {"so_dong": 40, "tu_top": 15, "toi_da_goi_ngay": 1, "mo_hinh": "claude-fable-5"}},
+    # 12/10/2026 — hạt giống THÊM SAU (sổ đã có 7 mục: mã chỉ nối mục còn thiếu, không đổi thứ tự mục cũ).
+    {"id": "H-RADAR", "phien_ban": 1, "loai": LOAI_TRONG_SO, "trang_thai": BONG,
+     "mo_ta": "Radar thị trường (12/10): video đối thủ đang NỔ ở tuổi thật (≥ 3× kỳ vọng theo đường cong của chính "
+              "kênh nguồn, ≤ 7 ngày) mà radar GÁN cho chính kênh này (chủ vùng / AI hợp tệp / nhãn tuyến); ưu tiên "
+              "≤ 72h, dài 12–21 phút. Ca cực mạnh được máy ép chọn (ghi công chính xác)",
+     "tham_so": {"cong": [{"f": "radar_muc", "op": ">=", "v": 1}, {"f": "radar_cua_minh", "op": "co"}],
+                 "trong_so": {"log_radar_boi": 1.0, "radar_tre": 0.5, "dai_tot": 0.5, "log_view": 0.2,
+                              "co_trang_chu": 0.2, "co_pool": 0.2},
+                 "tran": {"log_radar_boi": 5.3}}},
 ]
 
 
@@ -219,7 +228,7 @@ def doi_trang_thai(goc: str, doi: Dict[str, Tuple[str, str]]) -> int:
 #: Đặc trưng DẪN XUẤT (`dac_trung.mo_rong`) — cùng các cột số của ảnh chụp kho là những gì một giả thuyết mới được dùng.
 DAN_XUAT = ("log_vuot", "log_view", "dai_tot", "dai_tam", "tang_duong", "log_pool_xem", "log_pool_cum_xem",
             "log_pool_thang_xem", "log_pool_kenh_xem", "log_thi_truong", "log_tc", "vung_chua_chu", "co_doi_thu",
-            "co_pool", "co_trang_chu", "tre_3n", "tre_7n", "tre_30n")
+            "co_pool", "co_trang_chu", "tre_3n", "tre_7n", "tre_30n", "log_radar_boi", "radar_tre")
 OP_HOP_LE = (">=", ">", "<=", "<", "==", "!=", "co", "khong", "trong", "ngoai", "hoac")
 TOI_DA_DE_XUAT_TUAN = 2
 TOI_DA_BONG_CUA_NAO = 6

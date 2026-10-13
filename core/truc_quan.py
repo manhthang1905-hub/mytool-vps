@@ -7,7 +7,8 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
 Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`) · `/phong-thi-nghiem` phòng thí
-nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
+nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
+`core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
 """
 from __future__ import annotations
@@ -344,6 +345,15 @@ class _Xu(BaseHTTPRequestHandler):
                 from core.phong_thi_nghiem import truc_quan as ptn_tq  # noqa: PLC0415
                 return self._gui(200, "application/json; charset=utf-8",
                                  json.dumps(ptn_tq.tinh_nho(GOC), ensure_ascii=False).encode("utf-8"))
+            except Exception as loi:  # noqa: BLE001
+                return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
+        if self.path.startswith("/radar-dot-bien.json"):      # panel Radar đột biến (tab Phòng thí nghiệm, 5 phút)
+            try:
+                if GOC not in sys.path:
+                    sys.path.insert(0, GOC)
+                from core import radar_dot_bien  # noqa: PLC0415
+                return self._gui(200, "application/json; charset=utf-8",
+                                 json.dumps(radar_dot_bien.truc_quan_nho(GOC), ensure_ascii=False).encode("utf-8"))
             except Exception as loi:  # noqa: BLE001
                 return self._gui(500, "application/json", json.dumps({"loi": str(loi)[:200]}).encode("utf-8"))
         if self.path.startswith("/gioi-thieu.json"):      # nội dung trình chiếu (riêng máy → mặc định)

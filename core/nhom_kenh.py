@@ -46,6 +46,12 @@ vẫn là của từng kênh. Nghiên cứu cả nhóm chạy một lần dướ
 (`core/nghien_cuu_nhom.py`), và nguồn đã được một kênh giành thì kênh anh em
 không chọn lại (`giu-nguon/`).
 
+Cập nhật 12/10/2026 — SỔ ĐỐI THỦ CHUNG (`core/so_doi_thu_chung.py`, `CHANNEL/_NHOM/<nhóm>/doi-thu-chung.json`): mỗi
+kênh đối thủ MỘT dòng cho cả nhóm (gộp `@handle` ↔ `UC…`), dựng lại từ mọi danh bạ riêng mỗi lần gộp — phán quyết
+riêng (tuyến, trạng thái tay, ghi chú) nằm nguyên `theo_kenh`. Link hộp thư mà anh em đã chấm (AI ngách / sức sống /
+chết / bạn đưa) được GIEO thẳng vào danh bạ của kênh còn thiếu — không đo lại, không hỏi AI lại (TL4-T7 tối 12/10 từng
+chấm lại 1.542 kênh mất 1,5 giờ). Tuyến vẫn để trống cho từng kênh tự gán, đúng tinh thần đoạn trên.
+
 ═══ TẠO KÊNH TRONG NHÓM = NHÂN BẢN + DANH SÁCH TRẮNG, KHÔNG PHẢI DANH SÁCH ĐEN ═══
 
 `tao_kenh_trong_nhom` bọc `kenh.nhan_ban_kenh` (đã lo việc chép prompt/style/

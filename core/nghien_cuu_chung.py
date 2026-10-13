@@ -54,7 +54,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["THU_MUC", "nhom_cua", "thu_muc", "doc_json", "ghi_json_gop", "ghi_json",
            "doc_tra", "luu_tra", "ai_trang_chu_da_biet", "ai_trang_chu_ghi",
-           "lay_kenh_co_dem", "hoi_ai_co_dem", "lay_du_lieu_co_dem", "duong_kenh_ai",
+           "lay_kenh_co_dem", "hoi_ai_co_dem", "lay_du_lieu_co_dem", "duong_kenh_ai", "xa_dem_kenh_do",
            "nhan_tuyen_doc", "nhan_tuyen_ghi", "phan_xu_doc", "phan_xu_ghi",
            "khan_gia_cung_xem_doc", "khan_gia_cung_xem_ghi",
            "HAN_AI_TRANG_CHU_NGAY", "HAN_KENH_DO_NGAY", "HAN_KENH_AI_NGAY",
@@ -265,20 +265,78 @@ def _kenh_tu_dict(d: dict) -> Any:
 # ── 3) số đo kênh ứng viên lúc chốt hộp thư (`chot_doi_thu.do_ung_vien`) ─────
 
 
+#: Bộ đệm GHI của `kenh-do.json` theo tiến trình (12/10/2026). Tệp ~27 MB: bản cũ đọc-gộp-ghi lại CẢ tệp sau MỖI kênh
+#: đo (TL4-T7 tối 12/10 chấm 1.542 kênh hộp thư = 1.542 lần ghi lại 27 MB ≈ 40 GB đĩa, phần lớn của 1,5 giờ). Giờ: mục
+#: mới vào bộ nhớ chung của tiến trình (kênh anh em chạy kế tiếp trong cùng lượt nghiên cứu nhóm thấy ngay), ghi đĩa mỗi
+#: `KENH_DO_GHI_MOI` mục hoặc `KENH_DO_GHI_GIAY` giây, và khi tiến trình thoát (`atexit`) / `xa_dem_kenh_do()`. Tiến
+#: trình chết ngang thì mất tối đa vài chục mục đệm — lượt sau đo lại, không hỏng tệp.
+KENH_DO_GHI_MOI = 25
+KENH_DO_GHI_GIAY = 120.0
+_KENH_DO: Dict[str, Dict[str, Any]] = {}
+
+
+def _kenh_do_bang(p: str) -> Dict[str, Any]:
+    """Bảng đệm của tệp `p` trong tiến trình — nạp lại từ đĩa khi tiến trình khác vừa ghi (giờ sửa đổi khác)."""
+    try:
+        mt = os.path.getmtime(p)
+    except OSError:
+        mt = None
+    o = _KENH_DO.get(p)
+    if o is None or (mt is not None and mt != o.get("mt")):
+        du = doc_json(p, {})
+        du = du if isinstance(du, dict) else {}
+        cho = dict((o or {}).get("cho") or {})
+        du.update(cho)
+        o = {"du": du, "cho": cho, "mt": mt, "xa": (o or {}).get("xa") or time.time()}
+        _KENH_DO[p] = o
+    return o
+
+
+def _kenh_do_xa(p: str, *, ep: bool = False) -> None:
+    o = _KENH_DO.get(p)
+    if not o or not o["cho"]:
+        return
+    if not ep and len(o["cho"]) < KENH_DO_GHI_MOI and time.time() - float(o.get("xa") or 0) < KENH_DO_GHI_GIAY:
+        return
+    try:
+        moi = ghi_json_gop(p, o["cho"])
+        o["du"] = moi
+        o["cho"] = {}
+        o["xa"] = time.time()
+        try:
+            o["mt"] = os.path.getmtime(p)
+        except OSError:
+            o["mt"] = None
+    except OSError:
+        pass  # ghi không được thì giữ trong bộ nhớ, lần sau ghi tiếp
+
+
+def xa_dem_kenh_do() -> None:
+    """Ghi mọi mục `kenh-do.json` còn đệm của tiến trình (cuối lượt chấm hộp thư, lúc thoát)."""
+    for p in list(_KENH_DO):
+        _kenh_do_xa(p, ep=True)
+
+
+try:
+    import atexit as _atexit
+
+    _atexit.register(xa_dem_kenh_do)
+except Exception:  # noqa: BLE001
+    pass
+
+
 def lay_kenh_co_dem(goc: str, ma_kenh: str,
                     lay_kenh: Optional[Callable[..., Any]] = None) -> Callable[..., Any]:
-    """Bọc `youtube.fetch_channel` (chữ ký của `do_ung_vien`) bằng `kenh-do.json`."""
+    """Bọc `youtube.fetch_channel` (chữ ký của `do_ung_vien`) bằng `kenh-do.json` (đệm ghi theo tiến trình — xem
+    `KENH_DO_GHI_MOI`)."""
     if lay_kenh is None:
         from .youtube import fetch_channel as lay_kenh  # noqa: PLC0415
     p = os.path.join(thu_muc(goc, ma_kenh), TEP_KENH_DO)
-    bo: Dict[str, Any] = {"du": None}
 
     def _lay(link: str, *, max_videos: int = 0, lang: str = "", cancel=None, **k: Any) -> Any:
         khoa = "{0}|{1}|{2}".format(str(link).strip().lower(), int(max_videos or 0), lang or "")
-        if bo["du"] is None:
-            du = doc_json(p, {})
-            bo["du"] = du if isinstance(du, dict) else {}
-        m = bo["du"].get(khoa)
+        o = _kenh_do_bang(p)
+        m = o["du"].get(khoa)
         if isinstance(m, dict) and _con_han_ngay(m.get("ngay"), HAN_KENH_DO_NGAY):
             try:
                 return _kenh_tu_dict(m.get("ch") or {})
@@ -288,11 +346,9 @@ def lay_kenh_co_dem(goc: str, ma_kenh: str,
         d = _kenh_ra_dict(ch)
         if d is not None and d.get("videos"):
             muc = {"ngay": _hom_nay(), "ch": d}
-            bo["du"][khoa] = muc
-            try:
-                ghi_json_gop(p, {khoa: muc})
-            except OSError:
-                pass
+            o["du"][khoa] = muc
+            o["cho"][khoa] = muc
+            _kenh_do_xa(p)
         return ch
 
     return _lay

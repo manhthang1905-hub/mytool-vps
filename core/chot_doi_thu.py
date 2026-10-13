@@ -380,6 +380,16 @@ def chot(goc: str, kenh: str, *, links: Optional[Sequence[str]] = None, lang: st
         except Exception as loi:  # noqa: BLE001 — đường vào hỏng không giết lượt chốt
             if on_log is not None:
                 on_log("  nạp đường vào đối thủ hỏng: {0}".format(str(loi)[:100]))
+        # 12/10/2026 — SỔ ĐỐI THỦ CHUNG (`core/so_doi_thu_chung.py`): link hộp thư mà kênh anh em đã chấm (phán quyết
+        # ngách / sức sống / kênh chết / bạn đưa) được GIEO thẳng vào danh bạ — không đo lại, không hỏi AI lại. Chỉ
+        # phần còn lại (kênh cả nhóm chưa ai thấy) mới qua cửa duyệt bên dưới. Kênh không nhóm: không làm gì.
+        try:
+            from . import so_doi_thu_chung as sdc  # noqa: PLC0415
+
+            sdc.dong_bo_truoc_chot(goc, kenh, on_log=on_log)
+        except Exception as loi:  # noqa: BLE001 — sổ chung hỏng thì chấm như cũ
+            if on_log is not None:
+                on_log("  sổ đối thủ chung hỏng, chấm như cũ: {0}".format(str(loi)[:100]))
     if client is not None and mo_ta_kenh is None:
         mo_ta_kenh = _mo_ta_kenh_cho_ai(goc, kenh)
     tham = dict(lang=lang, phut_muc_tieu=phut_muc_tieu, lay_kenh=lay_kenh, tu_khop=tu_khop, client=client,
@@ -407,6 +417,17 @@ def chot(goc: str, kenh: str, *, links: Optional[Sequence[str]] = None, lang: st
         except Exception as loi:  # noqa: BLE001
             if on_log is not None:
                 on_log("  kiểm ngách định kỳ hỏng: {0}".format(str(loi)[:100]))
+    if la_hop_thu:
+        try:   # phán quyết vừa ghi vào danh bạ → sổ chung, để kênh anh em chấm kế tiếp thấy ngay (không chấm lại)
+            from . import nghien_cuu_chung as ncc  # noqa: PLC0415
+            from . import so_doi_thu_chung as sdc  # noqa: PLC0415
+
+            xa = getattr(ncc, "xa_dem_kenh_do", None)
+            if xa is not None:
+                xa()
+            sdc.gop_sau(goc, kenh, on_log=on_log)
+        except Exception:  # noqa: BLE001
+            pass
     return dem
 
 
@@ -501,6 +522,15 @@ def _chot(goc: str, kenh: str, *, links: Optional[Sequence[str]], lang: str, phu
 
     if links is None:
         links = db.hop_thu(goc, kenh)
+        try:   # cùng một kênh đã có trong danh bạ dưới dạng link khác (@handle ↔ /channel/UC…) → không đo lại
+            from . import so_doi_thu_chung as sdc  # noqa: PLC0415
+
+            links, n_bi_danh = sdc.bo_bi_danh_da_co(goc, kenh, links)
+            if n_bi_danh and on_log is not None:
+                on_log("  hộp thư: {0} link là kênh đã có trong danh bạ dưới dạng link khác — không đo lại.".format(
+                    n_bi_danh))
+        except Exception:  # noqa: BLE001
+            pass
     links = [str(l).strip() for l in links if str(l).strip()]
     dem: Dict[str, object] = {"cham": 0, "theo_doi": 0, "bo": 0, "o_lai": 0, "loi": 0, "ai_hoi": 0,
                               "ai_loai": 0, "ai_cuu": 0, "theo_doi_links": [], "bo_links": []}
