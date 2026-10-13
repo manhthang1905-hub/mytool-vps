@@ -19,6 +19,7 @@ import datetime as _dt
 import json
 import os
 import shutil
+import socket
 import sys
 import threading
 import time
@@ -282,6 +283,8 @@ class _Xu(BaseHTTPRequestHandler):
         self.send_response(ma)
         self.send_header("Content-Type", loai)
         self.send_header("Cache-Control", luu)
+        if "json" in loai:      # 13/10/2026: máy cùng mạng (session shopapi.vn) đọc thẳng các API chỉ-đọc
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(du)
 
@@ -396,6 +399,35 @@ class _Xu(BaseHTTPRequestHandler):
             return self._gui(404, "text/plain; charset=utf-8", "thiếu ui_web/{0}".format(ten).encode("utf-8"))
 
 
+#: 13/10/2026 — chủ: "mở để PC khác CÙNG MẠNG vào đọc" (session shopapi.vn kéo dữ liệu về đẩy lên web). Tệp này có
+#: `{"mo_lan": true}` (hoặc chạy `--lan`) → nghe "::" hai ngăn xếp (IPv4 + IPv6); tường lửa Windows chỉ mở cổng cho
+#: LocalSubnet (luật "MyTool 8790 LAN"). Không có tệp → 127.0.0.1 như cũ.
+TEP_CAI_DAT = os.path.join(GOC, "workspace", "truc-quan", "cai-dat.json")
+
+
+def dia_chi_nghe(a) -> str:
+    if "--lan" in a:
+        return "::"
+    try:
+        with open(TEP_CAI_DAT, "r", encoding="utf-8-sig") as tep:     # PowerShell 5.1 ghi kèm BOM
+            return "::" if (json.load(tep) or {}).get("mo_lan") else "127.0.0.1"
+    except (OSError, ValueError, AttributeError):
+        return "127.0.0.1"
+
+
+class _MayChuHaiNgan(ThreadingHTTPServer):
+    """IPv6 + IPv4 trên một ổ cắm (máy này tắt IPv4 khi Chrome kênh mở, LAN IPv4 lúc có lúc không)."""
+    address_family = socket.AF_INET6
+    daemon_threads = True
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except (AttributeError, OSError):
+            pass
+        super().server_bind()
+
+
 def main(argv=None) -> int:
     a = list(sys.argv[1:] if argv is None else argv)
     if "--json" in a:
@@ -404,8 +436,10 @@ def main(argv=None) -> int:
     cong = CONG
     if "--cong" in a:      # cổng khác (kiểm thử song song máy chủ thật); mặc định vẫn 8790
         cong = int(a[a.index("--cong") + 1])
-    sv = ThreadingHTTPServer(("127.0.0.1", cong), _Xu)
-    print("Trung tâm trực quan: http://127.0.0.1:{0}".format(cong), flush=True)
+    nghe = dia_chi_nghe(a)
+    sv = _MayChuHaiNgan((nghe, cong), _Xu) if nghe == "::" else ThreadingHTTPServer(("127.0.0.1", cong), _Xu)
+    print("Trung tâm trực quan: http://127.0.0.1:{0}{1}".format(cong, " (mở LAN: mọi địa chỉ của máy)" if nghe == "::"
+                                                                  else ""), flush=True)
     sv.serve_forever()
     return 0
 
