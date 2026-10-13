@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.194.1** — 2026-10-13 — `vps-jp1` — fix(nao-bo-phan): giac ngu bo ket qua video < 50 hien thi (YouTube khong phat — loi mail, khong phai content thua): dem dau rut 'TL5 tranh tuyen nguoi cao tuoi 3/3 truot' trong khi do la chinh ngach TL5
 - **2.194.0** — 2026-10-13 — `vps-jp1` — feat(nao-bo-phan): dot 2 — giac ngu dem (ma tinh so + cap hong/duoc, Claude Max Opus chi ra lenh sua co ma su kien, ma kiem roi moi ap), canh bao tach khoi loi, thuc the khau/engine/bo chon/ma kiem, nhat ky tung bo phan, ky-lai; so tay vao…
 - **2.193.1** — 2026-10-13 — `vps-jp1` — fix(dang-dom): hien_thi_trang_sua — dua bo chon tu chua ytcp-video-metadata-editor-sidepanel (khop that >=28 luot dang tu 12/10) len bo chon chinh, giu 2 bo cu du phong (nao bo phan phat hien: TU CHUA lap 28 lan)
 - **2.193.0** — 2026-10-13 — `vps-jp1` — feat(nao-bo-phan): dot 1 — nao chung cho 15 bo phan: ghi su kien, gom tang dan tu cac so san co, no-ron loi (dang xay ra/tam lang/da het/tai phat), ban chieu bai hoc, so tay bo phan, chi muc FTS5, nho() ~5ms; nao xem in loi dang tang
