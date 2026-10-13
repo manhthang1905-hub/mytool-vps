@@ -51,9 +51,14 @@ from typing import Any, Dict, List, Optional, Tuple
 PHIEN_BAN = 1
 NGUONG_HIEN_THI = 50.0
 TUOI_DO = 72.0
-SO_VIDEO = 3
+#: 13/10/2026, chủ: "khi phát triển thêm kênh sẽ có tình trạng không được đề xuất — đa phần do mail nên logic là
+#: ĐỔI MAIL (làm kênh mới) — chắc là 10 video mà bị vấn đề đó sẽ đổi mail — mấy kênh kia tạm thời cứ làm cứ đăng".
+#: → cần 10 video liền không được phân phối mới báo, và KHÔNG dừng sản xuất (`DUNG_SAN_XUAT`), chỉ báo chủ đổi mail.
+SO_VIDEO = 10
 NGUONG_SONG = 300.0
-SO_VIDEO_XET_TOI_DA = 8
+SO_VIDEO_XET_TOI_DA = 12
+#: Dừng làm video mới khi kênh không được phát? Mặc định KHÔNG (luật chủ 13/10/2026: cứ làm cứ đăng, chủ đổi mail).
+DUNG_SAN_XUAT = False
 GIO_TINH_LAI = 3.0
 GIO_CO_CU = 48.0
 THU_MUC = os.path.join("workspace", "kenh-khong-phat")
@@ -328,15 +333,16 @@ def danh_sach_kiem(goc: str, kenh: str) -> List[str]:
 
 def _cau_viec(goc: str, kenh: str, tt: Dict[str, Any]) -> Tuple[str, str]:
     bc = tt.get("bang_chung") or []
-    chuyen = ("Kênh {0} không được YouTube phát: {1} video gần nhất mỗi video dưới {2} lượt hiển thị sau ≥ 3 ngày "
-              "({3}). Máy đã DỪNG làm video mới cho kênh này (video đã hẹn lịch vẫn đăng); hạn mức kho clip dồn cho "
-              "kênh đang được phát.").format(
+    chuyen = ("Kênh {0} không được YouTube phân phối: {1} video gần nhất mỗi video dưới {2} lượt hiển thị sau ≥ 3 ngày "
+              "({3}). {4}").format(
         kenh, len(bc), _f(NGUONG_HIEN_THI),
-        ", ".join("{0}: {1} @{2}h".format(b.get("ma"), _f(b.get("hien_thi")), b.get("tuoi")) for b in bc))
-    can = ("Mở YouTube Studio kênh {0}, kiểm 6 mục (chi tiết ở workspace/loi-chay-max.md hoặc nút Chi tiết). Kiểm "
-           "xong bấm \"Đã kiểm Studio\" (hoặc `python -m core.kenh_khong_phat xoa --kenh {0}`): máy làm video lại; "
-           "3 video mới vẫn dưới {1} hiển thị thì báo lại. Video mới nào ≥ {2} hiển thị → máy tự chạy lại.").format(
-        kenh, _f(NGUONG_HIEN_THI), _f(NGUONG_SONG))
+        ", ".join("{0}: {1} @{2}h".format(b.get("ma"), _f(b.get("hien_thi")), b.get("tuoi")) for b in bc),
+        "Máy đã DỪNG làm video mới cho kênh này (video đã hẹn lịch vẫn đăng)." if DUNG_SAN_XUAT else
+        "Máy VẪN làm và đăng bình thường.")
+    can = ("Nên ĐỔI MAIL: tạo kênh mới trên một tài khoản Google khác cho tệp khán giả này (thường do tài khoản), rồi "
+           "chuyển cấu hình kênh sang kênh mới. Trước khi đổi, có thể kiểm nhanh 6 mục Studio (chi tiết ở "
+           "workspace/loi-chay-max.md). Đã xử lý thì bấm \"Đã kiểm Studio\" (hoặc `python -m core.kenh_khong_phat xoa "
+           "--kenh {0}`); video mới nào ≥ {1} hiển thị → máy tự xoá cờ.").format(kenh, _f(NGUONG_SONG))
     return chuyen, can
 
 

@@ -19,6 +19,24 @@ BAY = _dt.datetime(2026, 10, 12, 9, 0)
 NOW = BAY.timestamp()
 
 
+@pytest.fixture(autouse=True)
+def _luat_co_che(request, monkeypatch):
+    """Các bài cũ kiểm CƠ CHẾ với luật 12/10 (3 video, dừng sản xuất). Luật mặc định 13/10 (10 video, KHÔNG dừng —
+    chủ đổi mail) kiểm riêng ở `test_mac_dinh_13_10_*` (đánh dấu `mac_dinh`)."""
+    if "mac_dinh" in request.keywords:
+        return
+    monkeypatch.setattr(kp, "SO_VIDEO", 3)
+    monkeypatch.setattr(kp, "SO_VIDEO_XET_TOI_DA", 8)
+    monkeypatch.setattr(kp, "DUNG_SAN_XUAT", True)
+
+
+@pytest.mark.mac_dinh
+def test_mac_dinh_13_10_can_10_video_va_khong_dung_san_xuat():
+    assert kp.SO_VIDEO == 10 and kp.DUNG_SAN_XUAT is False
+    kq = kp.phan_xet(_chet(), NOW)                       # chỉ 3 video dưới 50 → CHƯA đủ 10 → chưa báo
+    assert kq["trang_thai"] != kp.KHONG_PHAT
+
+
 def _c(ma, tuoi_nay, *diem):
     """Chuỗi giả: video đăng `tuoi_nay` giờ trước BAY, các bản chụp (tuổi, hiển thị)."""
     dang = NOW - tuoi_nay * 3600.0

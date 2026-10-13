@@ -2016,7 +2016,7 @@ def _cua_so_san_xuat(goc: str, ma_kenh: str, kenh: Any,
         kp_dung, kp_ly = kenh_khong_phat.dang_dung(goc, ma_kenh, bay_gio=luc)
     except Exception:  # noqa: BLE001 — bộ phát hiện hỏng không được chặn sản xuất
         kp_dung, kp_ly = False, ""
-    if kp_dung:
+    if kp_dung and getattr(kenh_khong_phat, "DUNG_SAN_XUAT", False):   # 13/10/2026: cứ làm cứ đăng, chủ đổi mail
         return False, kp_ly, {"khong_phat": True, "so_video_dang_cho": 0, "video_dang_cho": []}
     cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
     can = {ten: cot.index(ten) for ten in

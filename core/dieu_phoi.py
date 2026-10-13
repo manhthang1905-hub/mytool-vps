@@ -488,7 +488,7 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
         kp_dung, kp_ly = kenh_khong_phat.dang_dung(goc, ma, bay_gio=bay_gio, tinh=True)
     except Exception:  # noqa: BLE001 — bộ phát hiện hỏng không được chặn điều phối
         kp_dung, kp_ly = False, ""
-    if kp_dung:
+    if kp_dung and getattr(kenh_khong_phat, "DUNG_SAN_XUAT", False):   # 13/10/2026: chủ — cứ làm cứ đăng, đổi mail
         ra["khong_phat"] = True
     if _co_luot_do(goc, ma, bay_gio.date()):
         # 12/10/2026: lượt dở đang CHỜ ENGINE phía máy chủ (đã nhả làn, tiến trình đã thoát —
@@ -507,7 +507,7 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
         ra.update(chay=True, diem=-1000.0, ly_do="lượt dở — chạy tiếp" + (
             " (kênh không được phát: xếp sau kênh đang được phát)" if kp_dung else ""))
         return ra
-    if kp_dung:
+    if kp_dung and getattr(kenh_khong_phat, "DUNG_SAN_XUAT", False):
         ra["ly_do"] = kp_ly
         return ra
     if so_luot >= xep_lich.tran_video_ngay(k):
