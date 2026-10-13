@@ -621,9 +621,11 @@
     },
     "hien_thi_trang_sua": {
       "chon": [
+        "ytcp-video-metadata-editor-sidepanel",
         "ytcp-video-metadata-visibility",
         "#visibility-container"
-      ]
+      ],
+      "ghi_chu": "13/10/2026: bộ tự chữa tìm ra ytcp-video-metadata-editor-sidepanel (12/10), khớp thật ≥ 28 lượt đăng — đưa lên bộ chọn chính, giữ hai bộ cũ dự phòng"
     },
     "sua_hien_thi_mo": {
       "chon": [
