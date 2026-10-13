@@ -9192,6 +9192,10 @@ def _ke_hoach_bia_luot(bc: BoiCanh, luot: LuotChay, thu_muc: str, kieu, tieu_de:
         khuon = kh.pop("khuon", None) or {}
         kh["khuon_video_id"] = khuon.get("video_id", "")
         kh["khuon_tep"] = khuon.get("tep", "")
+        # 13/10/2026: khuôn kiểu HỘP — 2–3 bìa thắng thật làm mẫu phong cách ảnh nền (`khuon_bia._anh_mau_phong_cach`).
+        if _btk.kieu_hop(khuon.get("khuon_chu")):
+            kh["kieu_khuon"] = "hop"
+            kh["khuon_tep_mau"] = [d for d in (khuon.get("tep_mau") or []) if d]
         _btk.ghi_ke_hoach(thu_muc, kh)
         bc.ghi("  ảnh bìa: chế độ {0} — {1}{2}".format(
             kh.get("che_do"), kh.get("ly_do", "")[:120],
@@ -9233,6 +9237,10 @@ def _dung_loi_nhac_tu_khuon(bc: BoiCanh, luot: LuotChay, kh: Dict[str, Any], tie
 
     thu_muc = os.path.join(luot.thu_muc, "7-thumbnail")
     hau_to = _hau_to_khoa_bia(thu_muc, chu_bia)
+    # 13/10/2026 tối: khuôn kiểu HỘP chữ (TL4-T7) — nền phẳng sáng theo bìa thắng thật + cảnh ẩn dụ do LLM viết; chữ
+    # code vẽ (thứ bậc, phông bo tròn). Nền đè được bằng `kenh.yaml: bia_hop_nen`.
+    hop = _btk.kieu_hop(kc)
+    nen_hop = str((_btk.cau_hinh_kenh(bc.goc, bc.kenh.ma) if getattr(bc, "goc", "") else {}).get("bia_hop_nen") or "")
     for nhom in ("khuon", "chuan_ngach"):
         ds = [m for m in kh.get("muc") or [] if m.get("nhom") == nhom]
         if not ds:
@@ -9257,7 +9265,11 @@ def _dung_loi_nhac_tu_khuon(bc: BoiCanh, luot: LuotChay, kh: Dict[str, Any], tie
             ma_ve = m.get("ve_chu") == "ma"
             m["chu_tang"] = bt["chu_tang"]
             m["chu_du_kien"] = "".join(_btk.chu_cua_tang(t) for t in bt["chu_tang"])
-            if nhom == "khuon":
+            if nhom == "khuon" and hop:
+                m["loi_nhac"] = bd(_btk.loi_nhac_hop_chu(kc, bien_the=b, nen=nen_hop))
+                m["ve_chu"] = "ma"
+                m["tham_chieu_bia_thang"] = True
+            elif nhom == "khuon":
                 m["loi_nhac"] = bd(_btk.loi_nhac_theo_khuon(
                     kc, phong_cach=bo_ao["phong_cach"], bien_the=b, chu_tang=bt["chu_tang"],
                     chu_do_ma_ve=ma_ve, cam=bo_ao["cam"]))
@@ -9298,13 +9310,18 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
                             ban_dia=bd)
     chu_mong = "".join(_btk.chu_cua_tang(t) for t in bt["chu_tang"])
     bo_ao = _bo_ao_kenh(bc)
-    hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)), khuon["tep"])
-    ve_cfg = str((kh.get("cau_hinh") or {}).get("bia_ve_chu") or "tron")
+    # 13/10/2026 tối: khuôn kiểu HỘP — thử đúng đường khai thác (code vẽ chữ, nền phẳng sáng, 2–3 bìa thắng làm mẫu).
+    kieu_hop = _btk.kieu_hop(kc)
+    hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)),
+                      (khuon.get("tep_mau") or [khuon["tep"]]) if kieu_hop else khuon["tep"])
+    ve_cfg = "ma" if kieu_hop else str((kh.get("cau_hinh") or {}).get("bia_ve_chu") or "tron")
+    nen_hop = str((kh.get("cau_hinh") or {}).get("bia_hop_nen") or "")
     ket = []
     for i, b in enumerate(bt["bien_the"]):
         ma_ve = ve_cfg == "ma" or (ve_cfg != "mo_hinh" and i % 2 == 1)
-        ln = bd(_btk.loi_nhac_theo_khuon(kc, phong_cach=bo_ao["phong_cach"], bien_the=b,
-                                         chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve, cam=bo_ao["cam"]))
+        ln = bd(_btk.loi_nhac_hop_chu(kc, bien_the=b, nen=nen_hop) if kieu_hop else _btk.loi_nhac_theo_khuon(
+            kc, phong_cach=bo_ao["phong_cach"], bien_the=b, chu_tang=bt["chu_tang"], chu_do_ma_ve=ma_ve,
+            cam=bo_ao["cam"]))
         tep = os.path.join(thu, "thu_{0}.png".format(i + 1))
         try:
             nen = os.path.join(thu, "_nen_thu_{0}.png".format(i + 1)) if ma_ve else tep
@@ -9345,33 +9362,35 @@ def _thu_khuon_nho(bc: BoiCanh, luot: LuotChay, thu_muc: str, kh: Dict[str, Any]
 
 
 class _HopThemAnh:
-    """Hộp tham chiếu = ảnh nhân vật (hộp gốc) + MỘT ảnh thêm (bìa thắng THẬT làm
-    tham chiếu phong cách). Tải ảnh thêm lên một lần, làm mới khi hộp gốc làm mới."""
+    """Hộp tham chiếu = ảnh nhân vật (hộp gốc) + ảnh thêm (bìa thắng THẬT làm tham
+    chiếu phong cách — một tấm, hoặc 2–3 tấm cho bìa kiểu hộp từ 13/10/2026). Tải ảnh
+    thêm lên một lần, làm mới khi hộp gốc làm mới."""
 
-    def __init__(self, bc: BoiCanh, goc_hop, duong_them: str) -> None:
+    def __init__(self, bc: BoiCanh, goc_hop, duong_them) -> None:
         self._bc = bc
         self._goc = goc_hop
-        self._duong = duong_them
+        self._duong = [duong_them] if isinstance(duong_them, str) else [d for d in (duong_them or []) if d]
         self._khoa = threading.Lock()
-        self._url = ""
+        self._url: List[str] = []
 
     def _url_them(self, lam_moi: bool = False) -> List[str]:
-        if not self._duong or not os.path.isfile(self._duong):
+        co = [d for d in self._duong if os.path.isfile(d)]
+        if not co:
             return []
         with self._khoa:
             if not self._url or lam_moi:
-                def tai():
+                def tai(duong: str):
                     xin_nhip(self._bc.on_log, ngu=self._bc.ngu, so_suat=SUAT_TAI_TEP)
-                    return self._bc.client.uploads.upload_file(self._duong)
-                self._url = str(goi_kien_nhan(tai, on_log=self._bc.on_log,
-                                              kiem_dung=self._bc.kiem_dung, ngu=self._bc.ngu))
-            return [self._url]
+                    return self._bc.client.uploads.upload_file(duong)
+                self._url = [str(goi_kien_nhan(lambda _d=d: tai(_d), on_log=self._bc.on_log,
+                                               kiem_dung=self._bc.kiem_dung, ngu=self._bc.ngu)) for d in co]
+            return list(self._url)
 
     def lay(self) -> List[str]:
         return list(self._goc.lay()) + self._url_them()
 
     def lam_moi(self, cu: List[str]) -> List[str]:
-        return list(self._goc.lam_moi([u for u in cu if u != self._url])) + self._url_them(True)
+        return list(self._goc.lam_moi([u for u in cu if u not in self._url])) + self._url_them(True)
 
 
 def _muc_ke_hoach(thu_muc: str, so: int) -> Dict[str, Any]:
@@ -9382,7 +9401,7 @@ def _muc_ke_hoach(thu_muc: str, so: int) -> Dict[str, Any]:
         return {}
     for m in kh.get("muc") or []:
         if int(m.get("so") or 0) == int(so):
-            return dict(m, _khuon_tep=kh.get("khuon_tep", ""))
+            return dict(m, _khuon_tep=kh.get("khuon_tep", ""), _khuon_tep_mau=list(kh.get("khuon_tep_mau") or []))
     return {}
 
 
@@ -9407,8 +9426,9 @@ def _lam_bia(bc: BoiCanh, luot: LuotChay, hop: "ThamChieu", thu_muc: str,
     # 12/10/2026: lô bìa LÀM LẠI (lô trước hỏng hết) — dặn lý do lô trước bị loại; cũng đổi khoá việc (lô mới).
     loi_nhac += _loi_nhac_vong(thu_muc)
     kh = _muc_ke_hoach(thu_muc, so_bia)
-    if kh.get("tham_chieu_bia_thang") and kh.get("_khuon_tep"):
-        hop = _HopThemAnh(bc, hop, kh["_khuon_tep"])
+    if kh.get("tham_chieu_bia_thang") and (kh.get("_khuon_tep_mau") or kh.get("_khuon_tep")):
+        # 13/10/2026: bìa kiểu hộp gửi 2–3 bìa thắng thật (sáng/sạch nhất) làm mẫu phong cách; còn lại một tấm như cũ.
+        hop = _HopThemAnh(bc, hop, kh.get("_khuon_tep_mau") or kh["_khuon_tep"])
     ma_ve = kh.get("ve_chu") == "ma" and bool(kh.get("chu_tang"))
     dich = os.path.join(thu_muc, "znen-thumb_{0:03d}.png".format(so_bia)) if ma_ve else tep
     if not (ma_ve and os.path.exists(dich)):
@@ -10246,7 +10266,10 @@ def _goi_chon_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, muc, tieu_de: str,
                                    if m.get("chu_du_kien")}
             them["nhom_uu_tien"] = kh.get("nhom_uu_tien") or None
             them["luot_tham_do"] = bool(kh.get("luot_tham_do"))
-            if kh.get("chuan_ngach"):
+            # 13/10/2026: khuôn kiểu HỘP mà lô không có tấm chuẩn ngách — luật ngách "chữ trần, không hộp" không
+            # được chấm điểm ngược bìa đúng khuôn thắng của chính kênh.
+            if kh.get("chuan_ngach") and not (kh.get("kieu_khuon") == "hop" and not any(
+                    m.get("nhom") == "chuan_ngach" for m in kh["muc"])):
                 them["chuan_ngach_khoi"] = _btk.khoi_chuan_ngach(kh["chuan_ngach"])
     except Exception:  # noqa: BLE001 — thiếu kế hoạch thì chấm như cũ
         them = {}

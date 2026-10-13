@@ -33,6 +33,9 @@ Hai cách đo:
   * MÙ — ảnh đã ghép (chữ do mô hình ảnh vẽ, hoặc bìa cũ): `tim_dong_chu` dò dòng chữ theo vành
     viền (chữ bìa kiểu này luôn có viền tối/sáng bao quanh), ước màu chữ/viền/nền rồi đo y như trên.
     Không dò ra chữ → `tin_cay=False` (không kết luận).
+  * HỘP (13/10/2026 tối) — bìa kiểu HỘP CHỮ do `bia_theo_khuon._ve_bia_hop` vẽ: báo cáo mang bố cục hộp
+    (`hop_chu`); `cham_tep` đo lại trên chính tệp giao bằng `cham_hop` (chữ↔hộp theo cỡ nét thật, hộp↔nền:
+    độ sáng / sắc độ / viền). Bộ dò mù coi hộp đỏ là "màu chữ" nên chấm trượt oan bìa trắng-trên-đỏ.
 
 Ngoài đo còn: `chon_kieu_dong` (chọn màu chữ/viền/khung theo nền ĐO được — bộ vẽ dùng; không khung
 trước, khung không che CHỦ THỂ `ban_do_chu_the`), `ve_lai_tu_anh_ghep` (xoá chữ cũ bằng nội suy nền + vẽ
@@ -60,6 +63,7 @@ __all__ = [
     "chon_kieu_dong", "ve_lai_tu_anh_ghep", "nhom_doc_duoc", "duong_bao_cao", "ghi_bao_cao",
     "doc_bao_cao", "nguong_theo_co", "rat_kho_doc", "ban_do_chu_the", "che_chu_the", "bo_cuc_dat",
     "ly_do_bo_cuc", "phan_chu_the_bi_che", "dien_tich_hop", "soi_dai_toi", "dai_toi_moi", "tom_tat_dai",
+    "cham_hop",
 ]
 
 #: WCAG: chữ thường ≥ 4,5:1; chữ lớn (≥ 24 px CSS) ≥ 3:1. Bìa trên điện thoại rộng ~360 px CSS → dòng 12%
@@ -635,6 +639,121 @@ def cham_anh(anh_hoac_duong) -> Dict[str, Any]:
     return tong_hop(ds, cach="mu", tin_cay=bool(ds))
 
 
+# ── Bìa kiểu HỘP CHỮ: đo theo bố cục hộp bộ vẽ ghi lại (13/10/2026 tối) ───────────────────────────────────────
+#
+# Bìa TL4-T7 (chữ trắng trên hộp đỏ sẫm) đọc rất rõ mà bộ dò mù chấm TRƯỢT: nó coi HỘP ĐỎ là "màu chữ" và chữ trắng
+# là "viền", rồi so hộp đỏ với nền be ("dòng 1: tương phản 2.7:1"); thêm viền nâu mảnh cho hộp thì dò lệch dòng
+# ("không có dòng chính đủ lớn"). Bộ vẽ BIẾT từng hộp → ghi `hop_chu` vào báo cáo, cổng đo trên CHÍNH ảnh:
+#   * chữ↔hộp: hai màu trội bên trong hộp (bỏ viền/bo góc) gán theo màu chữ/màu hộp bộ vẽ khai → WCAG, ngưỡng theo cỡ
+#     NÉT CHỮ THẬT của dòng (`nguong_theo_co`, dòng cực to ~21% khung);
+#   * hộp↔nền: vành nền quanh hộp (trừ các hộp khác) — tách khi tương phản bách phân vị xấu ≥ `NGUONG_TACH_HOP`, hoặc
+#     khác SẮC rõ (`HE_SAC_DO`), hoặc có VIỀN đo được trên ảnh tách cả hộp lẫn nền (bóng đổ nằm sẵn trong vành nền).
+# Bìa chữ trần giữ nguyên đường cũ (`cham_dong_ve` / dò mù).
+
+#: Hộp tách khỏi nền (một trong ba đường) khi mức tách ≥ ngần này.
+NGUONG_TACH_HOP = 1.4
+#: Viền hộp (px ở ảnh cao 720) tối thiểu để tính là đường tách.
+VIEN_HOP_TOI_THIEU_PX = 2.0
+
+
+def _rgb_hex(h: Any, mac_dinh: Tuple[int, int, int]) -> Tuple[int, int, int]:
+    m = re.search(r"#([0-9a-fA-F]{6})", str(h or ""))
+    if not m:
+        return mac_dinh
+    v = m.group(1)
+    return int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
+
+
+def cham_hop(anh_hoac_duong, hop_chu: Sequence[Dict[str, Any]], *,
+             kich_thuoc: Optional[Sequence[int]] = None) -> Dict[str, Any]:
+    """Chấm bìa KIỂU HỘP theo bố cục hộp (`hop_chu` của `bia_theo_khuon._ve_bia_hop`: hop, cao_px, mau_chu, mau_hop,
+    vien_px, vien_mau, to) trên ảnh (đường dẫn / PIL.Image). `kich_thuoc` = (W, H) lúc vẽ — ảnh khác cỡ thì quy đổi."""
+    np = _np()
+    from PIL import Image  # noqa: PLC0415
+    anh = Image.open(anh_hoac_duong) if isinstance(anh_hoac_duong, str) else anh_hoac_duong
+    arr = np.asarray(anh.convert("RGB"))
+    H, W = arr.shape[:2]
+    W0, H0 = (int(kich_thuoc[0]), int(kich_thuoc[1])) if kich_thuoc else (W, H)
+    kx, ky = W / float(max(1, W0)), H / float(max(1, H0))
+    L = _mang_do_sang(arr)
+    hop_px = []
+    for h in hop_chu:
+        x0, y0, x1, y1 = [float(v) for v in h.get("hop") or (0, 0, 0, 0)]
+        hop_px.append((max(0, int(x0 * kx)), max(0, int(y0 * ky)), min(W, int(round(x1 * kx))),
+                       min(H, int(round(y1 * ky)))))
+    phu = np.zeros((H, W), dtype=bool)
+    for a0, b0, a1, b1 in hop_px:
+        phu[max(0, b0 - 2):b1 + 2, max(0, a0 - 2):a1 + 2] = True
+    ds: List[Dict[str, Any]] = []
+    for i, (h, (a0, b0, a1, b1)) in enumerate(zip(hop_chu, hop_px)):
+        cao_hop = max(1, b1 - b0)
+        ten = str(h.get("chu") or "dòng {0}".format(i + 1))[:24]
+        mau_chu = _rgb_hex(h.get("mau_chu"), TRANG)
+        mau_hop = _rgb_hex(h.get("mau_hop"), (190, 57, 43))
+        # 1) Chữ ↔ hộp: hai màu trội bên trong hộp (bỏ 12% chiều cao hộp mỗi phía: viền, bo góc, mép hộp sau đè lên).
+        m = int(0.12 * cao_hop)
+        trong = arr[b0 + m:b1 - m, a0 + m:a1 - m].reshape(-1, 3)
+        troi = _mau_troi(trong, 3) if len(trong) else []
+
+        def gan(mau):
+            return min(troi, key=lambda x: sum(abs(int(p) - int(q)) for p, q in zip(x[0], mau)))[0] if troi else mau
+        c_hop = gan(mau_hop)
+        con = [x for x in troi if x[0] != c_hop]
+        c_chu = min(con, key=lambda x: sum(abs(int(p) - int(q)) for p, q in zip(x[0], mau_chu)))[0] if con else None
+        l_hop = do_sang(c_hop)
+        tp_chu = ti_le_tuong_phan(do_sang(c_chu), l_hop) if c_chu is not None else 1.0
+        # 2) Hộp ↔ nền: vành nền quanh hộp, trừ mọi hộp (giãn 2 px).
+        r = max(4, int(0.2 * cao_hop))
+        y0v, y1v, x0v, x1v = max(0, b0 - r), min(H, b1 + r), max(0, a0 - r), min(W, a1 + r)
+        vanh = ~phu[y0v:y1v, x0v:x1v]
+        l_vanh = L[y0v:y1v, x0v:x1v][vanh]
+        tp_vanh = _phan_vi(_tp_mang(l_hop, l_vanh), PHAN_VI_XAU, 1.0) if l_vanh.size else 21.0
+        tach, duong = tp_vanh, "do_sang"
+        if l_vanh.size:
+            rgb_vanh = arr[y0v:y1v, x0v:x1v][vanh].astype(np.float32)
+            de = np.sqrt(((_lab(rgb_vanh) - _lab(np.asarray(c_hop, dtype=np.float32))) ** 2).sum(axis=-1))
+            ts = _phan_vi(1.0 + de / HE_SAC_DO, PHAN_VI_XAU, 1.0)
+            if ts > tach:
+                tach, duong = ts, "sac_do"
+            # Viền: dải sát mép TRONG của hộp (trên + trái, giữa cạnh) đo được tối/sáng khác hẳn hộp.
+            vp = int(round(float(h.get("vien_px") or 0) * ky))
+            if vp >= VIEN_HOP_TOI_THIEU_PX * H / 720.0:
+                q = max(1, vp - 1)
+                gx0, gx1 = a0 + int(0.25 * (a1 - a0)), a0 + int(0.75 * (a1 - a0))
+                gy0, gy1 = b0 + int(0.3 * cao_hop), b0 + int(0.7 * cao_hop)
+                dai = np.concatenate([L[b0:b0 + q, gx0:gx1].ravel(), L[gy0:gy1, a0:a0 + q].ravel()])
+                if dai.size:
+                    l_vien = float(np.median(dai))
+                    tv = min(_phan_vi(_tp_mang(l_vien, l_vanh), PHAN_VI_XAU, 1.0), ti_le_tuong_phan(l_vien, l_hop))
+                    if tv > tach:
+                        tach, duong = tv, "vien"
+        cao_px = float(h.get("cao_px") or 0) * ky
+        cao_pct = 100.0 * cao_px / float(max(1, H))
+        nguong = round(nguong_theo_co(cao_pct), 2)
+        ly_do: List[str] = []
+        if c_chu is None:
+            ly_do.append("không thấy chữ trong hộp")
+        elif tp_chu < nguong:
+            ly_do.append("chữ↔hộp {0:.1f}:1 < {1:.1f}:1".format(tp_chu, nguong))
+        if cao_pct < CAO_TOI_THIEU_PCT:
+            ly_do.append("chữ nhỏ {0:.1f}% khung < {1:.0f}%".format(cao_pct, CAO_TOI_THIEU_PCT))
+        if tach < NGUONG_TACH_HOP:
+            ly_do.append("hộp lẫn vào nền (hộp↔nền {0:.1f}:1, không viền/sắc độ tách)".format(tp_vanh))
+        he = KHUNG_DT[1] / float(max(1, H))
+        ds.append({
+            "ten": ten, "hop": [int(round(v)) for v in (a0, b0, a1, b1)], "kieu": str(h.get("kieu") or "hop"),
+            "tuong_phan": round(tp_chu, 2), "tuong_phan_nen": round(tp_chu, 2), "nguong": nguong,
+            "tuong_phan_vien_nen": round(tach, 2), "vien_day": False, "ganh": "hop",
+            "tach_hop": round(tach, 2), "tach_hop_nen": round(tp_vanh, 2), "tach_hop_duong": duong,
+            "cao_pct": round(cao_pct, 1), "cao_dt_px": round(cao_px * he, 1), "vien_dt_px": 0.0,
+            "ban_ron": 0.0, "nen_p50": round(l_hop, 3), "co_khung": True, "to": bool(h.get("to")),
+            "mau_chu": ["#{0:02X}{1:02X}{2:02X}".format(*c_chu)] if c_chu is not None else [],
+            "mau_hop": "#{0:02X}{1:02X}{2:02X}".format(*c_hop),
+            "dat": not ly_do, "ly_do": ly_do, "canh_bao": [],
+        })
+    return tong_hop(ds, cach="hop", tin_cay=bool(ds))
+
+
 # ── Báo cáo cạnh ảnh (đo CHÍNH XÁC lúc vẽ) ────────────────────────────────────
 
 _RE_CHON = re.compile(r"^CHON-", re.I)
@@ -700,6 +819,14 @@ def cham_tep(duong_anh: str) -> Dict[str, Any]:
             if _lech_van_tay(bc.get("van_tay") or [], van_tay(duong_anh)) < _LECH_VAN_TAY:
                 bc = dict(bc)
                 bc.pop("van_tay", None)
+                if bc.get("hop_chu"):
+                    # 13/10/2026: bìa kiểu HỘP — đo lại chữ↔hộp, hộp↔nền trên CHÍNH tệp này (vd. CHON-*.jpg) theo bố
+                    # cục hộp bộ vẽ ghi; giữ khối bố cục của báo cáo.
+                    moi = cham_hop(duong_anh, bc["hop_chu"], kich_thuoc=bc.get("kich_thuoc"))
+                    for k in ("bo_cuc", "hop_chu", "kich_thuoc", "kieu_bia", "font"):
+                        if k in bc:
+                            moi[k] = bc[k]
+                    return moi
                 return bc
         except (OSError, ValueError):
             pass

@@ -26,6 +26,8 @@
 !/tool-catalog/
 !/mau-capcut/
 !/scripts/
+# Phông vẽ chữ bìa (13/10/2026): M PLUS Rounded 1c Black — SIL OFL 1.1, giấy phép ở fonts/OFL.txt.
+!/fonts/
 
 # Tệp chạy ở gốc — khai TỪNG TÊN (tệp .py thử nghiệm ở gốc không tự lên kho).
 # Công cụ phụ ít dùng nằm trong scripts/, không ở gốc.

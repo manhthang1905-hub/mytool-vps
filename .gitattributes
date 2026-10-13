@@ -22,3 +22,7 @@
 # Golden cua bo chon nguon so TUNG BYTE (tests/test_chien_luoc_golden.py): giu LF ca khi clone tren
 # Windows (core.autocrlf=true) - khong thi may moi chay test la lech golden.
 *.golden.json text eol=lf
+
+# Phong chu vendor (fonts/): nhi phan, khong bao gio doi xuong dong.
+*.ttf binary
+*.otf binary

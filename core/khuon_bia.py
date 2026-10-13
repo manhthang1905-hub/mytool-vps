@@ -38,6 +38,9 @@ thật của kênh. Giờ ứng viên gồm cả video THẬT đã đăng đo tr
 `bia_theo_khuon.du_bang_chung` (CTR ≥ 7% và ≥10.000 hiển thị, HOẶC ≥50.000 hiển thị và CTR ≥ trung vị kênh) —
 CTR cao nhất, hoà thì nhiều hiển thị hơn; không ai đạt mới tới luật trung vị cũ bên dưới.
 
+13/10/2026 tối: khuôn kiểu HỘP chữ (`bia_theo_khuon.kieu_hop`) ghi thêm `tep_mau` — 2–3 bìa thật sáng/sạch nhất của
+các video đủ bằng chứng (`_anh_mau_phong_cach`) làm mẫu phong cách ảnh nền bìa theo khuôn. Khuôn chữ trần không đổi.
+
 Không gọi mạng trừ khi CẦN tải ảnh bìa đối chứng (`anh_da_dang`, một lần rồi
 lưu vĩnh viễn) hoặc mô tả khuôn bằng AI (`cap_nhat`, chỉ khi người thắng vừa
 đổi) — cả hai đều rất hiếm khi xảy ra (một lần/kênh cho tới khi có video mới
@@ -600,6 +603,14 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
         # khi `bia_theo_khuon.trang_thai_khai_thac` xét khai thác.
         "trung_vi_ctr_that": thang.get("trung_vi_ctr_that"),
     }
+    # 13/10/2026 tối — khuôn kiểu HỘP chữ: 2–3 bìa thắng THẬT sáng/sạch nhất của kênh làm MẪU PHONG CÁCH cho ảnh nền
+    # (chủ chê bìa tool làm "xấu, không thu hút như các thumb đã win"). Khuôn chữ trần: không đổi gì.
+    try:
+        from . import bia_theo_khuon as _btk  # noqa: PLC0415
+        if _btk.kieu_hop(khuon_chu):
+            moi["tep_mau"] = _anh_mau_phong_cach(goc, kenh, duong_anh, tai_anh=tai_anh)
+    except Exception:  # noqa: BLE001 — thiếu mẫu phong cách thì tấm theo khuôn dùng một ảnh thắng như cũ
+        pass
     # ═══ BÌA THẬT, VÒNG THỬ, VÒNG HỌC (30/09/2026, `core/bia_theo_khuon.py`) ═══
     ta_tu_anh_that = bool(duong_that) and (phai_ta_lai and goi_chat is not None or cu.get("anh_that"))
     moi["anh_that"] = bool(ta_tu_anh_that and khuon_chu)
@@ -635,6 +646,27 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
         except Exception:  # noqa: BLE001 — dòng markdown chỉ là tiện đọc, không chặn
             pass
     return moi
+
+
+def _anh_mau_phong_cach(goc: str, kenh: str, duong_khuon: str, *,
+                        tai_anh: Optional[Callable[[str], Optional[bytes]]] = None) -> List[str]:
+    """Bìa thật (YouTube) của các video ĐỦ BẰNG CHỨNG của kênh (CTR cao trước, ≤ 6 video, tải một lần rồi giữ) + bìa
+    của khuôn → `bia_theo_khuon.chon_anh_mau_phong_cach` (2–3 tấm sáng/sạch nhất)."""
+    from . import bia_theo_khuon as _btk  # noqa: PLC0415
+    rieng = _ung_vien_cua_kenh(goc, kenh)
+    ch = _btk.cau_hinh_kenh(goc, kenh)
+    tv = trung_vi_ctr_that(rieng)
+    dat = sorted((u for u in rieng if _btk.du_bang_chung(
+        u.ctr, u.impressions, ctr_min=float(ch["bia_khai_thac_ctr_min"]), imp_min=float(ch["bia_khai_thac_imp_min"]),
+        imp_lon=float(ch["bia_khai_thac_imp_lon"]), trung_vi=tv)), key=lambda u: (-u.ctr, -u.impressions))
+    cac = [duong_khuon] if duong_khuon else []
+    for u in dat[:6]:
+        d = duong_anh_that(goc, kenh, u.video_id)
+        if not os.path.isfile(d):
+            d = anh_that(goc, kenh, u.video_id, tai_anh=tai_anh)
+        if d and d not in cac:
+            cac.append(d)
+    return _btk.chon_anh_mau_phong_cach(cac)
 
 
 def _bo_sung_mau_khoi(goc: str, kenh: str, kc: Dict[str, Any]) -> Dict[str, Any]:
