@@ -138,6 +138,34 @@ def test_do_thi_nut_day_va_dong_kich_hoat(tmp_path):
     assert du["dem"]["dong"] == 3 and du["dem"]["nut"] == len(du["nut"]) and du["dem"]["loi_dang"] >= 3
 
 
+def test_do_thi_truong_cho_ban_3d(tmp_path):
+    """13/10/2026: bản 3D cần `vung` (thuỳ + màu), `so_lan` (cỡ chấm), `do_sang` (độ sáng) — chỉ THÊM trường."""
+    goc, ids = _nao(tmp_path)
+    du = do_thi.do_thi(goc)
+    nut = {n["id"]: n for n in du["nut"]}
+    for n in du["nut"]:
+        assert {"id", "nhom", "ten", "bo_phan", "trang_thai", "kich_thuoc", "mau", "tep"} <= set(n), n   # hợp đồng cũ
+        assert isinstance(n["vung"], int) and isinstance(n["so_lan"], int) and n["so_lan"] >= 0, n
+        assert n["do_sang"] in ("sang", "vua", "mo"), n
+        if n["nhom"] in ("loi", "canh-bao", "bai-hoc"):
+            assert n["vung"] == list(C.BO_PHAN).index(n["bo_phan"]), n
+    for i, bp in enumerate(C.BO_PHAN):
+        assert nut[bp]["vung"] == nut[bp]["thu_tu"] == i and nut[bp]["so_lan"] == nut[bp]["su_kien_7"]
+    tt = nut[do_thi.TRUNG_TAM]
+    assert tt["vung"] == -1 and tt["so_lan"] == sum(nut[bp]["su_kien_7"] for bp in C.BO_PHAN) > 0
+    assert (nut[ids["X"]]["so_lan"], nut[ids["Y"]]["so_lan"], nut[ids["Z"]]["so_lan"]) == (3, 3, 1)   # lỗi: lần 7 ngày
+    assert nut[ids["X"]]["do_sang"] == "sang" and nut[ids["CB"]]["do_sang"] == "vua"                 # cảnh báo: vừa
+    assert nut[ids["L"]]["so_lan"] == 2 and nut[ids["L"]]["do_sang"] == "sang"                       # bài: n bằng chứng
+    assert nut[ids["L2"]]["so_lan"] == 4                                                              # n = 0 → α+β−2
+    ka = nut["thuc-the/kenh/KA"]
+    assert ka["vung"] == -1 and ka["so_lan"] == ka["so_noi"] and ka["do_sang"] == "vua"
+    for nhom, tt_, ra in (("loi", C.DANG, "sang"), ("loi", C.TAI_PHAT, "sang"), ("loi", C.TAM_LANG, "vua"),
+                          ("loi", C.DA_HET, "mo"), ("canh-bao", C.DANG, "vua"), ("canh-bao", C.DA_HET, "mo"),
+                          ("bai-hoc", C.DANG_DUNG, "sang"), ("bai-hoc", C.UNG_VIEN, "vua"),
+                          ("bai-hoc", C.THU_THACH, "vua"), ("bai-hoc", C.NGHI, "mo")):
+        assert do_thi._do_sang(nhom, tt_) == ra, (nhom, tt_)
+
+
 def test_do_thi_tran_nut_va_dong(tmp_path, monkeypatch):
     goc, ids = _nao(tmp_path)
     monkeypatch.setattr(do_thi, "TRAN_NUT", 20)
@@ -284,3 +312,68 @@ def test_trang_do_thi_va_thu_vien_tu_chua():
             assert 'href="/nao-do-thi"' not in tep.read(), ten           # không còn tab riêng
     with io.open(os.path.join(truc_quan.GOC, "ui_web", "nao.html"), encoding="utf-8") as tep:
         assert 'src="/nao-do-thi?nhung=1"' in tep.read()                  # tab Não nhúng bản đồ ở đầu trang
+
+
+# ── bản 3D: thư viện ES module trong thư mục con của vendor ─────────────────
+
+def test_vendor_thu_muc_con_mjs_va_chan_lach(tmp_path):
+    from core import truc_quan
+    goc = tmp_path / "vendor"
+    (goc / "three" / "build").mkdir(parents=True)
+    (goc / "three" / "build" / "a.mjs").write_bytes(b"export {};")
+    (goc / "three" / "build" / "b.js").write_bytes(b"export {};")
+    (goc / "three" / "LICENSE").write_bytes(b"MIT")
+    (tmp_path / "ngoai.mjs").write_bytes(b"x")
+    g = str(goc)
+    assert truc_quan.tep_tinh("/vendor/three/build/a.mjs?v=183", g) == os.path.realpath(str(goc / "three" / "build" / "a.mjs"))
+    assert truc_quan.tep_tinh("/vendor/three/build/b.js", g) == os.path.realpath(str(goc / "three" / "build" / "b.js"))
+    assert truc_quan._LOAI_TINH[".mjs"].startswith("text/javascript") and truc_quan._LOAI_TINH[".js"].startswith("text/javascript")
+    for xau in ("/vendor/three/../../ngoai.mjs", "/vendor/three/%2e%2e/%2e%2e/ngoai.mjs", "/vendor/three/build/..%5C..%5C..%5Cngoai.mjs",
+                "/vendor/three/build/%2e%2e%2f%2e%2e%2f%2e%2e%2fngoai.mjs", "/vendor/three//build/a.mjs", "/vendor/three/./build/a.mjs",
+                "/vendor/three/LICENSE", "/vendor/three/build/", "/vendor/three/build/khong-co.mjs"):
+        assert truc_quan.tep_tinh(xau, g) is None, xau
+
+
+def test_trang_3d_thu_vien_tu_chua_va_chu_cho_nguoi_thuong():
+    from core import truc_quan
+    with _may_chu() as url:
+        trang = _lay(url + "/nao-do-thi")[1].decode("utf-8")
+        im = json.loads(re.search(r'<script type="importmap">(.*?)</script>', trang, re.S).group(1))["imports"]
+        assert im == {"three": "/vendor/three/build/three.module.min.js"}
+        js3 = sorted(set(re.findall(r"""["'](/vendor/[^"'?]+\.m?js)""", trang)) | {im["three"]})
+        assert "/vendor/3d-force-graph.min.js" in js3 and "/vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js" in js3
+        for duong in js3:                                                  # mọi tệp JS trang nạp (cả nạp động) đều phục vụ được
+            loai, js = _lay(url + duong)
+            assert loai.startswith("text/javascript") and js, duong
+        _, js = _lay(url + "/vendor/3d-force-graph.min.js")
+        assert js.startswith(b"/*! 3d-force-graph 1.80.0") and b"MIT License" in js[:3000] and b"ForceGraph3D" in js
+        _, js = _lay(url + "/vendor/three/build/three.module.min.js")
+        assert b"SPDX-License-Identifier: MIT" in js[:300] and b'from"./three.core.min.js"' in js
+        _, js = _lay(url + "/vendor/three/build/three.core.min.js")
+        assert b"SPDX-License-Identifier: MIT" in js[:300] and b'const t="183"' in js[:400]           # đúng r183
+        for xau in ("/vendor/three/../../core/truc_quan.py", "/vendor/three/%2e%2e/%2e%2e/core/truc_quan.py",
+                    "/vendor/three/build/..%5C..%5C..%5C..%5Ccore%5Ctruc_quan.py", "/vendor/three/LICENSE"):
+            with pytest.raises(urllib.error.HTTPError) as loi:
+                urllib.request.urlopen(url + xau, timeout=20)
+            assert loi.value.code == 404, xau
+    # addon bloom: import tương đối trỏ đúng tệp có thật, import trần chỉ có "three" (do importmap lo)
+    for duong in js3:
+        p = os.path.join(truc_quan.VENDOR, *duong[len("/vendor/"):].split("/"))
+        if not duong.startswith("/vendor/three/examples/"):
+            continue
+        with io.open(p, encoding="utf-8") as tep:
+            src = tep.read()
+        assert src.startswith("/* three.js r183") and "MIT" in src.splitlines()[0]
+        dichs = re.findall(r"""^(?:import\b[^\n]*?|\}\s*)from\s+['"]([^'"]+)['"]""", src, re.M)   # bỏ dòng @three_import
+        assert "three" in dichs, duong
+        for dich in dichs:
+            assert dich == "three" or os.path.isfile(os.path.normpath(os.path.join(os.path.dirname(p), dich))), (duong, dich)
+    assert os.path.isfile(os.path.join(truc_quan.VENDOR, "three", "LICENSE"))
+    for can in ("UnrealBloomPass", "OutputPass", "postProcessingComposer", ".85, .55, .12", "cooldownTicks", "Xem phẳng", "Xem 3D",
+                "localStorage", "giamChuyenDong", "WebGL2RenderingContext", "innerWidth < 900", "> 1000", "cameraPosition",
+                "<title>Bản đồ não", "emitParticle"):
+        assert can in trang, can
+    assert not re.search(r"""(src|href)=["']https?://|import\(["']https?://|"three": *"https?://""", trang)   # không CDN
+    thap = trang.lower()
+    for tu in ("nút", "đồ thị", "cạnh"):                                    # chữ cho người thường (cả chú thích)
+        assert tu not in thap, tu

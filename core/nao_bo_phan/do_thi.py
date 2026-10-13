@@ -7,6 +7,10 @@ vault chỉ đọc; không LLM, không ghi gì.
 
 NÚT: `nao-trung-tam` · 15 bộ phận (hub) · nơ-ron lỗi / cảnh báo / bài học (bỏ `nghi` và `da-het` im quá 14 ngày) ·
 thực thể (`thuc-the/*`) nối ≥ 2 nơ-ron. Quá `TRAN_NUT` nút thì giữ nơ-ron sôi động nhất (to nhất, gặp gần nhất).
+Trường cho bản 3D (13/10/2026, chỉ THÊM — bản 2D và session shopapi.vn đọc hợp đồng cũ): `vung` = số thứ tự bộ phận
+(0–14, màu + thuỳ não; -1 = trung tâm / thực thể) · `so_lan` = số lần não gặp/học (lỗi: số lần 7 ngày; bài học: số
+bằng chứng `n`, thiếu thì α+β−2; bộ phận: sự kiện 7 ngày; thực thể: số nơ-ron nối) · `do_sang` = `sang` (đang cháy,
+đang dùng) | `vua` (tạm lặng, ứng viên, thử thách, cảnh báo) | `mo` (đã hết, nghỉ).
 DÂY: trung tâm→bộ phận (`goc`) · bộ phận→nơ-ron (`thuoc`) · nơ-ron→thực thể (`the`, bảng `lien_ket`) · nơ-ron→nơ-ron
 (`noi` của bài tự rút) · ĐỒNG KÍCH HOẠT (`dong` — "cùng cháy thì nối"): hai nơ-ron có sự kiện trong cùng một SỰ CỐ
 (cùng gói; không gói thì cùng kênh × ngày) 14 ngày qua, trọng số = số sự cố chung ≥ `DONG_TOI_THIEU`, giữ `TRAN_DONG`
@@ -73,6 +77,14 @@ def _kich_bai(a: Any, b: Any, n: Any) -> float:
     return round(2 + 4 * tb * min(1.0, math.log1p(n or 0) / math.log1p(20)), 2)
 
 
+def _do_sang(nhom: str, tt: str) -> str:
+    """Độ sáng chấm trên bản 3D: sáng = đang cháy / đang dùng; mờ = đã hết / nghỉ; còn lại (tạm lặng, ứng viên, thử
+    thách, cảnh báo còn sống) vừa."""
+    if tt in (DA_HET, NGHI):
+        return "mo"
+    return "sang" if nhom != "canh-bao" and tt in (DANG, TAI_PHAT, DANG_DUNG) else "vua"
+
+
 def _dem(con: sqlite3.Connection, bay_gio: float) -> Dict[str, Any]:
     """Bộ đếm thanh trên: sự kiện 24h, lỗi đang cháy (không tính cảnh báo), bài đang dùng, giấc ngủ cuối."""
     mot = lambda sql, *ts: con.execute(sql, ts).fetchone()[0]  # noqa: E731
@@ -127,10 +139,13 @@ def _dong_kich_hoat(con: sqlite3.Connection, goc: str, giu: Dict[str, Dict[str, 
 def do_thi(goc: str, bay_gio: Optional[float] = None) -> Dict[str, Any]:
     bay_gio = bay_gio or time.time()
     bp_nut = {bp: {"id": bp, "nhom": "bo-phan", "ten": ten, "bo_phan": bp, "trang_thai": "", "kich_thuoc": 7.0,
-                   "mau": "bo-phan", "tep": bp + "/so-tay", "thu_tu": i, "su_kien_7": 0, "so_loi": 0, "so_bai": 0}
+                   "mau": "bo-phan", "tep": bp + "/so-tay", "thu_tu": i, "su_kien_7": 0, "so_loi": 0, "so_bai": 0,
+                   "vung": i, "so_lan": 0, "do_sang": "sang"}
               for i, (bp, ten) in enumerate(BO_PHAN.items())}
+    vung = {bp: i for i, bp in enumerate(BO_PHAN)}
     nut: List[Dict[str, Any]] = [{"id": TRUNG_TAM, "nhom": "trung-tam", "ten": "Não trung tâm", "bo_phan": "",
-                                  "trang_thai": "", "kich_thuoc": 16.0, "mau": "trung-tam", "tep": "_ban-do"}]
+                                  "trang_thai": "", "kich_thuoc": 16.0, "mau": "trung-tam", "tep": "_ban-do",
+                                  "vung": -1, "so_lan": 0, "do_sang": "sang"}]
     nut += bp_nut.values()
     day = [{"source": TRUNG_TAM, "target": bp, "loai": "goc", "trong_so": 1} for bp in BO_PHAN]
     ra = {"luc": time.strftime("%Y-%m-%d %H:%M:%S"), "co_kho": os.path.isfile(duong_db(goc)), "nut": nut, "day": day,
@@ -151,11 +166,14 @@ def do_thi(goc: str, bay_gio: Optional[float] = None) -> Dict[str, Any]:
                 nhom = "canh-bao" if muc == CANH_BAO else "loi"
                 kich = _kich_loi(so7, s48, nhom == "canh-bao")
                 mau = "canh-bao" if nhom == "canh-bao" and tt != DA_HET else tt
+                lan = int(so7 or 0)
             else:
                 nhom, kich, mau = "bai-hoc", _kich_bai(a, b, n), tt
+                lan = int(n or 0) or max(0, int(round(float(a or 1) + float(b or 1) - 2)))
             nr.append({"id": id_, "nhom": nhom, "ten": _ngan(cau), "cau": _ngan(cau, 240), "bo_phan": bp,
                        "trang_thai": tt, "kich_thuoc": kich, "mau": mau, "tep": id_, "kenh": _json(kenh, []),
-                       "nguon": nguon, "lan_cuoi": int(lan_cuoi or 0)})
+                       "nguon": nguon, "lan_cuoi": int(lan_cuoi or 0), "vung": vung[bp], "so_lan": lan,
+                       "do_sang": _do_sang(nhom, tt)})
         nr.sort(key=lambda x: (-x["kich_thuoc"], -x["lan_cuoi"], x["id"]))
         nr = nr[:max(0, TRAN_NUT - len(nut) - TRAN_THE)]
         giu = {x["id"]: x for x in nr}
@@ -173,7 +191,8 @@ def do_thi(goc: str, bay_gio: Optional[float] = None) -> Dict[str, Any]:
             loai_t, _, ten = t[len("thuc-the/"):].partition("/")
             nr.append({"id": t, "nhom": "thuc-the", "ten": "{0} {1}".format(THUC_THE.get(loai_t, loai_t), ten),
                        "bo_phan": "", "trang_thai": loai_t, "kich_thuoc": round(1.5 + min(3.0, the_dem[t] / 4.0), 2),
-                       "mau": "thuc-the", "tep": t, "so_noi": the_dem[t]})
+                       "mau": "thuc-the", "tep": t, "so_noi": the_dem[t], "vung": -1, "so_lan": the_dem[t],
+                       "do_sang": "vua"})
         nut += nr
         dong = _dong_kich_hoat(con, goc, giu, moc)
         the_co = set(the)
@@ -184,7 +203,8 @@ def do_thi(goc: str, bay_gio: Optional[float] = None) -> Dict[str, Any]:
         for bp, n in con.execute("SELECT bo_phan, COUNT(*) FROM su_kien WHERE luc >= ? GROUP BY 1",
                                  (bay_gio - 7 * NGAY,)):
             if bp in bp_nut:
-                bp_nut[bp].update(su_kien_7=n, kich_thuoc=round(7 + min(7.0, math.sqrt(n) / 3), 2))
+                bp_nut[bp].update(su_kien_7=n, so_lan=n, kich_thuoc=round(7 + min(7.0, math.sqrt(n) / 3), 2))
+        nut[0]["so_lan"] = sum(x["su_kien_7"] for x in bp_nut.values())
         for x in giu.values():
             if x["nhom"] == "loi" and x["trang_thai"] in (DANG, TAI_PHAT):
                 bp_nut[x["bo_phan"]]["so_loi"] += 1

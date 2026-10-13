@@ -7,11 +7,13 @@ không bấm, không sửa gì. Máy chủ nhỏ RIÊNG (không đụng trạm 8
     python -m core.truc_quan --json     # in ảnh chụp dữ liệu (kiểm)
     python -m core.truc_quan --cong 8791   # cổng khác (mặc định 8790)
 Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`core.nao_truc_quan`; panel Não bộ phận đọc
-`/nao-bo-phan.json` — `core.nao_bo_phan.truc_quan`) · `/nao-do-thi` đồ thị thần kinh não bộ phận (force-graph;
-`/nao-bo-phan/do-thi.json`, `/nao-bo-phan/song.json`, `/nao-bo-phan/no-ron.json` — `core.nao_bo_phan.do_thi`)
+`/nao-bo-phan.json` — `core.nao_bo_phan.truc_quan`) · `/nao-do-thi` bản đồ não bộ phận (3D: 3d-force-graph + three
+r183 bloom; 2D dự phòng: force-graph; `/nao-bo-phan/do-thi.json`, `/nao-bo-phan/song.json`, `/nao-bo-phan/no-ron.json`
+— `core.nao_bo_phan.do_thi`)
 · `/phong-thi-nghiem` phòng thí nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
 `core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu
-Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2 tự chứa — không CDN; máy IPv6-only).
+Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2, thư viện JS/ES module kể cả thư mục con
+như `vendor/three/...` — tự chứa, không CDN; máy IPv6-only).
 """
 from __future__ import annotations
 
@@ -245,8 +247,8 @@ def chien_truong_nho(han: float = 600.0) -> Dict[str, Any]:
 
 # Tệp tĩnh giao diện (phông, CSS/JS dùng chung) — chỉ thư mục ui_web/vendor, chỉ đuôi trong danh sách trắng.
 VENDOR = os.path.join(GOC, "ui_web", "vendor")
-_LOAI_TINH = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2",
-              ".ttf": "font/ttf", ".svg": "image/svg+xml"}
+_LOAI_TINH = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+              ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".ttf": "font/ttf", ".svg": "image/svg+xml"}
 
 
 def tep_tinh(duong_url: str, goc: Optional[str] = None) -> Optional[str]:
