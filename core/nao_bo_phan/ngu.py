@@ -233,6 +233,16 @@ def _muc_cap(ds: List[Dict[str, Any]], toi_da: int = 10) -> List[str]:
 #: Thuộc tính của sự kiện `chon` đem so với kết quả cùng gói (mỗi thuộc tính một nhóm dòng).
 _THUOC_CHON = ("cong_thuc", "nguon", "loai", "tuyen", "cum")
 
+#: 13/10/2026 — video < ngưỡng hiển thị của `core.kenh_khong_phat` (50 lúc ≥ 72h) là YouTube KHÔNG PHÁT (lỗi mail /
+#: kênh mới), không phải content thua: ngủ đầu tiên rút "TL5 tránh tuyến người cao tuổi 3/3 trượt" (1–26 hiển thị)
+#: trong khi đó là chính ngách của TL5. Kết quả như vậy không vào mục "lựa chọn → kết quả".
+NGUONG_KHONG_PHAT = 50.0
+
+
+def khong_duoc_phat(e: Dict[str, Any]) -> bool:
+    gt = (e.get("so") or {}).get("ket_gia_tri")
+    return isinstance(gt, (int, float)) and gt < NGUONG_KHONG_PHAT
+
 
 def _muc_lua_chon(ds: List[Dict[str, Any]]) -> List[str]:
     """Lựa chọn → kết quả cùng mã gói (vd. công thức / loại / tuyến / cụm của nguồn đã chọn → ván thắng / trung bình /
@@ -241,7 +251,7 @@ def _muc_lua_chon(ds: List[Dict[str, Any]]) -> List[str]:
     nhom: Dict[Tuple[str, str], Counter] = {}
     vd: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     for e in ds:
-        if e["loai"] == "ket_qua" and e["ma_goi"] in chon and e["so"].get("ket"):
+        if e["loai"] == "ket_qua" and e["ma_goi"] in chon and e["so"].get("ket") and not khong_duoc_phat(e):
             c = chon[e["ma_goi"]]["so"]
             for t in _THUOC_CHON:
                 gt = c.get(t)
@@ -285,12 +295,16 @@ def to_so(con: sqlite3.Connection, bp: str, bay_gio: float, moi: int = 0, tran: 
     """Bảng số của bộ phận trong `NGAY_TO_SO` ngày qua — mã tính, mỗi dòng có mã `#id`; cắt ≤ `tran` ký tự (mục
     quan trọng trước)."""
     ds = doc_su_kien(con, bp, bay_gio - NGAY_TO_SO * NGAY)
+    bo_kp = sum(1 for e in ds if e["loai"] == "ket_qua" and khong_duoc_phat(e))
+    ds = [e for e in ds if not (e["loai"] == "ket_qua" and khong_duoc_phat(e))]
     dem = Counter(e["loai"] for e in ds)
     kq = Counter(ket(e) for e in ds)
     muc = [
         ("TỔNG", ["- {0} sự kiện trong {1} ngày ({2}) · mới từ lần ngủ trước: {3} · được {4} · hỏng {5} · kênh: {6}"
                   .format(len(ds), NGAY_TO_SO, ", ".join("{0} {1}".format(k, v) for k, v in sorted(dem.items())),
-                          moi, kq["duoc"], kq["hong"], ", ".join(sorted({e["kenh"] for e in ds if e["kenh"]})) or "—")]),
+                          moi, kq["duoc"], kq["hong"], ", ".join(sorted({e["kenh"] for e in ds if e["kenh"]})) or "—")]
+         + (["- đã BỎ {0} kết quả video < {1:.0f} hiển thị (YouTube không phát — lỗi mail/kênh mới, không phải content "
+             "thua; đừng rút bài học content từ kênh ấy)".format(bo_kp, NGUONG_KHONG_PHAT)] if bo_kp else [])),
         ("LỖI LẶP (theo chữ ký; sự cố = kênh × gói/ngày; kèm lần sửa và số lần trước/sau sửa)",
          _muc_loi_lap(con, bp, ds, bay_gio)),
         ("CẶP HỎNG ⇄ ĐƯỢC CÙNG HOÀN CẢNH (cùng khâu/nguồn, cùng kênh, cách ≤ {0} ngày)".format(NGAY_CAP),

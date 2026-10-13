@@ -273,6 +273,26 @@ def test_kiem_lenh_bang_chung_trung_va_luat_chu(tmp_path):
         con.close()
 
 
+def test_bang_so_bo_ket_qua_video_khong_duoc_phat(tmp_path):
+    """13/10/2026: video < 50 hiển thị (YouTube không phát — lỗi mail) không phải content thua → bảng số bỏ."""
+    goc = _goc(tmp_path)
+    bg = time.time()
+    for i, (k, gt, kq) in enumerate((("KA", 26, "truot"), ("KA", 2, "truot"), ("KB", 5170, "thang"),
+                                     ("KB", 138, "truot"))):
+        goi = "{0}-{1:04d}".format(k, i)
+        nbp.ghi(goc, "chon-content", "chon", kenh=k, ma_goi=goi, so={"tuyen": "tuyen-x"}, khoa="c%d" % i,
+                luc=bg - 3600)
+        nbp.ghi(goc, "chon-content", "ket_qua", kenh=k, ma_goi=goi, so={"ket": kq, "ket_gia_tri": gt},
+                khoa="k%d" % i, luc=bg - 600)
+    con = kho.mo(goc)
+    try:
+        so = ngu_mod.to_so(con, "chon-content", bg)
+    finally:
+        con.close()
+    assert "đã BỎ 2 kết quả video < 50 hiển thị" in so
+    assert "tuyen=tuyen-x → thang 1, truot 1 (n 2)" in so or "tuyen=tuyen-x → truot 1, thang 1 (n 2)" in so
+
+
 def test_bang_chung_mot_kenh_thi_tu_gan_kenh(tmp_path):
     """13/10/2026: bằng chứng chỉ của MỘT kênh mà LLM quên `kenh/…` → mã tự gắn; nhiều kênh → để trống (bài gộp)."""
     goc = _goc(tmp_path)
