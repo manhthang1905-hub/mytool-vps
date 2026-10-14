@@ -28,6 +28,9 @@ Chạy:  python vm/thiet_lap_kenh_dom.py --kenh TL5-T7 [--thu]
        --kiem-thuong-hieu [--dat-hinh-mo]   (14/10) CHỈ ĐỌC hình mờ / trailer / video nổi bật / số danh sách phát →
                   `<K>.thuong-hieu.json` + ảnh; `--dat-hinh-mo`: kênh THIẾU hình mờ thì đặt (toàn bộ video), đọc lại.
                   Chạy được cả kênh chính (không cần `thiet_lap_kenh: true`, không ghi sổ `<K>.json`).
+       --dat-trang-chu   (14/10, chủ duyệt) bật Thẻ Trang chủ + video giới thiệu cho người CHƯA đăng ký (video thắng nhất
+                  của chính kênh: hiển thị × tỷ lệ bấm, dài, công khai, >= 7 ngày) + video nổi bật (nhì) + phần «Video phổ
+                  biến»; đọc lại sau Xuất bản. --dat-mo-ta: kênh đang TRỐNG mô tả thì viết (LLM) + đặt. Kèm --khong-luu = điền rồi bỏ.
 Mã thoát: 0 xong/đã đủ · 10 hoãn · 20 cần người · 30 không cần chạy · 1 lỗi.
 """
 
@@ -806,7 +809,8 @@ _JS_LOI_XUAT_BAN = "(() => {" + _JS_CHUNG + r"""
 
 _JS_HOP_THOAI ="(() => {" + _JS_CHUNG + r"""
   const ds = qa('tp-yt-paper-dialog, ytcp-dialog, ytcp-confirmation-dialog, [role=dialog], [role=alertdialog]').filter(hien);
-  return ds.map(d => (d.innerText || '').trim().slice(0, 600)).join('\n----\n');
+  // 14/10: bỏ hộp KHÔNG có chữ (vỏ `ytcp-dialog` của hộp chọn video thẻ Trang chủ vẫn «hiện» khi đã đóng)
+  return ds.map(d => (d.innerText || '').trim().slice(0, 600)).filter(x => x).join('\n----\n');
 })()"""
 
 _JS_CAI_DAT_KENH = "(() => {" + _JS_CHUNG + r"""
@@ -868,7 +872,7 @@ _JS_MUC_MENU = """((reSrc) => { const Y = window.__yd, re = new RegExp(reSrc, 'i
 THOI_GIAN_HINH_MO = {"entire-video-radio-button": "toan_bo", "ENTIRE": "toan_bo", "end-of-video-radio-button": "cuoi", "END": "cuoi",
                      "custom-start-time-radio-button": "tuy_chinh", "START": "tuy_chinh"}
 PHUT_CAM_GIO_TRON = 5                     # :55–:05 — agent mở phiên đăng quanh giờ tròn, không chen Chrome kênh lúc đó
-DU_KIEN_KIEM_PHUT, DU_KIEN_DAT_PHUT = 8, 14
+DU_KIEN_KIEM_PHUT, DU_KIEN_DAT_PHUT, DU_KIEN_TRANG_CHU_PHUT = 8, 14, 15
 RE_TRAILER = r"(giới thiệu kênh|người chưa đăng ký|channel trailer|haven.?t subscribed|予告編|登録していない)"
 RE_NOI_BAT = r"(video nổi bật|người đăng ký quay lại|featured video|returning subscriber|おすすめ動画|リピーター)"
 RE_NUT_THEM = r"^(\+\s*)?(thêm|add|追加)$"
@@ -972,6 +976,208 @@ def lech_ho_so(truoc: Any, sau: Any) -> List[str]:
     return ra
 
 
+# ── trang chủ kênh (14/10, chủ duyệt): bật Thẻ Trang chủ + video giới thiệu (người CHƯA đăng ký) + video nổi bật (người
+# đăng ký quay lại) + phần «Video phổ biến»; mô tả kênh cho kênh đang để TRỐNG. Mục đích: thêm người đăng ký (nghẽn YPP).
+TUOI_TOI_THIEU_NGAY = 7                   # video giới thiệu: đăng đủ 7 ngày (số hiển thị/bấm đã chín)
+DAI_TOI_THIEU_GIAY = 181                  # video DÀI (Shorts <= 180 giây)
+SO_UNG_VIEN_TRA = 6                       # tra «Công khai» trên Studio tối đa ngần này ứng viên đầu bảng
+MO_TA_KENH_TOI_THIEU, MO_TA_KENH_TOI_DA = 150, 300
+RE_PHAN_PHO_BIEN = r"(video phổ biến|popular videos|人気の動画|인기 동영상)"
+
+
+def giay_dai(s: Any) -> Optional[int]:
+    """«13:05» / «1:02:03» → giây; không đọc được → None (hàm thuần)."""
+    p = str(s or "").strip().split(":")
+    if not 2 <= len(p) <= 3 or not all(x.strip().isdigit() for x in p):
+        return None
+    g = 0
+    for x in p:
+        g = g * 60 + int(x)
+    return g
+
+
+def ty_le_so(s: Any) -> float:
+    """«5.29%» / «5,29 %» → 0.0529; trống/lạ → 0.0."""
+    m = re.search(r"(\d+(?:[.,]\d+)?)", str(s or ""))
+    return float(m.group(1).replace(",", ".")) / 100.0 if m else 0.0
+
+
+def so_nguyen(s: Any) -> int:
+    """«35,330» / «35330» / «» → số nguyên (0 nếu không đọc được)."""
+    d = re.sub(r"[^\d]", "", str(s or "").split(".")[0])
+    return int(d) if d else 0
+
+
+def xep_video_gioi_thieu(hang, ngay_bat_dau: Any, hom_nay, toi_thieu_ngay: int = TUOI_TOI_THIEU_NGAY,
+                         dai_toi_thieu: int = DAI_TOI_THIEU_GIAY) -> List[Dict[str, Any]]:
+    """Hàng `chi-so/bang-tom-tat.csv` (csv.DictReader) → ứng viên video giới thiệu, TỐT NHẤT trước theo
+    «Lượt hiển thị» × «Tỷ lệ bấm» (≈ lượt bấm từ hiển thị). Chỉ video DÀI, đăng từ `ngay_bat_dau` (kenh.yaml), đủ
+    `toi_thieu_ngay` tuổi tính tới `hom_nay` (date), có lượt bấm > 0; trùng mã giữ một. Hàm thuần."""
+    try:
+        moc = datetime.strptime(str(ngay_bat_dau or "").strip()[:10], "%Y-%m-%d").date() if ngay_bat_dau else None
+    except ValueError:
+        moc = None
+    ra: Dict[str, Dict[str, Any]] = {}
+    for h in hang or []:
+        if not isinstance(h, dict):
+            continue
+        vid = str(h.get("Mã video") or "").strip()
+        try:
+            ngay = datetime.strptime(str(h.get("Ngày đăng") or "").strip()[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        dai = giay_dai(h.get("Dài"))
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", vid) or dai is None or dai < dai_toi_thieu:
+            continue
+        if (moc and ngay < moc) or (hom_nay - ngay).days < toi_thieu_ngay:
+            continue
+        ht, tl = so_nguyen(h.get("Lượt hiển thị")), ty_le_so(h.get("Tỷ lệ bấm"))
+        diem = round(ht * tl, 1)
+        if diem <= 0 or (vid in ra and ra[vid]["diem"] >= diem):
+            continue
+        ra[vid] = {"vid": vid, "tieu_de": str(h.get("Tiêu đề") or "").strip(), "ngay": ngay.isoformat(), "dai": dai,
+                   "hien_thi": ht, "ty_le": tl, "diem": diem}
+    return sorted(ra.values(), key=lambda x: (-x["diem"], -x["hien_thi"], x["vid"]))
+
+
+def chon_gioi_thieu(ung_vien, loai: Dict[str, str]) -> Tuple[Optional[dict], Optional[dict], List[str]]:
+    """(video giới thiệu, video nổi bật, ghi chú bỏ): hai ứng viên ĐẦU BẢNG mà Studio đọc CHẮC là «cong_khai» (`loai`:
+    mã → loại hàng của `MayDangDom.tra_kenh`). Không thấy / riêng tư / hẹn giờ / không rõ → bỏ qua, ghi lý do. Hàm thuần."""
+    chon: List[dict] = []
+    bo: List[str] = []
+    for u in ung_vien or []:
+        if len(chon) >= 2:
+            break
+        lo = (loai or {}).get(u.get("vid"))
+        if lo == "cong_khai":
+            chon.append(u)
+        else:
+            bo.append("{0} «{1}»: {2}".format(u.get("vid"), str(u.get("tieu_de") or "")[:40],
+                                            "không thấy trên Studio" if not lo else "Studio: " + str(lo)))
+    return (chon[0] if chon else None), (chon[1] if len(chon) > 1 else None), bo
+
+
+def co_phan_pho_bien(ten_phan) -> bool:
+    """Bố cục trang chủ (danh sách tên phần / chữ) đã có phần «Video phổ biến» chưa."""
+    ds = [ten_phan] if isinstance(ten_phan, str) else list(ten_phan or [])
+    return any(re.search(RE_PHAN_PHO_BIEN, str(x or ""), re.I) for x in ds)
+
+
+#: Mục của menu «Thêm phần kênh» (đo 14/10: `tp-yt-paper-item[test-id=SHELF_TYPE_…]`, mờ = phần đã có).
+RE_MUC_TRAILER = r"^(video giới thiệu kênh|channel trailer|チャンネル予告編)"
+RE_MUC_NOI_BAT = r"^(video nổi bật|featured video|おすすめ動画)"
+RE_MUC_PHO_BIEN = r"^(video phổ biến|popular videos|人気の動画)$"
+RE_NHAN_TIEU_DE = r"(tiêu đề video|video title|動画のタイトル)\s*[:：]?\s*"
+
+
+def _tieu_diem(ds: Any) -> Dict[str, Any]:
+    """Các bản `ytcp-spotlight-*-video-item` → {co, tieu_de, ma}: item HIỆN = đã đặt; tiêu đề = chữ sau «Tiêu đề video»."""
+    hien = [x for x in (ds or []) if isinstance(x, dict) and x.get("hien")]
+    if not hien:
+        return {"co": False, "tieu_de": "", "ma": []}
+    chu = str(hien[0].get("chu") or "")
+    m = re.search(RE_NHAN_TIEU_DE + r"(.+)$", chu, re.I)
+    return {"co": True, "tieu_de": (m.group(2) if m else chu).strip(), "ma": list(hien[0].get("ma") or [])}
+
+
+def tom_trang_chu(du: Any) -> Dict[str, Any]:
+    """Bản đọc `_JS_BO_CUC_TC` → {bat (None = không đọc được công tắc), trailer, noi_bat ({co, tieu_de, ma}), phan (tên các
+    phần bố cục đang hiện, bỏ «(số)» + thời lượng), pho_bien, them_tat, hop_chon}. Hàm thuần."""
+    du = du if isinstance(du, dict) else {}
+    phan = []
+    for x in du.get("phan") or []:
+        if not isinstance(x, dict) or not x.get("hien"):
+            continue
+        chu = str(x.get("chu") or "").strip()
+        m = re.match(r"^(.*?)\s*\(\d+\)", chu)
+        phan.append((m.group(1) if m else chu[:40]).strip())
+    them = du.get("them") if isinstance(du.get("them"), dict) else None
+    return {"bat": du.get("bat") if isinstance(du.get("bat"), bool) else None, "trailer": _tieu_diem(du.get("trailer")),
+            "noi_bat": _tieu_diem(du.get("noi_bat")), "phan": phan, "pho_bien": co_phan_pho_bien(phan),
+            "them_tat": (them or {}).get("tat") if them else None, "hop_chon": bool(du.get("hop_chon"))}
+
+
+def khop_tieu_de(a: Any, b: Any) -> bool:
+    """Tiêu đề Studio hiện ↔ tiêu đề mong: giống sau chuẩn hoá, hoặc một bên bị cắt «…» mà phần đầu (>= 20 ký tự) trùng."""
+    x, y = (chuan(s).rstrip("….").strip() for s in (a, b))
+    if not x or not y:
+        return False
+    if x == y:
+        return True
+    ngan, dai = sorted((x, y), key=len)
+    return len(ngan) >= 20 and dai.startswith(ngan)
+
+
+def chon_muc_phan(ds: Any, re_chu: str) -> Optional[dict]:
+    """Mục menu «Thêm phần kênh» khớp `re_chu` (chữ đã chuẩn): mục đầu tiên khớp, kèm `tat` để nơi gọi quyết. Hàm thuần."""
+    for x in ds or []:
+        if isinstance(x, dict) and re.search(re_chu, chuan(x.get("chu")), re.I):
+            return x
+    return None
+
+
+def chon_the_video(the: Any, vid: str) -> Optional[dict]:
+    """Thẻ trong hộp «Chọn một video cụ thể» có ĐÚNG mã `vid` (ảnh thu nhỏ `/vi/<mã>/`), đang hiện, không mờ. Nhiều hơn
+    một thẻ trùng mã = không rõ → None (không đoán). Hàm thuần."""
+    ds = [x for x in (the or []) if isinstance(x, dict) and vid and x.get("ma") == vid and x.get("hien") and not x.get("tat")]
+    return ds[0] if len(ds) == 1 else None
+
+
+def lam_sach_mo_ta_kenh(chu: Any) -> str:
+    """Trả lời LLM → mô tả kênh: bỏ rào ```/ngoặc kép bao ngoài, gộp dòng trống thừa, cắt khoảng trắng đầu/cuối dòng."""
+    s = unicodedata.normalize("NFC", str(chu or "")).replace("\r\n", "\n").replace("\r", "\n").strip()
+    s = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", s).strip()
+    if len(s) >= 2 and s[0] + s[-1] in ('""', "「」", "『』", "“”"):
+        s = s[1:-1].strip()
+    s = "\n".join(d.strip() for d in s.split("\n"))
+    return re.sub(r"\n{3,}", "\n\n", s).strip()
+
+
+def do_dai_mo_ta(chu: Any) -> int:
+    """Số ký tự mô tả (không tính xuống dòng)."""
+    return len(str(chu or "").replace("\n", ""))
+
+
+def kiem_mo_ta_kenh(chu: Any, toi_thieu: int = MO_TA_KENH_TOI_THIEU, toi_da: int = MO_TA_KENH_TOI_DA) -> List[str]:
+    """Lỗi của mô tả kênh tiếng Nhật ([] = đạt): độ dài, phải có kana, không link/email/@handle/markdown,
+    không dấu < > (Studio từ chối). Hàm thuần."""
+    s = str(chu or "")
+    loi = []
+    n = do_dai_mo_ta(s)
+    if not toi_thieu <= n <= toi_da:
+        loi.append("dài {0} ký tự (cần {1}–{2})".format(n, toi_thieu, toi_da))
+    if not re.search(r"[぀-ヿ]", s):
+        loi.append("không phải tiếng Nhật (không có kana)")
+    if re.search(r"https?://|www\.|\S+@\S+\.\w+|(^|\s)@\w", s):
+        loi.append("có link / email / @handle")
+    if re.search(r"[<>]", s):
+        loi.append("có dấu < > (Studio từ chối)")
+    if re.search(r"\*\*|^#+\s|```", s, re.M):
+        loi.append("có markdown")
+    return loi
+
+
+def loi_nhac_mo_ta_kenh(ten_kenh: str, kh: Dict[str, Any], tieu_de_thang, mau) -> str:
+    """Lời nhắc viết MÔ TẢ KÊNH (tiếng Nhật, 150–300 ký tự) theo bản sắc kênh (kenh.yaml `ten`/`luat_chon`/`giong_van`),
+    tiêu đề video THẮNG của chính kênh và mô tả THẬT của kênh anh em (bắt giọng, không chép chữ). Hàm thuần."""
+    vd = "\n".join("- {0}".format(" / ".join(str(m).split("\n"))[:400]) for m in (mau or []) if str(m or "").strip())
+    td = "\n".join("- {0}".format(str(t)[:120]) for t in (tieu_de_thang or []) if str(t or "").strip())
+    return (
+        "You write the YouTube CHANNEL DESCRIPTION («概要») of a Japanese psychology channel. Reply with the description text only.\n"
+        "CHANNEL FACTS\n- current YouTube channel name (if you name the channel, use EXACTLY this; never invent another name): {ten}\n"
+        "- identity / angle (internal note, may be partly Vietnamese — do not translate it literally): {goc}\n"
+        "- what the channel is about: {luat}\n- voice and tone: {giong}\n"
+        "- the channel's best-performing video titles (the promise viewers already click on):\n{td}\n"
+        "{vd_}"
+        "WRITE: Japanese, {a}-{b} characters, 2-4 short paragraphs (line breaks allowed). First sentence = who the channel is for + the "
+        "promise (understanding yourself and the people around you through psychology / brain science, explained gently). Then what "
+        "viewers get from the videos, then a warm, natural invitation to subscribe (チャンネル登録). Polite です/ます, calm and warm, no hype, "
+        "no exaggerated claims, no medical / therapeutic advice. No URLs, no email, no @handles, no hashtags, no emoji, no markdown, no < or >.\n"
+    ).format(ten=ten_kenh or "(unknown)", goc=str(kh.get("ten") or "")[:200], luat=str(kh.get("luat_chon") or "(none)")[:700],
+             giong=str(kh.get("giong_van") or "")[:300], td=td or "- (none)", a=MO_TA_KENH_TOI_THIEU, b=MO_TA_KENH_TOI_DA,
+             vd_=("DESCRIPTIONS OF SIBLING CHANNELS (match their tone and care, NOT their wording):\n" + vd + "\n") if vd else "")
+
+
 _JS_HINH_MO = "(() => {" + _JS_CHUNG + r"""
   const h = q('ytcp-video-watermark-upload'); if (!h) return null;
   try { h.scrollIntoView({block: 'center'}); } catch (e) {}
@@ -1004,6 +1210,47 @@ _JS_DEM_DS_PHAT = "(() => {" + _JS_CHUNG + r"""
   const t = (s.innerText || '').trim();
   return {hang: hang, ten: [...new Set(ten)].slice(0, 60), chan: ft ? (ft.innerText || '').trim().slice(0, 200) : t.slice(-200),
           trong: hang === 0 && qa('ytcp-button.content-button', s).some(hien), duoi: t.slice(-200)};
+})()"""
+
+#: Nút «Xuất bản» của trang Tuỳ chỉnh đã mờ (true) / còn sáng (false) / không thấy (null).
+_JS_XUAT_BAN_TAT = "(() => {" + _JS_CHUNG + r"""
+  const b = q('ytcp-button#publish-button'); if (!b) return null; const i = q('button', b) || b;
+  return [b, i].some(e => e.hasAttribute('disabled') || e.getAttribute('aria-disabled') === 'true');
+})()"""
+
+#: Thẻ Trang chủ (đo 14/10 TL2-T7, thăm dò không lưu): công tắc `ytcp-switch#home-tab-enabled-switch button[role=switch]`
+#: (aria-checked), nút `ytcp-button#add-section-button`, phần bố cục `ytcp-shelf-list-item`, tiêu điểm
+#: `ytcp-spotlight-trailer-video-item` / `ytcp-spotlight-featured-video-item` (có sẵn trong DOM, ẩn khi chưa đặt).
+_JS_BO_CUC_TC = "(() => {" + _JS_CHUNG + r"""
+  const sw = q('ytcp-switch#home-tab-enabled-switch button[role=switch]');
+  const them = q('ytcp-button#add-section-button'), them_i = them ? (q('button', them) || them) : null;
+  const ma = e => [...qa('img', e).map(i => i.src || ''), ...qa('[style*="/vi"]', e).map(x => x.getAttribute('style') || '')]
+    .map(s => (s.match(/\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})/) || [])[1]).filter(x => x);
+  const muc = sel => qa(sel).map(e => ({tag: e.tagName.toLowerCase(), hien: hien(e), chu: (e.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 200), ma: ma(e)}));
+  return {bat: sw ? sw.getAttribute('aria-checked') === 'true' : null, ke: !!q('ytcp-shelves-section'),
+    them: them ? {hien: hien(them), tat: [them, them_i].some(e => e.hasAttribute('disabled') || e.getAttribute('aria-disabled') === 'true')} : null,
+    phan: muc('ytcp-shelf-list-item'), trailer: muc('ytcp-spotlight-trailer-video-item'), noi_bat: muc('ytcp-spotlight-featured-video-item'),
+    hop_chon: qa('ytcp-video-pick-dialog tp-yt-paper-dialog').some(hien)};
+})()"""
+
+#: Menu «Thêm phần kênh» đang mở: mục `tp-yt-paper-item` (chữ, test-id, mờ, tâm điểm).
+_JS_MENU_PHAN = "(() => {" + _JS_CHUNG + r"""
+  const lb = qa('tp-yt-paper-listbox, ytcp-text-menu').filter(hien).find(e => qa('tp-yt-paper-item[test-id^="SHELF_TYPE"]', e).length);
+  if (!lb) return null;
+  return qa('tp-yt-paper-item', lb).filter(hien).map(e => { const r = e.getBoundingClientRect();
+    return {chu: (e.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80), test_id: e.getAttribute('test-id') || '',
+      tat: e.hasAttribute('disabled') || e.getAttribute('aria-disabled') === 'true', x: r.x + r.width / 2, y: r.y + r.height / 2}; });
+})()"""
+
+#: Hộp «Chọn một video cụ thể» (`ytcp-video-pick-dialog` — MỖI ô tiêu điểm một bản, chỉ bản đang HIỆN): thẻ
+#: `ytcp-entity-card` — tiêu đề, MÃ video (ảnh nền `/vi/<mã>/`), mờ, tâm điểm.
+_JS_THE_VIDEO = "(() => {" + _JS_CHUNG + r"""
+  const dlg = qa('ytcp-video-pick-dialog').find(d => qa('tp-yt-paper-dialog', d).some(hien));
+  if (!dlg) return null;
+  return {tim: (q('input#search-yours', dlg) || {}).value || '', the: qa('ytcp-entity-card', dlg).filter(hien).slice(0, 60).map(c => {
+    const r = c.getBoundingClientRect(), st = [...qa('[style*="/vi"]', c).map(x => x.getAttribute('style') || ''), ...qa('img', c).map(i => i.src || '')].join(' ');
+    return {tieu_de: ((q('.title', c) || c).innerText || '').trim().slice(0, 160), ma: (st.match(/\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})/) || [])[1] || '',
+      tat: c.getAttribute('aria-disabled') === 'true', hien: true, x: r.x + r.width / 2, y: r.y + r.height / 2}; })};
 })()"""
 
 
@@ -1714,9 +1961,10 @@ class Studio:
         except LoiMuc:
             pass
 
-    def xu_ly_sau_xuat_ban(self, ghi, han: float = 40.0) -> str:
+    def xu_ly_sau_xuat_ban(self, ghi, han: float = 40.0, chi_nut: bool = False) -> str:
         """Chờ Xuất bản xong: gặp hộp xác nhận thì bấm Xác nhận (nếu hộp ĐÒI xác minh thì dừng người); xong khi nút Xuất bản mờ lại.
-        Trả '' nếu ổn, hoặc CHỮ LỖI của Studio (toast/hộp/ô báo lỗi) — khi đó Xuất bản coi như THẤT BẠI."""
+        Trả '' nếu ổn, hoặc CHỮ LỖI của Studio (toast/hộp/ô báo lỗi) — khi đó Xuất bản coi như THẤT BẠI.
+        `chi_nut` (thẻ Trang chủ): chỉ nhìn nút Xuất bản, không cần form Hồ sơ."""
         het = time.monotonic() + han
         thay: List[str] = []
         while time.monotonic() < het:
@@ -1746,6 +1994,10 @@ class Studio:
                     if loi:
                         return loi
                     raise LoiMuc("hộp lạ sau Xuất bản, không có nút xác nhận: " + re.sub(r"\s+", " ", ht)[:120])
+            if chi_nut:
+                if self.js(_JS_XUAT_BAN_TAT) is True:
+                    return ""
+                continue
             du = self.js(_JS_HO_SO)
             if du is not None and du.get("xuat_ban_tat"):
                 return ""
@@ -1891,6 +2143,292 @@ class Studio:
         else:
             ra["ly_do"] = "; ".join(x for x in (ra["ly_do"], "đọc lại sau Xuất bản: có={0} hiển thị={1!r}".format(
                 hm3["co"], hm3["thoi_gian"]), ("lệch: " + ", ".join(lech)) if lech else "") if x)
+        return ra
+
+    def dat_mo_ta(self, chu: str, ghi, khong_luu: bool = False) -> dict:
+        """CHỈ đặt MÔ TẢ cho kênh đang để TRỐNG (14/10, chủ duyệt TL1): gõ → đọc lại ô → so tên/handle/logo/banner với lúc
+        mở trang (lệch = bỏ thay đổi) → Xuất bản → TẢI LẠI đọc lại. Ô đã có chữ → KHÔNG đụng. `khong_luu`: gõ rồi bỏ.
+        Trả {ket: dat|hong|bo|khong_luu, ly_do, anh, doc_lai}."""
+        ra: dict = {"ket": "hong", "ly_do": "", "anh": {}, "doc_lai": None}
+        css = "#description-textbox [role=textbox]"
+        self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
+        self.doi_hien(css, 15)
+        self.ngu(1.5)
+        goc = self.js(_JS_HO_SO)
+        if not goc:
+            ra["ly_do"] = "không đọc được trang Hồ sơ"
+            self.chup("mo-ta-khac-mong-doi")
+            return ra
+        if str(goc.get("mo_ta") or "").strip():
+            ra.update(ket="bo", ly_do="kênh đã có mô tả ({0} ký tự) — không đụng".format(len(goc.get("mo_ta") or "")))
+            return ra
+        ra["anh"]["truoc"] = self.bang_chung("mo-ta-truoc").get("anh", "")
+        da_xuat_ban = False
+        try:
+            self.nhap(css, chu, nhieu_dong=True)
+            self.ngu(1.0)
+            sau = self.js(_JS_HO_SO)
+            lech = [m for m in lech_ho_so(goc, sau) if m != "mo_ta"]
+            if lech:
+                raise LoiMuc("trang Hồ sơ lệch ngoài mô tả: " + ", ".join(lech))
+            if not mo_ta_giong(chu, (sau or {}).get("mo_ta")):
+                raise LoiMuc("ô mô tả đọc lại lệch chữ đã gõ")
+            ra["anh"]["truoc_xuat_ban"] = self.bang_chung("mo-ta-truoc-xuat-ban").get("anh", "")
+            if khong_luu:
+                ra.update(ket="khong_luu", ly_do="[--khong-luu] đã gõ + đọc lại đúng, KHÔNG Xuất bản (bỏ thay đổi)")
+                return ra
+            self.bam(["ytcp-button#publish-button button", "ytcp-button#publish-button"], ("Xuất bản", "Publish", "公開"), han=6)
+            da_xuat_ban = True
+            loi_xb = self.xu_ly_sau_xuat_ban(ghi)
+            if loi_xb:
+                raise LoiMuc("Xuất bản báo lỗi: " + loi_xb)
+        except CanNguoi:
+            raise
+        except Exception as e:  # noqa: BLE001 — LoiMuc / LoiThaoTac (bấm hụt): DỪNG, không bấm thêm
+            ra["ly_do"] = str(e)[:300]
+            ghi("   mô tả: DỪNG — {0}".format(ra["ly_do"]))
+            self.chup("mo-ta-hong")
+        finally:
+            if not da_xuat_ban:
+                self.huy_thay_doi(ghi)
+        if not da_xuat_ban:
+            return ra
+        self.ngu(3.0)
+        self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")       # TẢI LẠI: chỉ tin cái Studio đã lưu
+        self.doi_hien(css, 15)
+        self.ngu(2.0)
+        du = self.js(_JS_HO_SO) or {}
+        lech = [m for m in lech_ho_so(goc, du) if m != "mo_ta"]
+        ra["doc_lai"], ra["lech_sau"] = du.get("mo_ta"), lech
+        ra["anh"]["sau"] = self.bang_chung("mo-ta-sau").get("anh", "")
+        if mo_ta_giong(chu, du.get("mo_ta")) and not lech:
+            ra["ket"], ra["ly_do"] = "dat", ""
+        else:
+            ra["ly_do"] = "; ".join(x for x in (ra["ly_do"], "đọc lại sau Xuất bản: mô tả {0}".format(
+                "KHỚP" if mo_ta_giong(chu, du.get("mo_ta")) else "LỆCH"), ("lệch: " + ", ".join(lech)) if lech else "") if x)
+        return ra
+
+    # ── trang chủ (14/10): DOM đo bằng 3 lượt thăm dò KHÔNG lưu trên TL2-T7 ──
+    def doc_tc(self) -> dict:
+        try:
+            return tom_trang_chu(self.js(_JS_BO_CUC_TC))
+        except Exception:  # noqa: BLE001
+            return tom_trang_chu(None)
+
+    def mo_the_trang_chu(self, han: float = 30.0) -> dict:
+        """Tuỳ chỉnh → bấm tab «Thẻ Trang chủ» (URL `editing/sections` bị đưa về Hồ sơ) → đợi công tắc + bố cục dựng xong
+        (2 lần đọc liền giống nhau). Trả `tom_trang_chu`; không dựng → LoiMuc."""
+        self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
+        self._bam_nhan(RE_TAB_TRANG_CHU, "tab Thẻ Trang chủ", sel="tp-yt-paper-tab")
+        self.ngu(2.0)
+        self.kiem_chan()
+        het, cu = time.monotonic() + han, None
+        while True:
+            t = self.doc_tc()
+            dung = t["bat"] is not None and t["them_tat"] is not None and bool(t["phan"])
+            if dung and cu == t:
+                return t
+            if time.monotonic() >= het:
+                raise LoiMuc("thẻ Trang chủ không dựng xong (công tắc={0}, nút Thêm={1}, {2} phần)".format(t["bat"], t["them_tat"], len(t["phan"])))
+            cu = t if dung else None
+            self.ngu(1.5)
+
+    def _cho_tc(self, dk, han: float = 10.0) -> dict:
+        het = time.monotonic() + han
+        while True:
+            t = self.doc_tc()
+            if dk(t) or time.monotonic() >= het:
+                return t
+            self.ngu(1.0)
+
+    def them_phan(self, re_muc: str, nhan: str) -> None:
+        """«Thêm phần kênh» → bấm mục khớp `re_muc` (chuột thật vào tâm điểm). Không thấy menu / mục / mục đang mờ → Escape, LoiMuc."""
+        self.bam(["ytcp-button#add-section-button"], han=5)
+        het, ds = time.monotonic() + 6, None
+        while ds is None and time.monotonic() < het:
+            self.ngu(0.8)
+            ds = self.js(_JS_MENU_PHAN)
+        x = chon_muc_phan(ds, re_muc)
+        if not x or x.get("tat"):
+            self.chup("menu-phan-" + nhan.replace(" ", "-")[:20])
+            self.st.phim("Escape")
+            raise LoiMuc("menu «Thêm phần kênh» {0} «{1}» (menu: {2})".format("có nhưng MỜ mục" if x else "không có mục", nhan,
+                                                                          " | ".join(m.get("chu", "") for m in (ds or []))[:200]))
+        self.ghi("   + phần «{0}» (test-id {1})".format(x["chu"], x.get("test_id")))
+        self.st._bam_diem(round(x["x"], 1), round(x["y"], 1))          # noqa: SLF001
+        self.ngu(2.5)
+
+    def chon_video_hop(self, vid: str, tieu_de: str) -> str:
+        """Hộp «Chọn một video cụ thể»: tìm theo đầu tiêu đề → bấm ĐÚNG thẻ có mã `vid` (ảnh thu nhỏ) → hộp tự đóng.
+        Trả tiêu đề Studio của thẻ đã bấm. Không thấy hộp / thẻ / hộp không đóng → LoiMuc (nơi gọi bỏ thay đổi)."""
+        het, du = time.monotonic() + 10, None
+        while du is None and time.monotonic() < het:
+            du = self.js(_JS_THE_VIDEO)
+            if du is None:
+                self.ngu(1.0)
+        if du is None:
+            raise LoiMuc("bấm mục menu xong không thấy hộp «Chọn một video cụ thể»")
+        x = None
+        for go in dict.fromkeys((tieu_de[:30], tieu_de[:12])):
+            try:                                                    # ô tìm «video của bạn» (hộp nổi bật còn tab «kênh khác»)
+                self.bam(["ytcp-video-pick-dialog tp-yt-paper-tab#search-yours-tab"], han=3)
+            except Exception:  # noqa: BLE001
+                pass
+            self.bam(["ytcp-video-pick-dialog input#search-yours"], han=4)
+            self.st._ctrl_a()                                       # noqa: SLF001
+            self.st._chen(go)                                       # noqa: SLF001
+            self.st.phim("Enter")
+            het, lan = time.monotonic() + 10, 0
+            while time.monotonic() < het:
+                self.ngu(1.5)
+                du = self.js(_JS_THE_VIDEO) or {}
+                if chuan(du.get("tim")) != chuan(go):               # chữ chưa vào ĐÚNG ô của hộp đang mở → chưa tin danh sách
+                    continue
+                lan += 1
+                x = chon_the_video(du.get("the"), vid) if lan >= 2 else None    # đợi lọc xong (2 lần đọc)
+                if x:
+                    break
+            if x:
+                break
+            self.ghi("   hộp chọn: tìm «{0}» (ô đang: {1!r}) không ra thẻ {2} (thẻ: {3})".format(go, du.get("tim"), vid, " | ".join(
+                "{0}:{1}".format(t.get("ma"), str(t.get("tieu_de"))[:20]) for t in (du.get("the") or [])[:6])))
+        if not x:
+            self.chup("hop-chon-khong-thay")
+            raise LoiMuc("hộp chọn video không có thẻ đúng mã {0}".format(vid))
+        if not str(x.get("tieu_de") or "").strip():
+            raise LoiMuc("thẻ mã {0} không có tiêu đề".format(vid))
+        if not khop_tieu_de(x.get("tieu_de"), tieu_de):                 # mã khớp là bằng chứng chính; tiêu đề có thể đã sửa sau lần cào
+            self.ghi("   (thẻ {0}: tiêu đề Studio «{1}» khác bảng số liệu «{2}»)".format(vid, str(x["tieu_de"])[:50], tieu_de[:50]))
+        pt = self.st._js("timChua", {"chon": ["ytcp-video-pick-dialog ytcp-entity-card"]}, "/vi/{0}/".format(vid))   # noqa: SLF001
+        if not (pt or {}).get("khop"):
+            raise LoiMuc("không định vị được thẻ {0} để bấm".format(vid))
+        self.st.bam(dict(pt, khoa="thẻ video " + vid))              # cuộn vào giữa + kiểm điểm bấm trúng thẻ
+        t = self._cho_tc(lambda t: not t["hop_chon"], 8)
+        if t["hop_chon"]:
+            raise LoiMuc("bấm thẻ video xong hộp chọn không đóng")
+        return str(x["tieu_de"]).strip()
+
+    def dong_hop_chon(self) -> None:
+        """Dọn trước khi bỏ thay đổi: đóng hộp chọn video (nút Đóng) / menu đang mở. Không ném lỗi."""
+        try:
+            if self.doc_tc()["hop_chon"]:
+                self.bam(["ytcp-video-pick-dialog ytcp-icon-button#close"], han=3)
+                self.ngu(1.5)
+            if self.js(_JS_MENU_PHAN):
+                self.st.phim("Escape")
+                self.ngu(1.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def dat_trang_chu(self, gt: Optional[dict], nb: Optional[dict], ghi, khong_luu: bool = False) -> dict:
+        """Thẻ Trang chủ: BẬT công tắc → «Video giới thiệu kênh» = `gt` → «Video nổi bật (người đăng ký cũ)» = `nb` → phần
+        «Video phổ biến» (cái nào có sẵn thì giữ) → so bố cục (không mất phần nào) → Xuất bản → TẢI LẠI đọc lại. Bước nào
+        khác mong đợi → DỪNG cả kênh (bỏ mọi thay đổi, không Xuất bản). Trả {ket: dat|giong|hong|khong_luu, ly_do, buoc,
+        truoc, doc_lai, anh}."""
+        ra: dict = {"ket": "hong", "ly_do": "", "buoc": [], "truoc": None, "doc_lai": None, "anh": {}}
+        t0 = self.mo_the_trang_chu()
+        ra["truoc"] = t0
+        ra["anh"]["truoc"] = self.bang_chung("trang-chu-truoc").get("anh", "")
+        ghi("   trang chủ trước: bật={0} · trailer={1!r} · nổi bật={2!r} · phần: {3}".format(
+            t0["bat"], t0["trailer"]["tieu_de"], t0["noi_bat"]["tieu_de"], ", ".join(t0["phan"])))
+        sua = False
+        da_xuat_ban = False
+        da_dat: Dict[str, str] = {}
+        ra["da_dat"] = da_dat
+        try:
+            if not t0["bat"]:
+                self.bam(["ytcp-switch#home-tab-enabled-switch button[role=switch]"], han=5)
+                t = self._cho_tc(lambda t: t["bat"] is True and t["them_tat"] is False, 8)
+                if not (t["bat"] is True and t["them_tat"] is False):
+                    raise LoiMuc("bấm công tắc mà Thẻ Trang chủ chưa bật (bật={0}, nút Thêm mờ={1})".format(t["bat"], t["them_tat"]))
+                ra["buoc"].append("bật Thẻ Trang chủ")
+                sua = True
+            for khoa, v, re_muc, nhan in (("trailer", gt, RE_MUC_TRAILER, "Video giới thiệu kênh"),
+                                          ("noi_bat", nb, RE_MUC_NOI_BAT, "Video nổi bật")):
+                hien = self.doc_tc()[khoa]
+                if hien["co"]:
+                    ra["buoc"].append("{0}: đã có «{1}» — giữ".format(nhan, hien["tieu_de"][:60]))
+                    continue
+                if not v:
+                    ra["buoc"].append("{0}: không có video đủ điều kiện — bỏ".format(nhan))
+                    continue
+                self.them_phan(re_muc, nhan)
+                td_the = self.chon_video_hop(v["vid"], v["tieu_de"])
+                t = self._cho_tc(lambda t, k=khoa: t[k]["co"], 8)
+                if not (t[khoa]["co"] and khop_tieu_de(t[khoa]["tieu_de"], td_the)):
+                    raise LoiMuc("{0}: sau khi chọn, ô hiện {1!r} — không khớp thẻ «{2}»".format(nhan, t[khoa]["tieu_de"][:60], td_the[:60]))
+                if t[khoa]["ma"] and v["vid"] not in t[khoa]["ma"]:
+                    raise LoiMuc("{0}: ảnh thu nhỏ mang mã {1}, mong {2}".format(nhan, t[khoa]["ma"], v["vid"]))
+                da_dat[khoa] = td_the
+                ra["buoc"].append("{0} = «{1}» ({2})".format(nhan, td_the[:60], v["vid"]))
+                sua = True
+            if self.doc_tc()["pho_bien"]:
+                ra["buoc"].append("Video phổ biến: đã có — giữ")
+            else:
+                self.them_phan(RE_MUC_PHO_BIEN, "Video phổ biến")
+                if not self._cho_tc(lambda t: t["pho_bien"], 8)["pho_bien"]:
+                    raise LoiMuc("bấm «Video phổ biến» mà bố cục không có phần đó")
+                ra["buoc"].append("thêm phần Video phổ biến")
+                sua = True
+            t1 = self.doc_tc()
+            mat = [p for p in t0["phan"] if p not in t1["phan"]]
+            if mat or t1["bat"] is not True:
+                raise LoiMuc("bố cục lệch trước khi Xuất bản: bật={0}, mất phần {1}".format(t1["bat"], mat))
+            ghi("   " + " · ".join(ra["buoc"]))
+            if not sua:
+                ra.update(ket="giong", ly_do="đã đủ — không sửa gì")
+                return ra
+            ra["anh"]["truoc_xuat_ban_cuoi"] = self.bang_chung("trang-chu-truoc-xuat-ban-cuoi").get("anh", "")   # cuối bố cục
+            self.js("(() => { const e = document.querySelector('ytcp-switch#home-tab-enabled-switch'); if (e) e.scrollIntoView({block: 'center'}); return !!e; })()")
+            self.ngu(1.0)
+            ra["anh"]["truoc_xuat_ban"] = self.bang_chung("trang-chu-truoc-xuat-ban").get("anh", "")             # đầu: công tắc + tiêu điểm
+            if khong_luu:
+                ra.update(ket="khong_luu", ly_do="[--khong-luu] điền xong + đọc đúng, KHÔNG Xuất bản (bỏ thay đổi)")
+                return ra
+            self.bam(["ytcp-button#publish-button button", "ytcp-button#publish-button"], ("Xuất bản", "Publish", "公開"), han=6)
+            da_xuat_ban = True
+            loi_xb = self.xu_ly_sau_xuat_ban(ghi, chi_nut=True)
+            if loi_xb:
+                raise LoiMuc("Xuất bản báo lỗi: " + loi_xb)
+        except CanNguoi:
+            raise
+        except Exception as e:  # noqa: BLE001 — LoiMuc / LoiThaoTac: DỪNG kênh, không bấm thêm
+            ra["ly_do"] = str(e)[:300]
+            ghi("   trang chủ: DỪNG — {0}".format(ra["ly_do"]))
+            self.chup("trang-chu-hong")
+        finally:
+            if not da_xuat_ban:
+                self.dong_hop_chon()
+                try:
+                    self.huy_thay_doi(ghi)
+                except Exception:  # noqa: BLE001
+                    pass
+        if not da_xuat_ban:
+            return ra
+        self.ngu(3.0)
+        t9 = self.mo_the_trang_chu()                                # TẢI LẠI: chỉ tin cái Studio đã lưu
+        ra["doc_lai"] = t9
+        ra["anh"]["sau"] = self.bang_chung("trang-chu-sau").get("anh", "")
+        self.js("(() => { const e = [...document.querySelectorAll('ytcp-shelf-list-item')].pop(); if (e) e.scrollIntoView({block: 'center'}); return !!e; })()")
+        self.ngu(1.0)
+        ra["anh"]["sau_cuoi"] = self.bang_chung("trang-chu-sau-cuoi").get("anh", "")
+        sai = [] if t9["bat"] is True else ["Thẻ Trang chủ chưa bật"]
+        for khoa, nhan in (("trailer", "video giới thiệu"), ("noi_bat", "video nổi bật")):
+            if khoa in da_dat and not khop_tieu_de(t9[khoa]["tieu_de"], da_dat[khoa]):
+                sai.append("{0}: {1!r}".format(nhan, t9[khoa]["tieu_de"][:60]))
+        if not t9["pho_bien"]:
+            sai.append("không có phần Video phổ biến")
+        mat = [p for p in t0["phan"] if p not in t9["phan"]]
+        if mat:
+            sai.append("mất phần " + ", ".join(mat))
+        ghi("   trang chủ ĐỌC LẠI: bật={0} · trailer={1!r} · nổi bật={2!r} · phần: {3}".format(
+            t9["bat"], t9["trailer"]["tieu_de"], t9["noi_bat"]["tieu_de"], ", ".join(t9["phan"])))
+        if not sai:                                                 # nguồn thật = trang đã tải lại
+            ra["ket"] = "dat"
+            if ra["ly_do"]:
+                ra["ghi_chu"], ra["ly_do"] = ra["ly_do"], ""
+        else:
+            ra["ly_do"] = "; ".join(x for x in (ra["ly_do"], "đọc lại sau Xuất bản: " + "; ".join(sai)) if x)
         return ra
 
     # ── sửa: Cài đặt kênh / mặc định tải lên ──
@@ -2528,7 +3066,8 @@ def ghi_thuong_hieu(kenh: str, kq: dict) -> str:
     ls = list(cu.get("lich_su") or []) if isinstance(cu, dict) else []
     if isinstance(cu, dict) and cu.get("luc"):
         ls.append({"luc": cu.get("luc"), "che_do": cu.get("che_do"), "ket_qua": cu.get("ket_qua"), "hinh_mo": cu.get("hinh_mo"),
-                   "dat_hinh_mo": (cu.get("dat_hinh_mo") or {}).get("ket")})
+                   "dat_hinh_mo": (cu.get("dat_hinh_mo") or {}).get("ket"), "dat_trang_chu": (cu.get("dat_trang_chu") or {}).get("ket"),
+                   "dat_mo_ta": (cu.get("dat_mo_ta") or {}).get("ket")})
     kq["lich_su"] = ls[-10:]
     os.makedirs(THU_MUC_SO, exist_ok=True)
     with open(d + ".tam", "w", encoding="utf-8") as tep:
@@ -2571,6 +3110,112 @@ def anh_hinh_mo_kenh(kenh: str, uc: str, ghi, src_studio=()) -> Tuple[str, str]:
     raise LoiMuc("không lấy được ảnh hồ sơ hiện tại của kênh để cắt hình mờ" + (": " + loi if loi else ""))
 
 
+def chon_video_trang_chu(kenh: str, md, ghi, hom_nay=None) -> dict:
+    """Video giới thiệu (tốt nhất) + video nổi bật (nhì) của CHÍNH kênh: xếp bằng `xep_video_gioi_thieu` trên
+    `CHANNEL/<K>/chi-so/bang-tom-tat.csv` (từ `ngay_bat_dau` của kenh.yaml), rồi tra từng ứng viên đầu bảng trên danh sách
+    Nội dung của Studio (`MayDangDom.tra_kenh`, CHỈ ĐỌC) — CSV không có chế độ hiển thị, chỉ nhận hàng «Công khai»."""
+    import csv  # noqa: PLC0415
+    nbd = _yaml_gia_tri(nuoi.duong_kenh_yaml(kenh) or "", "ngay_bat_dau")
+    duong = os.path.join(GOC_TOOL, "CHANNEL", kenh, "chi-so", "bang-tom-tat.csv")
+    try:
+        with open(duong, "r", encoding="utf-8-sig", newline="") as tep:
+            hang = list(csv.DictReader(tep))
+    except OSError as e:
+        raise LoiMuc("không đọc được {0}: {1}".format(duong, e))
+    ung = xep_video_gioi_thieu(hang, nbd, hom_nay or datetime.now().date())[:SO_UNG_VIEN_TRA]
+    ghi("   ứng viên video giới thiệu ({0} hàng CSV, từ {1}): {2}".format(len(hang), nbd or "?", " · ".join(
+        "{0} {1:.0f}".format(u["vid"], u["diem"]) for u in ung) or "không có"))
+    loai: Dict[str, str] = {}
+    for u in ung:
+        if sum(1 for v in loai.values() if v == "cong_khai") >= 2:
+            break
+        try:
+            hang_st = [x for x in md.tra_kenh(u["tieu_de"], u["vid"]) if x.get("video_id") == u["vid"]]
+        except Exception as e:  # noqa: BLE001 — không tra được = không nhận (không đoán là công khai)
+            ghi("   tra {0} trên Studio lỗi: {1}".format(u["vid"], str(e)[:100]))
+            hang_st = []
+        loai[u["vid"]] = (hang_st[0].get("loai") or "khong_ro") if hang_st else ""
+        ghi("   {0} «{1}»: Studio {2}".format(u["vid"], u["tieu_de"][:40], loai[u["vid"]] or "không thấy"))
+    gt, nb, bo = chon_gioi_thieu(ung, loai)
+    return {"gioi_thieu": gt, "noi_bat": nb, "bo": bo, "ung_vien": ung, "loai": loai, "ngay_bat_dau": nbd}
+
+
+def duong_mo_ta_moi(kenh: str, luc: Optional[float] = None) -> str:
+    """`workspace/chan-doan/mo-ta-<TLx>-<dd-mm>.txt` (bỏ đuôi `-T7`)."""
+    ngan = re.sub(r"-T\d+$", "", kenh)
+    return os.path.join(GOC_TOOL, "workspace", "chan-doan", "mo-ta-{0}-{1}.txt".format(ngan, time.strftime("%d-%m", time.localtime(luc))))
+
+
+def mo_ta_anh_em(kenh: str) -> List[str]:
+    """Mô tả THẬT (đọc ở Studio, `mo_ta_hien` của `<K>.thuong-hieu.json`) của kênh khác CÙNG nhóm kenh.yaml."""
+    tl = _tl()
+    nhom = str(tl._yaml_kenh(kenh, GOC_TOOL).get("nhom") or "")        # noqa: SLF001
+    ra = []
+    try:
+        ten = sorted(os.listdir(THU_MUC_SO))
+    except OSError:
+        return ra
+    for t in ten:
+        k = t[:-len(".thuong-hieu.json")] if t.endswith(".thuong-hieu.json") else ""
+        if not k or k == kenh or "." in k or (nhom and str(tl._yaml_kenh(k, GOC_TOOL).get("nhom") or "") != nhom):   # noqa: SLF001
+            continue
+        try:
+            with open(os.path.join(THU_MUC_SO, t), "r", encoding="utf-8") as tep:
+                mt = str((json.load(tep) or {}).get("mo_ta_hien") or "").strip()
+        except (OSError, ValueError):
+            continue
+        if mt:
+            ra.append(mt)
+    return ra
+
+
+def viet_mo_ta_kenh(kenh: str, ten_kenh: str, ghi, goi=None) -> Tuple[str, str]:
+    """Mô tả kênh mới (tiếng Nhật 150–300 ký tự) qua `core.goi_van_ban` (Claude Max, lùi ShopAPI), tối đa 3 lượt tới khi
+    `kiem_mo_ta_kenh` đạt; ghi `workspace/chan-doan/mo-ta-<TLx>-<dd-mm>.txt`. Tệp hôm nay đã có + đạt → dùng lại (không
+    tốn lượt). Trả (chữ, đường tệp); không đạt → LoiMuc."""
+    d = duong_mo_ta_moi(kenh)
+    try:
+        with open(d, "r", encoding="utf-8") as tep:
+            cu = lam_sach_mo_ta_kenh(tep.read())
+        if cu and not kiem_mo_ta_kenh(cu):
+            ghi("   mô tả: dùng lại {0} ({1} ký tự)".format(d, do_dai_mo_ta(cu)))
+            return cu, d
+    except OSError:
+        pass
+    tl = _tl()
+    kh = tl._yaml_kenh(kenh, GOC_TOOL)                                    # noqa: SLF001
+    csv_d = os.path.join(GOC_TOOL, "CHANNEL", kenh, "chi-so", "bang-tom-tat.csv")
+    try:
+        import csv  # noqa: PLC0415
+        with open(csv_d, "r", encoding="utf-8-sig", newline="") as tep:
+            thang = [u["tieu_de"] for u in xep_video_gioi_thieu(list(csv.DictReader(tep)), kh.get("ngay_bat_dau"),
+                                                               datetime.now().date(), toi_thieu_ngay=0)[:6]]
+    except OSError:
+        thang = []
+    mau = mo_ta_anh_em(kenh)
+    ghi("   mô tả: viết bằng LLM (tiêu đề thắng {0}, mô tả kênh anh em {1})".format(len(thang), len(mau)))
+    if goi is None:
+        from core.goi_van_ban import goi_van_ban, tin_nhan_viet  # noqa: PLC0415
+        try:
+            client = tl.tao_goi_llm().client
+        except Exception as e:  # noqa: BLE001 — không có ví thì vẫn đi Claude Max (goi_van_ban tự quyết)
+            ghi("   (không dựng được client ShopAPI: {0})".format(str(e)[:100]))
+            client = None
+        goi = lambda p: goi_van_ban(client, tin_nhan_viet(p), toi_da_token=4096, on_log=ghi)   # noqa: E731
+    hoi, loi = loi_nhac_mo_ta_kenh(ten_kenh, kh, thang, mau), []
+    for _ in range(3):
+        chu = lam_sach_mo_ta_kenh(goi(hoi + (("\nPREVIOUS ANSWER WAS REJECTED: " + "; ".join(loi) + ". Fix it.") if loi else "")))
+        loi = kiem_mo_ta_kenh(chu)
+        if not loi:
+            os.makedirs(os.path.dirname(d), exist_ok=True)
+            with open(d, "w", encoding="utf-8") as tep:
+                tep.write(chu + "\n")
+            ghi("   mô tả: {0} ký tự → {1}".format(do_dai_mo_ta(chu), d))
+            return chu, d
+        ghi("   mô tả LLM chưa đạt: {0}".format("; ".join(loi)))
+    raise LoiMuc("LLM viết mô tả kênh chưa đạt sau 3 lượt: " + "; ".join(loi))
+
+
 def _cfg_kenh(agent, kenh: str) -> dict:
     """Cấu hình agent có `kenh` trong `cac_kenh` (kênh mới nối đuôi như `nuoi.cau_hinh_kenh_moi`) → đúng cổng DevTools."""
     cfg = agent.doc_cau_hinh()
@@ -2581,14 +3226,16 @@ def _cfg_kenh(agent, kenh: str) -> dict:
     return dict(cfg, cac_kenh=cac)
 
 
-def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = False, rng=None) -> int:
-    """`--kiem-thuong-hieu` (CHỈ ĐỌC) [+ `--dat-hinh-mo`]. Luật như máy DOM: khoá máy `.khoa-may` (bận → hoãn, không ép),
-    khoá Chrome kênh + một phiên thiết lập một lúc, van IPv4 mở → hoãn, Chrome kênh có sẵn thì chỉ mở/đóng TAB của mình,
-    tạm giao diện vi (MayDangDom.lay_uc: đúng UC ghim) rồi TRẢ ngôn ngữ cũ. Không ghi sổ thiết lập `<K>.json`.
-    Mã: 0 xong · 10 hoãn · 20 cần người · 1 lỗi."""
+def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = False, rng=None,
+                     trang_chu: bool = False, mo_ta: bool = False, khong_luu: bool = False) -> int:
+    """`--kiem-thuong-hieu` (CHỈ ĐỌC) [+ `--dat-hinh-mo`] [+ `--dat-trang-chu`] [+ `--dat-mo-ta`]. Luật như máy DOM: khoá máy
+    `.khoa-may` (bận → hoãn, không ép), khoá Chrome kênh + một phiên thiết lập một lúc, van IPv4 mở → hoãn, Chrome kênh có
+    sẵn thì chỉ mở/đóng TAB của mình, tạm giao diện vi (MayDangDom.lay_uc: đúng UC ghim) rồi TRẢ ngôn ngữ cũ. Không ghi sổ
+    thiết lập `<K>.json`. `khong_luu`: trang chủ / mô tả điền xong thì BỎ (không Xuất bản). Mã: 0 xong · 10 hoãn ·
+    20 cần người · 1 lỗi."""
     rng = rng or random.Random()
     luc0 = time.time()
-    du_kien = DU_KIEN_DAT_PHUT if dat else DU_KIEN_KIEM_PHUT
+    du_kien = DU_KIEN_TRANG_CHU_PHUT if (trang_chu or mo_ta) else (DU_KIEN_DAT_PHUT if dat else DU_KIEN_KIEM_PHUT)
     r = "" if bo_qua_khung else (khung_cam(luc0, du_kien) or khung_gio_tron(luc0, du_kien))
     if r:
         ghi("hoãn: " + r)
@@ -2610,7 +3257,8 @@ def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = Fal
     khoa_may = khoa_kenh = da_doc = False
     cdp = cdp_mod = md = S = None
     ma = 0
-    kq: dict = {"kenh": kenh, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "che_do": "kiem+dat" if dat else "kiem", "ket_qua": "đang chạy"}
+    che_do = "+".join(["kiem"] + [x for x, b in (("dat", dat), ("trang-chu", trang_chu), ("mo-ta", mo_ta), ("khong-luu", khong_luu)) if b])
+    kq: dict = {"kenh": kenh, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "che_do": che_do, "ket_qua": "đang chạy"}
     try:
         if not agent.giu_khoa_may_chung(viec="thiet_lap", kenh=kenh, uu_tien=1):
             raise Hoan("khoá máy (.khoa-may) đang bận — không ép")
@@ -2631,7 +3279,8 @@ def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = Fal
         except cdp_mod.CdpKhongDung as e:
             raise Hoan("không nối được Chrome kênh: {0} (mã {1})".format(e.ly_do, e.ma))
         ghi("── KIỂM THƯƠNG HIỆU {0}{1} — Chrome cổng {2}{3} ──".format(
-            kenh, " + ĐẶT HÌNH MỜ nếu thiếu" if dat else " [CHỈ ĐỌC]", cdp.cong,
+            kenh, "".join(x for x, b in ((" + ĐẶT HÌNH MỜ nếu thiếu", dat), (" + TRANG CHỦ (bật, video giới thiệu/nổi bật, phổ biến)", trang_chu),
+                                         (" + MÔ TẢ nếu trống", mo_ta), (" [KHÔNG LƯU]", khong_luu)) if b) or " [CHỈ ĐỌC]", cdp.cong,
             " (máy này tự mở)" if cdp.tu_mo else " (có sẵn — chỉ mở/đóng TAB của mình)"))
         nuoi.canh_tien_trien.bat_canh(lambda: (cdp_mod.dong_trinh_duyet(cdp) if cdp.tu_mo else cdp.dong()), ghi=ghi)
         bo = cdp_studio.doc_bo_chon()
@@ -2650,8 +3299,9 @@ def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = Fal
         kt, loi = S.doc_thuong_hieu()
         da_doc = True
         hm, td, dsp = kt["hinh_mo"], kt["tieu_diem"], kt["ds_phat"]
+        hs0 = kt.get("_ho_so") or {}
         kq.update(hinh_mo=hm, tieu_diem={k: v.get("co") for k, v in td.items()}, trang_chu_bat=kt.get("trang_chu_bat"),
-                  ds_phat=dsp, anh=kt["anh"], loi_doc=loi,
+                  ds_phat=dsp, anh=kt["anh"], loi_doc=loi, ten_kenh=hs0.get("ten"), mo_ta_hien=str(hs0.get("mo_ta") or ""),
                   chi_tiet={"hinh_mo": kt.get("_hinh_mo_tho"), "tieu_diem": td,
                             "trang_chu": {k: (kt.get("_trang_chu") or {}).get(k) for k in ("url", "tab", "ds", "cong_tac", "chu")}})
         ghi("   hình mờ: {0} · hiển thị: {1} «{2}»".format({True: "CÓ", False: "THIẾU", None: "?"}[hm["co"]], hm["thoi_gian"], hm["nhan"]))
@@ -2672,6 +3322,26 @@ def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = Fal
                 kq["anh_hinh_mo"] = {"duong": duong, "nguon": nguon}
                 kq["dat_hinh_mo"] = S.dat_hinh_mo(duong, ghi)
                 ghi("*** HÌNH MỜ {0}: {1} {2} ***".format(kenh, kq["dat_hinh_mo"]["ket"].upper(), kq["dat_hinh_mo"].get("ly_do") or ""))
+        if trang_chu:
+            r = ly_do_dung(agent, kenh, time.time()) or ("" if bo_qua_khung else khung_gio_tron(time.time(), DU_KIEN_TRANG_CHU_PHUT / 2))
+            if r:
+                raise Hoan("trước khi đặt trang chủ: " + r)
+            cv = chon_video_trang_chu(kenh, md, ghi)
+            kq["chon_video"] = {k: cv[k] for k in ("gioi_thieu", "noi_bat", "bo", "loai", "ngay_bat_dau")}
+            ghi("   video giới thiệu: {0} · video nổi bật: {1}".format(*(("«{0}» ({1})".format(v["tieu_de"][:50], v["vid"]) if v else "KHÔNG CÓ")
+                                                                    for v in (cv["gioi_thieu"], cv["noi_bat"]))))
+            kq["dat_trang_chu"] = S.dat_trang_chu(cv["gioi_thieu"], cv["noi_bat"], ghi, khong_luu=khong_luu)
+            ghi("*** TRANG CHỦ {0}: {1} {2} ***".format(kenh, kq["dat_trang_chu"]["ket"].upper(), kq["dat_trang_chu"].get("ly_do") or ""))
+        if mo_ta:
+            if kq["mo_ta_hien"].strip():
+                kq["dat_mo_ta"] = {"ket": "bo", "ly_do": "kênh đã có mô tả ({0} ký tự) — không đụng".format(len(kq["mo_ta_hien"]))}
+            else:
+                r = ly_do_dung(agent, kenh, time.time()) or ("" if bo_qua_khung else khung_gio_tron(time.time(), DU_KIEN_DAT_PHUT / 2))
+                if r:
+                    raise Hoan("trước khi đặt mô tả: " + r)
+                chu, duong = viet_mo_ta_kenh(kenh, kq.get("ten_kenh") or "", ghi)
+                kq["dat_mo_ta"] = dict(S.dat_mo_ta(chu, ghi, khong_luu=khong_luu), chu=chu, tep=duong)
+            ghi("*** MÔ TẢ {0}: {1} {2} ***".format(kenh, kq["dat_mo_ta"]["ket"].upper(), kq["dat_mo_ta"].get("ly_do") or ""))
         kq["ket_qua"] = "xong"
     except CanNguoi as c:
         ma, kq["ket_qua"] = MA_CAN_NGUOI, "can_nguoi: {0}".format(c)
@@ -2732,14 +3402,18 @@ def main(argv=None) -> int:
     ap.add_argument("--kiem-thuong-hieu", action="store_true",
                     help="CHỈ ĐỌC hình mờ + thời gian hiển thị, trailer/video nổi bật (Thẻ Trang chủ), số danh sách phát → <K>.thuong-hieu.json")
     ap.add_argument("--dat-hinh-mo", action="store_true", help="(kèm --kiem-thuong-hieu) kênh THIẾU hình mờ thì đặt, hiển thị toàn bộ video")
+    ap.add_argument("--dat-trang-chu", action="store_true",
+                    help="bật Thẻ Trang chủ + video giới thiệu (video thắng nhất, công khai, >=7 ngày) + video nổi bật (nhì) + phần Video phổ biến")
+    ap.add_argument("--dat-mo-ta", action="store_true", help="kênh đang để TRỐNG mô tả thì viết (LLM, tiếng Nhật 150–300 ký tự) + đặt")
     a = ap.parse_args(argv)
     ghi = _nhat_ky(a.kenh)
     d = nuoi.duong_kenh_yaml(a.kenh)
     if not d:
         ghi("không thấy kenh.yaml của {0}".format(a.kenh))
         return 1
-    if a.kiem_thuong_hieu or a.dat_hinh_mo:                          # không cần thiet_lap_kenh: true, không đụng sổ thiết lập
-        return chay_thuong_hieu(a.kenh, ghi, dat=a.dat_hinh_mo, bo_qua_khung=a.bo_qua_khung)
+    if a.kiem_thuong_hieu or a.dat_hinh_mo or a.dat_trang_chu or a.dat_mo_ta:   # không cần thiet_lap_kenh: true, không đụng sổ thiết lập
+        return chay_thuong_hieu(a.kenh, ghi, dat=a.dat_hinh_mo, bo_qua_khung=a.bo_qua_khung, trang_chu=a.dat_trang_chu,
+                                mo_ta=a.dat_mo_ta, khong_luu=a.khong_luu)
     if not a.thu and not a.khong_luu and not a.ngon_ngu and not thiet_lap_bat(a.kenh) and not a.mo_lai:
         so = doc_so(a.kenh)
         ghi("kênh {0} không bật thiet_lap_kenh: true — không chạy{1}".format(a.kenh, " (đã xong)" if so.get("trang_thai") == "xong" else ""))
