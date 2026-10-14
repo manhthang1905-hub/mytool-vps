@@ -846,6 +846,9 @@ def doc_yaml(duong: str) -> Dict[str, Any]:
             tho = tep.read()
     except OSError:
         return {}
+    # 14/10/2026: TL1/TL2/TL3 nhân bản từ khuôn TL4 mang một ký tự BOM (U+FEFF) KẸT GIỮA tệp → PyYAML hỏng → rơi về bộ
+    # đọc tối giản, mọi khối LỒNG NHAU (vd `chuyen_doi_sub:` + `  bat: true`) bị làm phẳng thành khoá rời — lặng lẽ.
+    tho = tho.replace("﻿", "")
     try:
         import yaml  # noqa: PLC0415
 
