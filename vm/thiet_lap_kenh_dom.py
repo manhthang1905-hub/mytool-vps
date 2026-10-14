@@ -25,6 +25,9 @@ Không chạy 02:00–07:00; van IPv4 mở thì hoãn; một lúc chỉ MỘT ph
 Chạy:  python vm/thiet_lap_kenh_dom.py --kenh TL5-T7 [--thu]
        (`--thu` = chỉ ĐỌC Studio, in khác biệt so với hồ sơ, không sửa, không ghi sổ)
        --mo-lai   xoá `can_nguoi`/từ chối cũ (khi người đã xử lý) rồi chạy tiếp
+       --kiem-thuong-hieu [--dat-hinh-mo]   (14/10) CHỈ ĐỌC hình mờ / trailer / video nổi bật / số danh sách phát →
+                  `<K>.thuong-hieu.json` + ảnh; `--dat-hinh-mo`: kênh THIẾU hình mờ thì đặt (toàn bộ video), đọc lại.
+                  Chạy được cả kênh chính (không cần `thiet_lap_kenh: true`, không ghi sổ `<K>.json`).
 Mã thoát: 0 xong/đã đủ · 10 hoãn · 20 cần người · 30 không cần chạy · 1 lỗi.
 """
 
@@ -856,6 +859,154 @@ _JS_MUC_MENU = """((reSrc) => { const Y = window.__yd, re = new RegExp(reSrc, 'i
   ra.sort((a, b) => (a.chu.length - b.chu.length) || (a.w * a.h - b.w * b.h)); return ra.slice(0, 5); })"""
 
 
+# ═══════════════════════════ KIỂM THƯƠNG HIỆU (14/10/2026) ══════════════════
+# `--kiem-thuong-hieu`: CHỈ ĐỌC — hình mờ (có? hiển thị lúc nào), video giới thiệu kênh cho người CHƯA đăng ký + video
+# nổi bật cho người đăng ký quay lại (Tuỳ chỉnh → Thẻ Trang chủ), số danh sách phát → `<K>.thuong-hieu.json` + ảnh.
+# Kèm `--dat-hinh-mo`: kênh THIẾU hình mờ thì đặt (đường `hinh_mo` có sẵn), hiển thị TOÀN BỘ video, đọc lại sau Xuất
+# bản. Kênh chính: KHÔNG đụng tên/handle/mô tả/logo/banner (so trước–sau trên trang, lệch → bỏ thay đổi, không Xuất bản).
+#: Nút chọn thời gian hiển thị hình mờ (đo 04/10 trên Studio: id/name của tp-yt-paper-radio-button) → mã.
+THOI_GIAN_HINH_MO = {"entire-video-radio-button": "toan_bo", "ENTIRE": "toan_bo", "end-of-video-radio-button": "cuoi", "END": "cuoi",
+                     "custom-start-time-radio-button": "tuy_chinh", "START": "tuy_chinh"}
+PHUT_CAM_GIO_TRON = 5                     # :55–:05 — agent mở phiên đăng quanh giờ tròn, không chen Chrome kênh lúc đó
+DU_KIEN_KIEM_PHUT, DU_KIEN_DAT_PHUT = 8, 14
+RE_TRAILER = r"(giới thiệu kênh|người chưa đăng ký|channel trailer|haven.?t subscribed|予告編|登録していない)"
+RE_NOI_BAT = r"(video nổi bật|người đăng ký quay lại|featured video|returning subscriber|おすすめ動画|リピーター)"
+RE_NUT_THEM = r"^(\+\s*)?(thêm|add|追加)$"
+RE_NUT_CO_VIDEO = r"^(thay đổi|xóa|xoá|gỡ|change|remove|変更|削除)$"
+RE_TAB_TRANG_CHU = r"(thẻ trang chủ|home tab|ホーム\s?タブ|홈 탭)"
+
+
+def khung_gio_tron(luc: float, du_kien_phut: float = 0.0, bien: int = PHUT_CAM_GIO_TRON) -> str:
+    """"" nếu cả quãng [luc, luc + du_kien_phut] nằm NGOÀI phút :55–:05; không thì lý do (hàm thuần)."""
+    t = time.localtime(luc)
+    p = t.tm_min + t.tm_sec / 60.0
+    if p < bien or p + max(0.0, du_kien_phut) >= 60 - bien:
+        return "sát giờ tròn (phút :{0:02d}–:{1:02d}, agent mở phiên đăng) — đợi".format(60 - bien, bien)
+    return ""
+
+
+def doc_hinh_mo(du: Any) -> Dict[str, Any]:
+    """Kết quả `_JS_HINH_MO` → {co: True/False/None, thoi_gian: toan_bo|cuoi|tuy_chinh|""|None, nhan}.
+    co=None = KHÔNG đọc được ô (không bao giờ coi là thiếu). Có = nút Xoá của ô hiện; thiếu = chỉ có nút Tải lên."""
+    if not isinstance(du, dict) or not du.get("thay_o"):
+        return {"co": None, "thoi_gian": None, "nhan": ""}
+    if du.get("nut_xoa"):
+        co = True
+    elif du.get("nut_tai_len"):
+        co = False
+    else:
+        return {"co": None, "thoi_gian": None, "nhan": ""}
+    chon = [r for r in (du.get("radio") or []) if isinstance(r, dict) and r.get("chon")]
+    tg, nhan = ("", "")
+    if co and len(chon) == 1:
+        r = chon[0]
+        tg = THOI_GIAN_HINH_MO.get(str(r.get("id") or "")) or THOI_GIAN_HINH_MO.get(str(r.get("name") or "").upper(), "")
+        nhan = str(r.get("chu") or "")
+    return {"co": co, "thoi_gian": tg if co else None, "nhan": nhan}
+
+
+def can_dat_hinh_mo(hm: Any) -> Tuple[bool, str]:
+    """Có ĐẶT hình mờ không: CHỈ khi đọc chắc chắn ô đang trống. Không đọc được → KHÔNG đặt (không đoán)."""
+    co = (hm or {}).get("co") if isinstance(hm, dict) else None
+    if co is None:
+        return False, "không đọc được ô hình mờ — không đặt"
+    if co:
+        return False, "đã có hình mờ — không làm gì"
+    return True, "thiếu hình mờ"
+
+
+def dem_ds_phat(du: Any) -> Optional[int]:
+    """Số danh sách phát từ `_JS_DEM_DS_PHAT`: tổng trong chữ phân trang («1–30 / 45», «1 – 3 trên tổng số 3»,
+    «1～3/3 件»), không có thì số hàng; trang trống (nút «Danh sách phát mới» giữa trang) = 0; không đọc được = None."""
+    if not isinstance(du, dict):
+        return None
+    hang = max(int(du.get("hang") or 0), len(du.get("ten") or []))
+    m = None
+    for m in re.finditer(r"(\d+)\s*[–\-~～]\s*(\d+)\D{1,30}?(\d+)", str(du.get("chan") or "")):
+        pass
+    if m:
+        return max(int(m.group(3)), hang)
+    if hang:
+        return hang
+    return 0 if du.get("trong") else None
+
+
+def doc_tieu_diem(chu: Any, trang_da_dung: bool = False) -> Dict[str, Dict[str, Any]]:
+    """Chữ trang «Thẻ Trang chủ» → {trailer, noi_bat}: {co: True/False/None, dong: [...]}. Mỗi mục: dòng tiêu đề khớp
+    (`RE_TRAILER` / `RE_NOI_BAT`), rồi các dòng tới tiêu đề kế; có nút «Thêm» mà không có «Thay đổi/Xoá» = CHƯA có video;
+    có mục mà không có nút «Thêm» = CÓ. Không thấy tiêu đề: trang đã dựng xong (`trang_da_dung`: công tắc Thẻ Trang chủ +
+    khung bố cục đã hiện — Studio 14/10 không còn khối «Tiêu điểm video») = KHÔNG có; chưa chắc trang dựng = None."""
+    dong = [" ".join(x.split()) for x in str(chu or "").split("\n") if x.strip()]
+    vt = {}
+    for i, d in enumerate(dong):
+        if len(d) > 120:
+            continue
+        for k, mau in (("trailer", RE_TRAILER), ("noi_bat", RE_NOI_BAT)):
+            if k not in vt and re.search(mau, d, re.I):
+                vt[k] = i
+    ra: Dict[str, Dict[str, Any]] = {}
+    for k in ("trailer", "noi_bat"):
+        if k not in vt:
+            ra[k] = {"co": False if trang_da_dung else None, "dong": []}
+            continue
+        sau = [v for v in vt.values() if v > vt[k]]
+        doan = dong[vt[k] + 1: min(sau) if sau else vt[k] + 8][:8]
+        them = any(re.match(RE_NUT_THEM, d, re.I) for d in doan)
+        co_vid = any(re.match(RE_NUT_CO_VIDEO, d, re.I) for d in doan)
+        ra[k] = {"co": True if (co_vid or not them) else False, "dong": [dong[vt[k]]] + doan}
+    return ra
+
+
+def lech_ho_so(truoc: Any, sau: Any) -> List[str]:
+    """Mục nào của trang Hồ sơ (`_JS_HO_SO`) đã LỆCH giữa hai lần đọc (ngoài hình mờ): tên, handle, mô tả, logo, banner."""
+    a, b = truoc if isinstance(truoc, dict) else {}, sau if isinstance(sau, dict) else {}
+    if not a or not b:
+        return ["không đọc được trang Hồ sơ"]
+    ra = [m for m in ("ten", "handle") if chuan(a.get(m)) != chuan(b.get(m))]
+    if not mo_ta_giong(a.get("mo_ta"), b.get("mo_ta")):
+        ra.append("mo_ta")
+    for m in ("logo", "banner"):
+        x, y = a.get(m) or {}, b.get(m) or {}
+        if bool(x.get("co")) != bool(y.get("co")) or (x.get("src") and y.get("src") and x.get("src") != y.get("src")):
+            ra.append(m)
+    return ra
+
+
+_JS_HINH_MO = "(() => {" + _JS_CHUNG + r"""
+  const h = q('ytcp-video-watermark-upload'); if (!h) return null;
+  try { h.scrollIntoView({block: 'center'}); } catch (e) {}
+  const nut = id => qa('ytcp-button#' + id, h).some(hien);
+  const radio = qa('tp-yt-paper-radio-button', h).filter(hien).map(r => ({id: r.id || '', name: r.getAttribute('name') || '',
+    chu: (r.innerText || '').trim().slice(0, 60),
+    chon: r.hasAttribute('checked') || r.getAttribute('aria-checked') === 'true' || r.classList.contains('iron-selected')}));
+  return {thay_o: true, nut_xoa: nut('remove-button'), nut_thay: nut('replace-button'), nut_tai_len: nut('upload-button'),
+          anh: qa('img', h).filter(i => hien(i) && i.src).length, radio: radio, chu: (h.innerText || '').trim().slice(0, 300)};
+})()"""
+
+_JS_TRANG_CHU = "(() => {" + _JS_CHUNG + r"""
+  const tab = qa('tp-yt-paper-tab').filter(hien).map(t => ({chu: (t.innerText || '').trim().slice(0, 40),
+    chon: t.classList.contains('iron-selected') || t.getAttribute('aria-selected') === 'true'}));
+  const ds = qa('*').filter(e => /featured|trailer|spotlight/i.test(e.tagName) && hien(e)).slice(0, 30).map(e => ({tag: e.tagName.toLowerCase(),
+    id: e.id || '', chu: (e.innerText || '').trim().slice(0, 300),
+    nut: qa('ytcp-button, button', e).filter(hien).map(b => ((b.innerText || '').trim() || b.getAttribute('aria-label') || '').slice(0, 40)).filter(x => x).slice(0, 8)}));
+  const goc = q('ytcp-channel-editing-sections-tab') || q('ytcp-channel-editing-layout') || q('#main') || document.body;
+  const sh = q('ytcp-switch#home-tab-enabled-switch'), sw = sh ? (q('[role=switch]', sh) || sh) : null;
+  const ac = sw ? sw.getAttribute('aria-checked') : null;
+  return {url: location.href, tab: tab, ds: ds, chu: (goc.innerText || '').slice(0, 5000), ke: !!q('ytcp-shelves-section'),
+          bat: sw ? (ac !== null ? ac === 'true' : sh.hasAttribute('checked')) : null, cong_tac: sw ? {aria_checked: ac, checked: sh.hasAttribute('checked')} : null};
+})()"""
+
+_JS_DEM_DS_PHAT = "(() => {" + _JS_CHUNG + r"""
+  const s = q('ytcp-playlist-section-content') || q('ytcp-playlist-section'); if (!s) return null;
+  const hang = qa('ytcp-playlist-row', s).filter(hien).length;
+  const ten = qa('ytcp-playlist-row h3.playlist-title a, ytcp-playlist-row a.playlist-title-link, ytcp-playlist-row #video-title', s).map(a => (a.innerText || '').trim()).filter(x => x);
+  const ft = q('ytcp-table-footer', s) || q('ytcp-table-footer');
+  const t = (s.innerText || '').trim();
+  return {hang: hang, ten: [...new Set(ten)].slice(0, 60), chan: ft ? (ft.innerText || '').trim().slice(0, 200) : t.slice(-200),
+          trong: hang === 0 && qa('ytcp-button.content-button', s).some(hien), duoi: t.slice(-200)};
+})()"""
+
+
 # ═══════════════════════════ ĐIỀU KHIỂN STUDIO ══════════════════════════════
 def pref_dat_hl(pref: str, hl: str) -> str:
     """Giá trị cookie PREF của YouTube (`k=v&k=v`) với `hl=<hl>`: giữ MỌI cặp khoá khác, đổi/thêm `hl`. Hàm thuần."""
@@ -1552,9 +1703,12 @@ class Studio:
                 self.huy_thay_doi(ghi)
 
     def chon_thoi_gian_hinh_mo(self) -> None:
-        """Hình mờ: đặt hiển thị TOÀN BỘ video (mặc định của Studio có thể là 'Toàn bộ video' — chỉ bấm nếu thấy lựa chọn)."""
+        """Hình mờ: đặt hiển thị TOÀN BỘ video (mặc định của Studio có thể là 'Toàn bộ video' — chỉ bấm nếu thấy lựa chọn).
+        14/10: DOM thật (ảnh 04/10) là `#entire-video-radio-button` / name=ENTIRE — tên cũ ENTIRE_VIDEO không khớp."""
         try:
-            self.bam(["ytcp-video-watermark-upload tp-yt-paper-radio-button[name=ENTIRE_VIDEO]",
+            self.bam(["ytcp-video-watermark-upload tp-yt-paper-radio-button#entire-video-radio-button",
+                      "ytcp-video-watermark-upload tp-yt-paper-radio-button[name=ENTIRE]",
+                      "ytcp-video-watermark-upload tp-yt-paper-radio-button[name=ENTIRE_VIDEO]",
                       "ytcp-video-watermark-upload tp-yt-paper-radio-button[name=FULL_VIDEO]"],
                      ("Toàn bộ video", "Entire video", "動画全体"), han=3)
         except LoiMuc:
@@ -1597,6 +1751,147 @@ class Studio:
                 return ""
         raise LoiMuc("Xuất bản xong nhưng nút vẫn sáng sau {0:.0f}s (Studio chưa xác nhận lưu){1}".format(
             han, (" — thông báo: " + " | ".join(thay[-3:])) if thay else ""))
+
+    # ── thương hiệu (14/10): đọc hình mờ / thẻ Trang chủ / số danh sách phát; đặt RIÊNG hình mờ ──
+    def bang_chung(self, nhan: str) -> dict:
+        """Ảnh + bản đồ DOM; trả {anh, ban_do} ({} nếu hụt)."""
+        try:
+            return self.st.ghi_bang_chung(nhan) or {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def cho_doc_hinh_mo(self, can_co: bool = False, han: float = 20.0) -> Optional[dict]:
+        """Đọc ô hình mờ ở trang Hồ sơ đang mở; ô (nhất là ảnh) dựng chậm → đợi tới khi thấy nút Xoá/Tải lên
+        (`can_co`: đợi nút Xoá). Trả bản đọc cuối (None nếu không có ô)."""
+        het = time.monotonic() + han
+        du = None
+        while True:
+            try:
+                du = self.js(_JS_HINH_MO)
+            except Exception:  # noqa: BLE001
+                du = None
+            if du and (du.get("nut_xoa") or (not can_co and du.get("nut_tai_len"))):
+                return du
+            if time.monotonic() >= het:
+                return du
+            self.ngu(1.5)
+
+    def doc_thuong_hieu(self) -> Tuple[dict, dict]:
+        """CHỈ ĐỌC: hình mờ (trang Hồ sơ), thẻ Trang chủ (trailer/nổi bật), danh sách phát. Trả (kết quả, {nhóm: lỗi})."""
+        kq: dict = {"anh": {}}
+        loi: dict = {}
+        try:
+            self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
+            self.doi_hien("#description-textbox [role=textbox]", 15)
+            tho = self.cho_doc_hinh_mo()
+            kq["hinh_mo"], kq["_hinh_mo_tho"] = doc_hinh_mo(tho), tho
+            kq["_ho_so"] = self.js(_JS_HO_SO)
+            self.ngu(1.0)
+            kq["anh"]["hinh_mo"] = self.bang_chung("thuong-hieu-hinh-mo").get("anh", "")
+        except LoiMuc as e:
+            loi["hinh_mo"] = str(e)[:150]
+            kq["hinh_mo"] = doc_hinh_mo(None)
+        try:
+            # Thẻ Trang chủ: URL `editing/sections` bị đưa về Hồ sơ (đo 14/10) → BẤM tab (chỉ chuyển tab, chưa sửa gì)
+            if "/editing/profile" not in self.url():
+                self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
+            self._bam_nhan(RE_TAB_TRANG_CHU, "tab Thẻ Trang chủ", sel="tp-yt-paper-tab")
+            self.ngu(2.0)
+            self.kiem_chan()
+            du, het, lan_dung = {}, time.monotonic() + 25, 0
+            while True:
+                du = self.js(_JS_TRANG_CHU) or {}
+                dung = du.get("bat") is not None and bool(du.get("ke"))
+                lan_dung += 1 if dung else 0
+                td = doc_tieu_diem(du.get("chu"), trang_da_dung=lan_dung >= 2)   # 2 lần đọc liền: khung đã dựng hẳn
+                if all(td[k]["co"] is not None for k in td) or time.monotonic() >= het:
+                    break
+                self.ngu(1.5)
+            kq["tieu_diem"], kq["_trang_chu"], kq["trang_chu_bat"] = td, du, du.get("bat")
+            kq["anh"]["trang_chu"] = self.bang_chung("thuong-hieu-trang-chu").get("anh", "")
+        except LoiMuc as e:
+            loi["trang_chu"] = str(e)[:150]
+            kq["tieu_diem"] = doc_tieu_diem("")
+        try:
+            self.mo("https://studio.youtube.com/channel/{0}/content/playlists".format(self.uc), "ytcp-playlist-section")
+            du, het = None, time.monotonic() + 20
+            while True:
+                du = self.js(_JS_DEM_DS_PHAT)
+                if (du and (du.get("hang") or du.get("trong"))) or time.monotonic() >= het:
+                    break
+                self.ngu(1.5)
+            kq["ds_phat"] = {"so": dem_ds_phat(du), "ten": (du or {}).get("ten") or [], "chan": (du or {}).get("chan") or ""}
+            kq["anh"]["ds_phat"] = self.bang_chung("thuong-hieu-ds-phat").get("anh", "")
+        except LoiMuc as e:
+            loi["ds_phat"] = str(e)[:150]
+            kq["ds_phat"] = {"so": None, "ten": [], "chan": ""}
+        return kq, loi
+
+    def dat_hinh_mo(self, duong: str, ghi) -> dict:
+        """CHỈ đặt hình mờ cho kênh đang THIẾU (đường `hinh_mo` của `sua_ho_so`): chọn tệp → Xong → «Toàn bộ video» →
+        so tên/handle/mô tả/logo/banner với lúc mở trang (lệch = bỏ thay đổi) → Xuất bản → TẢI LẠI trang đọc lại.
+        Bước nào khác mong đợi → DỪNG (bỏ thay đổi, không bấm thêm gì). Trả {ket: dat|hong|bo, ly_do, anh, doc_lai}."""
+        ra: dict = {"ket": "hong", "ly_do": "", "anh": {}, "doc_lai": None}
+        self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")
+        self.doi_hien("#description-textbox [role=textbox]", 15)
+        hm = doc_hinh_mo(self.cho_doc_hinh_mo())
+        ok, ly = can_dat_hinh_mo(hm)
+        if not ok:
+            ra.update(ket="bo", ly_do=ly)
+            return ra
+        goc = self.js(_JS_HO_SO)
+        if not goc or not self.co(["ytcp-video-watermark-upload ytcp-button#upload-button"]):
+            ra["ly_do"] = "trang Hồ sơ khác mong đợi (không đọc được form / không có nút Tải lên của ô hình mờ)"
+            self.chup("hinh-mo-khac-mong-doi")
+            return ra
+        ra["anh"]["truoc"] = self.bang_chung("hinh-mo-truoc").get("anh", "")
+        da_xuat_ban = False
+        try:
+            self.dat_tep(["ytcp-video-watermark-upload ytcp-button#upload-button"], duong)
+            self.xong_hop_cat()
+            hm2 = doc_hinh_mo(self.cho_doc_hinh_mo(can_co=True, han=15))
+            if not hm2["co"]:
+                raise LoiMuc("chọn tệp + Xong xong mà ô hình mờ vẫn chưa có ảnh")
+            if hm2["thoi_gian"] != "toan_bo":
+                self.chon_thoi_gian_hinh_mo()
+                self.ngu(1.0)
+                hm2 = doc_hinh_mo(self.cho_doc_hinh_mo(can_co=True, han=5))
+            ghi("   hình mờ trước Xuất bản: có={0} hiển thị={1} «{2}»".format(hm2["co"], hm2["thoi_gian"], hm2["nhan"]))
+            if hm2["thoi_gian"] != "toan_bo":
+                raise LoiMuc("không thấy «Toàn bộ video» được chọn (đang: {0!r})".format(hm2.get("nhan")))
+            lech = lech_ho_so(goc, self.js(_JS_HO_SO))
+            if lech:
+                raise LoiMuc("trang Hồ sơ lệch ngoài hình mờ: " + ", ".join(lech))
+            ra["anh"]["truoc_xuat_ban"] = self.bang_chung("hinh-mo-truoc-xuat-ban").get("anh", "")
+            self.bam(["ytcp-button#publish-button button", "ytcp-button#publish-button"], ("Xuất bản", "Publish", "公開"), han=6)
+            da_xuat_ban = True
+            loi_xb = self.xu_ly_sau_xuat_ban(ghi)
+            if loi_xb:
+                raise LoiMuc("Xuất bản báo lỗi: " + loi_xb)
+        except LoiMuc as e:
+            ra["ly_do"] = str(e)[:300]
+            ghi("   hình mờ: DỪNG — {0}".format(ra["ly_do"]))
+            self.chup("hinh-mo-hong")
+        finally:
+            if not da_xuat_ban:
+                self.huy_thay_doi(ghi)
+        if not da_xuat_ban:
+            return ra
+        self.ngu(3.0)
+        self.mo(self.url_hoso(), "ytcp-channel-editing-channel-name input")       # TẢI LẠI: chỉ tin cái Studio đã lưu
+        self.doi_hien("#description-textbox [role=textbox]", 15)
+        hm3 = doc_hinh_mo(self.cho_doc_hinh_mo(can_co=True, han=30))
+        lech = lech_ho_so(goc, self.js(_JS_HO_SO))
+        ra["doc_lai"], ra["lech_sau"] = hm3, lech
+        ra["anh"]["sau"] = self.bang_chung("hinh-mo-sau").get("anh", "")
+        if hm3["co"] and hm3["thoi_gian"] == "toan_bo" and not lech:      # nguồn thật = trang đã tải lại
+            ra["ket"] = "dat"
+            if ra["ly_do"]:
+                ra["ghi_chu"], ra["ly_do"] = ra["ly_do"], ""
+        else:
+            ra["ly_do"] = "; ".join(x for x in (ra["ly_do"], "đọc lại sau Xuất bản: có={0} hiển thị={1!r}".format(
+                hm3["co"], hm3["thoi_gian"]), ("lệch: " + ", ".join(lech)) if lech else "") if x)
+        return ra
 
     # ── sửa: Cài đặt kênh / mặc định tải lên ──
     def chon_dropdown(self, css_trigger: str, aliases) -> None:
@@ -1840,8 +2135,10 @@ def chuan_bi_ho_so(kenh: str, ghi) -> dict:
 def kiem_truoc_khi_chay(agent, kenh: str) -> None:
     if agent.van_ipv4_mo():
         raise Hoan("van IPv4 đang mở")
-    if os.path.exists(os.path.join(GOC_TOOL, "logs", "dang-dodang.json")):
-        raise Hoan("đang có máy đăng dở (logs/dang-dodang.json)")
+    # 14/10/2026: agent ghi cờ đăng dở ở `vm/logs/` (GOC), bản cũ chỉ nhìn `MyTool/logs/` (GOC_TOOL) → kiểm cả hai.
+    for goc_co in (GOC_TOOL, GOC):
+        if os.path.exists(os.path.join(goc_co, "logs", "dang-dodang.json")):
+            raise Hoan("đang có máy đăng dở ({0}/logs/dang-dodang.json)".format(os.path.basename(goc_co)))
 
 
 def nhuong_nuoi(kenh: str, ghi, cho_giay: float = 150.0) -> bool:
@@ -2215,6 +2512,210 @@ def _ghi_thu(kenh: str, hs: dict, ht: dict, kh: dict, loi: dict) -> None:
         tep.write("\n".join(d) + "\n")
 
 
+# ═══════════════════════════ PHIÊN KIỂM THƯƠNG HIỆU (14/10/2026) ═════════════
+def duong_thuong_hieu(kenh: str) -> str:
+    return os.path.join(THU_MUC_SO, kenh + ".thuong-hieu.json")
+
+
+def ghi_thuong_hieu(kenh: str, kq: dict) -> str:
+    """Ghi `<K>.thuong-hieu.json`; giữ tóm tắt <= 10 lần trước trong `lich_su`."""
+    d = duong_thuong_hieu(kenh)
+    try:
+        with open(d, "r", encoding="utf-8") as tep:
+            cu = json.load(tep) or {}
+    except (OSError, ValueError):
+        cu = {}
+    ls = list(cu.get("lich_su") or []) if isinstance(cu, dict) else []
+    if isinstance(cu, dict) and cu.get("luc"):
+        ls.append({"luc": cu.get("luc"), "che_do": cu.get("che_do"), "ket_qua": cu.get("ket_qua"), "hinh_mo": cu.get("hinh_mo"),
+                   "dat_hinh_mo": (cu.get("dat_hinh_mo") or {}).get("ket")})
+    kq["lich_su"] = ls[-10:]
+    os.makedirs(THU_MUC_SO, exist_ok=True)
+    with open(d + ".tam", "w", encoding="utf-8") as tep:
+        json.dump(kq, tep, ensure_ascii=False, indent=1)
+    os.replace(d + ".tam", d)
+    return d
+
+
+def anh_hinh_mo_kenh(kenh: str, uc: str, ghi, src_studio=()) -> Tuple[str, str]:
+    """Ảnh hình mờ 150×150 của CHÍNH kênh: `thiet-lap/<hinh_mo>` của hồ sơ nếu có sẵn đúng cỡ; không thì cắt tròn từ ẢNH
+    HỒ SƠ hiện tại (og:image trang công khai, dự phòng ảnh trên trang Hồ sơ Studio) bằng `anh_hinh_mo_tu_logo`.
+    Ảnh dựng ghi vào `vm/logs/thiet-lap-kenh/<K>/` (không ghi vào CHANNEL). Trả (đường, nguồn); hỏng → LoiMuc."""
+    tl = _tl()
+    tm = tl.thu_muc_thiet_lap(kenh, GOC_TOOL)
+    hs = tl.doc_ho_so(kenh, GOC_TOOL)
+    d = tl.duong_anh(hs, "hinh_mo", tm) if hs else ""
+    if d and os.path.isfile(d) and tl.kich_thuoc_anh(d) == tl.KICH_THUOC["hinh_mo"]:
+        return d, "thiet-lap/" + os.path.basename(d)
+    goc = [(doc_anh_cong_khai(uc) or {}).get("logo") or ""] + [goc_url_anh(u) for u in (src_studio or ()) if str(u).startswith("http")]
+    thu_muc = os.path.join(THU_MUC_SO, kenh)
+    os.makedirs(thu_muc, exist_ok=True)
+    nguon, loi = os.path.join(thu_muc, "anh-ho-so-goc.img"), ""
+    import urllib.request  # noqa: PLC0415
+    for u in [x for x in goc if x]:
+        try:
+            rq = urllib.request.Request(u + "=s800-c-k-c0x00ffffff-no-rj", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(rq, timeout=30) as r:
+                b = r.read()
+            if len(b) < 2000:
+                raise ValueError("ảnh quá nhỏ ({0} byte)".format(len(b)))
+            with open(nguon, "wb") as tep:
+                tep.write(b)
+            dich = tl.anh_hinh_mo_tu_logo(nguon, os.path.join(thu_muc, "hinh-mo.png"))
+            if tl.kich_thuoc_anh(dich) != tl.KICH_THUOC["hinh_mo"]:
+                raise ValueError("ảnh hình mờ không đúng 150×150")
+            ghi("   ảnh hình mờ: cắt từ ảnh hồ sơ hiện tại → {0}".format(dich))
+            return dich, "ảnh hồ sơ hiện tại của kênh"
+        except Exception as e:  # noqa: BLE001
+            loi = str(e)[:120]
+    raise LoiMuc("không lấy được ảnh hồ sơ hiện tại của kênh để cắt hình mờ" + (": " + loi if loi else ""))
+
+
+def _cfg_kenh(agent, kenh: str) -> dict:
+    """Cấu hình agent có `kenh` trong `cac_kenh` (kênh mới nối đuôi như `nuoi.cau_hinh_kenh_moi`) → đúng cổng DevTools."""
+    cfg = agent.doc_cau_hinh()
+    cac = list(agent.danh_sach_kenh(cfg))
+    for k in nuoi.KENH_MOI_THU_TU + (kenh,):
+        if k not in cac:
+            cac.append(k)
+    return dict(cfg, cac_kenh=cac)
+
+
+def chay_thuong_hieu(kenh: str, ghi, dat: bool = False, bo_qua_khung: bool = False, rng=None) -> int:
+    """`--kiem-thuong-hieu` (CHỈ ĐỌC) [+ `--dat-hinh-mo`]. Luật như máy DOM: khoá máy `.khoa-may` (bận → hoãn, không ép),
+    khoá Chrome kênh + một phiên thiết lập một lúc, van IPv4 mở → hoãn, Chrome kênh có sẵn thì chỉ mở/đóng TAB của mình,
+    tạm giao diện vi (MayDangDom.lay_uc: đúng UC ghim) rồi TRẢ ngôn ngữ cũ. Không ghi sổ thiết lập `<K>.json`.
+    Mã: 0 xong · 10 hoãn · 20 cần người · 1 lỗi."""
+    rng = rng or random.Random()
+    luc0 = time.time()
+    du_kien = DU_KIEN_DAT_PHUT if dat else DU_KIEN_KIEM_PHUT
+    r = "" if bo_qua_khung else (khung_cam(luc0, du_kien) or khung_gio_tron(luc0, du_kien))
+    if r:
+        ghi("hoãn: " + r)
+        return MA_HOAN
+    agent = nuoi._nap_agent(ghi)                                    # noqa: SLF001
+    try:
+        kiem_truoc_khi_chay(agent, kenh)
+        if os.path.exists(os.path.join(GOC, "logs", "dang-dodang.json")):
+            raise Hoan("đang có máy đăng dở (vm/logs/dang-dodang.json)")
+        r = nuoi.viec_dang_cho(agent, luc0, kenh)
+        if r:
+            raise Hoan("nhường: " + r)
+    except Hoan as h:
+        ghi("hoãn: {0}".format(h))
+        return MA_HOAN
+    if not nuoi.giu_khoa("_thiet-lap", THU_MUC_KHOA_RIENG):
+        ghi("hoãn: đang có phiên thiết lập kênh khác (tuần tự)")
+        return MA_HOAN
+    khoa_may = khoa_kenh = da_doc = False
+    cdp = cdp_mod = md = S = None
+    ma = 0
+    kq: dict = {"kenh": kenh, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "che_do": "kiem+dat" if dat else "kiem", "ket_qua": "đang chạy"}
+    try:
+        if not agent.giu_khoa_may_chung(viec="thiet_lap", kenh=kenh, uu_tien=1):
+            raise Hoan("khoá máy (.khoa-may) đang bận — không ép")
+        khoa_may = True
+        if not nuoi.giu_khoa(kenh):
+            raise Hoan("kênh {0} đang có tiến trình khác giữ khoá Chrome".format(kenh))
+        khoa_kenh = True
+        nuoi.xoa_co_dung(kenh)
+        cdp_mod, cdp_studio = _nap_cdp()
+        import may_dang_dom as mdd                                  # noqa: PLC0415 — sau _nap_cdp: đúng vm/
+        cfg = _cfg_kenh(agent, kenh)
+        if not cdp_mod.hoi_phien_ban(agent._cong_devtools(agent.cau_hinh_kenh(cfg, kenh))):   # noqa: SLF001
+            r = nuoi.duoc_mo_them(len(nuoi.cac_kenh_dang_nuoi()), nuoi.ram_trong_gb())
+            if r:
+                raise Hoan(r)
+        try:
+            cdp = cdp_mod.ket_noi_kenh(cfg, kenh, nhat_ky=ghi)
+        except cdp_mod.CdpKhongDung as e:
+            raise Hoan("không nối được Chrome kênh: {0} (mã {1})".format(e.ly_do, e.ma))
+        ghi("── KIỂM THƯƠNG HIỆU {0}{1} — Chrome cổng {2}{3} ──".format(
+            kenh, " + ĐẶT HÌNH MỜ nếu thiếu" if dat else " [CHỈ ĐỌC]", cdp.cong,
+            " (máy này tự mở)" if cdp.tu_mo else " (có sẵn — chỉ mở/đóng TAB của mình)"))
+        nuoi.canh_tien_trien.bat_canh(lambda: (cdp_mod.dong_trinh_duyet(cdp) if cdp.tu_mo else cdp.dong()), ghi=ghi)
+        bo = cdp_studio.doc_bo_chon()
+        thu_muc_anh = os.path.join(THU_MUC_SO, kenh)
+        md = mdd.MayDangDom(kenh, bo, lambda: cdp_studio.TrangStudio.mo_tab_moi(cdp, bo, nhat_ky=ghi, thu_muc_dom=thu_muc_anh, rng=rng),
+                            mdd.SoVideoId(), bao=None, thu_muc_done="", nhat_ky=ghi)
+        S = Studio(md.tab_b(), ghi, thu_muc_anh)
+        try:
+            S.uc = md.lay_uc()                                      # đúng UC đã ghim + tạm giao diện vi (trả lại cuối phiên)
+        except mdd.DungKenh as e:
+            raise CanNguoi(str(e))
+        except Exception:  # noqa: BLE001
+            S.kiem_chan()                                           # đăng xuất / xác minh → CanNguoi
+            raise
+        S.kiem_chan()
+        kt, loi = S.doc_thuong_hieu()
+        da_doc = True
+        hm, td, dsp = kt["hinh_mo"], kt["tieu_diem"], kt["ds_phat"]
+        kq.update(hinh_mo=hm, tieu_diem={k: v.get("co") for k, v in td.items()}, trang_chu_bat=kt.get("trang_chu_bat"),
+                  ds_phat=dsp, anh=kt["anh"], loi_doc=loi,
+                  chi_tiet={"hinh_mo": kt.get("_hinh_mo_tho"), "tieu_diem": td,
+                            "trang_chu": {k: (kt.get("_trang_chu") or {}).get(k) for k in ("url", "tab", "ds", "cong_tac", "chu")}})
+        ghi("   hình mờ: {0} · hiển thị: {1} «{2}»".format({True: "CÓ", False: "THIẾU", None: "?"}[hm["co"]], hm["thoi_gian"], hm["nhan"]))
+        ghi("   thẻ Trang chủ bật: {0} · trailer người chưa đăng ký: {1} · video nổi bật người đăng ký quay lại: {2} · "
+            "danh sách phát: {3}".format(kt.get("trang_chu_bat"), td["trailer"]["co"], td["noi_bat"]["co"], dsp["so"]))
+        for k, v in loi.items():
+            ghi("   không đọc được {0}: {1}".format(k, v))
+        if dat:
+            ok, ly = can_dat_hinh_mo(hm)
+            if not ok:
+                kq["dat_hinh_mo"] = {"ket": "bo", "ly_do": ly}
+                ghi("   đặt hình mờ: bỏ — " + ly)
+            else:
+                r = ly_do_dung(agent, kenh, time.time()) or ("" if bo_qua_khung else khung_gio_tron(time.time(), DU_KIEN_DAT_PHUT / 2))
+                if r:
+                    raise Hoan("trước khi đặt hình mờ: " + r)
+                duong, nguon = anh_hinh_mo_kenh(kenh, S.uc, ghi, ((kt.get("_ho_so") or {}).get("logo") or {}).get("src") or ())
+                kq["anh_hinh_mo"] = {"duong": duong, "nguon": nguon}
+                kq["dat_hinh_mo"] = S.dat_hinh_mo(duong, ghi)
+                ghi("*** HÌNH MỜ {0}: {1} {2} ***".format(kenh, kq["dat_hinh_mo"]["ket"].upper(), kq["dat_hinh_mo"].get("ly_do") or ""))
+        kq["ket_qua"] = "xong"
+    except CanNguoi as c:
+        ma, kq["ket_qua"] = MA_CAN_NGUOI, "can_nguoi: {0}".format(c)
+        if S:
+            S.chup("can-nguoi")
+        ghi("DỪNG — cần người xử lý: {0} (không thử lại)".format(c))
+    except Hoan as h:
+        ma, kq["ket_qua"] = MA_HOAN, "hoãn: {0}".format(h)
+        ghi("hoãn: {0}".format(h))
+    except Exception as e:  # noqa: BLE001
+        ma, kq["ket_qua"] = 1, "lỗi: {0}".format(str(e)[:200])
+        ghi("PHIÊN LỖI: {0}".format(str(e)[:200]))
+        if S:
+            S.chup("thuong-hieu-loi")
+    finally:
+        try:
+            if md is not None:
+                md.dong_het()                                       # CHỈ tab của phiên này
+            if cdp is not None:
+                try:
+                    import ngon_ngu_tam  # noqa: PLC0415
+                    ngon_ngu_tam.tra(cdp, kenh, ghi)
+                except Exception as e:  # noqa: BLE001
+                    ghi("trả ngôn ngữ giao diện lỗi: {0}".format(str(e)[:120]))
+                if cdp.tu_mo:
+                    ghi("đóng Chrome kênh {0} (máy này đã mở): {1}".format(kenh, "đã đóng" if cdp_mod.dong_trinh_duyet(cdp) else "CỔNG CHƯA ĐÓNG"))
+                    don_launcher_mo_coi(kenh, ghi)
+                else:
+                    cdp.dong()
+        finally:
+            if khoa_kenh:
+                nuoi.xoa_co_dung(kenh)
+                nuoi.nha_khoa(kenh)
+            if khoa_may:
+                agent.nha_khoa_may_chung()
+            nuoi.nha_khoa("_thiet-lap", THU_MUC_KHOA_RIENG)
+        if da_doc or ma in (MA_CAN_NGUOI, 1):
+            try:
+                ghi("đã ghi {0}".format(ghi_thuong_hieu(kenh, kq)))
+            except OSError as e:
+                ghi("không ghi được kết quả: {0}".format(e))
+    return ma
+
+
 def main(argv=None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
@@ -2228,12 +2729,17 @@ def main(argv=None) -> int:
     ap.add_argument("--bo-qua-khung", action="store_true", help="(dev) bỏ khung cấm 02–07h")
     ap.add_argument("--ngon-ngu", action="store_true", help="CHỈ kiểm/đặt ngôn ngữ Studio = đích của kênh (ngon_ngu_tai_khoan_dich, mặc định vi) (kèm --thu = chỉ đọc)")
     ap.add_argument("--nhom", default="", help="(dev) chỉ chạy nhóm: ho_so,cai_dat_kenh,mac_dinh,ds_phat")
+    ap.add_argument("--kiem-thuong-hieu", action="store_true",
+                    help="CHỈ ĐỌC hình mờ + thời gian hiển thị, trailer/video nổi bật (Thẻ Trang chủ), số danh sách phát → <K>.thuong-hieu.json")
+    ap.add_argument("--dat-hinh-mo", action="store_true", help="(kèm --kiem-thuong-hieu) kênh THIẾU hình mờ thì đặt, hiển thị toàn bộ video")
     a = ap.parse_args(argv)
     ghi = _nhat_ky(a.kenh)
     d = nuoi.duong_kenh_yaml(a.kenh)
     if not d:
         ghi("không thấy kenh.yaml của {0}".format(a.kenh))
         return 1
+    if a.kiem_thuong_hieu or a.dat_hinh_mo:                          # không cần thiet_lap_kenh: true, không đụng sổ thiết lập
+        return chay_thuong_hieu(a.kenh, ghi, dat=a.dat_hinh_mo, bo_qua_khung=a.bo_qua_khung)
     if not a.thu and not a.khong_luu and not a.ngon_ngu and not thiet_lap_bat(a.kenh) and not a.mo_lai:
         so = doc_so(a.kenh)
         ghi("kênh {0} không bật thiet_lap_kenh: true — không chạy{1}".format(a.kenh, " (đã xong)" if so.get("trang_thai") == "xong" else ""))
