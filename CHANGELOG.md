@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.203.0** — 2026-10-14 — `vps-jp1` — feat(ky-nang): ky nang tu kich hoat (chu 14/10: dong goi viec lam tay thanh skill tu chay khi du dieu kien) — moi skill khai dieu_kien/chay/nhip/tu_ap; bo chay tu-kich-hoat moi gio (1 viec nang/luot, giu khoa may, tranh :55-:05, 3 lan hong…
 - **2.202.0** — 2026-10-14 — `vps-jp1` — feat(thiet-lap): bat tab Trang chu + video gioi thieu (nguoi chua dang ky) + video noi bat + muc Video pho bien cho TL1-4 (chu duyet 14/10), mo ta kenh TL1; co --dat-trang-chu / --dat-mo-ta / --khong-luu (chay thu)
 - **2.201.0** — 2026-10-14 — `vps-jp1` — feat(thiet-lap): kiem thuong hieu (chi doc) + gan hinh mo Dang ky — TL1-4 truoc deu THIEU hinh mo, nay da gan (toan video, doc lai dung); sua chon thoi gian hinh mo (ENTIRE); kiem co dang dang do ca vm/logs
 - **2.200.1** — 2026-10-14 — `vps-jp1` — fix(kenh): doc_yaml bo ky tu BOM ket giua tep (TL1-3 nhan ban tu khuon TL4 mang U+FEFF -> PyYAML hong -> lui bo doc toi gian, khoi long nhau bi lam phang lang le)
