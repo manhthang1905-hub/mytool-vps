@@ -95,6 +95,11 @@ MUC = (
     ("viet_lui_vi", "Claude Max hết lượt hoặc lỗi thì viết bằng ví ShopAPI",
      "Bật (mặc định từ 13/10/2026): thuê bao Claude cạn hạn mức, hoặc viết hỏng 2 lần, thì lượt ấy tự viết bằng ví "
      "ShopAPI để video không đứng. Tắt: không bao giờ tiêu ví cho chữ — đợi hạn mức mở lại (có thể nhiều giờ)."),
+    ("ky_nang_tu_kich_hoat", "Skill tự chạy khi đủ điều kiện",
+     "Bật (mặc định): mỗi giờ (tác vụ ShopAPI-KyNang, phút :35) máy xem từng skill có điều kiện — đổi bìa gấp trước "
+     "giờ đăng, bàn giao lượt kẹt cấu hình, hình mờ/trang chủ kênh, gom não bộ phận… — đủ điều kiện thì tự chạy, mỗi "
+     "lượt tối đa một việc nặng, khoá máy bận thì để lượt sau; hỏng 3 lần liền thì tạm dừng 24 giờ và báo bạn. "
+     "Tắt: máy chỉ báo “nên chạy”, không tự chạy gì. Tắt riêng một kênh: kenh.yaml → ky_nang_tat: [mã skill]."),
     ("bao_su_co", "Hiện thông báo khi tool gặp lỗi",
      "Tắt thì lỗi vẫn được ghi lại đầy đủ vào workspace/su-co.log, chỉ là "
      "không hiện lên màn hình. Hợp khi bạn để tool chạy qua đêm."),

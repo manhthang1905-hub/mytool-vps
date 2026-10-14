@@ -197,10 +197,18 @@ def _chi_so_28(goc: str, kenh: str) -> Dict[str, Any]:
 
 def cay_ky_nang(goc: str, kenh: str) -> List[Dict[str, Any]]:
     from core import ky_nang  # noqa: PLC0415
+    try:  # 14/10/2026: skill có điều kiện — sẽ chạy / nên chạy / tạm dừng / lần chạy cuối (`core/ky_nang_tu.py`)
+        from core import ky_nang_tu  # noqa: PLC0415
+        tu = ky_nang_tu.danh_gia_kenh(goc, kenh)
+    except Exception:  # noqa: BLE001
+        tu = {}
     ra = []
     for k, tt, gc in ky_nang.kiem_kenh(goc, kenh):
+        x = tu.get(k.ma) or {}
         ra.append({"ma": k.ma, "ten": k.ten, "loai": k.loai, "mo_ta": k.mo_ta, "lenh": str(k.lenh or "").replace("<kenh>", kenh)[:200],
-                   "can": list(k.can or []), "tt": tt, "ghi_chu": str(gc or "")[:200]})
+                   "can": list(k.can or []), "tt": tt, "ghi_chu": str(gc or "")[:200],
+                   "tu": {"quyet": x["quyet"], "nhan": x["nhan"], "ly_do": str(x["ly_do"])[:200], "tu_ap": x["tu_ap"],
+                          "lan_cuoi": x.get("lan_cuoi")} if x else None})
     return ra
 
 

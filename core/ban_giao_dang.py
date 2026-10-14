@@ -31,7 +31,7 @@ from . import qa_truoc_dang
 
 __all__ = ["ma_goi", "doc_gioi_thieu", "kiem_du_bo", "xuat_goi", "ban_giao",
            "ghi_nhan_dang_tay", "danh_dau_dang_tay", "TRANG_THAI_DANG_TAY",
-           "TEP_VIDEO", "TEP_SRT", "TEP_BINH_LUAN", "kiem_clip_that", "TEP_NGUON_CLIP"]
+           "TEP_VIDEO", "TEP_SRT", "TEP_BINH_LUAN", "kiem_clip_that", "TEP_NGUON_CLIP", "ban_giao_tay"]
 
 #: Trạng thái ghi khi chủ kênh đăng TAY. Khác chuỗi "ĐÃ ĐĂNG" của máy một
 #: chút là cố ý: nhìn sổ biết ngay video nào máy đăng, video nào người đăng —
@@ -690,3 +690,119 @@ def kiem_lai_goi_ket(goc: str, ma_kenh: str, *, kiem=None, toi_da: int = 0) -> L
     if doi:
         ke_hoach_dang.luu_bang(goc, ma_kenh, hang, cot)
     return ra
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BÀN GIAO TAY một lượt kẹt (14/10/2026) — logic của `workspace/cong-cu/ban_giao_tay.py` đưa vào tool để skill S04
+# (`core/ky_nang.py`, tự kích hoạt) gọi. Ca gốc 13/10/2026: TL4-T7/0001 xong `8-video.mp4` nhưng kenh.yaml thiếu
+# `thu_muc_done` → L3 bỏ lượt, video nằm im.
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _ghi_so_ngay(duong: str, so: dict) -> None:
+    import json  # noqa: PLC0415
+    with open(duong + ".tam", "w", encoding="utf-8") as tep:
+        json.dump(so, tep, ensure_ascii=False, indent=2)
+    os.replace(duong + ".tam", duong)
+
+
+def _sua_run(duong: str, luot: str, sua) -> None:
+    """Đọc lại sổ ngày NGAY trước khi ghi (lượt khác có thể vừa ghi sổ), sửa đúng mục của `luot`, ghi nguyên tử."""
+    import json  # noqa: PLC0415
+    with open(duong, "r", encoding="utf-8") as tep:
+        so = json.load(tep)
+    run = next(r for r in so["runs"] if str(r.get("ma_luot")) == luot)
+    sua(run)
+    _ghi_so_ngay(duong, so)
+
+
+def ban_giao_tay(goc: str, kenh: str, luot: str, ngay_so: str, *, ghi=print,
+                 bay_gio: Optional[_dt.datetime] = None) -> int:
+    """Bàn giao một lượt đã dựng xong mà chưa bàn giao — ĐÚNG luồng bước 5 của `core/tu_chay.py`: giữ khe "nang", gọi
+    `ban_giao` (cổng clip thật + cổng chất lượng — không bao giờ đi đường tắt), ghi sổ ngày + gỡ cờ bỏ của L3, cất dấu
+    BO-VI sang `workspace/sao-luu/`, ghi ván tự học / bộ não / dọn lựa chọn content. Kênh tự duyệt → khe trống sớm
+    nhất; không tự duyệt → để trống ngày giờ cho chủ duyệt. Bàn giao hỏng → ghi `ban_giao.loi` như bước 5 (lý do mới
+    thay lý do cấu hình — skill không thử lại mãi).
+    Mã: 0 xong / đã bàn giao từ trước · 1 bàn giao hỏng · 2 kenh.yaml chưa có thu_muc_done · 5 không thấy lượt ·
+    10 hoãn (chưa có khe trống — lượt sau thử lại; cùng mã hoãn của máy DOM)."""
+    import glob  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from . import dieu_phoi, xep_lich  # noqa: PLC0415
+    from .auto import duong_luot  # noqa: PLC0415
+    from .kenh import doc_kenh  # noqa: PLC0415
+
+    k = doc_kenh(goc, kenh)
+    if not k.thu_muc_done:
+        ghi("kenh.yaml chưa có thu_muc_done — không bàn giao")
+        return 2
+    p_so = os.path.join(goc, "CHANNEL", kenh, "tu-chay", ngay_so + ".json")
+    try:
+        with open(p_so, "r", encoding="utf-8") as tep:
+            run = next(r for r in json.load(tep)["runs"] if str(r.get("ma_luot")) == luot)
+    except (OSError, ValueError, KeyError, StopIteration):
+        ghi("không thấy lượt {0} trong sổ {1}".format(luot, p_so))
+        return 5
+    if (run.get("ban_giao") or {}).get("da_ban_giao"):
+        ghi("đã bàn giao rồi: {0}".format(run["ban_giao"]))
+        return 0
+    ngay, gio, ly_do_trong = "", "", ""
+    if k.tu_duyet:
+        ngay, gio = xep_lich.khe_trong_som_nhat(goc, kenh, k, bay_gio=bay_gio or _dt.datetime.now())
+        if not ngay:
+            ghi("không tìm được khe trống — lượt sau thử lại")
+            return 10
+    else:
+        ly_do_trong = "tu_duyet: false — để trống ngày giờ, tự duyệt trong bảng kế hoạch."
+    ghi("khe: {0} {1}".format(ngay or "(trống)", gio))
+    try:
+        with dieu_phoi.giu_nang(goc, "qa_chep", kenh=kenh, uu_tien=2, ghi=ghi):
+            ma, moi = ban_giao(goc, kenh, luot, k.thu_muc_done, ngay=ngay, gio=gio)
+    except Exception as loi:  # noqa: BLE001 — ghi lý do như bước 5 rồi báo hỏng
+        _sua_run(p_so, luot, lambda r: r.setdefault("ban_giao", {}).update(loi=str(loi)[:400]))
+        ghi("bàn giao hỏng: {0}".format(str(loi)[:300]))
+        return 1
+    ghi("bàn giao: {0} {1}".format(ma, "dòng mới" if moi else "dòng cũ"))
+
+    def xong(r):
+        r.setdefault("ban_giao", {}).update(da_ban_giao=True, ma_goi=ma, ngay_dang=ngay, gio_dang=gio,
+                                            ly_do_trong=ly_do_trong, loi="")
+        for khoa in ("bo", "ly_do_bo", "phuc_hoi"):
+            r.pop(khoa, None)
+    _sua_run(p_so, luot, xong)
+    cat = os.path.join(goc, "workspace", "sao-luu", "bo-vi-{0}-{1}".format(kenh, luot))
+    for p in glob.glob(os.path.join(duong_luot(goc, kenh, luot), "BO-VI-*.txt")):
+        os.makedirs(cat, exist_ok=True)
+        shutil.move(p, os.path.join(cat, os.path.basename(p)))
+    nguon = run.get("nguon") or {}
+    try:  # bàn giao đã xong — ba việc phụ dưới hỏng thì chỉ ghi
+        from . import tu_hoc  # noqa: PLC0415
+        tu_hoc.ghi_van_tu_luot(goc, kenh, ma, nguon)
+    except Exception as loi:  # noqa: BLE001
+        ghi("(tự học hỏng: {0})".format(str(loi)[:120]))
+    try:
+        from . import nao  # noqa: PLC0415
+        ghi("bộ não: {0}".format(nao.ghi_ban_giao(goc, kenh, ma, str(nguon.get("link") or ""))))
+    except Exception as loi:  # noqa: BLE001
+        ghi("(bộ não hỏng: {0})".format(str(loi)[:120]))
+    try:
+        from . import chon_content  # noqa: PLC0415
+        chon_content.hoan_tat_lua_chon(goc, kenh, str(nguon.get("ma") or ""))
+    except Exception as loi:  # noqa: BLE001
+        ghi("(dọn lựa chọn hỏng: {0})".format(str(loi)[:120]))
+    ghi("XONG")
+    return 0
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """`python -X utf8 -m core.ban_giao_dang ban-giao-tay <KÊNH> <MÃ LƯỢT> <NGÀY SỔ yyyy-mm-dd>`."""
+    import sys  # noqa: PLC0415
+    a = list(sys.argv[1:] if argv is None else argv)
+    if len(a) != 4 or a[0] != "ban-giao-tay":
+        print(main.__doc__)
+        return 2
+    goc = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return ban_giao_tay(goc, a[1], a[2], a[3])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

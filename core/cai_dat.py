@@ -219,6 +219,9 @@ MAC_DINH: Dict[str, Any] = {
     # Tab Tự động: kênh (template) chọn lần cuối — mở tool lên là ở sẵn đó,
     # không phải chọn lại (chủ dự án 09/09/2026). Trống = kênh đầu danh sách.
     "auto_kenh_cuoi": "",
+    # 14/10/2026 — công tắc chung của skill tự kích hoạt (`core/ky_nang_tu.py`, tác vụ ShopAPI-KyNang): bật thì skill
+    # `tu_ap` tự chạy khi đủ điều kiện; tắt thì chỉ báo "nên chạy". Mỗi kênh tắt riêng: `kenh.yaml: ky_nang_tat`.
+    "ky_nang_tu_kich_hoat": True,
 }
 
 _KHOA = threading.Lock()

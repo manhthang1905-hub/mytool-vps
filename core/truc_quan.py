@@ -161,7 +161,15 @@ def _ky_nang(kenh: str) -> Dict[str, Any]:
         dem[tt] = dem.get(tt, 0) + 1
         if tt in ("loi", "thieu") or (tt == "cho" and k.loai == "khoi_tao"):
             loi.append({"ma": k.ma, "ten": k.ten, "tt": tt, "ghi_chu": gc[:90]})
-    return {"dem": dem, "can_chu_y": loi[:8]}
+    try:  # 14/10/2026: skill tự kích hoạt — sẽ chạy / nên chạy / tạm dừng / vừa chạy (24 giờ)
+        from core import ky_nang_tu  # noqa: PLC0415
+        moc = (_dt.datetime.now() - _dt.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        tu = [{"ma": x["ma"], "ten": x["ten"], "quyet": x["quyet"], "nhan": x["nhan"], "ly_do": str(x["ly_do"])[:120],
+               "lan_cuoi": x.get("lan_cuoi")} for x in ky_nang_tu.danh_gia_kenh(GOC, kenh).values()
+              if x["quyet"] in ("se_chay", "nen_chay", "tam_dung") or str((x.get("lan_cuoi") or {}).get("luc") or "") >= moc]
+    except Exception:  # noqa: BLE001
+        tu = []
+    return {"dem": dem, "can_chu_y": loi[:8], "tu": tu}
 
 
 def chup() -> Dict[str, Any]:

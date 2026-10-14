@@ -113,12 +113,14 @@
     hop.style.width = rong + "px"; hop.style.height = caoPx + "px";
     hop.innerHTML = svg + ds.map(k => { const t = TT_KN[k.tt] || TT_KN["-"], [x, y] = vt[k.ma], nguoi = (k.can || []).some(c => String(c).startsWith("nguoi:"));
       return `<div class="kn-nut ${t[1]}" data-ma="${esc(k.ma)}" style="left:${x}px;top:${y}px;width:${W}px;height:${H}px" tabindex="0">
-        <span class="kn-ic">${ic(t[2])}</span><div style="min-width:0"><small>${esc(k.ma)} · ${esc(TEN_LOAI[k.loai] || k.loai)}${nguoi ? " · cần người" : ""}</small><b>${esc(k.ten)}</b></div></div>`; }).join("");
+        <span class="kn-ic">${ic(t[2])}</span><div style="min-width:0"><small>${esc(k.ma)} · ${esc(TEN_LOAI[k.loai] || k.loai)}${nguoi ? " · cần người" : ""}${k.tu && ["se_chay", "nen_chay", "tam_dung"].includes(k.tu.quyet) ? " · " + esc(k.tu.nhan) : ""}</small><b>${esc(k.ten)}</b></div></div>`; }).join("");
     hop.querySelectorAll(".kn-nut").forEach(e => {
       const k = theo[e.dataset.ma], t = TT_KN[k.tt] || TT_KN["-"];
       const tip = ev => MT.tip(`<h4>${esc(k.ma)} · ${esc(k.ten)}</h4><div style="margin-bottom:6px"><span class="chip">${t[0]}</span></div><div class="mo" style="margin-bottom:6px">${esc(k.mo_ta || "")}</div>
         ${k.ghi_chu ? `<div class="dong"><span>Kiểm</span><b style="max-width:220px;text-align:right">${esc(k.ghi_chu)}</b></div>` : ""}
         ${(k.can || []).length ? `<div class="dong"><span>Cần trước</span><b>${k.can.map(esc).join(", ")}</b></div>` : ""}
+        ${k.tu ? `<div class="dong"><span>Tự kích hoạt</span><b style="max-width:220px;text-align:right">${esc(k.tu.nhan)}${k.tu.tu_ap ? "" : " (chỉ báo)"} — ${esc(k.tu.ly_do)}</b></div>` : ""}
+        ${k.tu && k.tu.lan_cuoi ? `<div class="dong"><span>Lần chạy cuối</span><b style="max-width:220px;text-align:right">${esc(k.tu.lan_cuoi.luc || "")} · ${esc(k.tu.lan_cuoi.quyet || "")}${k.tu.lan_cuoi.ket ? " — " + esc(k.tu.lan_cuoi.ket) : ""}</b></div>` : ""}
         ${k.lenh ? `<div class="mo rat-nho" style="margin-top:6px;font-family:var(--f-ma)">${esc(k.lenh)}</div>` : ""}`, ev);
       e.addEventListener("pointerenter", tip); e.addEventListener("pointermove", MT.tipDoi); e.addEventListener("pointerleave", MT.tipAn);
       e.addEventListener("focus", () => { const r = e.getBoundingClientRect(); tip({clientX: r.right, clientY: r.top}); }); e.addEventListener("blur", MT.tipAn);

@@ -1435,6 +1435,19 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — mở kênh hỏng không làm hỏng khối việc
         pass
 
+    # 18) Skill tự kích hoạt (`core/ky_nang_tu.py`, 14/10/2026): skill hỏng 3 lần liền (máy tạm dừng 24 giờ), kenh.yaml
+    # thiếu khoá tự chạy / BOM máy không tự gỡ (S02), não bộ phận chưa ngủ > 30 giờ (D12).
+    try:
+        from . import ky_nang_tu as _knt  # noqa: PLC0415
+
+        for v in _knt.viec_cua_ban(goc, bay_gio):
+            if v["khoa"] in da_xong:
+                continue
+            ra.append(_viec(v["khoa"], CANH_BAO, kenh=v.get("kenh", ""), chu=v["chu"], goi_y=v.get("goi_y", ""),
+                            nut=[("Đã xử lý", "danh_dau_xong", {"khoa": v["khoa"]})], xong_tay=True))
+    except Exception:  # noqa: BLE001 — skill tự kích hoạt hỏng không làm hỏng khối việc
+        pass
+
     ra.sort(key=lambda v: _THU_TU_MUC.get(v["muc"], 9))
     return ra
 

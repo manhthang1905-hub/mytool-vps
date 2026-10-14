@@ -360,7 +360,10 @@ function chiTiet(ma) {
       <span class="chip ${k.phien ? "ta" : ""}">phiên kênh: ${k.phien ? "đã chạy" : "chưa"}</span>${k.ngon_ngu_tam ? '<span class="chip dich">ngôn ngữ đang tạm</span>' : ""}</div></div>
     <div class="muc-ngan"><h5>Skill (${Object.entries(dem).map(([a, b]) => `${esc(a)} ${b}`).join(" · ")})</h5>
       ${cb.ds.map(x => `<div class="bd ${x.tt === "loi" ? "" : "ok"}" style="margin-bottom:6px;${x.tt === "loi" ? "" : "background:linear-gradient(90deg,rgba(251,191,36,.1),transparent);border-color:rgba(251,191,36,.3)"}"><span class="bieu" style="${x.tt === "loi" ? "" : "color:var(--vang);background:rgba(251,191,36,.14)"}">${ic("alert")}</span>
-        <div><b>${esc(x.ma)} · ${esc(x.ten)}</b><div class="mo rat-nho">${esc(x.tt)} — ${esc(x.ghi_chu)}</div></div></div>`).join("") || '<div class="trong">không có gì cần chú ý</div>'}</div>`);
+        <div><b>${esc(x.ma)} · ${esc(x.ten)}</b><div class="mo rat-nho">${esc(x.tt)} — ${esc(x.ghi_chu)}</div></div></div>`).join("") || '<div class="trong">không có gì cần chú ý</div>'}</div>
+    <div class="muc-ngan"><h5>Skill tự kích hoạt</h5>
+      ${((k.ky_nang && k.ky_nang.tu) || []).map(x => `<div class="nho" style="margin-bottom:4px"><b>${esc(x.ma)} · ${esc(x.ten)}</b> <span class="chip ${x.quyet === "tam_dung" ? "dich" : x.quyet === "se_chay" ? "ta" : ""}">${esc(x.nhan)}</span>
+        <div class="mo rat-nho">${esc(x.ly_do)}${x.lan_cuoi ? ` · lần cuối ${esc(x.lan_cuoi.luc || "")} ${esc(x.lan_cuoi.quyet || "")}` : ""}</div></div>`).join("") || '<div class="trong">không có skill nào cần chạy</div>'}</div>`);
   MT.khiDongNgan = () => document.querySelectorAll(".lan").forEach(e => e.classList.remove("chon"));
 }
 function khoDan() {

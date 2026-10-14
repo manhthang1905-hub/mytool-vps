@@ -526,6 +526,8 @@ def gom(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None) -> Dict[s
         tk["them"] = them
         tk["them_nguon"] = dict(con.execute("SELECT nguon, COUNT(*) FROM su_kien WHERE id > ? GROUP BY 1", (truoc,)))
         tk.update(no_ron.dung_vault(con, goc, ra, bay_gio))
+        kho.dat_meta(con, "gom_cuoi", "%.0f" % time.time())     # skill D12 (`core/ky_nang.py`) đọc: gom cũ > 2 giờ → gom lại
+        con.commit()
     finally:
         con.close()
     tk["giay"] = round(time.time() - t0, 2)

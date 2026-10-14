@@ -91,7 +91,13 @@ def _muc_skill(goc: str) -> List[str]:
                 thieu.setdefault(nhan, []).append(k)
     ra = ["- HỎNG {0}: {1}".format(n, ", ".join(ks)) for n, ks in sorted(loi.items())]
     ra += ["- THIẾU {0}: {1}".format(n, ", ".join(ks)) for n, ks in sorted(thieu.items())]
-    return ra or ["- không skill nào hỏng/thiếu"]
+    ra = ra or ["- không skill nào hỏng/thiếu"]
+    try:  # 14/10/2026: skill tự kích hoạt — đã chạy 24 giờ · nên chạy (chờ chủ) · tạm dừng · sẽ chạy (≤ 4 dòng)
+        from core import ky_nang_tu  # noqa: PLC0415
+        ra += ky_nang_tu.dong_bao_cao(goc)
+    except Exception as loi_tu:  # noqa: BLE001
+        ra.append("- tự kích hoạt: không đọc được ({0})".format(str(loi_tu)[:60]))
+    return ra
 
 
 # ── 3. YPP ────────────────────────────────────────────────────────────────────
