@@ -1599,7 +1599,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                    goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "",
                    khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
                    bao_cao: Optional[Dict[str, Any]] = None, cho_khung: bool = True,
-                   tranh_them: Sequence[Sequence[float]] = (), ep_co: float = 1.0, doc: float = 0.5) -> bool:
+                   tranh_them: Sequence[Sequence[float]] = (), ep_co: float = 1.0, doc: float = 0.5,
+                   kieu_phong: str = "", uu_tien_kieu: Sequence[str] = (), nhan_toi_da: int = 1) -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
@@ -1629,14 +1630,21 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
 
     13/10/2026 tối — MỌI tầng có hộp (khuôn kiểu hộp, `gan_kieu_khuon`) và không dồn vào `khung_chu` → `_ve_bia_hop`:
     thứ bậc (một dòng cực to), phông bo tròn rất đậm, hộp đỏ sẫm so le/đè nhẹ/bóng/viền mảnh; báo cáo mang bố cục hộp
-    (`hop_chu`) để cổng `do_bia` đo chữ↔hộp và hộp↔nền trên chính tệp giao."""
+    (`hop_chu`) để cổng `do_bia` đo chữ↔hộp và hộp↔nền trên chính tệp giao.
+
+    14/10/2026 (`core/bia_lo.py`, bìa lô theo khuôn chữ TRẦN của kênh): tầng có `co_toi_da_pct` không cao quá ngần
+    ấy % khung (thứ bậc: một dòng cực to, các dòng khác vừa), tầng `mot_dong` không tự xuống dòng (cách chia đã
+    quyết); `ep_co` thu mọi dòng sau khi cân diện tích (né đầu nhân vật); `kieu_phong="hop"` dùng phông rất đậm
+    `FONT_HOP`; `uu_tien_kieu`/`nhan_toi_da` chuyển cho `do_bia.chon_kieu_khoi` (giữ đúng kiểu chữ khuôn — trắng viền
+    đen, đỏ/vàng từ khoá). Mặc định: y như cũ."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
     ds_tang = [t for t in chu_tang if isinstance(t, dict)]
     if ds_tang and not khung_chu and all(_hop_ro(t) is not None for t in ds_tang):
         return _ve_bia_hop(nen, dich, ds_tang, goc=goc, kich_thuoc=kich_thuoc, ngon_ngu=ngon_ngu, anh_nen=anh_nen,
                            bao_cao=bao_cao, tranh_them=tranh_them, ep_co=ep_co, doc=doc)
-    font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu)
+    font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu,
+                           kieu=kieu_phong)
     if not font_duong:
         return False
     try:
@@ -1668,8 +1676,11 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     def hop_dong(c: int, t) -> float:  # chiều cao hộp một dòng (có viền)
         return c * 1.12 + 2 * vien_cua(c, t)
 
+    def tran_dong(t) -> float:  # chiều cao hộp dòng tối đa (% khung) của tầng
+        return min(DONG_TOI_DA_PCT, float(t.get("co_toi_da_pct") or DONG_TOI_DA_PCT))
+
     def co_vua(doan, t, rong_vung) -> int:
-        c = int(H * DONG_TOI_DA_PCT / 100.0 / 1.25)
+        c = int(H * tran_dong(t) / 100.0 / 1.25)
         while c > 14 and rong_dong(doan, c, t) > rong_vung:
             c -= 2
         return c
@@ -1694,7 +1705,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         c1 = co_vua(doan, t, rv)
         cach = {"dong": [doan], "co": c1}
         s = "".join(p["chu"] for p in doan)
-        if hop_dong(c1, t) < toi_thieu and len(_chuan(s)) >= 4:
+        if hop_dong(c1, t) < toi_thieu and len(_chuan(s)) >= 4 and not t.get("mot_dong"):
             a, b = _cat_doan(doan, _cho_xuong_dong(s))
             if a and b:
                 c2 = min(co_vua(a, t, rv), co_vua(b, t, rv))
@@ -1733,7 +1744,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
         for b in bo:
             c_moi = int(b["co"] * 1.05) + 1
             if (all(rong_dong(d, c_moi, b["t"]) <= b["vx1"] - b["vx0"] for d in b["dong"])
-                    and hop_dong(c_moi, b["t"]) <= H * DONG_TOI_DA_PCT / 100.0):
+                    and hop_dong(c_moi, b["t"]) <= H * tran_dong(b["t"]) / 100.0):
                 b["co"] = c_moi
                 lon_duoc = True
         if not lon_duoc or chong_nhau():
@@ -1741,6 +1752,9 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                 for b in bo:
                     b["co"] = max(14, int(b["co"] * 0.97))
             break
+    if ep_co != 1.0:
+        for b in bo:
+            b["co"] = max(14, int(b["co"] * float(ep_co)))
 
     # 3) Hình học từng dòng: tầng "tren" (và tầng có hộp canh một bên) xếp từ mép trên xuống, tầng khác từ
     #    mép dưới lên.
@@ -1773,7 +1787,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     chon = do_bia.chon_kieu_khoi(arr, canh, [
         {"hop": g["hop"], "mau_doan": [_mau_rgb(p.get("mau", ""), (255, 255, 255)) for p in g["doan"]],
          "vien_px": g["vien"] + g["dam"], "cao_px": g["cao_px"], "khoi_nen": bool(g["t"].get("khoi_nen"))}
-        for g in thuong], H=H, cho_khung=cho_khung, chu_the=chu_the) if thuong else []
+        for g in thuong], H=H, cho_khung=cho_khung, chu_the=chu_the, uu_tien=uu_tien_kieu,
+        nhan_toi_da=max(1, int(nhan_toi_da))) if thuong else []
     for g, (kieu, _cham) in zip(thuong, chon):
         g["kieu"] = kieu
     for g in hinh:

@@ -9845,7 +9845,12 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
     if _chon_cua_nguoi(thu_muc) or (du.get("bia_lo") and tep_chon and os.path.isfile(os.path.join(thu_muc, tep_chon))):
         so = len(du.get("ung_vien") or []) or 1
         return thu_muc, tieu_de, chu_bia, {"so_thumbnail": so, "bia_lo": "đã có"}, so
-    mau = bia_lo.mau_cua_kenh(bc.goc, bc.kenh.ma)
+    try:  # 14/10/2026: mẫu tả bìa thắng RIÊNG kênh (một lượt AI khi khuôn đổi) trước khi chọn ảnh tham chiếu
+        hs = bia_lo.ho_so_kieu(bc.goc, bc.kenh.ma, goi=_goi_soat(bc), log=bc.ghi)
+    except Exception as loi:  # noqa: BLE001 — hồ sơ hỏng: chọn mẫu như cũ
+        bc.ghi("    (bìa lô: hồ sơ kiểu bìa hỏng: {0})".format(str(loi)[:120]))
+        hs = None
+    mau = bia_lo.mau_cua_kenh(bc.goc, bc.kenh.ma, ho_so=hs)
     if not mau:
         bc.ghi("  (!) ảnh bìa: bật bia_lo nhưng kênh chưa có bìa thắng thật làm mẫu (khuôn kênh hoặc kenh.yaml "
                "bia_lo_mau: <thư mục ảnh>) — dùng đường cũ.")

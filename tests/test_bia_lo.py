@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import threading
 import time
 from types import SimpleNamespace
@@ -352,6 +353,263 @@ def test_chay_ca_lo_dung_lai_va_xuat_goi(tmp_path):
     b2 = ho_so_video._sao_luu_bia_2(goc, "KH", "KH-0001", os.path.join(tm, "CHON-thumb_001.jpg"))  # noqa: SLF001
     assert b2["tep"] == "thumb_002.jpg" and b2["bia_3"]["tep"] == "thumb_003.jpg"
     assert os.path.isfile(ho_so_video.duong_bia_2_ho_so(goc, "KH", "KH-0001")[:-5] + "3.jpg")
+
+
+# ── 6) Kiểu chữ CỦA kênh: hộp (TL4) / chữ trần (TL2/TL3) — 14/10/2026 ───────
+
+
+def _tang_tran(*phan) -> dict:
+    return {"vi_tri": "duoi", "mau": [m for _c, m in phan], "phan_mau": [{"chu": c, "mau": m} for c, m in phan],
+            "vien": "thick black outline", "khoi_nen": False}
+
+
+#: Khuôn chữ TRẦN giả (chữ giả): dải trên trắng, dải dưới đỏ + trắng + vàng, nhân vật giữa, nền tím.
+KC_TRAN = {"nhan_vat": {"vi_tri": "giua"}, "nen_mau_chu_dao": "dark purple #10041C", "nen_do_sang": "toi",
+           "nen_hieu_ung": ["purple glow halo", "digital UI overlay", "particle noise"], "diem_hut_mat": "glow",
+           "chu": {"tang": [dict(_tang_tran(("あいうえ", "#FFFFFF")), vi_tri="tren"),
+                            _tang_tran(("かき", "#FF0000"), ("く", "#FFFFFF"), ("けこ", "#FFFF00"))]}}
+
+
+def test_kieu_chu_hop_tran_bo_cuc_mau():
+    assert bia_lo.kieu_chu(KC) == "hop" and bia_lo.kieu_chu({}) == "hop" and bia_lo.kieu_chu(KC_TRAN) == "tran"
+    assert bia_lo.kieu_chu({"chu": {"tang": [dict(t, khoi_nen=True) for t in KC_TRAN["chu"]["tang"]]}}) == "hop", \
+        "tầng có khối nền (chưa đo màu hộp) vẫn là kiểu hộp"
+    assert bia_lo.bo_cuc_tran(KC_TRAN) == "dai"
+    assert bia_lo.bo_cuc_tran(dict(KC_TRAN, nhan_vat={"vi_tri": "phai"})) == "trai"
+    assert bia_lo.bo_cuc_tran(dict(KC_TRAN, nhan_vat={"vi_tri": "trai"})) == "phai"
+    assert bia_lo.bo_cuc_tran({"chu": KC_TRAN["chu"], "vi_tri_chu": "Left side stacked"}) == "trai"
+    assert bia_lo.mau_tran(KC_TRAN) == ("#FFFFFF", "#FF0000", "#FFFF00")
+    assert bia_lo.mau_tran({}) == ("#FFFFFF", bia_lo.MAU_DO_MAC_DINH, bia_lo.MAU_VANG_MAC_DINH)
+    nen = bia_lo.nen_tu_khuon(KC_TRAN)
+    assert "dark purple #10041C" in nen and "glow" in nen and "UI" not in nen, "hiệu ứng dễ thành chữ lạc bị bỏ"
+    assert bia_lo._uu_tien_vien(KC_TRAN) == bia_lo.UU_TIEN_VIEN_DEN  # noqa: SLF001
+
+
+def _hs_tran(bo: str = "dai") -> dict:
+    nen, do, vang = bia_lo.mau_tran(KC_TRAN)
+    return {"kieu": "tran", "kc": KC_TRAN, "bo_cuc": bo, "mau_nen": nen, "mau_do": do, "mau_vang": vang,
+            "uu_tien": bia_lo.UU_TIEN_VIEN_DEN, "mau_dau": None, "nhan_vat": "a round-headed figure",
+            "nen": "dark purple background", "mau": "- 「MAU-KENH-GIA」: a fake winner description", "bia_mau": []}
+
+
+def test_doc_chu_bia_tran_mau_thu_bac_va_lui_may():
+    hs = _hs_tran("dai")
+    t = bia_lo.doc_chu_bia_tran("朝の習慣を変える人", hs, cach_ai=["朝の習慣を|[<変える>{人}]"])
+    assert [btk.chu_cua_tang(x) for x in t] == ["朝の習慣を", "変える人"]
+    assert [x["vi_tri"] for x in t] == ["tren", "duoi"] and all(x["can"] == "giua" and x["mot_dong"] for x in t)
+    assert t[1]["to"] and t[1]["chinh"] and "co_toi_da_pct" not in t[1], "dòng cực to: tầng chính, trần 30% của bộ vẽ"
+    assert not t[0].get("to") and t[0]["co_toi_da_pct"] == bia_lo.TRAN_CO_VUA_PCT
+    assert t[1]["phan_mau"] == [{"chu": "変える", "mau": "#FF0000"}, {"chu": "人", "mau": "#FFFF00"}]
+    assert t[0]["phan_mau"] == [{"chu": "朝の習慣を", "mau": "#FFFFFF"}]
+    # cột trái: dòng cuối xếp từ dưới, canh trái
+    c = bia_lo.doc_chu_bia_tran("朝の習慣を変える人", _hs_tran("trai"), cach_ai=["朝の|習慣を|[<変える>人]"])
+    assert [x["vi_tri"] for x in c] == ["tren", "tren", "duoi"] and {x["can"] for x in c} == {"trai"}
+    # AI bỏ chữ → chia máy, giữ TRỌN chữ bìa; không dấu màu → tô máy dòng cực to (đỏ/vàng)
+    may = bia_lo.doc_chu_bia_tran("朝の習慣を変える人", hs, cach_ai=["朝の|[<習慣>]"])
+    assert "".join(btk.chu_cua_tang(x) for x in may) == "朝の習慣を変える人"
+    to = [x for x in may if x.get("to")]
+    assert len(to) == 1 and {p["mau"] for p in to[0]["phan_mau"]} <= {"#FF0000", "#FFFF00"}
+    # dấu tay kiểu hộp ("*" = dòng cực to) cũng nhận
+    tay = bia_lo.doc_chu_bia_tran("朝の習慣を|*変える人", hs)
+    assert [bool(x.get("to")) for x in tay] == [False, True]
+
+
+def _nen_tran(duong: str, x_dau: float = 0.72, tim: bool = False) -> str:
+    """Nền chữ trần: kem sáng (hoặc tím tối) + nhân vật đầu tròn trắng viền đen bên phải + manh mối."""
+    W, H = 1376, 768
+    im = Image.new("RGB", (W, H), (20, 6, 34) if tim else (246, 236, 214))
+    d = ImageDraw.Draw(im)
+    d.ellipse([0.80 * W, 0.62 * H, 0.95 * W, 0.86 * H], fill=(230, 180, 40), outline=(60, 40, 10), width=6)
+    d.rounded_rectangle([(x_dau + 0.02) * W, 0.53 * H, (x_dau + 0.11) * W, 0.95 * H], radius=30, fill=(40, 50, 80),
+                        outline=(12, 12, 12), width=8)
+    d.ellipse([x_dau * W, 0.26 * H, (x_dau + 0.13) * W, 0.50 * H], fill=(250, 250, 250), outline=(12, 12, 12), width=8)
+    for dx in (0.04, 0.08):
+        d.ellipse([(x_dau + dx) * W, 0.35 * H, (x_dau + dx + 0.01) * W, 0.37 * H], fill=(10, 10, 10))
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    im.save(duong)
+    return duong
+
+
+def test_dung_bia_tran_ve_chu_tran_hop_giu_nguyen(tmp_path, monkeypatch):
+    """Khuôn chữ TRẦN → bộ vẽ chữ trần của khuôn (không khung, viền đen trước, cột chữ né đầu); khuôn HỘP → bộ vẽ hộp
+    như cũ."""
+    _can_font()
+    goi_ve, goi_hop = [], []
+    that_ve, that_hop = btk.ve_chu_len_anh, btk._ve_bia_hop  # noqa: SLF001
+
+    def spy_ve(*a, **k):
+        goi_ve.append(k)
+        return that_ve(*a, **k)
+
+    def spy_hop(*a, **k):
+        goi_hop.append(k)
+        return that_hop(*a, **k)
+    monkeypatch.setattr(btk, "ve_chu_len_anh", spy_ve)
+    monkeypatch.setattr(btk, "_ve_bia_hop", spy_hop)
+    hs = _hs_tran("trai")
+    tang = bia_lo.doc_chu_bia_tran("朝の習慣を変える人", hs, cach_ai=["朝の|習慣を|[<変える>{人}]"])
+    uv = {"ma": "y01-1", "nen": _nen_tran(str(tmp_path / "y01-1-nen.png"))}
+    bia_lo._chuan_nen(uv["nen"])  # noqa: SLF001
+    bia_lo.dung_bia(uv, tang, ho_so=hs)
+    assert uv["loai"] == "" and uv["kieu_chu"] == "tran" and os.path.isfile(uv["tep"]), uv
+    assert goi_hop == [], "chữ trần không đi bộ vẽ hộp"
+    k = goi_ve[0]
+    assert k["cho_khung"] is False and tuple(k["uu_tien_kieu"]) == bia_lo.UU_TIEN_VIEN_DEN and not k.get("kieu_phong")
+    assert k["khung_chu"] == (0.0, 0.0, 0.60, 1.0) and uv["che_dau"] <= bia_lo.CHE_DAU_TOI_DA and uv["dau"]
+    bc = do_bia.doc_bao_cao(uv["tep"])
+    assert bc and not bc.get("hop_chu") and all(not (d.get("khung") or {}) for d in bc["dong"])
+    assert all(d["hop"][2] <= 0.62 * 1280 for d in bc["dong"]), "chữ nằm trong cột trái, không lấn sang nhân vật"
+    im = Image.open(uv["tep"]).convert("RGB")
+    do = sum(1 for x in range(0, 760, 4) for y in range(0, 720, 4)
+             if (lambda p: p[0] > 200 and p[1] < 70 and p[2] < 70)(im.getpixel((x, y))))
+    assert do > 50, "từ khoá tô ĐỎ của khuôn"
+    # khuôn HỘP: bộ vẽ hộp y như cũ
+    goi_ve.clear()
+    tang_hop = bia_lo.doc_chu_bia("同じ車に長く|*乗る人の|ほとんどが", KC)
+    uv2 = {"ma": "y02-1", "nen": _nen(str(tmp_path / "y02-1-nen.png"), x_dau=0.72)}
+    bia_lo._chuan_nen(uv2["nen"])  # noqa: SLF001
+    bia_lo.dung_bia(uv2, tang_hop, ho_so={"kieu": "hop", "kc": KC, "mau_dau": None})
+    assert len(goi_hop) >= 1 and uv2["loai"] == "" and do_bia.doc_bao_cao(uv2["tep"]).get("hop_chu")
+
+
+def test_tim_dau_mau_va_noi(tmp_path):
+    """Đầu CAM viền đen (TL3) bắt bằng màu đo trên nv1.png; đầu trắng ám ấm viền mảnh (TL2) bắt ở chế độ nới."""
+    im = Image.new("RGB", (1280, 720), (24, 8, 40))
+    d = ImageDraw.Draw(im)
+    d.ellipse([540, 200, 760, 420], fill=(248, 144, 22), outline=(10, 10, 10), width=12)
+    d.ellipse([600, 280, 620, 300], fill=(10, 10, 10))
+    d.line([600, 360, 700, 360], fill=(10, 10, 10), width=8)
+    assert bia_lo.tim_dau(im) == []
+    cam = bia_lo.tim_dau(im, (250, 143, 18))
+    assert len(cam) == 1 and abs(cam[0][0] - 540) < 20 and abs(cam[0][3] - 420) < 20, cam
+    am = Image.new("RGB", (1280, 720), (190, 120, 60))
+    d = ImageDraw.Draw(am)
+    d.ellipse([900, 150, 1060, 310], fill=(246, 234, 206), outline=(70, 60, 50), width=3)
+    d.ellipse([950, 210, 965, 225], fill=(20, 20, 20))
+    assert bia_lo.tim_dau(am) == [] and len(bia_lo.tim_dau(am, noi=True)) == 1
+    # màu đầu đo trên ảnh nhân vật (nền trắng)
+    for mau, mong in (((248, 144, 22), True), ((250, 250, 250), False)):
+        nv = Image.new("RGB", (700, 400), (255, 255, 255))
+        d = ImageDraw.Draw(nv)
+        d.ellipse([280, 40, 420, 180], fill=mau, outline=(10, 10, 10), width=8)
+        d.rectangle([340, 180, 360, 380], fill=(10, 10, 10))
+        p = str(tmp_path / "nv.png")
+        nv.save(p)
+        ra = bia_lo.mau_dau_nv(p)
+        assert (ra is not None and ra[0] > 200 and 100 < ra[1] < 190 and ra[2] < 80) if mong else ra is None, ra
+
+
+def _goc_tran(tmp_path, kc=None) -> str:
+    """Gốc giả: kênh KH có khuôn chữ trần + bìa khuôn + style.yaml + nv1.png + một lượt."""
+    goc = _goc_gia(tmp_path)
+    kenh = duong_kenh(goc, "KH")
+    os.makedirs(os.path.join(kenh, "nghien-cuu"), exist_ok=True)
+    os.makedirs(os.path.join(kenh, "nv"), exist_ok=True)
+    tep = os.path.join(kenh, "bia-khuon.jpg")
+    Image.new("RGB", (1280, 720), (30, 10, 50)).save(tep)
+    nv = Image.new("RGB", (700, 400), (255, 255, 255))
+    ImageDraw.Draw(nv).ellipse([280, 40, 420, 180], fill=(250, 250, 250), outline=(10, 10, 10), width=8)
+    nv.save(os.path.join(kenh, "nv", "nv1.png"))
+    with io.open(os.path.join(kenh, "style.yaml"), "w", encoding="utf-8") as f:
+        f.write('default_character_lock: "round off-white head, two dot eyes, short straight neutral mouth, navy '
+                'sweater, warm cream ground, hands relaxed at sides"\n')
+    with io.open(os.path.join(kenh, "nghien-cuu", "khuon-bia-thang.json"), "w", encoding="utf-8") as f:
+        json.dump({"video_id": "VIDGIA0001", "sha1_that": "s1", "ctr": 9.0, "imp": 20000, "tep": tep, "nguon": "kenh",
+                   "anh_that": True, "khuon_chu": kc or KC_TRAN}, f, ensure_ascii=False)
+    return goc
+
+
+def _anh(duong: str, mau=(240, 220, 200)) -> str:
+    Image.new("RGB", (1280, 720), mau).save(duong)
+    return duong
+
+
+def test_mau_thang_rieng_kenh_lap_cache_va_lam_moi(tmp_path, monkeypatch):
+    goc = _goc_tran(tmp_path)
+    kenh = duong_kenh(goc, "KH")
+    tep_k = os.path.join(kenh, "bia-khuon.jpg")
+    bia = [{"video_id": "VIDGIA0001", "ctr": 9.0, "imp": 20000, "tep": tep_k, "khuon": True},
+           {"video_id": "VIDGIA0002", "ctr": 6.0, "imp": 90000, "tep": _anh(os.path.join(kenh, "b2.jpg"))},
+           {"video_id": "VIDGIA0003", "ctr": 5.0, "imp": 50000, "tep": _anh(os.path.join(kenh, "b3.jpg"), (35, 12, 55))}]
+    monkeypatch.setattr(bia_lo, "bia_thang", lambda goc_, kenh_, kh=None, **k: list(bia))
+    lan = []
+
+    def goi(loi_nhac, **kw):
+        lan.append((loi_nhac, kw))
+        return json.dumps({"bia": [{"so": 1, "kieu_chu": "bare", "chu": "あいうえ|かきくけこ", "ta": "TA-MOT"},
+                                   {"so": 2, "kieu_chu": "box", "chu": "さしす", "ta": "TA-HAI"},
+                                   {"so": 3, "kieu_chu": "bare", "chu": "たちつ", "ta": "TA-BA"}],
+                           "hinh": "HINH-KENH", "nen": "NEN-KENH."})
+    hs = bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
+    assert len(lan) == 1 and len(lan[0][1]["anh"]) == 3 and "best-performing" in lan[0][0]
+    cache = bia_lo._doc_json(bia_lo.duong_mau_thang(goc, "KH"))  # noqa: SLF001
+    assert cache["khoa"] and [b["kieu_chu"] for b in cache["bia"]] == ["tran", "hop", "tran"]
+    assert hs["nguon_mau"] == "kenh" and "TA-MOT" in hs["mau"] and "TA-HAI" in hs["mau"] and "お金持ちほど" not in hs["mau"]
+    assert hs["hinh_them"] == "HINH-KENH" and "NEN-KENH" in hs["nen"] and "dark purple" in hs["nen"]
+    assert hs["bia_mau"] == [tep_k, bia[2]["tep"]], "bìa khuôn + bìa CÙNG kiểu chữ trần (bỏ bìa hộp)"
+    assert hs["nhan_vat"] and not re.search(r"ground|neutral|relaxed", hs["nhan_vat"])
+    assert hs["bang_chung"] == " (20k-90k impressions)"
+    assert bia_lo.mau_cua_kenh(goc, "KH", ho_so=hs) == hs["bia_mau"]
+    # khuôn không đổi → không gọi lại
+    bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
+    assert len(lan) == 1
+    # bìa khuôn đổi (sha1 bìa thật) → tả lại; không có hàm gọi thì dùng bản cũ
+    tep_khuon = os.path.join(kenh, "nghien-cuu", "khuon-bia-thang.json")
+    kh = bia_lo._doc_json(tep_khuon)  # noqa: SLF001
+    kh["sha1_that"] = "s2"
+    bia_lo._ghi_json(tep_khuon, kh)  # noqa: SLF001
+    assert bia_lo.ho_so_kieu(goc, "KH", log=lambda s: None)["nguon_mau"] == "kenh-cu"
+    bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
+    assert len(lan) == 2 and bia_lo._doc_json(bia_lo.duong_mau_thang(goc, "KH"))["khoa"] != cache["khoa"]  # noqa: SLF001
+    # kênh kiểu HỘP chưa có cache, không hàm gọi → mẫu TL4 viết tay như cũ
+    goc2 = _goc_tran(tmp_path / "hop", kc=KC)
+    hs2 = bia_lo.ho_so_kieu(goc2, "KH", log=lambda s: None)
+    assert hs2["kieu"] == "hop" and hs2["mau"] == bia_lo.MAU_THANG and "bia_mau" not in hs2
+
+
+def test_chay_tran_dao_dien_va_giam_khao_dung_mau_cua_kenh(tmp_path, monkeypatch):
+    """Cả lô kênh chữ trần: đạo diễn đọc mẫu tả CỦA kênh, ảnh nền theo lời nhắc chữ trần, giám khảo so với bìa thắng
+    CỦA kênh (bìa khuôn đầu tiên), lời chấm không nói "red boxes"; xuất gói ghi kiểu khuôn "tran"."""
+    _can_font()
+    goc = _goc_tran(tmp_path, kc=dict(KC_TRAN, nhan_vat={"vi_tri": "phai"}))
+    kenh = duong_kenh(goc, "KH")
+    tep_k = os.path.join(kenh, "bia-khuon.jpg")
+    b2 = _anh(os.path.join(kenh, "b2.jpg"), (36, 14, 52))
+    kh = bia_lo._doc_json(os.path.join(kenh, "nghien-cuu", "khuon-bia-thang.json"))  # noqa: SLF001
+    bia_lo._ghi_json(bia_lo.duong_mau_thang(goc, "KH"), {  # noqa: SLF001 — cache còn mới
+        "khoa": bia_lo._khoa_mau(kh), "mau": "- 「MAU-KENH-GIA」: fake channel winner", "hinh": "", "nen": "",  # noqa: SLF001
+        "bia": [{"video_id": "VIDGIA0001", "tep": tep_k, "imp": 20000, "kieu_chu": "tran", "chu": "x", "ta": "y"},
+                {"video_id": "VIDGIA0002", "tep": b2, "imp": 50000, "kieu_chu": "tran", "chu": "x", "ta": "y"}]})
+    luot = os.path.join(goc, "PROJECTS", "AUTO", "KH", "0001")
+    cap = []
+    goc_goi = _goi_gia(xep=[2, 1, 3])
+
+    def goi(loi_nhac, **kw):
+        cap.append((loi_nhac, kw.get("anh")))
+        return goc_goi(loi_nhac, **kw)
+    lan_ve = []
+
+    def ve(loi_nhac, n, k, cac_dich):
+        lan_ve.append(loi_nhac)
+        for d in cac_dich[:n]:
+            _nen_tran(d)
+        return list(cac_dich[:n])
+    kq = bia_lo.chay(goc, "KH", thu_muc_luot=luot, ra=str(tmp_path / "ra"), so_y=3, moi_y=2, goi=goi, ve=ve,
+                     log=lambda s: None)
+    assert kq["kieu_chu"] == "tran" and kq["bo_cuc"] == "trai" and kq["nguon_mau"] == "kenh"
+    dd = next(p for p, _a in cap if "CONCEPT DIRECTOR" in p)
+    assert "MAU-KENH-GIA" in dd and "お金持ちほど" not in dd and "deep-red text boxes" not in dd
+    assert "BARE lettering" in dd and "< >" in dd and "(20k-50k impressions)" in dd
+    assert all("big outlined lettering" in p and "red text boxes" not in p for p in lan_ve)
+    cham = [(p, a) for p, a in cap if p.startswith("You are the strict")]
+    assert cham and all("red boxes" not in p and "huge outlined lettering" in p for p, _a in cham)
+    mau_url = [bia_lo._url_anh(t) for t in (tep_k, b2)]  # noqa: SLF001
+    assert all(a[:2] == mau_url for _p, a in cham), "giám khảo so với bìa thắng CỦA kênh (bìa khuôn trước)"
+    assert kq["mau"] == [tep_k, b2] and kq["top"]
+    tm = os.path.join(luot, "7-thumbnail")
+    bia_lo.xuat_goi(kq, tm)
+    k2 = btk.doc_ke_hoach(tm)
+    assert k2["kieu_khuon"] == "tran" and k2["muc"][0]["chu_tang"][0]["mot_dong"]
 
 
 def test_bia_lo_tat_giu_duong_cu(tmp_path, monkeypatch):

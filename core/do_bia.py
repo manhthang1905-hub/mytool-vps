@@ -1349,12 +1349,20 @@ def chon_kieu_dong(arr, canh, hop, mau_doan: Sequence[Sequence[int]], *, vien_px
     return ra[0]
 
 
-def _cac_vong(cac: Sequence[Dict[str, Any]], cho_khung: bool) -> List[Tuple[int, List[Dict[str, Any]]]]:
+def _cac_vong(cac: Sequence[Dict[str, Any]], cho_khung: bool, uu_tien: Sequence[str] = ()
+              ) -> List[Tuple[int, List[Dict[str, Any]]]]:
     """Thứ tự thử (chủ dự án 09/10 — bìa vẽ lại phủ khung xám che đám đông): MỌI kiểu KHÔNG khung trước
     (đổi màu chữ / viền dày hơn trên đúng bố cục: vòng 1 đòi thêm tách nền, vòng 2 chỉ tương phản hiệu
-    dụng), CHỈ khi không kiểu nào đạt mới tới kiểu có khung gọn sau dòng (và chỉ khi `cho_khung`)."""
+    dụng), CHỈ khi không kiểu nào đạt mới tới kiểu có khung gọn sau dòng (và chỉ khi `cho_khung`).
+
+    14/10/2026 (`core/bia_lo.py`, khuôn chữ TRẦN của kênh): `uu_tien` = tên các kiểu ĐÚNG khuôn (vd. chữ trắng viền
+    đen) — thử trọn hai vòng trước mọi kiểu khác, để nền sáng không đổi chữ sang xanh đen viền trắng (khác bìa thắng)."""
     kk = [k for k in cac if not k.get("khung")]
     ck = [k for k in cac if k.get("khung")] if cho_khung else []
+    uu = sorted((k for k in kk if k.get("ten") in uu_tien), key=lambda k: list(uu_tien).index(k["ten"]))
+    if uu:
+        con = [k for k in kk if k not in uu]
+        return [(1, uu), (2, uu), (1, con), (2, con), (1, ck), (2, ck)]
     return [(1, kk), (2, kk), (1, ck), (2, ck)]
 
 
@@ -1367,7 +1375,8 @@ def _khung_che(chu_the, hop, arr) -> bool:
 
 
 def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int, nhan_toi_da: int = 1,
-                   cho_khung: bool = True, chu_the=None) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+                   cho_khung: bool = True, chu_the=None, uu_tien: Sequence[str] = ()
+                   ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     """Chọn kiểu cho CẢ KHỐI chữ — ưu tiên MỘT kiểu chung cho mọi dòng (bìa nhìn liền một khối, không
     dòng tối dòng sáng). Thứ tự kiểu theo nền dưới cả khối, vòng thử theo `_cac_vong` (không khung trước,
     khung sau); kiểu chung đầu tiên mà MỌI dòng đạt được chọn. Không kiểu chung nào đạt → từng dòng tự chọn
@@ -1386,7 +1395,7 @@ def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int, nha
         x1 = max(ds[i]["hop"][2] for i in thuong)
         y1 = max(ds[i]["hop"][3] for i in thuong)
         L0, _ = _nen_sau_khung(arr, canh, (x0, y0, x1, y1), None)
-        for vong, cac in _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung):
+        for vong, cac in _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung, uu_tien):
             for kieu in cac:
                 kq = []
                 for i in thuong:
@@ -1404,19 +1413,20 @@ def chon_kieu_khoi(arr, canh, cac_dong: Sequence[Dict[str, Any]], *, H: int, nha
                         ra[i] = x
                     for i, dd in enumerate(ds):
                         if ra[i] is None:
-                            ra[i] = _mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the)
+                            ra[i] = _mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the, uu_tien)
                     return ra
     # 2) Từng dòng tự chọn theo nền riêng.
-    return [_mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the) for dd in ds]
+    return [_mot(arr, canh, dd, H, nhan_toi_da, cho_khung, chu_the, uu_tien) for dd in ds]
 
 
-def _mot(arr, canh, dd: Dict[str, Any], H: int, nhan_toi_da: int, cho_khung: bool = True, chu_the=None):
+def _mot(arr, canh, dd: Dict[str, Any], H: int, nhan_toi_da: int, cho_khung: bool = True, chu_the=None,
+         uu_tien: Sequence[str] = ()):
     if dd.get("khoi_nen"):
         vong_ds = [(1, [_KHOI_NEN]), (2, [_KHOI_NEN])]
     else:
         L0, _ = _nen_sau_khung(arr, canh, dd["hop"], None)
         che = _khung_che(chu_the, dd["hop"], arr)
-        vong_ds = _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung and not che)
+        vong_ds = _cac_vong(_kieu_theo_nen(_phan_vi(L0, 50, 0.5)), cho_khung and not che, uu_tien)
     tot = None
     for vong, cac in vong_ds:
         for kieu in cac:
