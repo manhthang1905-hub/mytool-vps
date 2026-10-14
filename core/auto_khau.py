@@ -2298,7 +2298,7 @@ _ANH_THAM_CHIEU_HONG = ("ảnh tham chiếu tải không được",
 
 def _tao_anh(bc: BoiCanh, luot: LuotChay, loi_nhac: str,
              hop: "ThamChieu", khoa: str, ten_hien: str = "",
-             so: Optional[SoTheoDoi] = None):
+             so: Optional[SoTheoDoi] = None, n: int = 1):
     """Tạo một tấm ảnh. Chữ ký ảnh tham chiếu hết hạn thì **tự tải lại**.
 
     ═══ VÌ SAO CẦN TỰ CHỮA, KHÔNG CHỈ CẦN NHỚ ĐÚNG HẠN ═══
@@ -2317,10 +2317,12 @@ def _tao_anh(bc: BoiCanh, luot: LuotChay, loi_nhac: str,
 
     Trả về danh sách URL ảnh, hoặc `(danh sách, tham chiếu mới)` khi vừa phải
     tải lại — để nơi gọi cập nhật cho những cảnh sau khỏi hỏng tiếp.
+
+    `n` > 1 (bìa lô, `core/bia_lo.py`): một job nhiều ảnh, tải từng ảnh bằng `_tai_ket_qua(…, chi_so, …)`.
     """
     def mot_lan(anh_tc, hau_to=""):
         job = _tao_job(bc, bc.client.images.create,
-                       prompt=loi_nhac, n=1, aspect_ratio="16:9",
+                       prompt=loi_nhac, n=max(1, int(n)), aspect_ratio="16:9",
                        reference_images=anh_tc or None,
                        idempotency_key=khoa + hau_to)
         return _cho_job(bc, job, ten_viec=ten_hien, so=so)
@@ -9499,7 +9501,7 @@ _TIEN_TO_LO_CU = "_vong-"
 #: Tệp/thư mục của MỘT lô bìa — dời sang `_vong-N/` (hay `_chu-sai-N/`) khi làm lô mới; không xoá gì.
 _RE_TEP_LO_BIA = re.compile(r"^(?:CHON-.*|z?nen-thumb_\d+\..*|thumb_\d+.*|chon-bia\.json|ke-hoach-bia\.json)$",
                             re.IGNORECASE)
-_THU_MUC_LO_BIA = ("_lam-lai", "_truoc-do-bia", "_bi-loai")
+_THU_MUC_LO_BIA = ("_lam-lai", "_truoc-do-bia", "_bi-loai", "_lo")
 
 #: Lý do loại (tiếng Việt, từ giám khảo/cổng) → lời dặn tiếng Anh cho lô bìa sau.
 _DAN_LO_SAU = (
@@ -9810,7 +9812,74 @@ def _khau_thumbnail(bc: BoiCanh):
 
 def _mot_lo_bia(bc: BoiCanh, luot: LuotChay, tt: TrangThaiKhau) -> Dict[str, Any]:
     """MỘT lô bìa: sinh các tấm còn thiếu → giám khảo → cổng đọc được → cổng chữ trên ảnh. Không còn tấm nào giao
-    được → `HetBiaDat` (khâu bìa làm lô mới)."""
+    được → `HetBiaDat` (khâu bìa làm lô mới). 14/10/2026: `kenh.yaml: bia_lo: true` → lô do `core/bia_lo.py` làm
+    (vẽ vài chục rồi chọn — `_bia_lo_luot`); hai cổng phía sau giữ nguyên."""
+    lo = _bia_lo_luot(bc, luot) if _cai_kenh_yaml(bc).get("bia_lo") is True else None
+    thu_muc, tieu_de, chu_bia, ket, so_tam = lo or _sinh_lo_bia(bc, luot, tt)
+    # ═══ CỔNG ĐỌC ĐƯỢC (09/10/2026, `core/do_bia.py`) rồi CỔNG CHỮ TRÊN ẢNH (12/10/2026) ═══
+    # Chủ dự án: "thumb rất kém — nền và text không tương phản". Bìa đã chọn phải ĐẠT số đo độ đọc
+    # được; không đạt thì tự sửa (tấm khác đạt → vẽ lại kiểu thích nghi → rút gọn chữ). Rồi chữ trên ảnh phải
+    # đúng từng ký tự chữ đã soát, không dải tối do vẽ đè — tấm hỏng thì đổi tấm kế và soát lại cả hai cổng.
+    # Hết tấm → `HetBiaDat` (lô mới); hết lô → không bàn giao (luật 07/10: thà không đăng còn hơn sản phẩm kém).
+    for _lan in range(max(4, so_tam + 2)):
+        ket["doc_duoc"] = _cong_doc_duoc_bia(bc, luot, thu_muc, chu_bia)
+        r = _cong_chu_bia(bc, luot, thu_muc, chu_bia, tieu_de)
+        ket["chu_bia_giao"] = r
+        if not r.get("doi"):
+            return ket
+    raise HetBiaDat("đổi tấm quá nhiều lần mà vẫn chưa có tấm giao được")
+
+
+def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, Dict[str, Any], int]]:
+    """Lô bìa của `core/bia_lo.py` (14/10/2026, chủ kênh: "cho nó vẽ vài chục cái rồi chọn cái tốt nhất"): đạo diễn
+    6–8 ý → ~28–32 nền (ảnh tham chiếu = 2–3 bìa thắng thật + nhân vật) → lọc cứng (đầu nhân vật, manh mối, đọc được)
+    → giám khảo 2 vòng; top 3 thành `thumb_001..003` + `CHON-thumb_001.jpg` (`bia_lo.xuat_goi` — hạng nhì là
+    `bia-2` như cũ). Lô đã xuất (hoặc `CHON-*` của người) thì không làm lại. Kênh chưa có bìa thắng thật làm mẫu
+    (khuôn / `kenh.yaml: bia_lo_mau`) → None: đường cũ, có ghi log."""
+    from . import bia_lo, chon_bia as _cb  # noqa: PLC0415
+    thu_muc = os.path.join(luot.thu_muc, "7-thumbnail")
+    os.makedirs(thu_muc, exist_ok=True)
+    tieu_de, chu_bia = _doc_tieu_de(_doc_chu(os.path.join(luot.thu_muc, "1-tieu-de.txt")))
+    du = _cb.doc_chon_bia(thu_muc) or {}
+    tep_chon = str((du.get("chon") or {}).get("tep") or "")
+    if _chon_cua_nguoi(thu_muc) or (du.get("bia_lo") and tep_chon and os.path.isfile(os.path.join(thu_muc, tep_chon))):
+        so = len(du.get("ung_vien") or []) or 1
+        return thu_muc, tieu_de, chu_bia, {"so_thumbnail": so, "bia_lo": "đã có"}, so
+    mau = bia_lo.mau_cua_kenh(bc.goc, bc.kenh.ma)
+    if not mau:
+        bc.ghi("  (!) ảnh bìa: bật bia_lo nhưng kênh chưa có bìa thắng thật làm mẫu (khuôn kênh hoặc kenh.yaml "
+               "bia_lo_mau: <thư mục ảnh>) — dùng đường cũ.")
+        return None
+    hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)), mau)
+
+    def ve(loi_nhac: str, n: int, khoa: str, cac_dich: List[str]) -> List[str]:
+        goi = _tao_anh(bc, luot, loi_nhac, hop, _khoa_ascii(khoa), ten_hien="bìa lô", n=n)
+        ra = []
+        for i, d in enumerate(cac_dich[:n]):
+            try:
+                _tai_ket_qua(bc, goi, i, d)
+                _xoa_dau(bc, d)
+                ra.append(d)
+            except Exception as loi:  # noqa: BLE001 — một ảnh hỏng không giết cả job
+                bc.ghi("    (bìa lô: tải ảnh {0}/{1} hỏng: {2})".format(i + 1, n, str(loi)[:120]))
+        return ra
+    kq = bia_lo.chay(bc.goc, bc.kenh.ma, thu_muc_luot=luot.thu_muc, ra=os.path.join(thu_muc, "_lo"),
+                     goi=_goi_soat(bc), ve=ve, mau=mau, log=bc.ghi, ngon_ngu=bc.kenh.ngon_ngu or "ja",
+                     khoa="bia-lo:{0}:{1}{2}".format(luot.ma_kenh, luot.ma_luot, _hau_to_khoa_bia(thu_muc, chu_bia)))
+    if not kq.get("top"):
+        if any(not u.get("loai") and u.get("tong") is None for u in kq.get("ung_vien") or []):
+            # Giám khảo chưa trả lời (AI lỗi) — KHÔNG bỏ lô đã trả tiền: khâu thử lại, nền + ý tưởng trên đĩa.
+            raise RuntimeError("bìa lô: giám khảo chưa chấm được — thử lại sau, chưa giao")
+        raise HetBiaDat("bìa lô: không tấm nào qua lọc cứng + giám khảo ({0} nền)".format(
+            (kq.get("chi_phi") or {}).get("anh_tong")))
+    chon = bia_lo.xuat_goi(kq, thu_muc)
+    bc.ghi("  ảnh bìa (bìa lô): " + chon["ly_do"][:240])
+    return thu_muc, tieu_de, chu_bia, {"so_thumbnail": len(kq["top"]), "bia_lo": kq.get("chi_phi"),
+                                       "chon_bia": chon}, len(kq["top"])
+
+
+def _sinh_lo_bia(bc: BoiCanh, luot: LuotChay, tt: TrangThaiKhau) -> Tuple[str, str, str, Dict[str, Any], int]:
+    """Đường cũ của một lô: sinh các tấm còn thiếu (kế hoạch khuôn / thăm dò) → giám khảo `chon_bia`."""
     thu_muc, muc, thieu, ta_bia, tieu_de, chu_bia = _chuan_bi_bia(bc, luot)
     # Đủ ba tấm rồi thì đừng dựng `ThamChieu`: nó có thể phải tải lại ảnh
     # nhân vật lên, tốn chỗ trong kho tạm 500 MB cho một việc không có.
@@ -9845,18 +9914,7 @@ def _mot_lo_bia(bc: BoiCanh, luot: LuotChay, tt: TrangThaiKhau) -> Dict[str, Any
         # 12/10/2026: giám khảo LOẠI MỌI tấm → không giao tấm "ít chữ nhất" nữa: làm lô mới.
         if isinstance(ket.get("chon_bia"), dict) and ket["chon_bia"].get("het_hop_le"):
             raise HetBiaDat("giám khảo loại mọi tấm — " + str(ket["chon_bia"].get("ly_do") or "")[:400])
-    # ═══ CỔNG ĐỌC ĐƯỢC (09/10/2026, `core/do_bia.py`) rồi CỔNG CHỮ TRÊN ẢNH (12/10/2026) ═══
-    # Chủ dự án: "thumb rất kém — nền và text không tương phản". Bìa đã chọn phải ĐẠT số đo độ đọc
-    # được; không đạt thì tự sửa (tấm khác đạt → vẽ lại kiểu thích nghi → rút gọn chữ). Rồi chữ trên ảnh phải
-    # đúng từng ký tự chữ đã soát, không dải tối do vẽ đè — tấm hỏng thì đổi tấm kế và soát lại cả hai cổng.
-    # Hết tấm → `HetBiaDat` (lô mới); hết lô → không bàn giao (luật 07/10: thà không đăng còn hơn sản phẩm kém).
-    for _lan in range(max(4, len(muc) + 2)):
-        ket["doc_duoc"] = _cong_doc_duoc_bia(bc, luot, thu_muc, chu_bia)
-        r = _cong_chu_bia(bc, luot, thu_muc, chu_bia, tieu_de)
-        ket["chu_bia_giao"] = r
-        if not r.get("doi"):
-            return ket
-    raise HetBiaDat("đổi tấm quá nhiều lần mà vẫn chưa có tấm giao được")
+    return thu_muc, tieu_de, chu_bia, ket, len(muc)
 
 
 #: Số lần rút gọn chữ bìa tối đa ở cổng đọc được (mỗi lần MỘT lượt chat, không gọi AI ảnh).

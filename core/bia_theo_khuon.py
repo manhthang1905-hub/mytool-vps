@@ -1598,7 +1598,8 @@ def _cho_xuong_dong(s: str) -> int:
 def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                    goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "",
                    khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
-                   bao_cao: Optional[Dict[str, Any]] = None, cho_khung: bool = True) -> bool:
+                   bao_cao: Optional[Dict[str, Any]] = None, cho_khung: bool = True,
+                   tranh_them: Sequence[Sequence[float]] = (), ep_co: float = 1.0, doc: float = 0.5) -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
@@ -1634,7 +1635,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     ds_tang = [t for t in chu_tang if isinstance(t, dict)]
     if ds_tang and not khung_chu and all(_hop_ro(t) is not None for t in ds_tang):
         return _ve_bia_hop(nen, dich, ds_tang, goc=goc, kich_thuoc=kich_thuoc, ngon_ngu=ngon_ngu, anh_nen=anh_nen,
-                           bao_cao=bao_cao)
+                           bao_cao=bao_cao, tranh_them=tranh_them, ep_co=ep_co, doc=doc)
     font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang if isinstance(t, dict)), ngon_ngu)
     if not font_duong:
         return False
@@ -1869,7 +1870,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
 
 
 def xep_hop_chu(dong: Sequence[Dict[str, Any]], W: int, H: int, do_rong: Callable[[str, float], float], *,
-                canh: str = "trai", tranh: Sequence[Sequence[float]] = ()) -> List[Dict[str, Any]]:
+                canh: str = "trai", tranh: Sequence[Sequence[float]] = (), ep_co: float = 1.0,
+                doc: float = 0.5) -> List[Dict[str, Any]]:
     """BỐ CỤC cột hộp chữ (không vẽ). `dong` = [{"chu", "duoi", "to"}] theo thứ tự đọc; `do_rong(chu, co)` = bề
     ngang px của chuỗi ở cỡ phông `co`; `tranh` = hộp (x0, y0, x1, y1) px của nhân vật/chủ thể mà hộp chữ CÙNG DẢI
     DỌC không được lấn qua (cột trái: mép trái của chúng; cột phải: mép phải).
@@ -1878,6 +1880,8 @@ def xep_hop_chu(dong: Sequence[Dict[str, Any]], W: int, H: int, do_rong: Callabl
     `HOP_RONG_CHU`×W. Hộp ôm sát (lề `HOP_LE_NGANG`×cỡ), cao `HOP_CAO`×cỡ, dòng sau đè `HOP_DE`×cỡ lên đáy dòng trước,
     lùi vào `HOP_SO_LE`×W mỗi dòng; cả cột căn giữa theo chiều dọc, quá cao thì thu đều. Hộp chạm chủ thể → thu cỡ
     dòng đó (không dưới 75% cỡ gốc — chữ vẫn là nhân vật chính) rồi xếp lại.
+    14/10/2026 (`core/bia_lo.py`): `ep_co` thu cả cột (×cỡ gốc), `doc` dời cột theo chiều dọc (0 = sát trên, 0,5 = giữa
+    như cũ, 1 = sát dưới) — để né đầu nhân vật / manh mối khi co từng dòng chưa đủ.
     Trả [{"co", "co_duoi", "le", "hop": (x0, y0, x1, y1)}] cùng thứ tự `dong`."""
     phai = canh == "phai"
     tr = [(W - float(b[2]), float(b[1]), W - float(b[0]), float(b[3])) if phai else tuple(float(v) for v in b[:4])
@@ -1893,7 +1897,7 @@ def xep_hop_chu(dong: Sequence[Dict[str, Any]], W: int, H: int, do_rong: Callabl
 
     co: List[float] = []
     for d in dong:
-        c = (HOP_CO_TO if d.get("to") else HOP_CO_VUA) * H
+        c = (HOP_CO_TO if d.get("to") else HOP_CO_VUA) * H * ep_co
         while c > co_min and rong(d, c) > HOP_RONG_CHU * W:
             c *= 0.98
         co.append(c)
@@ -1908,7 +1912,7 @@ def xep_hop_chu(dong: Sequence[Dict[str, Any]], W: int, H: int, do_rong: Callabl
         if tong > tran:
             co = [c * tran / tong for c in co]
             tong = tran
-        y = max(0.039 * H, (H - tong) / 2.0 - 0.014 * H)
+        y = max(0.039 * H, min((H - tong) * doc - 0.014 * H, H * (1 - 0.039) - tong))
         ra, doi = [], False
         for i, (d, c) in enumerate(zip(dong, co)):
             x0 = le + i * so_le
@@ -1976,11 +1980,13 @@ def _mau_chu_tren_hop(chu: Tuple[int, int, int], hop: Tuple[int, int, int], cao_
 
 def _ve_bia_hop(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *, goc: str = "",
                 kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "", anh_nen: Any = None,
-                bao_cao: Optional[Dict[str, Any]] = None) -> bool:
+                bao_cao: Optional[Dict[str, Any]] = None, tranh_them: Sequence[Sequence[float]] = (),
+                ep_co: float = 1.0, doc: float = 0.5) -> bool:
     """Vẽ bìa KIỂU HỘP (xem khối `HOP_*`): một dòng cực to, phông `FONT_HOP`, hộp màu khuôn (đỏ sẫm) ôm sát chữ, so
     le, đè nhẹ, bóng mềm, viền nâu sẫm mảnh; chữ trắng (hoặc màu chữ khuôn, đuôi nhỏ cùng màu). Né nhân vật đo trên
-    nền sạch (`do_bia.ban_do_chu_the`). Sau khi vẽ: ĐO trên ảnh thật bằng `do_bia.cham_hop` (chữ↔hộp, hộp↔nền) →
-    `bao_cao` + `<dich không đuôi>.do-bia.json` kèm `hop_chu` (cổng `do_bia.cham_tep` đo lại trên tệp giao)."""
+    nền sạch (`do_bia.ban_do_chu_the`) + các hộp px `tranh_them` (đầu nhân vật, `core/bia_lo.py`). Sau khi vẽ: ĐO trên
+    ảnh thật bằng `do_bia.cham_hop` (chữ↔hộp, hộp↔nền) → `bao_cao` + `<dich không đuôi>.do-bia.json` kèm `hop_chu`
+    (cổng `do_bia.cham_tep` đo lại trên tệp giao). `ep_co`/`doc`: xem `xep_hop_chu`."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
     font_duong = _tim_font(goc, "".join(chu_cua_tang(t) for t in chu_tang), ngon_ngu, kieu="hop")
@@ -2026,7 +2032,8 @@ def _ve_bia_hop(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *, goc:
         chu_the = do_bia.ban_do_chu_the(arr)
     except Exception:  # noqa: BLE001 — không đo được chủ thể: vẫn vẽ, chỉ không né được
         chu_the = None
-    hinh = xep_hop_chu(dong, W, H, do_rong, canh=canh, tranh=vung_tranh_tu_chu_the(chu_the, W, H, canh))
+    hinh = xep_hop_chu(dong, W, H, do_rong, canh=canh, ep_co=ep_co, doc=doc,
+                       tranh=vung_tranh_tu_chu_the(chu_the, W, H, canh) + [tuple(b) for b in tranh_them])
 
     lop = Image.new("RGBA", anh.size, (0, 0, 0, 0))
     bong = Image.new("RGBA", anh.size, (0, 0, 0, 0))

@@ -155,6 +155,7 @@ def duong_bia_2_ho_so(goc: str, kenh: str, ma_goi: str) -> str:
 def _sao_luu_bia_2(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> Optional[Dict[str, Any]]:
     """Chép bìa hạng nhì (theo `chon-bia.json`: điểm cao nhất sau tấm được chọn, không bị loại) sang
     `anh/<mã gói>-bia-2.jpg` — giám đốc kênh đổi bìa video trượt mà không tốn tiền sinh lại.
+    14/10/2026 (bìa lô, `core/bia_lo.py`): hạng ba cũng chép sang `-bia-3.jpg` (khoá `bia_3` của bản ghi).
     Không có bản chấm / không có tấm nhì / lỗi đĩa → None (metadata phụ, không chặn hồ sơ)."""
     try:
         from . import chon_bia  # noqa: PLC0415
@@ -164,22 +165,26 @@ def _sao_luu_bia_2(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> Optional
         so_chon = (du.get("chon") or {}).get("so")
         ds = [u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")
               and u.get("so") is not None and u.get("so") != so_chon and u.get("tong_diem") is not None]
-        if not ds:
-            return None
-        nhi = max(ds, key=lambda u: float(u["tong_diem"]))
-        nguon = next((os.path.join(thu_muc, t) for t in sorted(os.listdir(thu_muc))
-                      if not t.upper().startswith("CHON-") and _RE_THUMB_SO.match(t)
-                      and int(_RE_THUMB_SO.match(t).group(1)) == int(nhi["so"])
-                      and os.path.splitext(t)[1].lower() in (".png", ".jpg", ".jpeg", ".webp")), "")
-        if not nguon:
-            return None
-        dich = duong_bia_2_ho_so(goc, kenh, ma_goi)
-        os.makedirs(os.path.dirname(dich), exist_ok=True)
-        shutil.copy2(nguon, dich + ".tmp")
-        os.replace(dich + ".tmp", dich)
-        return {"tep": os.path.basename(nguon), "so": nhi["so"], "kieu": str(nhi.get("kieu") or ""),
-                "nhom": str(nhi.get("nhom") or ""), "tong_diem": nhi.get("tong_diem"),
-                "anh": os.path.join("anh", os.path.basename(dich)).replace("\\", "/")}
+        ra: Optional[Dict[str, Any]] = None
+        for hang, u in enumerate(sorted(ds, key=lambda u: -float(u["tong_diem"]))[:2], 2):
+            nguon = next((os.path.join(thu_muc, t) for t in sorted(os.listdir(thu_muc))
+                          if not t.upper().startswith("CHON-") and _RE_THUMB_SO.match(t)
+                          and int(_RE_THUMB_SO.match(t).group(1)) == int(u["so"])
+                          and os.path.splitext(t)[1].lower() in (".png", ".jpg", ".jpeg", ".webp")), "")
+            if not nguon:
+                break
+            dich = duong_bia_2_ho_so(goc, kenh, ma_goi)[:-len("2.jpg")] + "{0}.jpg".format(hang)
+            os.makedirs(os.path.dirname(dich), exist_ok=True)
+            shutil.copy2(nguon, dich + ".tmp")
+            os.replace(dich + ".tmp", dich)
+            ban = {"tep": os.path.basename(nguon), "so": u["so"], "kieu": str(u.get("kieu") or ""),
+                   "nhom": str(u.get("nhom") or ""), "tong_diem": u.get("tong_diem"),
+                   "anh": os.path.join("anh", os.path.basename(dich)).replace("\\", "/")}
+            if ra is None:
+                ra = ban
+            else:
+                ra["bia_3"] = ban
+        return ra
     except Exception:  # noqa: BLE001 — bìa nhì là phụ
         return None
 
