@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.201.0** — 2026-10-14 — `vps-jp1` — feat(thiet-lap): kiem thuong hieu (chi doc) + gan hinh mo Dang ky — TL1-4 truoc deu THIEU hinh mo, nay da gan (toan video, doc lai dung); sua chon thoi gian hinh mo (ENTIRE); kiem co dang dang do ca vm/logs
 - **2.200.1** — 2026-10-14 — `vps-jp1` — fix(kenh): doc_yaml bo ky tu BOM ket giua tep (TL1-3 nhan ban tu khuon TL4 mang U+FEFF -> PyYAML hong -> lui bo doc toi gian, khoi long nhau bi lam phang lang le)
 - **2.200.0** — 2026-10-14 — `vps-jp1` — feat(bia-lo): ve vai chuc bia roi chon (chu 14/10) — dao dien y tuong doc kich ban (6-8 y, 5 khuon manh moi cua bia thang: ke ra chinh danh sach / mot minh vs dam dong / ben trong dau / mat manh + viec la / bi phan xet; tranh cach hieu hie…
 - **2.199.0** — 2026-10-13 — `vps-jp1` — feat(bia-khuon): bia kieu hop chu dat chuan bia thang that (chu: 'thumb xau, khong hut nhu thumb da win') — 1 dong CUC TO, phong M PLUS Rounded 1c Black (OFL, fonts/), hop do sat chu so le + bong + vien, nen vector phang sang am lay bia th…
