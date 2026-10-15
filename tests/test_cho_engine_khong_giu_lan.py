@@ -241,7 +241,6 @@ def _khau(monkeypatch, tmp_path, tts, *, me=None, so_cau=1, kich_ban=None):
     monkeypatch.setattr(ak, "_tai_ket_qua_dat_lai", tai)
     monkeypatch.setattr(ak, "_bi_xen_am_dau", lambda *_a: False)
     monkeypatch.setattr(ak, "_noi_mp3", lambda _bc, _m, dich, **_k: open(dich, "wb").close())
-    monkeypatch.setattr(ak, "_doi_cao_do_giong", lambda *_a: False)
     monkeypatch.setattr(ak, "_lam_sach_ket_qua", lambda *_a: None)
     monkeypatch.setattr(ak, "_ghi_phan_giong", lambda *_a: 0)
     return goc, bc, luot, ak._khau_giong_doc(bc), dong, ngu, nhat

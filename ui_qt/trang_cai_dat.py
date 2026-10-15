@@ -146,18 +146,6 @@ MUC = (
      "trước khi cho chạy hàng loạt.\n"
      "Tốn thêm vài lượt gọi AI viết chữ mỗi lượt chạy — loại rẻ, không phải "
      "loại đắt như ảnh hay clip."),
-    ("doi_cao_do_giong", "Đổi nhẹ cao độ giọng đọc",
-     "Tắt sẵn. Đây là nút DUY NHẤT trong nhóm này đụng vào chính nội dung, chứ "
-     "không chỉ vào thẻ dữ liệu — nên nó tách riêng.\n"
-     "Cổng giọng nói nhúng dấu chìm SynthID vào chính âm thanh. Dấu "
-     "đó nằm trong sóng tiếng nên xoá thẻ không tới được. Nghiên cứu "
-     "cho thấy dịch cao độ làm gãy dấu này.\n"
-     "Tôi dịch 60 cent — hơn nửa nốt nhạc. Nhạc công mới phân biệt được, người "
-     "nghe kể chuyện thì không. Độ dài giữ nguyên tuyệt đối nên phụ đề và cảnh "
-     "không xê dịch một mi-li-giây nào.\n"
-     "PHẢI NÓI THẬT: tôi KHÔNG tự kiểm được là dấu đã mất hay chưa — máy dò "
-     "của Google không công khai. Bạn tự kiểm miễn phí bằng công cụ dò "
-     "dấu chìm của nhà cung cấp giọng: tải lên bản trước và sau rồi so."),
 )
 
 

@@ -183,7 +183,6 @@ def _dung_khau_giong_doc(monkeypatch, tmp_path, ma_loi):
                         lambda _bc, muc, lam, _ten, **_k: [lam(m) for m in muc])
     monkeypatch.setattr(auto_khau, "_bi_xen_am_dau", lambda *_a: False)
     monkeypatch.setattr(auto_khau, "_noi_mp3", lambda *_a, **_k: None)
-    monkeypatch.setattr(auto_khau, "_doi_cao_do_giong", lambda *_a: False)
     monkeypatch.setattr(auto_khau, "_lam_sach_ket_qua", lambda *_a: None)
     monkeypatch.setattr(auto_khau, "_ghi_phan_giong", lambda *_a: 0)
     da_tai = _tai_gia(monkeypatch, ma_loi)

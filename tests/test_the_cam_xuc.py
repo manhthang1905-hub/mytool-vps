@@ -289,7 +289,7 @@ class TestKhongGiuCaLuotLamConTin:
                   encoding="utf-8") as tep:
             chu = tep.read()
         khuc = chu[chu.index("def _chen_the_cam_xuc"):]
-        khuc = khuc[:khuc.index("def _doi_cao_do_giong")]
+        khuc = khuc[:khuc.index("def _kiem_kich_ban_dung_duoc")]
         assert "bc.goi_chat(" in khuc, "phải gọi thẳng, một lượt"
         assert "_goi(bc," not in khuc, (
             "đang dùng thang thử lại — bước làm đẹp không được kiên nhẫn thế")
