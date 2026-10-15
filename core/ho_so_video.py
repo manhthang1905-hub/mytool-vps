@@ -398,6 +398,8 @@ def _khung_ho_so(kenh: str, ma_goi: str, *, luc: Optional[_dt.datetime] = None) 
         "clip_tu_anh": None,
         # 09/10/2026: cổng chất lượng lúc bàn giao (`_chat_luong`); số phẳng `cl_*` chỉ có khi đã đo.
         "chat_luong": None,
+        # 15/10/2026: độ độc đáo kịch bản (`core.do_doc_dao.tom_tat_ho_so`) + số phẳng `trung_nguon` (0..1, bài cuối).
+        "doc_dao": None, "trung_nguon": None,
     }
 
 
@@ -496,6 +498,14 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
     don_bay = _doc_json(os.path.join(thu_muc_luot, "1-don-bay-sub.json"))
     if isinstance(don_bay, dict):
         ho_so["don_bay_sub"] = don_bay
+    try:  # 15/10/2026: mức chép nguồn — não/vòng học nối độ độc đáo với kết quả (lượt cũ: đo lại từ hai tệp chữ)
+        from .do_doc_dao import tom_tat_ho_so  # noqa: PLC0415
+
+        dd = tom_tat_ho_so(thu_muc_luot)
+        if dd:
+            ho_so["doc_dao"], ho_so["trung_nguon"] = dd, dd.get("ti_le")
+    except Exception:  # noqa: BLE001 — metadata phụ, không chặn hồ sơ
+        pass
     ho_so["phan"] = _doc_phan(thu_muc_luot)
     ho_so["nhac"] = _doc_json(os.path.join(thu_muc_luot, "8-nhac.json"))
     tu_anh = _doc_json(os.path.join(thu_muc_luot, "6-clip", "tu-anh.json"))

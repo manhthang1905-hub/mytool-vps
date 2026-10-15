@@ -303,6 +303,9 @@ class Kenh:
     #: đầu, mở đầu trước ý 1 ≤ chừng ấy giây, móc trước, lời mời chỉ ở cuối. `false` = tắt cho kênh này.
     luat_mo_dau: bool = True
     giay_mo_dau_toi_da: int = 60
+    #: Cổng độ độc đáo (15/10/2026, `core/do_doc_dao.py`): kịch bản trùng nguồn > 15% chuỗi 10 ký tự thì viết lại
+    #: bằng giọng kênh trước rà soát. `false` = tắt viết lại (vẫn đo, vẫn ghi `1-doc-dao.json`).
+    doc_dao: bool = True
     #: Đòn bẩy SUB (12/10/2026, `core/chuyen_doi_sub.py`): khối `chuyen_doi_sub:` của kenh.yaml — `bat` (auto/true/
     #: false), `cta_giua`/`binh_luan` (ab/true/false), `ti_le_bat`, `mo_ta_lien_ket`. Rỗng = mặc định của module
     #: (auto: bật khi kênh trong tầm YPP, A/B 70% bật).
@@ -953,6 +956,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         tieu_de_ky_tu=str(cai.get("tieu_de_ky_tu") if cai.get("tieu_de_ky_tu") is not None else "").strip(),
         luat_mo_dau=_co_mac_dinh(cai.get("luat_mo_dau"), True),
         giay_mo_dau_toi_da=max(20, min(180, int(_so(cai.get("giay_mo_dau_toi_da"), 60)))),
+        doc_dao=_co_mac_dinh(cai.get("doc_dao"), True),
         chuyen_doi_sub=dict(cai["chuyen_doi_sub"]) if isinstance(cai.get("chuyen_doi_sub"), dict) else {},
         chuong_toi_da=max(3, min(20, int(_so(cai.get("chuong_toi_da"), 10)))),
         voice_id=str(cai.get("voice_id") or ""),

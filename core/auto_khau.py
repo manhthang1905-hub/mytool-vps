@@ -2663,6 +2663,131 @@ def _do_cta_sub(bc: "BoiCanh", k: Any, thu_muc_luot: str, ban: str) -> None:
         pass
 
 
+# ── Cổng ĐỘ ĐỘC ĐÁO (15/10/2026, `core/do_doc_dao.py`) ─────────────────────
+#
+# Chẩn đoán 15/10: trung vị 21% chuỗi 10 ký tự của kịch bản có y nguyên trong lời thoại đối thủ, cao nhất 91% — đúng
+# loại "nội dung tái sử dụng" mà YPP soi. Cổng đứng SAU khi bài đã chốt (chấm, nắn độ dài, chấm cuối) và TRƯỚC rà soát
+# `3-sua.md`, nên tách câu, thẻ cảm xúc, `---` và giọng đọc đều đi trên bản đã qua cổng. HỎNG THÌ IM: trả bài cũ.
+
+def _cong_doc_dao(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any], ban: str, tu_lieu: str,
+                  muc_tieu_kt: int, qd_sub: Dict[str, Any]) -> str:
+    """Bài trùng nguồn > `do_doc_dao.NGUONG_VIET_LAI` → viết lại bằng giọng kênh qua phễu chữ thường (`_goi`), tối đa
+    hai lần; giữ bản trùng thấp nhất qua được kiểm độ dài / ghi chú kỹ thuật / `---` / câu mời đăng ký. Biên bản
+    `1-doc-dao.json`; bản viết lại cất `1-nhap-doc-dao.txt` để chạy tiếp không trả tiền hai lần."""
+    if not (ban or "").strip() or not (tu_lieu or "").strip():
+        return ban
+    from .auto import Cancelled  # noqa: PLC0415
+
+    try:
+        from . import chuyen_doi_sub as cds  # noqa: PLC0415
+        from . import do_doc_dao as ddd  # noqa: PLC0415
+        from .lam_sach import ghi_chu_ky_thuat_con_lai  # noqa: PLC0415
+
+        d = luot.thu_muc
+        bam_vao = ddd.bam(ban, tu_lieu)
+        cu = ddd.doc_bien_ban(d)
+        if cu.get("bam_vao") == bam_vao:  # chạy tiếp: cùng bài vào → dùng lại; lần trước AI hỏng thì thử lại
+            nhap = _doc_chu(os.path.join(d, ddd.TEP_NHAP)).strip()
+            if (nhap and cu.get("viet_lai")) or not (cu.get("viet_lai") or any(
+                    x.get("loi") for x in cu.get("lan") or [])):
+                bc.ghi("  độ độc đáo — đã qua cổng từ lần trước, dùng lại.")
+                return nhap if (nhap and cu.get("viet_lai")) else ban
+        mt, cp, hien = int(muc_tieu_kt or 0), _chenh_cho_phep(k), _do_doc(ban)
+        if mt > 0:  # khoảng độ dài nói với AI: trong dung sai của kênh, sát bản đang có
+            lo, hi = max(mt * (1 - cp), hien * 0.9), min(mt * (1 + cp), hien * 1.1)
+            if lo > hi:
+                lo, hi = mt * (1 - cp * 0.8), mt * (1 + cp * 0.8)
+        else:
+            lo, hi = hien * (1 - min(cp, 0.1)), hien * (1 + min(cp, 0.1))
+        cta = cds.nhanh_bat(qd_sub, "cta_giua")
+        khuon = _luat_sub(them_luat_mo_dau(ddd.LOI_NHAC_VIET_LAI, k, cta_giua=cta), k, qd_sub, giu=True)
+
+        def viet(ban_dang: str, so_do: Dict[str, Any], lan: int, nhac: str) -> str:
+            bc.kiem_dung()
+            loi_nhac = _thay(khuon, dict(
+                chung, TI_LE="{0:.0%}".format(so_do["ti_le"]), CHARS_NOW=_do_doc(ban_dang), CHARS_MIN=int(lo),
+                CHARS_MAX=int(hi), DOAN_CHEP="\n".join("- 「{0}」".format(x) for x in so_do["vi_du"]) or "(không có)",
+                NHAC_LAI=("\n" + nhac + "\n") if nhac else "", DRAFT=ban_dang))
+            moi = _goi(bc, loi_nhac, _khoa_chat(luot, "doc-dao:v{0}:{1}".format(lan, ddd.bam(loi_nhac)[:8])),
+                       toi_da_token=max(_token_viet(len(ban_dang), mt), min(TOKEN_VIET_TRAN, 2 * len(ban_dang))))
+            return _don_ban(moi, k.ngon_ngu)
+
+        def kiem(moi: str, goc: str) -> str:
+            if mt > 0 and _lech(moi, mt) > max(_lech(goc, mt), cp) + 1e-9:
+                return "lệch độ dài {0:.0%} (kênh cho phép {1:.0%})".format(_lech(moi, mt), cp)
+            if mt <= 0 and abs(_do_doc(moi) - _do_doc(goc)) > cp * max(1, _do_doc(goc)):
+                return "đổi độ dài {0} → {1} ký tự".format(_do_doc(goc), _do_doc(moi))
+            if ghi_chu_ky_thuat_con_lai(moi):
+                return "còn ghi chú kỹ thuật của AI"
+            a, b = tach_phan(goc), tach_phan(moi)
+            if len(a) > 1 and abs(len(a) - len(b)) > 1:
+                return "mất dấu ngắt phần ({0} → {1} phần)".format(len(a), len(b))
+            dg, dm = cds.do_kich_ban(goc, k), cds.do_kich_ban(moi, k)
+            if cta and dg.get("giua") and not dm.get("giua"):
+                return "mất câu mời đăng ký giữa bài"
+            if dm.get("som") and not dg.get("som"):
+                return "có câu mời đăng ký trong giây đầu"
+            return ""
+
+        chon, bb = ddd.qua_cong(ban, tu_lieu, viet=viet if ddd.bat(k) else None, kiem=kiem, ghi=bc.ghi,
+                                khong_nuot=(Cancelled,))
+        bb.update(bat=ddd.bat(k), bam_vao=bam_vao, kenh=luot.ma_kenh or k.ma, luot=luot.ma_luot,
+                  luc=time.strftime("%Y-%m-%dT%H:%M:%S"), muc_tieu=mt, cho_phep=cp)
+        if bb["viet_lai"]:
+            _ghi_chu(os.path.join(d, ddd.TEP_NHAP), chon + "\n")
+        ddd.ghi_bien_ban(d, bb)
+        if bb["viet_lai"]:
+            bc.ghi("  độ độc đáo: trùng nguồn {0:.0%} → {1:.0%} sau {2} lần viết lại ({3} → {4} ký tự).".format(
+                bb["truoc"], bb["sau"], len(bb["lan"]), _do_doc(ban), _do_doc(chon)))
+        elif bb["lan"]:
+            bc.ghi("  độ độc đáo: không bản viết lại nào dùng được — giữ bài cũ (trùng {0:.0%}).".format(bb["truoc"]))
+        return chon
+    except Cancelled:
+        raise
+    except Exception as loi:  # noqa: BLE001 — cổng hỏng không bao giờ làm vỡ lượt
+        bc.ghi("  (cổng độ độc đáo hỏng: {0} — giữ bài cũ)".format(str(loi)[:100]))
+        return ban
+
+
+def _ghi_doc_dao_cuoi(bc: "BoiCanh", luot: LuotChay, k: Kenh, ban: str, tu_lieu: str) -> None:
+    """Đo bài CUỐI (sau rà soát, đúng chữ đem đi đọc) → khoá `cuoi` của `1-doc-dao.json` + một sự kiện não bộ phận
+    `kich-ban`/`do` (chỉ lượt thật trong `PROJECTS/AUTO`, chỉ khi não đã có). Hỏng thì im."""
+    try:
+        from . import do_doc_dao as ddd  # noqa: PLC0415
+
+        if not (ban or "").strip() or not (tu_lieu or "").strip():
+            return
+        d = luot.thu_muc
+        do = ddd.do_trung(ban, tu_lieu, toi_da=3)
+        bb = ddd.doc_bien_ban(d) or {"truoc": do["ti_le"], "sau": do["ti_le"], "lan": [], "viet_lai": False,
+                                     "canh_bao": "", "khac_tieng": do["khac_tieng"], "bat": ddd.bat(k),
+                                     "kenh": luot.ma_kenh or k.ma, "luot": luot.ma_luot,
+                                     "ghi_chu": "kịch bản có sẵn trước khi có cổng — chỉ đo"}
+        bb.update(cuoi=do["ti_le"], so_doan_cuoi=do["so_doan"], dai_nhat_cuoi=do["dai_nhat"],
+                  vi_du_cuoi=do["vi_du"])
+        ddd.ghi_bien_ban(d, bb)
+        bc.ghi("  độ độc đáo: kịch bản cuối trùng nguồn {0}.".format(
+            "— (nguồn khác tiếng, không đo được)" if do["khac_tieng"] else "{0:.0%}".format(do["ti_le"])))
+        goc = str(getattr(bc, "goc", "") or "")
+        from .nao_bo_phan import duong_db, ghi as ghi_nao  # noqa: PLC0415
+
+        auto = os.path.normcase(os.path.abspath(os.path.join(goc, "PROJECTS", "AUTO"))) + os.sep
+        if not (goc and os.path.isfile(duong_db(goc))
+                and os.path.normcase(os.path.abspath(d)).startswith(auto)):
+            return
+        ma = luot.ma_kenh or k.ma
+        ghi_nao(goc, "kich-ban", "do", kenh=ma, ma_goi="{0}-{1}".format(ma, luot.ma_luot), nguon="do_doc_dao",
+                noi_dung="độ độc đáo kịch bản: trùng nguồn {0:.0%} → {1:.0%}{2}".format(
+                    bb.get("truoc") or 0, do["ti_le"], " (viết lại {0} lần)".format(len(bb.get("lan") or []))
+                    if bb.get("lan") else ""),
+                so={"trung_truoc": bb.get("truoc"), "trung_sau": bb.get("sau"), "trung_cuoi": do["ti_le"],
+                    "viet_lai": bool(bb.get("viet_lai")), "so_lan": len(bb.get("lan") or []),
+                    "canh_bao": bool(bb.get("canh_bao")), "khac_tieng": do["khac_tieng"], "bat": bb.get("bat")},
+                khoa="doc-dao|{0}|{1}|{2}".format(ma, luot.ma_luot, ddd.bam(ban)))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _khau_kich_ban(bc_goc: BoiCanh):
     def lam(luot: LuotChay, tt: TrangThaiKhau):
         # Khâu này — và CHỈ khâu này — được đổi đường viết chữ sang thuê bao
@@ -3137,6 +3262,11 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 ban_nhap = _vong_cham_sua_luot(bc, luot, k, chung, ban_nhap,
                                                tu_lieu, d, nhan="cuoi", so_vong=1)
 
+            # ═══ CỔNG ĐỘ ĐỘC ĐÁO (15/10/2026, `core.do_doc_dao`) — nội dung + độ dài đã chốt, rà soát chưa chạy ═══
+            # Rà soát đã có từ lần trước (chạy tiếp lượt đứt) thì bản ấy vốn đã đi qua cổng — không gọi lại.
+            if not (k.prompt.get("3-sua.md", "").strip() and _doc_chu(os.path.join(d, "1-nhap-3.txt")).strip()):
+                ban_nhap = _cong_doc_dao(bc, luot, k, chung, ban_nhap, tu_lieu, muc_tieu_kt, qd_sub)
+
             # ═══ RÀ SOÁT CHO GIỌNG ĐỌC — BƯỚC CUỐI, SAU KHI ĐỘ DÀI ĐÃ CHỐT ═══
             #
             # `3-sua.md` tách mỗi câu một dòng, chèn thẻ cảm xúc và đặt dấu
@@ -3206,7 +3336,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
             _ghi_chu(duong_kb, ban_nhap + "\n")
             # Bài đã xong thì mấy tệp nháp không còn việc gì. Để lại chỉ làm
             # thư mục kết quả rối, và người mở ra không biết tệp nào là bài thật.
-            for ten in ("2", "3", "phan-tich"):
+            for ten in ("2", "3", "phan-tich", "doc-dao"):
                 try:
                     os.remove(os.path.join(d, "1-nhap-{0}.txt".format(ten)))
                 except OSError:
@@ -3229,6 +3359,7 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                                  tu_do=bool(getattr(k, "do_dai_tu_do", False)))
         _kiem_ban_sach(bc, ban_nhap, duong_kb)
         _do_cta_sub(bc, k, d, ban_nhap)
+        _ghi_doc_dao_cuoi(bc, luot, k, ban_nhap, tu_lieu)
 
         # SEO — thiếu cũng vẫn ra được video, nên hỏng thì chỉ ghi nhật ký.
         duong_seo = os.path.join(d, "1-seo.txt")
