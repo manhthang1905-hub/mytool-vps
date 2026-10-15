@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.205.1** — 2026-10-15 — `vps-jp1` — fix(lam-sach): GO HAN doi cao do giong (phá SynthID am thanh = lach nhan dien AI, trai chinh sach spam YouTube) - bo ham, cong tac Cai dat va loi goi o khau giong; test khoa khong cho them lai
 - **2.205.0** — 2026-10-15 — `vps-jp1` — feat(doc-dao): cong do doc dao kich ban - do % chuoi 10 ky tu chep nguon, tren 15% viet lai bang giong kenh (toi da 2 lan, khong chan luot), bien ban 1-doc-dao.json, ho so video + nao kich-ban, kenh.yaml doc_dao, CLI bao cao
 - **2.204.0** — 2026-10-14 — `vps-jp1` — feat(bia-lo): lo bia theo KIEU CHU cua chinh kenh — khuon hop (TL4) giu nguyen, khuon chu tran (TL2/TL3) ve bang bo ve chu tran voi mau/vien/to mau tu khoa cua khuon, 1 dong cuc to, khong de nhan vat (nhan dau cam TL3); mau bia thang + mo …
 - **2.203.0** — 2026-10-14 — `vps-jp1` — feat(ky-nang): ky nang tu kich hoat (chu 14/10: dong goi viec lam tay thanh skill tu chay khi du dieu kien) — moi skill khai dieu_kien/chay/nhip/tu_ap; bo chay tu-kich-hoat moi gio (1 viec nang/luot, giu khoa may, tranh :55-:05, 3 lan hong…
