@@ -2686,7 +2686,9 @@ def _cong_doc_dao(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any],
         d = luot.thu_muc
         bam_vao = ddd.bam(ban, tu_lieu)
         cu = ddd.doc_bien_ban(d)
-        if cu.get("bam_vao") == bam_vao:  # chạy tiếp: cùng bài vào → dùng lại; lần trước AI hỏng thì thử lại
+        # chạy tiếp: cùng bài vào → dùng lại; lần trước AI hỏng thì thử lại; biên bản nguồn khác tiếng đời trước
+        # (chưa đo xuyên ngôn ngữ, 16/10) thì đo lại
+        if cu.get("bam_vao") == bam_vao and not (cu.get("khac_tieng") and "xuyen" not in cu):
             nhap = _doc_chu(os.path.join(d, ddd.TEP_NHAP)).strip()
             if (nhap and cu.get("viet_lai")) or not (cu.get("viet_lai") or any(
                     x.get("loi") for x in cu.get("lan") or [])):
@@ -2705,7 +2707,8 @@ def _cong_doc_dao(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any],
         def viet(ban_dang: str, so_do: Dict[str, Any], lan: int, nhac: str) -> str:
             bc.kiem_dung()
             loi_nhac = _thay(khuon, dict(
-                chung, TI_LE="{0:.0%}".format(so_do["ti_le"]), CHARS_NOW=_do_doc(ban_dang), CHARS_MIN=int(lo),
+                chung, MUC_CHEP=so_do.get("mo_ta") or "{0:.0%} chuỗi 10 ký tự của nó có y nguyên trong bản gốc".format(
+                    so_do["ti_le"]), CHARS_NOW=_do_doc(ban_dang), CHARS_MIN=int(lo),
                 CHARS_MAX=int(hi), DOAN_CHEP="\n".join("- 「{0}」".format(x) for x in so_do["vi_du"]) or "(không có)",
                 NHAC_LAI=("\n" + nhac + "\n") if nhac else "", DRAFT=ban_dang))
             moi = _goi(bc, loi_nhac, _khoa_chat(luot, "doc-dao:v{0}:{1}".format(lan, ddd.bam(loi_nhac)[:8])),
@@ -2729,8 +2732,14 @@ def _cong_doc_dao(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any],
                 return "có câu mời đăng ký trong giây đầu"
             return ""
 
+        def dich(nguon: str) -> str:  # nguồn khác tiếng: dịch MỘT lần sang tiếng kênh (cache 0-tu-lieu-ja.txt)
+            bc.kiem_dung()
+            loi_nhac = _thay(ddd.LOI_NHAC_DICH, {"NGON_NGU": chung.get("NGON_NGU") or k.ngon_ngu, "NGUON": nguon})
+            return _don_ban(_goi(bc, loi_nhac, _khoa_chat(luot, "doc-dao:dich:{0}".format(ddd.bam(nguon)[:8])),
+                                 toi_da_token=TOKEN_VIET_TRAN), k.ngon_ngu)
+
         chon, bb = ddd.qua_cong(ban, tu_lieu, viet=viet if ddd.bat(k) else None, kiem=kiem, ghi=bc.ghi,
-                                khong_nuot=(Cancelled,))
+                                khong_nuot=(Cancelled,), dich=dich, thu_muc=d)
         bb.update(bat=ddd.bat(k), bam_vao=bam_vao, kenh=luot.ma_kenh or k.ma, luot=luot.ma_luot,
                   luc=time.strftime("%Y-%m-%dT%H:%M:%S"), muc_tieu=mt, cho_phep=cp)
         if bb["viet_lai"]:
@@ -2765,9 +2774,13 @@ def _ghi_doc_dao_cuoi(bc: "BoiCanh", luot: LuotChay, k: Kenh, ban: str, tu_lieu:
                                      "ghi_chu": "kịch bản có sẵn trước khi có cổng — chỉ đo"}
         bb.update(cuoi=do["ti_le"], so_doan_cuoi=do["so_doan"], dai_nhat_cuoi=do["dai_nhat"],
                   vi_du_cuoi=do["vi_du"])
+        xuyen = ddd.do_xuyen_cuoi(d, ban, tu_lieu) if do["khac_tieng"] else None    # chỉ dùng bản dịch đã cache
+        if xuyen is not None:
+            bb["xuyen"] = dict(bb.get("xuyen") or {}, cuoi=xuyen["ti_le"], vi_du_cuoi=xuyen["vi_du"][:3])
         ddd.ghi_bien_ban(d, bb)
         bc.ghi("  độ độc đáo: kịch bản cuối trùng nguồn {0}.".format(
-            "— (nguồn khác tiếng, không đo được)" if do["khac_tieng"] else "{0:.0%}".format(do["ti_le"])))
+            ("— nguồn khác tiếng: {0:.0%} câu dịch sát bản gốc".format(xuyen["ti_le"]) if xuyen is not None
+             else "— (nguồn khác tiếng, không đo được)") if do["khac_tieng"] else "{0:.0%}".format(do["ti_le"])))
         goc = str(getattr(bc, "goc", "") or "")
         from .nao_bo_phan import duong_db, ghi as ghi_nao  # noqa: PLC0415
 
@@ -2777,12 +2790,17 @@ def _ghi_doc_dao_cuoi(bc: "BoiCanh", luot: LuotChay, k: Kenh, ban: str, tu_lieu:
             return
         ma = luot.ma_kenh or k.ma
         ghi_nao(goc, "kich-ban", "do", kenh=ma, ma_goi="{0}-{1}".format(ma, luot.ma_luot), nguon="do_doc_dao",
-                noi_dung="độ độc đáo kịch bản: trùng nguồn {0:.0%} → {1:.0%}{2}".format(
+                noi_dung=("độ độc đáo kịch bản (nguồn khác tiếng): câu dịch sát {0:.0%} → {1:.0%}{2}".format(
+                    bb.get("truoc") or 0, xuyen["ti_le"], " (viết lại {0} lần)".format(len(bb.get("lan") or []))
+                    if bb.get("lan") else "") if xuyen is not None else
+                    "độ độc đáo kịch bản: trùng nguồn {0:.0%} → {1:.0%}{2}".format(
                     bb.get("truoc") or 0, do["ti_le"], " (viết lại {0} lần)".format(len(bb.get("lan") or []))
-                    if bb.get("lan") else ""),
+                    if bb.get("lan") else "")),
                 so={"trung_truoc": bb.get("truoc"), "trung_sau": bb.get("sau"), "trung_cuoi": do["ti_le"],
                     "viet_lai": bool(bb.get("viet_lai")), "so_lan": len(bb.get("lan") or []),
-                    "canh_bao": bool(bb.get("canh_bao")), "khac_tieng": do["khac_tieng"], "bat": bb.get("bat")},
+                    "canh_bao": bool(bb.get("canh_bao")), "khac_tieng": do["khac_tieng"], "bat": bb.get("bat"),
+                    "che_do": bb.get("che_do") or "ky_tu",
+                    "xuyen_cuoi": xuyen["ti_le"] if xuyen is not None else None},
                 khoa="doc-dao|{0}|{1}|{2}".format(ma, luot.ma_luot, ddd.bam(ban)))
     except Exception:  # noqa: BLE001
         pass

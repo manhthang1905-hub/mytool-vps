@@ -1315,19 +1315,56 @@ def _chrome_dang_chay(chrome: str) -> bool:
     # Launcher riêng của kênh (`TL2-T7.exe`) thì hỏi ĐÚNG nó; chỉ máy dùng thẳng
     # `chrome.exe` mới phải hỏi tên chung.
     ung_vien = {ten} if ten.lower() != "chrome.exe" else {"chrome.exe"}
+
+    def thay(ung: str) -> bool:
+        ra = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq " + ung, "/NH"],
+            # `tasklist` xuất theo BẢNG MÃ HỆ THỐNG, không phải UTF-8 —
+            # xem sự cố 06/09/2026 ở `chrome_sach.ipv6_tren_may`.
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=15)
+        return ung.lower() in (ra.stdout or "").lower()
     for ung in ung_vien:
         try:
-            ra = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq " + ung, "/NH"],
-                # `tasklist` xuất theo BẢNG MÃ HỆ THỐNG, không phải UTF-8 —
-                # xem sự cố 06/09/2026 ở `chrome_sach.ipv6_tren_may`.
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=15)
-            if ung.lower() in (ra.stdout or "").lower():
+            if thay(ung):
+                # 16/10/2026: launcher KẸT (không Chrome con, cổng câm, ≥3 phút) làm cửa này báo
+                # "đang chạy" hàng giờ → dọn ĐÚNG launcher đó rồi hỏi lại (`launcher_ket`).
+                if ung.lower() != "chrome.exe" and _don_launcher_ket(ung) and not thay(ung):
+                    continue
                 return True
         except Exception:  # noqa: BLE001 — hỏi không được thì coi như đang chạy
             return True    # thà không mở thêm còn hơn mở chồng
     return False
+
+
+#: Cửa canh hỏi dày (nhịp tim 30") — xét launcher kẹt mỗi tên tối đa một lần/khoảng này (mỗi lần là một PowerShell).
+NHIP_XET_LAUNCHER_GIAY = 120.0
+_LAN_XET_LAUNCHER: dict = {}
+
+
+def _nap_launcher_ket():
+    import importlib.util  # noqa: PLC0415
+    ten = "_launcher_ket_vm"
+    if ten not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            ten, os.path.join(os.path.dirname(os.path.abspath(__file__)), "launcher_ket.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules[ten] = mod
+    return sys.modules[ten]
+
+
+def _don_launcher_ket(ten_exe: str) -> bool:
+    """Launcher `ten_exe` kẹt thì tắt (luật ở `vm/launcher_ket.py`). True = đã tắt ít nhất một."""
+    bay = time.monotonic()
+    if bay - _LAN_XET_LAUNCHER.get(ten_exe.lower(), -1e9) < NHIP_XET_LAUNCHER_GIAY:
+        return False
+    _LAN_XET_LAUNCHER[ten_exe.lower()] = bay
+    try:
+        kq = _nap_launcher_ket().don(GOC, os.path.dirname(GOC), ten_exe=ten_exe, nguon="cua-canh", ghi=ghi)
+    except Exception:  # noqa: BLE001 — dọn hỏng thì cửa canh giữ nếp cũ
+        return False
+    return bool(kq.get("da_tat"))
 
 
 def mo_chrome_kenh(cau_hinh: dict, url: str, chrome: str = "",

@@ -13,7 +13,9 @@ lùi dần giữa các lần bật hỏng (`ben_bi.cho_lui_dan`), và TRẦN: h�
 thử lại đúng MỘT lần — và báo động MỘT lần/ngày (`core.bao_dong` + `workspace/loi-chay-max.md` + não `suc-khoe-may`).
 
 Luật cứng:
-  * CHỈ bật thành phần ĐANG CHẾT. Thành phần khoẻ không bao giờ bị "làm tươi"; module này không giết tiến trình nào.
+  * CHỈ bật thành phần ĐANG CHẾT. Thành phần khoẻ không bao giờ bị "làm tươi"; module này không giết tiến trình nào —
+    TRỪ launcher Chrome Portable KẸT (không Chrome con, cổng DevTools câm, sống ≥3 phút; luật ở `vm/launcher_ket.py`,
+    16/10/2026): mỗi lượt `don_launcher_ket` tắt ĐÚNG PID launcher đó, bỏ qua cả lượt khi đang tải lên.
   * Thành phần `ne_ban` (giao diện, agent) HOÃN khi máy đang tải lên hay đang giữ khe dựng/phụ đề/quét
     (`.khoa-may`, `vm/logs/dang-dodang.json` — cùng cách đọc với `an_toan_khoi_dong`, `thiet_lap_kenh_dom`).
     Giao diện còn hoãn khi việc nền cũ của nó còn sống (mở giao diện mới là `tien_trinh_con.don_xac_cu` giết chúng).
@@ -57,7 +59,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import khe
 
 __all__ = ["SONG", "CHET", "KET", "ThanhPhan", "so_dang_ky", "luc_khoi_dong", "ly_do_ban", "don_khoa_khoi_dong",
-           "mot_luot", "cau_khoi_dong", "duong_trang_thai", "duong_khoi_dong", "main"]
+           "mot_luot", "cau_khoi_dong", "duong_trang_thai", "duong_khoi_dong", "don_launcher_ket", "main"]
 
 GOC_TOOL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -711,6 +713,36 @@ def _xu_ly(goc: str, c: ThanhPhan, st: Dict[str, Any], kq: Dict[str, Any], luc: 
     return ra, st
 
 
+def don_launcher_ket(goc: str, *, thu: bool = False, ghi_nao: Optional[Callable[..., Any]] = None,
+                     don_fn: Optional[Callable[..., Dict[str, Any]]] = None, luc: Optional[float] = None) -> Dict[str, Any]:
+    """Launcher Chrome Portable kẹt chặn mọi việc DOM của kênh hàng giờ ("Chrome kênh đang chạy — việc khác đang dùng")
+    → tắt ĐÚNG launcher đó theo `vm/launcher_ket.py` (đang tải lên thì bỏ qua). `thu`: chỉ xét, không tắt."""
+    vm = thu_muc_vm(goc)
+    if don_fn is None:
+        duong = os.path.join(vm, "launcher_ket.py")
+        if not os.path.isfile(duong):
+            return {"bo_qua": "máy này không có vm/launcher_ket.py", "da_tat": [], "tat_hong": [], "ket": [], "giu": []}
+        try:
+            import importlib.util  # noqa: PLC0415
+            spec = importlib.util.spec_from_file_location("_launcher_ket_van_hanh", duong)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            don_fn = mod.don
+        except Exception as loi:  # noqa: BLE001
+            return {"bo_qua": "nạp launcher_ket hỏng: {0}".format(str(loi)[:120]), "da_tat": [], "tat_hong": [],
+                    "ket": [], "giu": []}
+    if ghi_nao is None:
+        def ghi_nao(*a: Any, **k: Any) -> Any:
+            from .nao_bo_phan import ghi  # noqa: PLC0415
+            return ghi(*a, **k)
+    try:
+        return don_fn(vm, goc, nguon="van-hanh", thu=thu, ghi_nao=ghi_nao,
+                      ghi=(lambda _s: None) if thu else (lambda s: _ghi_log(goc, s, luc)))
+    except Exception as loi:  # noqa: BLE001 — không được làm sập lượt canh
+        return {"bo_qua": "lỗi dọn launcher: {0}".format(str(loi)[:120]), "da_tat": [], "tat_hong": [], "ket": [],
+                "giu": []}
+
+
 def cau_khoi_dong(boot: float, kq: Dict[str, Any], so_khoa_don: int) -> Tuple[str, int, int, List[Dict[str, str]]]:
     """'khởi động hh:mm — X/Y thành phần chạy, đã dọn N khoá cũ; chưa chạy: ...'."""
     co = [v for v in kq.values() if v.get("trang_thai") not in (TAT, KHONG_CO)]
@@ -759,8 +791,9 @@ def mot_luot(goc: str, *, thu: bool = False, thanh_phan: Optional[List[ThanhPhan
              bay_gio: Optional[float] = None, luc_boot: Optional[float] = None,
              ly_do_ban_fn: Optional[Callable[..., str]] = None, pid_con_song: Optional[Callable[[int], bool]] = None,
              ngu: Callable[[float], None] = time.sleep, gui_bao: Optional[Callable[..., Any]] = None,
-             ghi_nao: Optional[Callable[..., Any]] = None) -> Dict[str, Any]:
-    """MỘT lượt: (lượt đầu sau khởi động → dọn khoá cũ) → kiểm từng thành phần, bật cái CHẾT theo luật → (một lần mỗi
+             ghi_nao: Optional[Callable[..., Any]] = None,
+             don_launcher_fn: Optional[Callable[..., Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """MỘT lượt: (lượt đầu sau khởi động → dọn khoá cũ) → dọn launcher Chrome kẹt → kiểm từng thành phần, bật cái CHẾT theo luật → (một lần mỗi
     lần khởi động) ghi báo cáo. `thu=True`: CHỈ ĐỌC — không bật, không xoá, không ghi, không báo; trả việc sẽ làm."""
     goc = os.path.abspath(goc)
     luc = time.time() if bay_gio is None else float(bay_gio)
@@ -783,6 +816,7 @@ def mot_luot(goc: str, *, thu: bool = False, thanh_phan: Optional[List[ThanhPhan
             for m in da_xoa:
                 _ghi_log(goc, "dọn khoá cũ {0} ({1}): {2}".format(m["duong"], m["nhan"], m["ly_do"]), luc)
     ban = (ly_do_ban_fn or ly_do_ban)(goc, luc_boot=boot, pid_con_song=pid_con_song)
+    launcher = don_launcher_ket(goc, thu=thu, ghi_nao=ghi_nao, don_fn=don_launcher_fn, luc=luc)
     kq: Dict[str, Any] = {}
     st_moi: Dict[str, Any] = {}
     for c in ds:
@@ -816,6 +850,7 @@ def mot_luot(goc: str, *, thu: bool = False, thanh_phan: Optional[List[ThanhPhan
                  {"song": n_song, "tong": n_tong, "khoa_don": kd.get("so_khoa_don") or 0,
                   "hong": [h["ma"] for h in hong]}, "van-hanh|khoi-dong|{0:.0f}".format(boot), ghi_nao)
     ket = {"luc": luc, "boot_luc": boot, "moi_boot": moi_boot, "thu": thu, "don": don, "ban": ban, "thanh_phan": kq,
+           "launcher": launcher,
            "bao_khoi_dong": bao_moi or kd.get("cau") or "", "song": n_song, "tong": n_tong, "hong": hong}
     if not thu:
         _ghi_json(duong_trang_thai(goc), {"luc": luc, "thanh_phan": st_moi, "khoi_dong": kd,
@@ -862,6 +897,15 @@ def in_ket_qua(ket: Dict[str, Any], goc: str) -> str:
     d.append("Khoá (luật khởi động): {0} tệp, {1} {2}".format(len(don), len(xoa), "sẽ xoá" if ket["thu"] else "đã xoá"))
     for m in don:
         d.append("  {0} {1} — {2}".format("XOÁ" if m["xoa"] is not False else "giữ", m["duong"], m["ly_do"]))
+    la = ket.get("launcher") or {}
+    if la.get("bo_qua"):
+        d.append("Launcher Chrome kẹt: bỏ qua — " + la["bo_qua"])
+    else:
+        d.append("Launcher Chrome kẹt: {0} {1}, {2} giữ (Chrome sống/cổng đáp/mới bật){3}".format(
+            len(la.get("ket") or []) if ket["thu"] else len(la.get("da_tat") or []), "sẽ tắt" if ket["thu"] else "đã tắt",
+            len(la.get("giu") or []), "; TẮT HỎNG {0}".format(len(la["tat_hong"])) if la.get("tat_hong") else ""))
+        for m in (la.get("ket") or []) + (la.get("da_tat") or []) + (la.get("tat_hong") or []):
+            d.append("  {0} PID {1} — {2}".format(m.get("ten"), m.get("pid"), m.get("ly_do")))
     d.append("Báo cáo khởi động: " + (ket["bao_khoi_dong"] or "(chưa — chờ mọi thành phần lên hoặc 15 phút sau lúc máy lên)"))
     return "\n".join(d)
 
