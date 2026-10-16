@@ -51,7 +51,7 @@ MUC_RIENG = ("do_phan_giai", "muc_song_song",
              "auto_kenh_cuoi",
              # Thẻ "Viết chữ (AI)" — `_the_viet_chu` (12/10/2026).
              "viet_chu_bang", "claude_max_mo_hinh", "claude_max_suy_nghi",
-             "claude_max_song_song",
+             "claude_max_song_song", "anh_kiem_max_ngay",
              # Ô cũ "Kịch bản viết bằng Claude Code" — đã thay bằng ô "Viết chữ
              # bằng" ở thẻ trên; khoá giữ lại chỉ để máy đã bật vẫn hiểu đúng
              # (xem `core/cai_dat.py`). Đổi ô mới là tool tự gỡ khoá cũ.
@@ -63,6 +63,9 @@ VIET_CHU_BANG = (
     ("claude_max", "Claude Max của máy"),
     ("vi", "Ví ShopAPI"),
 )
+
+#: Ô "Kiểm ảnh cảnh bằng Claude Max" — trần lượt/ngày (0 = tắt).
+MUC_KIEM_MAX = (0, 100, 200, 300, 500, 800, 1200)
 
 #: Ô "Mức suy nghĩ", `(khoá lưu, nhãn)`.
 SUY_NGHI = (
@@ -266,6 +269,27 @@ class TrangCaiDat(QWidget):
         self._o_cl.currentIndexChanged.connect(lambda i: self._dat_viet_chu("claude_max_song_song", int(i) + 1))
         hang2.addWidget(self._o_cl)
         v.addLayout(hang2)
+
+        # 17/10/2026: Claude Max kiểm cuối ảnh cảnh — trần lượt/ngày (`core/kiem_max_anh.py`).
+        from core import kiem_max_anh  # noqa: PLC0415
+
+        hang3 = HangXuongDong()
+        hang3.addWidget(nhan("Kiểm ảnh cảnh bằng Claude Max:", "phu"))
+        self._o_km = QComboBox()
+        try:
+            km = int(dang.get("anh_kiem_max_ngay", kiem_max_anh.TRAN_NGAY_MAC_DINH))
+        except (TypeError, ValueError):
+            km = kiem_max_anh.TRAN_NGAY_MAC_DINH
+        muc_km = sorted(set(MUC_KIEM_MAX + (km,)))
+        for n in muc_km:
+            self._o_km.addItem("Tắt" if n == 0 else "tối đa {0} lượt/ngày".format(n))
+        self._o_km.setCurrentIndex(muc_km.index(km))
+        self._o_km.setFixedWidth(190)
+        self._o_km.currentIndexChanged.connect(
+            lambda i: self._dat_viet_chu("anh_kiem_max_ngay", int(muc_km[i])) if 0 <= i < len(muc_km) else None)
+        hang3.addWidget(self._o_km)
+        hang3.addWidget(nhan("hôm nay đã dùng {0}".format(kiem_max_anh.da_dung_hom_nay(self._app.base_dir)), "phu"))
+        v.addLayout(hang3)
 
         self._nhan_vcb = self._phu("")
         v.addWidget(self._nhan_vcb)

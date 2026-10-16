@@ -189,6 +189,10 @@ MAC_DINH: Dict[str, Any] = {
     # Bao nhiêu tiến trình Claude viết cùng lúc trên cả máy (1–8). Mỗi tiến trình
     # vài trăm MB RAM và cùng ăn một hạn mức thuê bao.
     "claude_max_song_song": 3,
+    # 17/10/2026 — Claude Max KIỂM CUỐI ảnh cảnh (`core/kiem_max_anh.py`): trần lượt gọi/ngày để việc viết chữ luôn
+    # được ưu tiên hạn mức. Đo sổ thuê bao 12–16/10: viết chữ 1.300–1.700 lượt/ngày; 8 video × ~35 lượt ≈ 280.
+    # 0 = tắt (giữ lựa chọn của giám khảo ví).
+    "anh_kiem_max_ngay": 300,
 
     # Mốc công suất gửi việc lên máy chủ: "mac_dinh" | "nhanh" | "toi_da".
     #

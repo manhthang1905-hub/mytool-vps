@@ -7373,8 +7373,18 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
             return ""
         return "{0}, {1}".format(moi.rstrip(" ,."), duoi) if duoi else moi
 
+    # Claude Max KIỂM CUỐI theo lô (17/10/2026, `core/kiem_max_anh.py`): bù trần của giám khảo đi ví.
+    lo_max = _kiem_max_cua_luot(bc, luot, phong)
+
+    def kiem_cuoi(tep_ds: List[str], khoanh_khac: str) -> Dict[str, Any]:
+        return lo_max.kiem({"ma": "{0}-{1}".format(luot.ma_luot, so_canh), "loi_doc": loi_doc,
+                            "khoanh_khac": khoanh_khac, "tep": list(tep_ds), "ref": refs[0] if refs else ""})
+
+    from .kiem_max_anh import NGUONG_MAX  # noqa: PLC0415
+
     kq = cac.chon_canh(so_canh=so_canh, prompt=str(c["img_prompt"]), loi_doc=loi_doc, ve=ve, cham=cham,
-                       viet_lai=viet_lai, so=cac.SoChon(luot.thu_muc), ghi=bc.ghi, kiem_dung=bc.kiem_dung)
+                       viet_lai=viet_lai, so=cac.SoChon(luot.thu_muc), ghi=bc.ghi, kiem_dung=bc.kiem_dung,
+                       kiem_cuoi=kiem_cuoi if lo_max is not None else None, nguong_cuoi=NGUONG_MAX)
     chon = kq["chon"]
     tam = tep + ".chon.tmp"
     shutil.copyfile(chon["tep"], tam)
@@ -7392,6 +7402,35 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         shutil.rmtree(thu_muc_uv, ignore_errors=True)
     except Exception:  # noqa: BLE001 — dọn ứng viên thua hỏng không sao, chỉ tốn đĩa
         pass
+
+
+def _kiem_max_cua_luot(bc: BoiCanh, luot: LuotChay, phong: str):
+    """Lô kiểm Claude Max dùng chung cho mọi luồng ảnh của lượt; None = tắt (trần ngày 0, hoặc máy chưa có
+    `workspace/cai-dat.json` — máy dev / bài kiểm). Máy không đi được Claude Max thì vẫn trả lô với `goi=None`: mỗi cảnh
+    ghi "máy không có Claude Max" rồi giữ lựa chọn của ví."""
+    from . import kiem_max_anh as kma  # noqa: PLC0415
+
+    goc = str(getattr(bc, "goc", "") or "")
+    if not goc or not os.path.isfile(os.path.join(goc, "workspace", "cai-dat.json")) or kma.tran_ngay(goc) <= 0:
+        return None
+
+    def tao():
+        goi = None
+        try:
+            from .viet_max import duong_viet_chu  # noqa: PLC0415
+
+            if duong_viet_chu(goc)[0] == "max":
+                def goi(tin, khoa):
+                    from .viet_max import goi_tin_nhan_max  # noqa: PLC0415
+
+                    # `lui_vi=True`: cạn / hỏng thì ném `MaxKhongDung` NGAY (không đợi hạn mức) → lô giữ lựa chọn ví.
+                    return goi_tin_nhan_max(tin, goc=goc, toi_da_token=4000, khoa=khoa, on_log=bc.ghi,
+                                            kiem_dung=bc.kiem_dung, lui_vi=True)
+        except Exception:  # noqa: BLE001
+            goi = None
+        return kma.KiemMax(goi, goc=goc, phong=phong, ghi=bc.ghi)
+
+    return kma.cua_luot(luot.thu_muc, tao)
 
 
 def _nao_cua_luot(bc: BoiCanh, luot: LuotChay) -> str:
@@ -7440,6 +7479,17 @@ def _ghi_nao_anh_canh(bc: BoiCanh, luot: LuotChay, so_canh: int, kq: Dict[str, A
         pass
 
 
+def _ly_do_max_bo_qua(luot: LuotChay) -> str:
+    try:
+        from .chon_anh_canh import SoChon  # noqa: PLC0415
+
+        ds = [str(m.get("max_bo_qua")) for m in SoChon(luot.thu_muc).tat_ca().values()
+              if isinstance(m, dict) and m.get("max_bo_qua")]
+        return max(set(ds), key=ds.count)[:160] if ds else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _tong_ket_anh_canh(bc: BoiCanh, luot: LuotChay) -> None:
     """Cuối khâu ảnh: một dòng nhật ký + một sự kiện `do` (não `anh-clip`) tóm tắt sổ chọn ảnh của lượt."""
     try:
@@ -7451,8 +7501,10 @@ def _tong_ket_anh_canh(bc: BoiCanh, luot: LuotChay) -> None:
     if not tt:
         return
     bc.ghi("  chọn ảnh cảnh: {0} cảnh, điểm TB {1} (vòng đầu {2}), viết lại {3}, dưới ngưỡng {4}, nét rợn {5}, "
-           "{6} ảnh + {7} lượt chấm.".format(tt["so_canh"], tt["diem_tb"], tt["diem_tb_vong_dau"], tt["viet_lai"],
-                                            tt["duoi_nguong"], tt["kinh_di"], tt["so_anh"], tt["so_cham"]))
+           "{6} ảnh + {7} lượt chấm; Claude Max kiểm {8} cảnh ({9} lượt, đổi tấm {10}, điểm mù TB {11}), bỏ qua "
+           "{12}.".format(tt["so_canh"], tt["diem_tb"], tt["diem_tb_vong_dau"], tt["viet_lai"], tt["duoi_nguong"],
+                          tt["kinh_di"], tt["so_anh"], tt["so_cham"], tt.get("max_kiem"), tt.get("luot_max"),
+                          tt.get("max_doi"), tt.get("max_tb"), tt.get("max_bo_qua")))
     goc = _nao_cua_luot(bc, luot)
     if not goc:
         return
@@ -7466,6 +7518,13 @@ def _tong_ket_anh_canh(bc: BoiCanh, luot: LuotChay) -> None:
                              tt["so_canh"], tt["diem_tb"], tt["diem_tb_vong_dau"], tt["viet_lai"],
                              tt["thang_nho_viet_lai"], tt["duoi_nguong"], tt["kinh_di"]),
                 so=tt, khoa="anh-canh-tong|{0}|{1}|{2}|{3}".format(ma, luot.ma_luot, tt["so_canh"], tt["diem_tb"]))
+        if tt.get("max_bo_qua"):
+            ghi_nao(goc, "anh-clip", "loi", kenh=ma, ma_goi="{0}-{1}".format(ma, luot.ma_luot),
+                    nguon="kiem_max_anh", chu_ky="anh-canh-max-bo-qua",
+                    noi_dung="kiểm cuối ảnh cảnh bằng Claude Max bị bỏ qua ở {0}/{1} cảnh (giữ lựa chọn của "
+                             "ví): {2}".format(tt["max_bo_qua"], tt["so_canh"], _ly_do_max_bo_qua(luot)),
+                    so={"max_bo_qua": tt["max_bo_qua"], "so_canh": tt["so_canh"]},
+                    khoa="anh-canh-max-bo-qua|{0}|{1}|{2}".format(ma, luot.ma_luot, tt["max_bo_qua"]))
     except Exception:  # noqa: BLE001
         pass
 

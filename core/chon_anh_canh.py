@@ -472,7 +472,9 @@ def chon_canh(*, so_canh: int, prompt: str, loi_doc: str, ve: Callable[[str, int
               cham: Callable[[List[str], str], Optional[Dict[int, Dict[str, Any]]]],
               viet_lai: Optional[Callable[[str, str], str]] = None, so: Optional[SoChon] = None,
               nguong: float = NGUONG_DAT, so_vong: int = SO_VONG_VIET_LAI, ghi: Callable[[str], None] = print,
-              kiem_dung: Optional[Callable[[], None]] = None) -> Dict[str, Any]:
+              kiem_dung: Optional[Callable[[], None]] = None,
+              kiem_cuoi: Optional[Callable[[List[str], str], Dict[str, Any]]] = None,
+              nguong_cuoi: float = 7.0) -> Dict[str, Any]:
     """Chọn ảnh tốt nhất cho MỘT cảnh. Trả bản ghi của cảnh (cũng là thứ ghi vào sổ):
 
         {"prompt_goc", "bam_goc", "vong": [{vong, prompt, bam, tep, cham{so: …}}], "chon": {tep, vong, so, tong,
@@ -480,7 +482,12 @@ def chon_canh(*, so_canh: int, prompt: str, loi_doc: str, ve: Callable[[str, int
 
     `ve(prompt, vong)` vẽ N ứng viên → danh sách tệp, hoặc (tệp, lời nhắc thật đã dùng) (ném lỗi = vòng ấy hỏng). `cham(tệp, prompt)` → {số tấm: mục}
     như `doc_cham` (None/{} = không chấm được). `viet_lai(prompt, ghi_chú)` → lời nhắc mới ("" = không đổi được).
-    Vòng 0 hỏng thì NÉM (nơi gọi lo như mọi lỗi tạo ảnh); vòng sau hỏng thì giữ tấm tốt nhất đã có."""
+    Vòng 0 hỏng thì NÉM (nơi gọi lo như mọi lỗi tạo ảnh); vòng sau hỏng thì giữ tấm tốt nhất đã có.
+
+    `kiem_cuoi(tệp top-3, khoảnh khắc)` (Claude Max kiểm cuối, `core/kiem_max_anh.py`): gọi khi ví đã hài lòng (hoặc
+    hết vòng) → {"ok", "tot" (chỉ số trong top-3), "tong" (thang mù), "ung_vien", "sua"} hoặc {"ok": False, "ly_do"}.
+    Max < `nguong_cuoi` mà còn vòng → viết lại rồi Max kiểm lại; Max không dùng được → giữ lựa chọn của ví, ghi
+    `max_bo_qua`. Tấm chọn cuối: tấm Max chấm cao nhất (Max là trọng tài) nếu có, không thì xếp hạng của ví."""
     bam_goc = _bam(prompt)
     cu = so.lay(so_canh) if so is not None else {}
     if cu.get("bam_goc") != bam_goc and cu.get("bam_chon") != bam_goc:
@@ -536,15 +543,33 @@ def chon_canh(*, so_canh: int, prompt: str, loi_doc: str, ve: Callable[[str, int
         if not any(u.get("cham") for u in ung_vien):
             canh_bao = "giám khảo không chấm được — giữ ứng viên đầu"
             break
-        if not can_viet_lai(tot, nguong):
+        can = can_viet_lai(tot, nguong)
+        het_vong = vong >= int(so_vong)
+        ghi_chu_max = ""
+        if (not can or het_vong) and kiem_cuoi is not None and not ghi_lai.get("max_bo_qua"):
+            km = _kiem_cuoi(kiem_cuoi, ung_vien, cu, ghi_lai, ghi, so_canh)
+            if km.get("ok"):
+                if float(km.get("tong") or 0) >= float(nguong_cuoi) and not km.get("horror"):
+                    can = False
+                else:
+                    can = True
+                    ghi_chu_max = "- final reviewer: best candidate only {0}/10 on the strict scale{1}{2}".format(
+                        km.get("tong"), "; " + str(km.get("ly_do")) if km.get("ly_do") else "",
+                        "; fix: " + str(km.get("sua")) if km.get("sua") else "")
+            else:
+                ghi_lai["max_bo_qua"] = str(km.get("ly_do") or "Claude Max không dùng được")
+        if not can:
             break
-        if vong >= int(so_vong):
+        if het_vong:
             c = tot.get("cham") or {}
-            canh_bao = "sau {0} vòng viết lại vẫn {1}/10{2} — giữ tấm tốt nhất".format(
+            mx = _tot_theo_max(ung_vien)
+            canh_bao = "sau {0} vòng viết lại vẫn {1}/10{2}{3} — giữ tấm tốt nhất".format(
                 so_vong, c.get("tong"), " (dính nét rợn: {0})".format(", ".join(c.get("dau_hieu") or []) or "có")
-                if c.get("kinh_di") else "")
+                if c.get("kinh_di") else "", " (Claude Max {0}/10)".format(mx["max"]["tong"]) if mx else "")
             break
         ghi_chu = ghi_chu_viet_lai([u for u in ung_vien if u["vong"] == vong])
+        if ghi_chu_max:
+            ghi_chu = ghi_chu + "\n" + ghi_chu_max
         # Chạy tiếp: vòng sau đã viết lại ở lượt trước (từ đúng vòng này) → dùng lại bản ấy, khỏi gọi AI lần hai.
         sau = [x for x in cu.get("vong") or [] if int(x.get("vong", -1)) == vong + 1 and x.get("prompt")]
         moi = str(sau[0]["prompt"]) if sau and _vong_dung_lai(cu, vong, bam) is not None else ""
@@ -561,17 +586,60 @@ def chon_canh(*, so_canh: int, prompt: str, loi_doc: str, ve: Callable[[str, int
             "viết lại lời nhắc" if moi and moi != hien else "giữ lời nhắc", vong + 1))
         if moi:
             hien = moi
-    tot = xep_hang(ung_vien)[0]
+    mx = _tot_theo_max(ung_vien)
+    tot = mx or xep_hang(ung_vien)[0]
     c = tot.get("cham") or {}
     ghi_lai["chon"] = {"tep": tot["tep"], "vong": tot["vong"], "so": tot["so"], "prompt": tot["prompt"],
                        "tong": c.get("tong"), "kinh_di": bool(c.get("kinh_di")), "diem": c.get("diem"),
-                       "ly_do": c.get("ly_do", "")}
+                       "ly_do": c.get("ly_do", ""), "boi": "max" if mx else "vi",
+                       "max_tong": (mx or {}).get("max", {}).get("tong"),
+                       "max_doi": bool(mx) and mx["tep"] != xep_hang(ung_vien)[0]["tep"]}
     ghi_lai["bam_chon"] = _bam(tot["prompt"])
     ghi_lai["canh_bao"] = canh_bao
     ghi_lai["xong"] = True
     if so is not None:
         so.dat(so_canh, ghi_lai)
     return ghi_lai
+
+
+def _tot_theo_max(ung_vien: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Tấm Claude Max chấm cao nhất (sạch trước, rồi điểm, rồi xếp hạng ví); không tấm nào có điểm Max → None."""
+    co = [u for u in ung_vien if u.get("max")]
+    if not co:
+        return None
+    hang = {id(u): i for i, u in enumerate(xep_hang(list(ung_vien)))}
+    return sorted(co, key=lambda u: (bool(u["max"].get("horror")), -float(u["max"].get("tong") or 0),
+                                     hang.get(id(u), 99)))[0]
+
+
+def _kiem_cuoi(kiem_cuoi, ung_vien: List[Dict[str, Any]], cu: Dict[str, Any], ghi_lai: Dict[str, Any],
+               ghi: Callable[[str], None], so_canh: int) -> Dict[str, Any]:
+    """Gửi top-3 của ví cho Claude Max (dùng lại kết quả lượt trước nếu cùng bộ tệp), gắn điểm Max vào ứng viên."""
+    top = [u for u in xep_hang(list(ung_vien)) if u.get("cham")][:3]
+    tep = [u["tep"] for u in top]
+    km = next((dict(x["kq"]) for x in cu.get("max") or [] if x.get("tep") == tep and (x.get("kq") or {}).get("ok")),
+              None)
+    if km is None:
+        kk = next((str(u["cham"].get("khoanh_khac")) for u in top if u["cham"].get("khoanh_khac")), "")
+        try:
+            km = dict(kiem_cuoi(tep, kk) or {})
+        except Exception as loi:  # noqa: BLE001 — Max hỏng: giữ lựa chọn của ví
+            if _la_dung(loi):
+                raise
+            km = {"ok": False, "ly_do": "Claude Max lỗi ({0})".format(str(loi)[:100])}
+    ghi_lai.setdefault("max", []).append({"tep": tep, "kq": km})
+    if not km.get("ok"):
+        ghi("    ảnh cảnh {0}: không kiểm cuối được bằng Claude Max ({1}) — giữ lựa chọn của ví.".format(
+            so_canh, str(km.get("ly_do") or "")[:100]))
+        return km
+    for i, m in (km.get("ung_vien") or {}).items():
+        if 0 <= int(i) < len(top):
+            top[int(i)]["max"] = dict(m)
+    tot = top[int(km.get("tot") or 0)] if 0 <= int(km.get("tot") or 0) < len(top) else top[0]
+    km["ly_do"] = (tot.get("max") or {}).get("ly_do", "")
+    ghi("    ảnh cảnh {0}: Claude Max chấm {1}/10 (tấm {2} vòng {3}){4}.".format(
+        so_canh, km.get("tong"), tot["so"], tot["vong"], " — ĐỔI so với ví" if tot is not top[0] else ""))
+    return km
 
 
 def tom_tat(thu_muc_luot: str, nguong: float = NGUONG_DAT) -> Dict[str, Any]:
@@ -591,4 +659,10 @@ def tom_tat(thu_muc_luot: str, nguong: float = NGUONG_DAT) -> Dict[str, Any]:
             "thang_nho_viet_lai": sum(1 for m in xong if int(m["chon"].get("vong") or 0) > 0),
             "canh_bao": sum(1 for m in xong if m.get("canh_bao")),
             "so_anh": sum(int(m.get("so_anh") or 0) for m in xong),
-            "so_cham": sum(int(m.get("so_cham") or 0) for m in xong)}
+            "so_cham": sum(int(m.get("so_cham") or 0) for m in xong),
+            "max_kiem": sum(1 for m in xong if m["chon"].get("boi") == "max"),
+            "max_doi": sum(1 for m in xong if m["chon"].get("max_doi")),
+            "max_bo_qua": sum(1 for m in xong if m.get("max_bo_qua")),
+            "max_tb": (lambda v: round(sum(v) / len(v), 2) if v else None)(
+                [float(m["chon"]["max_tong"]) for m in xong if m["chon"].get("max_tong") is not None]),
+            "luot_max": sum(len(m.get("max") or []) for m in xong)}
