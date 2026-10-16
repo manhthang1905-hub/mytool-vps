@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.210.0** — 2026-10-16 — `vps-jp1` — feat(danh-sach-phat): danh sach phat chu de tu dong - AI chia video theo nghia, tao tren Studio, them video CHI qua trang sua Studio (khong mo trang xem), chi video cua chinh kenh, khong dung danh sach cua chu; video moi vao dung danh sach…
 - **2.209.2** — 2026-10-16 — `vps-jp1` — docs(kien-thuc): luat chu du an cho moi ngach/moi may (chat luong, cong chu bia, khong lach YouTube, hoc dung cho, van hanh) + CLAUDE.md tro toi
 - **2.209.1** — 2026-10-16 — `vps-jp1` — fix(cai-dat): may moi tu dang ky du 4 lich nao hoc + ky nang (KyNang, NaoBoPhan, NaoBoPhan-Ngu, PhongThiNghiem) - truoc day dang ky tay tren VPS dau
 - **2.209.0** — 2026-10-16 — `vps-jp1` — feat(van-hanh): khoi dong + tu hoi phuc - so dang ky 4 thanh phan (Qt, tram 8765, agent may dang, truc quan 8790) kiem song/bat lai khi chet, khong dung tien trinh dang dang/dung; don khoa cu sau khoi dong; bao cao khoi dong; task ShopAPI-…
