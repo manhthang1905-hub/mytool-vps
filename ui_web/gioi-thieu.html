@@ -36,6 +36,19 @@ em.hl{font-style:normal;color:var(--ht);text-shadow:0 0 24px rgba(251,191,36,.35
 .o-so .nhan svg{color:var(--ht)}
 .o-so .gt{font:700 clamp(28px,3.4vw,48px)/1.1 var(--f-hud);margin-top:6px;font-variant-numeric:tabular-nums}
 .o-so .phu{font-size:13px;color:var(--mo);margin-top:2px}
+/* ---- mục tiêu (đi ngược từ đích) ---- */
+.mt-tieu{font:700 clamp(24px,3vw,40px)/1.15 var(--f-hud);margin:0 0 6px}
+.mt-ds{display:grid;gap:8px;margin-top:14px}
+.mt-b{display:grid;grid-template-columns:44px minmax(0,1fr) 30px minmax(0,1fr);gap:8px 12px;align-items:center;padding:14px 18px}
+.mt-b .stt{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:700 15px var(--f-hud);color:#04121a;background:var(--ht);box-shadow:0 0 14px -2px rgba(251,191,36,.7)}
+.mt-b .vao-b{font:600 clamp(15px,1.4vw,18px)/1.4 var(--f-chu);color:var(--chu)} .mt-b .vao-b small{display:block;font-size:12.5px;color:var(--mo);font-weight:500}
+.mt-b .ra{font:700 clamp(24px,2.8vw,38px)/1.1 var(--f-hud);color:var(--ht);font-variant-numeric:tabular-nums} .mt-b .ra small{font:600 14px var(--f-chu);color:var(--chu);margin-left:6px}
+.mt-b .mui svg{width:28px;height:28px;color:var(--ht)}
+.mt-b .thanh-tien{grid-column:2/-1;height:12px}
+.mt-ket{margin-top:12px;font:600 clamp(16px,1.5vw,19px)/1.4 var(--f-chu);color:var(--ht)}
+.noi-mt{display:flex;gap:8px;align-items:flex-start;margin:-6px 0 14px;font:600 14.5px/1.45 var(--f-chu);color:var(--ht)}
+.noi-mt svg{flex:none;margin-top:2px}
+.noi-nho{font-size:12.5px;color:var(--ht);opacity:.85;line-height:1.4}
 /* ---- bài toán ---- */
 .chuoi{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr) 24px minmax(0,1fr) 24px minmax(0,1fr);gap:8px;align-items:stretch}
 .chuoi .stt{font:700 12px var(--f-hud);letter-spacing:.12em;color:var(--ht)}
@@ -138,6 +151,7 @@ em.hl{font-style:normal;color:var(--ht);text-shadow:0 0 24px rgba(251,191,36,.35
   .dai-so,.luoi4,.buoc,.bac{grid-template-columns:repeat(2,minmax(0,1fr))}
   .chuoi{grid-template-columns:minmax(0,1fr)} .chuoi .mui{transform:rotate(90deg);height:18px}
   .bac .b{min-height:0!important}
+  .mt-b{grid-template-columns:36px minmax(0,1fr)} .mt-b .mui{display:none} .mt-b .ra{grid-column:2} .mt-b .thanh-tien{grid-column:1/-1}
 }
 @media (max-width:900px){
   nav.tabs a.tab:not(.on) span{display:none}
@@ -167,6 +181,7 @@ em.hl{font-style:normal;color:var(--ht);text-shadow:0 0 24px rgba(251,191,36,.35
 
 <main class="trang">
   <section class="canh panel mo-dau goc vang vao" id="mo-dau" aria-label="Mở đầu"></section>
+  <section class="canh" id="muc-tieu" aria-label="Mục tiêu"></section>
   <section class="canh" id="bai-toan" aria-label="Bài toán"></section>
   <section class="canh" id="domain-translator" aria-label="Domain Translator"></section>
   <section class="canh" id="lo-trinh" aria-label="Lộ trình"></section>
@@ -184,19 +199,33 @@ em.hl{font-style:normal;color:var(--ht);text-shadow:0 0 24px rgba(251,191,36,.35
 const {esc, so, ic} = MT;
 document.querySelectorAll("svg[data-ic]").forEach(s => { s.innerHTML = MT.icTho(s.dataset.ic); });
 document.getElementById("logo-ic").innerHTML = ic("swords", "lon");
-const hl = s => esc(s).replace(/\[\[(.+?)\]\]/g, '<em class="hl">$1</em>');
+/* Mục tiêu (đi ngược từ đích): tham số ở JSON `muc_tieu`, số sống từ chiến trường. {khoa} trong chữ JSON được điền số. */
+let G = {};
+const vw = n => n >= 1e6 ? so(n / 1e6, n < 1e7 ? 2 : 1) + " triệu" : n >= 1e4 ? so(Math.round(n / 1e3)) + " nghìn" : so(Math.round(n));
+const dien = s => String(s == null ? "" : s).replace(/\{(\w+)\}/g, (m, k) => G[k] == null ? m : typeof G[k] === "number" ? (k.startsWith("view") ? vw(G[k]) : so(G[k])) : G[k]);
+const hl = s => esc(dien(s)).replace(/\[\[(.+?)\]\]/g, '<em class="hl">$1</em>');
+const noiMt = t => t ? `<div class="noi-mt">${ic("target")}<span>${hl(t)}</span></div>` : "";
+function tinhMucTieu() {
+  const m = ND.muc_tieu || {}, t = CT.tong || {}, q = CT.quan || [];
+  const usd = Number(m.usd) || 0, thang = Number(m.thang) || 1, rpm = Number(m.rpm) || 0, vkt = Number(m.video_kenh_thang) || 30;
+  G = {usd, thang, rpm, usd_thang: usd / thang};
+  G.view_thang = rpm ? G.usd_thang / rpm * 1000 : 0;
+  if (q.length) { G.so_kenh = q.length; G.video_thang = q.length * vkt; G.view_video = G.view_thang / G.video_thang; G.view_kenh = G.view_thang / q.length; }
+  if (t.dich) G.thi_phan_can = 100 * G.view_thang / t.dich;
+  if (t.ta) G.gap = G.view_thang / t.ta;
+}
 const tong = (ds, f) => ds.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const tieu = (i, t) => `<h2 class="canh-tieu">${ic(i)}${hl(t || "")}</h2>`;
-const nutTab = (tab, ten) => tab ? `<a class="nut" href="${esc(tab)}">${ic("chevron")}Xem ở ${esc(ten || "tab")}</a>` : "";
+const nutTab = (tab, ten) => tab ? `${(ND.noi_tab || {})[tab] ? `<span class="noi-nho">${hl(ND.noi_tab[tab])}</span>` : ""}<a class="nut" href="${esc(tab)}">${ic("chevron")}Xem ở ${esc(ten || "tab")}</a>` : "";
 const mui = `<div class="mui">${ic("chevron")}</div>`;
 const dat = id => document.getElementById(id);
 // Số đếm lên khi cuộn tới (data-so = đích)
-const dem = n => `<span data-so="${Number(n) || 0}">${MT.giamChuyenDong ? so(n) : "0"}</span>`;
+const dem = (n, le) => `<span data-so="${Number(n) || 0}" data-le="${le || 0}">${MT.giamChuyenDong ? so(n, le || 0) : "0"}</span>`;
 const quan = new IntersectionObserver(ds => ds.forEach(x => {
   if (!x.isIntersecting || x.target.dataset.xong) return;
-  const e = x.target, dich = Number(e.dataset.so), bd = performance.now(); e.dataset.xong = 1;
-  if (MT.giamChuyenDong) { e.textContent = so(dich); return; }
-  const buoc = t => { const p = Math.min(1, (t - bd) / 1300); e.textContent = so(dich * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(buoc); };
+  const e = x.target, dich = Number(e.dataset.so), le = Number(e.dataset.le) || 0, bd = performance.now(); e.dataset.xong = 1;
+  if (MT.giamChuyenDong) { e.textContent = so(dich, le); return; }
+  const buoc = t => { const p = Math.min(1, (t - bd) / 1300); e.textContent = so(dich * (1 - Math.pow(1 - p, 3)), le); if (p < 1) requestAnimationFrame(buoc); };
   requestAnimationFrame(buoc);
 }), {threshold: .4});
 
@@ -213,6 +242,27 @@ function moDau() {
   dat("mo-dau").innerHTML = `<div class="kicker">${hl(m.kicker || "")}</div><h1>${hl(m.tieu_de || "Domain Translator")}</h1>
     <div class="phu-de">${hl(m.phu_de || "")}</div>
     <div class="dai-so">${o.map(([n, i, g, p]) => `<div class="o-so"><div class="nhan">${ic(i)}${n}</div><div class="gt">${dem(g)}</div><div class="phu">${p}</div></div>`).join("")}</div>`;
+}
+
+function mucTieu() {
+  const m = ND.muc_tieu; if (!m || !G.view_thang) { dat("muc-tieu").remove(); return; }
+  const t = CT.tong || {}, top = CT.dich_top || [], muiT = `<div class="mui">${ic("chevron")}</div>`;
+  const b = [[`${so(G.usd)} $ trong ${so(G.thang)} tháng`, "", dem(G.usd_thang) + "<small>$ / tháng</small>"],
+             [`÷ RPM ${so(G.rpm, 2)} $ / 1.000 view`, esc(m.rpm_ghi || "giả định"), dem(G.view_thang) + "<small>view / tháng</small>"]];
+  if (G.thi_phan_can != null) b.push([`Cả ngách ~${vw(t.dich)} view/tháng`, "số sống — bản đồ chiến trường", dem(G.thi_phan_can, 1) + "<small>% thị phần cần có</small>"]);
+  if (G.gap != null) b.push([`Hiện tại ${vw(t.ta)} view/tháng · ${so(t.thi_phan, 2)}% thị phần`, "số sống — 28 ngày thật từ Studio", "×" + dem(G.gap, 1) + "<small>còn phải gấp</small>",
+    `<div class="thanh-tien vang"><b style="width:${MT.kep(100 * t.ta / G.view_thang, 1, 100)}%"></b></div>`]);
+  if (G.video_thang) b.push([`${so(G.so_kenh)} kênh × ${so(G.video_thang / G.so_kenh)} video/tháng = ${so(G.video_thang)} video`, "số kênh sống", "~" + dem(G.view_video) + "<small>view mỗi video</small>"]);
+  const cuoi = top[top.length - 1];
+  if (cuoi && cuoi.view) {
+    const hang = top.filter(d => d.view > G.view_thang).length + 1;
+    b.push([`Ngưỡng top ${top.length} ngách: ${vw(cuoi.view)} view/tháng`, `kênh đối thủ hạng ${top.length} — số sống`,
+      hang > top.length ? dem(100 * G.view_thang / cuoi.view) + `<small>% ngưỡng top ${top.length} — đạt mục tiêu vẫn chưa vào top ${top.length}</small>`
+        : "#" + dem(hang) + "<small>hạng trong ngách nếu đạt mục tiêu</small>"]);
+  }
+  dat("muc-tieu").innerHTML = `<div class="panel goc vang" style="padding:clamp(18px,2.4vw,30px)"><h2 class="mt-tieu">${hl(m.tieu)}</h2>
+    <div class="mt-ds">${b.map(([vao, phu, ra, them], j) => `<div class="panel mt-b"><span class="stt">${j + 1}</span><div class="vao-b">${esc(vao)}${phu ? `<small>${phu}</small>` : ""}</div>${muiT}<div class="ra">${ra}</div>${them || ""}</div>`).join("")}</div>
+    ${m.ket ? `<div class="mt-ket">${hl(m.ket)}</div>` : ""}</div>`;
 }
 
 function baiToan() {
@@ -237,7 +287,7 @@ function domainTranslator() {
 
 function loTrinh() {
   const l = ND.lo_trinh || {};
-  dat("lo-trinh").innerHTML = tieu("flag", l.tieu) + `<div class="lt">${(l.moc || []).map((m, j) => {
+  dat("lo-trinh").innerHTML = tieu("flag", l.tieu) + noiMt(l.muc_tieu_noi) + `<div class="lt">${(l.moc || []).map((m, j) => {
     const n = MT.kep(Number(m.nguoi) || 0, 0, 100);
     const thanh = m.mo ? "" : `<div class="nm"><i class="n" style="width:${n}%"></i><i class="m" style="width:${100 - n}%"></i></div>
       <div class="nm-chu"><span class="n">Người ${n}%</span><span class="m">Máy ${esc(m.may_chu || (100 - n) + "%")}</span></div>`;
@@ -270,7 +320,7 @@ const goiSo = k => { try { return SO[k] ? SO[k]() : null; } catch (e) { return n
 
 function banDich() {
   const b = ND.ban_dich || {};
-  dat("ban-dich").innerHTML = tieu("layers", b.tieu) +
+  dat("ban-dich").innerHTML = tieu("layers", b.tieu) + noiMt(b.muc_tieu_noi) +
     `<div class="bd-dau"><span>Điều tôi học được</span><span></span><span>Luật máy đang chạy</span><span></span><span>Số sống hôm nay</span></div>` +
     (b.dong || []).map((d, j) => {
       const s = goiSo(d.so);
@@ -284,7 +334,7 @@ function banDich() {
 
 function cachMayLam() {
   const c = ND.cach_may_lam || {};
-  dat("cach-may-lam").innerHTML = tieu("cpu", c.tieu) + `<div class="luoi4" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">${(c.the || []).map(t => {
+  dat("cach-may-lam").innerHTML = tieu("cpu", c.tieu) + noiMt(c.muc_tieu_noi) + `<div class="luoi4" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">${(c.the || []).map(t => {
     const s = t.so ? goiSo(t.so) : null;
     return `<div class="panel the-y"><div class="dau-y">${ic(t.ic)}${hl(t.tieu)}</div><p>${hl(t.noi)}</p>${s ? `<span class="so-chip">${esc(s)}</span>` : ""}${nutTab(t.tab, t.tab_ten)}</div>`; }).join("")}</div>`;
 }
@@ -292,7 +342,7 @@ function cachMayLam() {
 function doiKenh() {
   const q = (CT.quan || []).slice().sort((a, b) => (b.gio_xem || 0) - (a.gio_xem || 0));
   const thanh = (v, moc, lop) => `<div class="thanh-tien ${lop}"><b style="width:${MT.kep(100 * (v || 0) / moc, 0, 100)}%"></b></div>`;
-  dat("doi-kenh").innerHTML = tieu("users", (ND.doi_kenh || {}).tieu || "Đội kênh") + `<div class="doi">${q.map((k, j) => {
+  dat("doi-kenh").innerHTML = tieu("users", (ND.doi_kenh || {}).tieu || "Đội kênh") + noiMt((ND.doi_kenh || {}).muc_tieu_noi) + `<div class="doi">${q.map((k, j) => {
     const du = (k.gio_xem || 0) >= 4000, t = k.tot_nhat;
     return `<div class="panel k ${du ? "dat" : ""} vao" style="animation-delay:${j * 50}ms">
       <div class="k-dau"><img src="/logo/${encodeURIComponent(k.ma)}.png" alt="" onerror="this.remove()"><div style="min-width:0"><div class="ten" title="${esc(k.ten)}">${esc(k.ten || k.ma)}</div><div class="ma">${esc(k.ma)}</div></div>
@@ -300,7 +350,8 @@ function doiKenh() {
       <div class="k-tep">${(k.mat_tran_ten || []).filter((x, i) => (k.mat_tran || [])[i] !== "khac").map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>
       <div class="k-so"><div><b>${dem(k.so_video)}</b><span>video</span></div><div><b>${dem(Math.round(k.gio_xem || 0))}</b><span>giờ xem</span></div><div><b>${dem(k.dang_ky)}</b><span>đăng ký</span></div></div>
       <div class="k-ypp"><div class="dong"><span>Giờ xem → 4.000</span><b>${so(Math.min(100, 100 * (k.gio_xem || 0) / 4000))}%</b></div>${thanh(k.gio_xem, 4000, "vang")}
-        <div class="dong"><span>Đăng ký → 1.000</span><b>${so(Math.min(100, 100 * (k.dang_ky || 0) / 1000))}%</b></div>${thanh(k.dang_ky, 1000, "")}</div>
+        <div class="dong"><span>Đăng ký → 1.000</span><b>${so(Math.min(100, 100 * (k.dang_ky || 0) / 1000))}%</b></div>${thanh(k.dang_ky, 1000, "")}
+        ${G.view_kenh ? `<div class="dong"><span>View 28 ngày → ${vw(G.view_kenh)} (phần mục tiêu)</span><b>${vw(k.view_28 || 0)} · ${so(Math.min(100, 100 * (k.view_28 || 0) / G.view_kenh), 1)}%</b></div>${thanh(k.view_28, G.view_kenh, "tim")}` : ""}</div>
       ${t ? `<div class="k-tot">${ic("trophy")} Video tốt nhất: <b>${esc(t.tieu_de)}</b> — ${so(t.hien_thi)} hiển thị · bấm ${esc(t.ctr || "—")}</div>` : ""}</div>`;
   }).join("") || '<div class="trong">Chưa có số kênh.</div>'}</div>`;
 }
@@ -310,19 +361,21 @@ function kinhTe() {
   const o = [["Chi AI hôm nay", "zap", v.chi_hom_nay, "tính tới giờ này"], ["Chi AI hôm qua", "calendar", v.chi_hom_qua, "cả ngày"],
              ["Ước chi mỗi ngày", "trend", v.chi_ngay_uoc, "theo nhịp chi gần đây"], ["Ước chi mỗi video", "film", v.uoc_video, "trọn một video"]];
   const coSo = o.some(x => x[2]);
-  const may = (v.chi_ngay_uoc || 0) * 30, nguoi = (Number(dn.so_nguoi) || 0) * (Number(dn.luong_thang) || 0), max = Math.max(may, nguoi) || 1;
+  const tg = Number((ND.muc_tieu || {}).ty_gia) || 0, dt = (G.usd_thang || 0) * tg;
+  const may = (v.chi_ngay_uoc || 0) * 30, nguoi = (Number(dn.so_nguoi) || 0) * (Number(dn.luong_thang) || 0), max = Math.max(may, nguoi, dt) || 1;
   const hang = (ten, phu, gt, mau) => `<div class="hang"><div><b>${hl(ten)}</b><small>${hl(phu)}</small></div><div class="thanh-ss"><i style="width:${MT.kep(100 * gt / max, 1, 100)}%;background:${mau}"></i></div><div class="gt">${so(gt)} đ/tháng</div></div>`;
-  dat("kinh-te").innerHTML = tieu("yen", k.tieu) + (coSo ? `<div class="dai-so" style="margin-top:0">${o.map(([n, i, g, p]) =>
+  dat("kinh-te").innerHTML = tieu("yen", k.tieu) + noiMt(k.muc_tieu_noi) + (coSo ? `<div class="dai-so" style="margin-top:0">${o.map(([n, i, g, p]) =>
       `<div class="panel o-so"><div class="nhan">${ic(i)}${n}</div><div class="gt">${g ? dem(Math.round(g)) + " đ" : "—"}</div><div class="phu">${p}</div></div>`).join("")}</div>` : '<div class="trong">Chưa đọc được số ví.</div>') +
     (may && nguoi ? `<div class="panel so-so">${hang("Máy", "ước chi mỗi ngày × 30", may, "linear-gradient(90deg,var(--ta2),var(--ta))")}
       ${hang(dn.nhan || "Đội người làm tay", `${so(dn.so_nguoi)} người × ${so(dn.luong_thang)} đ/tháng — giả định`, nguoi, "var(--nguoi)")}
+      ${dt ? hang("Doanh thu mục tiêu", `${so(G.usd_thang)} $/tháng × ${so(tg)} đ/$ — ${(ND.muc_tieu || {}).ty_gia_ghi || "giả định"}`, dt, "linear-gradient(90deg,#d97706,var(--ht))") : ""}
       <div class="ghi">${hl(dn.ghi || "")}${dn.ghi ? "<br>" : ""}${hl(k.chu_thich || "")}</div></div>` : (k.chu_thich ? `<p class="ghi">${hl(k.chu_thich)}</p>` : ""));
 }
 
 function nguoiMay() {
   const n = ND.nguoi_may || {};
   const cot = (lop, ten, i, ds, dau) => `<div class="panel cot ${lop} goc ${lop === "nguoi" ? "vang" : ""}"><h3>${ic(i, "lon")}${hl(ten)}</h3><ul>${(ds || []).map(x => `<li>${ic(dau)}${hl(x)}</li>`).join("")}</ul></div>`;
-  dat("nguoi-may").innerHTML = `<div class="nm-hai">${cot("nguoi", n.nguoi_tieu || "Người làm gì", "users", n.nguoi, "star") + cot("may", n.may_tieu || "Máy làm gì", "cpu", n.may, "check")}</div>` +
+  dat("nguoi-may").innerHTML = noiMt(n.muc_tieu_noi) + `<div class="nm-hai">${cot("nguoi", n.nguoi_tieu || "Người làm gì", "users", n.nguoi, "star") + cot("may", n.may_tieu || "Máy làm gì", "cpu", n.may, "check")}</div>` +
     (n.tiep_theo ? `<div class="tiep">${ic("layers")}<span>${hl(n.tiep_theo)}</span></div>` : "");
   dat("chan").textContent = ND.chan_trang || "";
 }
@@ -332,7 +385,7 @@ async function tai() {
   [ND, CT, DD, NAO, NBP, RD, PTN, KT] = await Promise.all(["/gioi-thieu.json", "/chien-truong.json", "/day-du.json", "/nao.json", "/nao-bo-phan.json",
     "/radar-dot-bien.json", "/phong-thi-nghiem.json", "/kinh-te.json"].map(lay));
   const ve = (ten, ham) => { try { ham(); } catch (e) { console.error(ten, e); } };
-  ve("mở đầu", moDau); ve("bài toán", baiToan); ve("domain translator", domainTranslator); ve("lộ trình", loTrinh); ve("bản dịch", banDich);
+  ve("mục tiêu tính", tinhMucTieu); ve("mở đầu", moDau); ve("mục tiêu", mucTieu); ve("bài toán", baiToan); ve("domain translator", domainTranslator); ve("lộ trình", loTrinh); ve("bản dịch", banDich);
   ve("cách máy làm", cachMayLam); ve("đội", doiKenh); ve("kinh tế", kinhTe); ve("người máy", nguoiMay);
   document.querySelectorAll("[data-so]:not([data-xong])").forEach(e => quan.observe(e));
   if (CT.luc) MT.song(CT.luc); else MT.song(null, "không đọc được số kênh");

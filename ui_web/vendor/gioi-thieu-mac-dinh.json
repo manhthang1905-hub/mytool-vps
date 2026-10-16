@@ -2,7 +2,18 @@
  "mo_dau": {
   "kicker": "Doanh nghiệp YouTube một người",
   "tieu_de": "[[Domain Translator]]",
-  "phu_de": "Kiến thức nghề YouTube, dịch thành luật cho một đội agent AI tự vận hành nhiều kênh."
+  "phu_de": "Đi ngược từ mục tiêu [[{usd} $ trong {thang} tháng]]: kiến thức nghề YouTube, dịch thành luật cho một đội agent AI tự vận hành nhiều kênh."
+ },
+ "muc_tieu": {
+  "tieu": "Mục tiêu: một VPS kiếm [[{usd} $]] trong {thang} tháng",
+  "usd": 30000,
+  "thang": 6,
+  "rpm": 2.5,
+  "rpm_ghi": "RPM — GIẢ ĐỊNH, đổi theo thị trường của bạn",
+  "video_kenh_thang": 30,
+  "ty_gia": 26300,
+  "ty_gia_ghi": "tỉ giá GIẢ ĐỊNH",
+  "ket": "Mọi phần bên dưới tồn tại để đạt con số này."
  },
  "bai_toan": {
   "tieu": "Bài toán — một kênh YouTube là một doanh nghiệp",
@@ -163,7 +174,8 @@
     "cau": "Mỗi VPS một quốc gia + một mảng.",
     "mo": true
    }
-  ]
+  ],
+  "muc_tieu_noi": "Mỗi nấc người lùi ra là thêm kênh một người điều được — đường tới {video_thang} video/tháng."
  },
  "ban_dich": {
   "tieu": "Bản dịch — kiến thức nghề → luật máy đang chạy → số sống hôm nay",
@@ -224,7 +236,8 @@
     "tab": "/",
     "tab_ten": "Chiến trường"
    }
-  ]
+  ],
+  "muc_tieu_noi": "Mỗi luật dưới đây tồn tại để kéo {view_thang} view/tháng: học đúng thì chọn đúng."
  },
  "cach_may_lam": {
   "tieu": "Cách máy làm — mỗi ngày, không cần người trông",
@@ -265,10 +278,12 @@
     "tab": "/hau-can",
     "tab_ten": "Hậu cần"
    }
-  ]
+  ],
+  "muc_tieu_noi": "Máy chạy để {video_thang} video/tháng ra đều, mỗi video ~{view_video} view."
  },
  "doi_kenh": {
-  "tieu": "Đội kênh — đường tới bật kiếm tiền"
+  "tieu": "Đội kênh — đường tới bật kiếm tiền",
+  "muc_tieu_noi": "Mỗi kênh cần ~{view_kenh} view/tháng — thanh dưới mỗi thẻ là view 28 ngày so phần mục tiêu của kênh."
  },
  "kinh_te": {
   "tieu": "Kinh tế — máy tốn bao nhiêu, so với làm tay",
@@ -278,7 +293,8 @@
    "nhan": "Đội người làm tay tương đương",
    "ghi": "GIẢ ĐỊNH để so sánh, không phải số đo: 7 người (nghiên cứu, kịch bản, giọng, hình, dựng, đăng, chăm kênh) × 10 triệu đồng/tháng."
   },
-  "chu_thich": "Chi của máy = tiền ví AI (ước theo nhịp chi thật), chưa gồm thuê VPS và thuê bao Claude."
+  "chu_thich": "Chi của máy = tiền ví AI (ước theo nhịp chi thật), chưa gồm thuê VPS và thuê bao Claude.",
+  "muc_tieu_noi": "Chi của máy đặt cạnh doanh thu mục tiêu {usd_thang} $/tháng."
  },
  "nguoi_may": {
   "nguoi_tieu": "Người làm gì",
@@ -304,7 +320,14 @@
    "Tự học",
    "Tự sửa lỗi"
   ],
-  "tiep_theo": "Tiếp theo: [[nhiều VPS]] — mỗi VPS một quốc gia + một mảng, một người hiểu nghề điều phối."
+  "tiep_theo": "Tiếp theo: [[nhiều VPS]] — mỗi VPS một quốc gia + một mảng, một người hiểu nghề điều phối.",
+  "muc_tieu_noi": "Người giữ phần máy chưa làm được — để cả đội chạy về {usd} $ trong {thang} tháng."
  },
- "chan_trang": "MYTOOL · Domain Translator — người hiểu nghề, máy làm nghề"
+ "chan_trang": "MYTOOL · Domain Translator — người hiểu nghề, máy làm nghề",
+ "noi_tab": {
+  "/": "Vì mục tiêu: {view_thang} view/tháng nằm ở vùng nào, đối thủ nào đang giữ.",
+  "/phong-thi-nghiem": "Vì mục tiêu: chọn đúng nguồn nổ để mỗi video đạt ~{view_video} view.",
+  "/hau-can": "Vì mục tiêu: {video_thang} video/tháng phải ra đều, đúng giờ.",
+  "/nao": "Vì mục tiêu: mỗi tháng đoán trúng nhiều hơn tháng trước."
+ }
 }

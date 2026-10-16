@@ -6,7 +6,7 @@ import re
 
 from core import truc_quan as tq
 
-NEO = ("mo-dau", "bai-toan", "domain-translator", "lo-trinh", "ban-dich", "cach-may-lam", "doi-kenh", "kinh-te", "nguoi-may")
+NEO = ("mo-dau", "muc-tieu", "bai-toan", "domain-translator", "lo-trinh", "ban-dich", "cach-may-lam", "doi-kenh", "kinh-te", "nguoi-may")
 
 
 def test_noi_dung_rieng_may_roi_mac_dinh(tmp_path):
@@ -27,6 +27,7 @@ def test_mac_dinh_trung_tinh_va_trang_khong_cdn():
         md = tep.read()
     assert not re.search(r"TL\d|[぀-ヿ]|\d{1,3}\.\d{3}", md)       # không mã/tên kênh, không số liệu máy này
     d = json.loads(md)
+    assert all(k in d["muc_tieu"] for k in ("usd", "thang", "rpm", "video_kenh_thang", "ty_gia"))
     so_khoa = {x.get("so") for x in d["ban_dich"]["dong"] + d["cach_may_lam"]["the"] + d["domain_translator"]["buoc"]} - {None}
     with open(os.path.join(tq.GOC, "ui_web", "gioi-thieu.html"), encoding="utf-8") as tep:
         s = tep.read()
