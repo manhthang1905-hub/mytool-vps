@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.209.0** — 2026-10-16 — `vps-jp1` — feat(van-hanh): khoi dong + tu hoi phuc - so dang ky 4 thanh phan (Qt, tram 8765, agent may dang, truc quan 8790) kiem song/bat lai khi chet, khong dung tien trinh dang dang/dung; don khoa cu sau khoi dong; bao cao khoi dong; task ShopAPI-…
 - **2.208.0** — 2026-10-16 — `vps-jp1` — feat(bia): cong chu bia tuyet doi - soat chu truoc khi ve, 2 lan doc mu doc lap phai khop tung ky tu, dau chu_khop sha1, moi loi ra YouTube (dang/doi bia/A-B) tu choi bia chua dong dau; S05 dong dau goi cho; TL1 len bia_lo theo bia thang t…
 - **2.207.0** — 2026-10-16 — `vps-jp1` — feat(studio-may): bo tu lam viec Studio - D13 tu bat Thu nghiem A/B hinh thu nho (ung vien qua cong do_bia, khong dung tieu de), D14 doc suc khoe kenh (gay/canh bao/noi dung dung lai, chi bao nguoi khi co that); chung cua gac DOM + van IPv4
 - **2.206.0** — 2026-10-16 — `vps-jp1` — feat(viec-tu-dong): Viec cua ban chi con viec NGUOI - phan loai nguoi/may, ghim gop 1 dong + ghim bu video cu, tu doi tieu de co rao (chu duyet 16/10), tu xoa Chrome ban cu (chu duyet 16/10), de xuat nao + kiem suc khoe vao hang may co kieu
