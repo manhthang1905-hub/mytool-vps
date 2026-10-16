@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.213.1** — 2026-10-17 — `vps-jp1` — fix(anh-canh): giam khao chi thay cau doc (het cham theo loi nhac), loi cung bi loai (mui ten/dau do, luoi o, chu) + do may kiem_anh_cung; khop noi dung: 1 khoanh khac theo cau doc; giay->so dong srt
 - **2.213.0** — 2026-10-17 — `vps-jp1` — feat(anh-canh): chon tot nhat 3 ung vien moi canh + giam khao (noi dung/giong/loi/phong cach/nhan vat, diem theo chieu te nhat, co ron xep cuoi) + viet lai prompt toi da 2 vong, khong chan dung; clip tu tam da chon
 - **2.212.1** — 2026-10-16 — `vps-jp1` — fix(studio-may): trang sua video dang A/B tieu de (khong co o tieu de, chi ytcp-video-title-experiment) van tinh la dung xong - truoc day doc lai bao loi sau khi dat A/B
 - **2.212.0** — 2026-10-16 — `vps-jp1` — fix+feat: tu don launcher Chrome ket (khong chrome con + cong DevTools cam + >=3 phut, bo qua khi dang tai len) o cua canh agent + van_hanh 5 phut; cong doc dao do trung XUYEN NGON NGU (dich nguon sang Nhat, so tung cau, >30% viet lai)
