@@ -26,6 +26,11 @@ from core.auto_khau import BoiCanh, _doc_doi_thu, _khau_kich_ban
 from core.kenh import Kenh, ten_che_do
 
 
+#: 16/10/2026 (chủ: "bìa sai chữ là tối kỵ"; gốc lỗi TL3-T7-0017): chữ đọc từ bìa đối thủ KHÔNG còn là chữ bìa —
+#: nó chỉ là mẫu móc câu; chữ bìa là bản viết RIÊNG theo tiêu đề của mình.
+RIENG = "自分の言葉 決定的な違い"
+
+
 class _KetGia:
     def __init__(self, text, title, video_id):
         self.text = text
@@ -50,10 +55,11 @@ class _GoiChat:
     chống "kịch bản quá ngắn".
     """
 
-    def __init__(self, bia="読める文字", loi_bia=False):
+    def __init__(self, bia="読める文字", loi_bia=False, rieng=None):
         self.lan = []
         self._bia = bia
         self._loi_bia = loi_bia
+        self._rieng = RIENG if rieng is None else rieng
 
     def __call__(self, loi_nhac, mo_hinh="", khoa="", toi_da_token=8192, **kw):
         anh = kw.get("anh", "")
@@ -62,6 +68,8 @@ class _GoiChat:
             if self._loi_bia:
                 raise RuntimeError("cổng không nhận ảnh")
             return self._bia
+        if "A competitor's thumbnail" in loi_nhac:   # 16/10/2026: viết chữ bìa RIÊNG (chữ đối thủ chỉ là mẫu)
+            return "THUMB: " + self._rieng
         return "本" * 4000
 
     @property
@@ -107,8 +115,8 @@ class TestLayNguyenTieuDeVaDocBia:
             noi_dung = _tieu_de_da_ghi(d)
         # Tiêu đề y nguyên của đối thủ.
         assert "TITLE: 対抗のタイトル" in noi_dung
-        # Chữ bìa = chữ đọc từ ảnh (đã gọn khoảng trắng).
-        assert "THUMB: 読める文字" in noi_dung
+        # 16/10/2026: chữ bìa = bản viết RIÊNG, KHÔNG phải chữ đọc từ ảnh đối thủ; chữ đối thủ lưu riêng để cổng so chép.
+        assert "THUMB: " + RIENG in noi_dung and "読める文字" not in noi_dung
         # Đúng MỘT lượt gọi AI CÓ ẢNH (đọc bìa), kèm ảnh dạng data URL.
         assert len(goi.co_anh) == 1
         assert goi.co_anh[0]["anh"].startswith("data:image/jpeg;base64,")
@@ -120,7 +128,7 @@ class TestLayNguyenTieuDeVaDocBia:
         ấy đã chứng minh có người bấm. Nhưng bố cục thì tool vứt và áp một kiểu
         tự nghĩ: chữ chiếm 45–55% khung, khối đỏ, nhân vật dồn phải.
 
-        Đối chiếu bìa thật của đối thủ (video -bf2EAeXxOw): chữ nằm TRÊN CÙNG
+        Đối chiếu bìa thật của đối thủ (video -vidGia1deb): chữ nằm TRÊN CÙNG
         kín chiều ngang, hai dòng, nền tối; nhân vật NHỎ, giữa khung. Ngược hẳn.
 
         Và không có số nào đỡ cho kiểu tự nghĩ: hai CTR cao nhất của kênh
@@ -142,8 +150,8 @@ class TestLayNguyenTieuDeVaDocBia:
             noi_dung = _tieu_de_da_ghi(d)
             with open(os.path.join(d, TEP_BIA_DOI_THU), encoding="utf-8") as f:
                 bo_cuc = f.read()
-        # Chữ bìa tách ra sạch, không dính JSON.
-        assert "THUMB: 読める文字" in noi_dung, noi_dung
+        # Chữ bìa tách ra sạch, không dính JSON — và là chữ RIÊNG (16/10/2026), không phải chữ đối thủ.
+        assert "THUMB: " + RIENG in noi_dung, noi_dung
         assert "{" not in noi_dung
         # Bố cục để riêng một tệp: khâu ảnh bìa chạy sau, và chạy tiếp một lượt
         # đứt giữa chừng thì bước đọc ảnh này bị bỏ qua.
@@ -177,7 +185,7 @@ class TestLayNguyenTieuDeVaDocBia:
         with tempfile.TemporaryDirectory() as d:
             bc = _bc(d, goi, lay=lay, tai_anh=lambda u: b"\xff\xd8jpeg")
             _chay(bc, _kenh(), d, {"link": "http://x"})
-            assert "THUMB: 読める文字" in _tieu_de_da_ghi(d)
+            assert "THUMB: " + RIENG in _tieu_de_da_ghi(d)
             with open(os.path.join(d, TEP_BIA_DOI_THU), encoding="utf-8") as f:
                 bo_cuc = f.read()
         # Sáu trường đều phải có mặt, mỗi trường một dòng có nhãn.
@@ -198,7 +206,7 @@ class TestLayNguyenTieuDeVaDocBia:
         with tempfile.TemporaryDirectory() as d:
             bc = _bc(d, goi, lay=lay, tai_anh=lambda u: b"\xff\xd8jpeg")
             _chay(bc, _kenh(), d, {"link": "http://x"})
-            assert "THUMB: 読める文字" in _tieu_de_da_ghi(d)
+            assert "THUMB: " + RIENG in _tieu_de_da_ghi(d)
             assert not os.path.exists(os.path.join(d, TEP_BIA_DOI_THU))
 
     def test_khong_doc_bia_khi_nguoi_dung_dua_du(self):
@@ -211,6 +219,35 @@ class TestLayNguyenTieuDeVaDocBia:
             noi_dung = _tieu_de_da_ghi(d)
         assert "TITLE: của tôi" in noi_dung and "THUMB: bìa tôi" in noi_dung
         assert goi.co_anh == []
+
+
+class TestKhongChepChuBiaDoiThu:
+    """16/10/2026 — gốc lỗi TL3-T7-0017: hồ sơ ghi `chu_bia` = chữ bìa ĐỐI THỦ chép nguyên văn, lạc đề video."""
+
+    def test_chu_doi_thu_luu_rieng_chu_bia_la_ban_rieng(self):
+        from core.cong_chu import TEP_CHU_BIA_DOI_THU
+
+        goi = _GoiChat(bia="いちばん手軽な習慣 それが散歩")
+        lay = lambda *a, **k: _KetGia("G" * 800, "対抗のタイトル", "abc123")
+        with tempfile.TemporaryDirectory() as d:
+            bc = _bc(d, goi, lay=lay, tai_anh=lambda u: b"\xff\xd8jpeg")
+            _chay(bc, _kenh(), d, {"link": "http://x"})
+            noi_dung = _tieu_de_da_ghi(d)
+            with open(os.path.join(d, TEP_CHU_BIA_DOI_THU), encoding="utf-8") as f:
+                doi_thu = f.read().strip()
+        assert doi_thu == "いちばん手軽な習慣 それが散歩"
+        assert "THUMB: " + RIENG in noi_dung and "それが散歩" not in noi_dung
+        viet = [l["loi_nhac"] for l in goi.lan if "A competitor's thumbnail" in l["loi_nhac"]]
+        assert len(viet) == 1 and "対抗のタイトル" in viet[0] and "いちばん手軽な習慣" in viet[0]
+
+    def test_ban_viet_van_chep_doi_thu_thi_lay_tieu_de(self):
+        goi = _GoiChat(bia="いちばん手軽な習慣 それが散歩", rieng="いちばん手軽な習慣 それが散歩")
+        lay = lambda *a, **k: _KetGia("G" * 800, "対抗のタイトル", "abc123")
+        with tempfile.TemporaryDirectory() as d:
+            bc = _bc(d, goi, lay=lay, tai_anh=lambda u: b"\xff\xd8jpeg")
+            _chay(bc, _kenh(), d, {"link": "http://x"})
+            noi_dung = _tieu_de_da_ghi(d)
+        assert "THUMB: 対抗のタイトル" in noi_dung and "それが散歩" not in noi_dung
 
 
 class TestDuongLui:

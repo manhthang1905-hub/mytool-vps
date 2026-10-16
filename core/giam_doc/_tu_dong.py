@@ -88,7 +88,10 @@ def la_viec_suc_khoe(chu: Any) -> bool:
 
 LOAI_TEST_COMPARE = "studio_test_compare"      # bật "Thử nghiệm và so sánh" (bìa) cho `video_ids` trong Studio
 LOAI_KIEM_SUC_KHOE = "studio_kiem_suc_khoe"    # đọc Studio: cảnh báo chính sách, gậy, "nội dung dùng lại", kiếm tiền
-LOAI_VIEC_MAY = (LOAI_TEST_COMPARE, LOAI_KIEM_SUC_KHOE)
+#: 16/10/2026: A/B «Tiêu đề và hình thu nhỏ» (tiêu đề thêm do giám đốc viết — sổ `giam-doc/ab-tieu-de.json`,
+#: `core/ab_tieu_de.py`); bộ chạy D13 làm chung với `studio_test_compare`.
+LOAI_AB_TIEU_DE = "studio_ab_tieu_de"
+LOAI_VIEC_MAY = (LOAI_TEST_COMPARE, LOAI_KIEM_SUC_KHOE, LOAI_AB_TIEU_DE)
 TT_CHO, TT_DANG, TT_XONG, TT_LOI, TT_CAN_NGUOI, TT_BO = "cho", "dang", "xong", "loi", "can_nguoi", "bo"
 #: Còn việc cho bộ chạy (loi: bộ chạy tự thử lại tới `LAN_THU_TOI_DA`).
 TT_MO = (TT_CHO, TT_DANG, TT_LOI)
@@ -168,7 +171,7 @@ def ghi_viec_may_kieu(goc: str, loai: str, kenh: str, *, video_ids: Any = (), ng
     """Thêm MỘT việc máy có kiểu. Cùng (loai, kenh, bộ video) đang mở → không thêm. Đã kết thúc: `kiem_suc_khoe`
     "xong" quá `NGAY_KIEM_LAI_SUC_KHOE` ngày → mở lại (cò vẫn báo động thì đọc Studio lại); còn lại không mở lại.
     Trả True nếu vừa thêm/mở lại."""
-    if loai not in LOAI_VIEC_MAY or not kenh or (loai == LOAI_TEST_COMPARE and not video_ids):
+    if loai not in LOAI_VIEC_MAY or not kenh or (loai in (LOAI_TEST_COMPARE, LOAI_AB_TIEU_DE) and not video_ids):
         return False
     bay_gio = bay_gio or _dt.datetime.now()
     luc = bay_gio.isoformat(timespec="seconds")

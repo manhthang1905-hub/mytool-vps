@@ -62,6 +62,8 @@ class _AiSoat:
         self.loi_nhac.append(loi_nhac)
         if self.hong:
             raise RuntimeError("cổng quá tải")
+        if loi_nhac.startswith("You check that the"):          # 16/10/2026: kiểm đúng chủ đề — giả: luôn đúng
+            return json.dumps({"hop": True, "ly_do": "gia"})
         chu = loi_nhac.split("THUMBNAIL TEXT (a space only marks a line break): 「", 1)[1].split("」", 1)[0]
         if "意き" in chu or "意か" in chu:
             moi = "hoàn toàn khác hẳn câu cũ rồi nhé" if self.sua_bay else chu.replace("意か", "惹か").replace(
@@ -118,6 +120,8 @@ class _AiDoc:
         self.loi_nhac.append(loi_nhac)
         if self.hong:
             raise RuntimeError("mạng rớt")
+        if loi_nhac.startswith("You check that the"):          # 16/10/2026: kiểm đúng chủ đề — giả: luôn đúng
+            return json.dumps({"hop": True, "ly_do": "gia"})
         if "THUMBNAIL TEXT" in loi_nhac:                         # lượt soát chính tả (無意識 có 意 — đúng)
             chu = loi_nhac.split("「", 1)[1].split("」", 1)[0]
             return json.dumps({"dung": "意か" not in chu and "意き" not in chu, "loi": [], "chu_sua": ""})

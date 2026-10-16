@@ -54,14 +54,21 @@ TOI_DA_THEM_PHIEN = 25
 NGAN_SACH_PHUT = 14
 CHO_TAO_LAI_PHUT = 30
 
-#: Hàng bảng «Danh sách phát» của Studio: tên, chữ cả hàng (chế độ, số video), các liên kết (mã danh sách).
+#: Hàng bảng «Danh sách phát» của Studio: tên, chữ cả hàng (chế độ, số video), các liên kết (mã danh sách), chữ TỪNG Ô
+#: (`div[role=cell]`) + tên CỘT (`ytcp-table-header [role=columnheader]`). Đo 16/10/2026 (Studio vi): cột «Danh sách
+#: phát | Loại | Chế độ hiển thị | Lần cập nhật gần nhất | Số lượng video | Lượt xem» — số CUỐI hàng là LƯỢT XEM, không
+#: phải số video (đọc nhầm → "0 video (Studio)"); ảnh nhỏ đầu hàng còn in số video lần nữa.
 _JS_HANG = "(() => {" + tl._JS_CHUNG + r"""
   const s = q('ytcp-playlist-section-content') || q('ytcp-playlist-section'); if (!s) return null;
+  const cot = qa('ytcp-table-header [role=columnheader], [role=columnheader]', s).filter(hien).map(c => (c.innerText || '').trim());
   return qa('ytcp-playlist-row', s).filter(hien).map(r => {
     const a = q('h3.playlist-title a, a.playlist-title-link, #video-title', r);
     return {ten: a ? (a.innerText || '').trim() : '', chu: (r.innerText || '').trim().slice(0, 400),
+            o: qa('[role=cell]', r).map(c => (c.innerText || '').trim().slice(0, 120)), cot: cot.slice(0, 12),
             href: qa('a[href]', r).map(x => x.getAttribute('href') || '').slice(0, 8)}; });
 })()"""
+#: Cột «Số lượng video» (vi / en / ja).
+RE_COT_SO_VIDEO = re.compile(r"^(số (lượng )?video|video count|videos?|動画(の)?数|動画)$", re.I)
 
 SO_LAN_DOC_TICH = 10                     # dò trạng thái tích sau khi bấm (× 0,5 giây)
 
@@ -102,10 +109,37 @@ def ma_danh_sach(href: Any) -> str:
     return ""
 
 
-def so_video_hang(chu: Any) -> Optional[int]:
-    """Số video trong chữ một hàng bảng Studio: dòng cuối chỉ là số (cột «Số video»)."""
-    so = [x.strip() for x in str(chu or "").splitlines() if re.fullmatch(r"\d{1,5}", x.strip())]
-    return int(so[-1]) if so else None
+def _so(x: Any) -> Optional[int]:
+    s = re.sub(r"[\s.,  ]", "", str(x or ""))
+    return int(s) if re.fullmatch(r"\d{1,7}", s) else None
+
+
+def so_video_hang(chu: Any, o: Any = None, cot: Any = None) -> Optional[int]:
+    """Số video của một hàng bảng Studio. Có chữ từng ô + tên cột → ô của cột «Số lượng video». Không có → chữ cả hàng:
+    các dòng chỉ là số; ≥ 2 dòng thì số video là dòng ÁP CHÓT (dòng cuối = cột «Lượt xem»; đo 16/10/2026), 1 dòng thì
+    chính nó (khuôn cũ không có cột lượt xem)."""
+    o, cot = list(o or []), [str(c or "").strip() for c in cot or []]
+    i = next((k for k, c in enumerate(cot) if RE_COT_SO_VIDEO.match(c)), None)
+    if i is not None and len(o) == len(cot):
+        return _so(o[i])
+    so = [x.strip() for x in str(chu or "").splitlines() if _so(x.strip()) is not None]
+    if not so:
+        return None
+    return _so(so[-2] if len(so) >= 2 else so[-1])
+
+
+def gop_ten(*ds: Any) -> List[str]:
+    """Gộp các danh sách tên, bỏ trùng theo `chuan_ten` + casefold (NFKC: «｜» toàn khổ = «|» nửa khổ), giữ bản ĐẦU
+    TIÊN gặp (bảng Studio trước — đúng chữ như trên kênh)."""
+    ra: List[str] = []
+    da: set = set()
+    for d in ds:
+        for x in d or ():
+            k = dsp.chuan_ten(x).casefold()
+            if k and k not in da:
+                da.add(k)
+                ra.append(str(x).strip())
+    return ra
 
 
 def ma_thoat(ket: Dict[str, Any], ke: Dict[str, Any]) -> int:
@@ -133,7 +167,7 @@ def doc_bang_studio(S, han: float = 20.0) -> Dict[str, Any]:
     if not isinstance(du, dict):
         raise tl.LoiMuc("không đọc được bảng danh sách phát Studio")
     hang = S.js(_JS_HANG) or []
-    ten = list(dict.fromkeys([str(x) for x in du.get("ten") or []] + [h["ten"] for h in hang if h.get("ten")]))
+    ten = gop_ten([str(x) for x in du.get("ten") or []], [h["ten"] for h in hang if h.get("ten")])
     return {"ten": ten, "dem": tl.dem_ds_phat(du), "hang": hang}
 
 
@@ -149,11 +183,12 @@ def ten_tren_kenh(S, may, ke: Dict[str, Any], ghi) -> List[str]:
     if vid:
         h = may.doc_ten(vid)
         if h is not None:
-            ten += [x for x in h if x]
+            ten = gop_ten(ten, [x for x in h if x])    # ô trang sửa trả tên đã NFKC («|») — cùng danh sách, không kể 2 lần
         else:
             ghi("ô «Danh sách phát» trang sửa không đọc được — chỉ dựa bảng Studio")
-    ghi("danh sách phát đang có trên kênh: {0}".format(" | ".join(dict.fromkeys(ten)) or "—"))
-    return list(dict.fromkeys(ten))
+    ten = gop_ten(ten)
+    ghi("danh sách phát đang có trên kênh: {0}".format(" ¦ ".join(ten) or "—"))
+    return ten
 
 
 def tao_thieu(S, ke: Dict[str, Any], ten_kenh: List[str], luu: Callable[[], None], ghi, ket: Dict[str, Any]) -> None:
@@ -243,7 +278,7 @@ def doc_lai(S, ke: Dict[str, Any], ghi) -> Dict[str, Any]:
         return ra
     for d in [d for d in ke.get("danh_sach") or [] if d.get("trang_thai") == dsp.DA_TAO]:
         h = next((h for h in b["hang"] if dsp.chuan_ten(h.get("ten")) == dsp.chuan_ten(d["ten"])), None)
-        so = so_video_hang((h or {}).get("chu"))
+        so = so_video_hang((h or {}).get("chu"), (h or {}).get("o"), (h or {}).get("cot"))
         o: Dict[str, Any] = {"thay_studio": h is not None or co_ten(b["ten"], d["ten"]), "so_video_studio": so,
                              "ma": ma_danh_sach((h or {}).get("href")), "xac_nhan": len(d.get("da_them") or [])}
         o["cong_khai"] = bool(re.search(r"công khai|public|公開", str((h or {}).get("chu") or ""), re.I)) if h else None

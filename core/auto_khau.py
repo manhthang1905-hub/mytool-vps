@@ -3027,8 +3027,25 @@ def _khau_kich_ban(bc_goc: BoiCanh):
                 bc.ghi("  đang đọc chữ trên ảnh bìa đối thủ…")
                 doc, bo_cuc = _doc_chu_bia_doi_thu(
                     bc, luot, doi_thu.get("video_id", ""))
-                chu_bia = doc or tieu_de
-                if not doc:
+                # ═══ 16/10/2026 — KHÔNG CHÉP CHỮ BÌA ĐỐI THỦ (gốc lỗi TL3-T7-0017) ═══
+                #
+                # Trước đây `chu_bia = doc`: chữ đọc từ bìa đối thủ thành NGUYÊN VĂN chữ bìa của mình — kể cả khi
+                # bìa đối thủ nói chuyện khác hẳn video (một lượt TL3-T7: chữ bìa về "tự đầu tư" trên video về "giữ
+                # bình tĩnh"). Chủ: "bìa sai chữ là tối kỵ". Nay chữ đối thủ chỉ là MẪU móc câu: lưu
+                # riêng (`0-chu-bia-doi-thu.txt`, cổng chữ bìa so chép), rồi viết chữ bìa RIÊNG theo tiêu đề của mình.
+                # Viết hỏng → tiêu đề làm chữ bìa (đúng chủ đề; khâu khung + cổng chữ bìa trước khi vẽ lo phần còn lại).
+                if doc:
+                    from . import cong_chu as _cc  # noqa: PLC0415
+                    _ghi_chu(os.path.join(d, _cc.TEP_CHU_BIA_DOI_THU), doc + "\n")
+                    bc.kiem_dung()
+                    rieng = _cc.viet_chu_bia_rieng(_goi_soat(bc), tieu_de=tieu_de, ngu_canh=tu_lieu[:2500],
+                                                   chu_doi_thu=doc, ngon_ngu=k.ngon_ngu,
+                                                   khoa=_khoa_chat(luot, "tieu-de:bia-rieng"))
+                    bc.ghi("  chữ bìa đối thủ 「{0}」 chỉ làm mẫu — chữ bìa riêng: 「{1}」".format(
+                        doc[:40], (rieng or tieu_de)[:40]) + ("" if rieng else " (viết hỏng — tạm dùng tiêu đề)"))
+                    chu_bia = rieng or tieu_de
+                else:
+                    chu_bia = tieu_de
                     bc.ghi("  (không lấy được chữ bìa — tạm dùng tiêu đề đối thủ)")
                 # ═══ CHỮ BÌA TRÙNG VIDEO TRƯỚC CỦA KÊNH THÌ NHỜ AI VIẾT CHỮ KHÁC ═══
                 trung = _chu_bia_trung_luot_truoc(d, chu_bia) if doc else ""
@@ -9774,12 +9791,13 @@ def _soat_chu_luu(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu: str, tieu_de: 
     cu = (so.get("chu") or {}).get(chu)
     # 16/10/2026: chỉ dùng lại kết quả của luật CHẶT (`cong_chu.soat_chat`: + kanji ngoài tiêu đề/kịch bản phải được
     # xác nhận) — kết quả luật cũ soát lại.
-    if isinstance(cu, dict) and cu.get("ok") is not None and int(cu.get("phien") or 0) >= cong_chu.PHIEN_BAN:
+    # 16/10/2026 (PHIEN_SOAT 3): + không chép chữ bìa đối thủ + đúng chủ đề video — kết quả luật cũ soát lại.
+    if isinstance(cu, dict) and cu.get("ok") is not None and int(cu.get("phien") or 0) >= cong_chu.PHIEN_SOAT:
         return cu
     kq = cong_chu.soat_chat(
         _goi_soat(bc), chu, tieu_de=tieu_de, ngu_canh=_doc_chu(os.path.join(luot.thu_muc, "1-kich-ban.txt"))[:2500],
         ngon_ngu=getattr(bc.kenh, "ngon_ngu", "ja"), thang=_thang_soat(bc, soat_bia.THANG_MO_HINH_CHU),
-        khoa=_khoa_chat(luot, "soat-chu-bia"))
+        khoa=_khoa_chat(luot, "soat-chu-bia"), doi_thu=cong_chu.chu_bia_doi_thu(luot.thu_muc))
     kq["luc"] = soat_bia.bay_gio()
     if kq.get("ok") is not None:
         so = soat_bia.doc_so(thu_muc)
@@ -9797,7 +9815,7 @@ def _viet_lai_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, t
     lượt), mỗi bản mới soát CHẶT lại từ đầu (`_soat_chu_luu`). Đạt → kết quả soát với `sua`/`viet_lai` True; không →
     kết quả cuối (`ok` False/None)."""
     from . import cong_chu  # noqa: PLC0415
-    ly = "; ".join("{0}→{1}".format(x.get("sai"), x.get("dung")) for x in kq.get("loi") or []) or str(kq.get("ly_do"))
+    ly = cong_chu.ly_do_viet_lai(kq)          # chép chữ bìa đối thủ / lạc chủ đề / lỗi chính tả
     ngu_canh = _doc_chu(os.path.join(luot.thu_muc, "1-kich-ban.txt"))[:2500]
     for lan in range(cong_chu.SO_LAN_VIET_LAI):
         moi = cong_chu.viet_lai(_goi_soat(bc), chu_bia, tieu_de=tieu_de, ngu_canh=ngu_canh,
@@ -10346,7 +10364,9 @@ def _cong_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_
             raise RuntimeError("ảnh bìa: chưa soát được chính tả chữ bìa (AI lỗi: {0}) — thử lại sau, chưa "
                                "giao".format(s.get("ly_do")))
         if s.get("ok") is False or s.get("sua"):
-            ly.append("chữ trên tấm sai chính tả 「{0}」{1}".format(
+            ly.append("chữ trên tấm {0} 「{1}」{2}".format(
+                "chép chữ bìa đối thủ" if s.get("chep_doi_thu") else "lạc chủ đề video" if (
+                    s.get("chu_de") or {}).get("hop") is False else "sai chính tả",
                 chu_mong[:30], " → đúng là 「{0}」".format(s.get("chu")) if s.get("sua") else ""))
     # 2) Bố cục / dải tối do vẽ đè.
     try:

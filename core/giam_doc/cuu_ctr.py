@@ -43,7 +43,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .du_lieu import chu_so, ctr_trang_chu, moi_nhat, thu_muc_giam_doc, thu_muc_kenh
 
@@ -453,6 +453,114 @@ def chon_tieu_de(bs: Any, d: Dict[str, Any], goi_chat: Callable[..., str], *, lu
                 mo_hinh=q.get("mo_hinh"))
 
 
+# ── tiêu đề cho Thử nghiệm A/B (16/10/2026 — chủ duyệt «Cho dùng») ─────────
+
+def loi_nhac_tieu_de_ab(bs: Any, v: Dict[str, Any], n: int, *, ngu_canh: str = "", doi_thu: Sequence[str] = (),
+                        da_co: Sequence[str] = (), ly_do: str = "") -> str:
+    """Bài toán cho giám đốc: `n` tiêu đề THÊM cho «Thử nghiệm A/B» (A = tiêu đề đang chạy; YouTube chọn bản thắng
+    theo thời gian xem)."""
+    nhan = _RE_NHAN.match(v.get("tieu_de") or "")
+    khung = khung_tieu_de(bs.goc) if bs.goc else ""
+    ngach = _thang_ngach(bs.goc, bs.ma_kenh) if bs.goc else []
+    thang = [x["tieu_de"] for x in bs.video if x.get("thang")][:4]
+    dong = [
+        "THỬ NGHIỆM A/B TIÊU ĐỀ — kênh YouTube {0}, video {1}. YouTube sẽ chia người xem cho tiêu đề A (đang chạy) và "
+        "{2} tiêu đề bạn viết, rồi tự giữ bản có THỜI GIAN XEM cao nhất.{3}".format(
+            bs.ma_kenh, v["id"], n, " " + ly_do if ly_do else ""),
+        "TIÊU ĐỀ A (đang chạy): “{0}”".format(v.get("tieu_de")),
+        "KỊCH BẢN (đoạn đầu — tiêu đề KHÔNG được hứa điều video không nói)\n" + ((ngu_canh or "").strip()[:2500]
+                                                                           or "(không có)"),
+        "MỤC TIÊU KÊNH\n" + str(bs.muc_tieu or "").strip(),
+        "KHUNG TIÊU ĐỀ THẮNG CỦA NGÁCH\n" + (khung or "(không đọc được)"),
+        "TIÊU ĐỀ ĐANG THẮNG CỦA KÊNH: " + (" / ".join(thang) or "(chưa có)"),
+        "TIÊU ĐỀ ĐANG THẮNG CỦA NGÁCH: " + (" / ".join(ngach) or "(chưa có)"),
+        "TIÊU ĐỀ ĐỐI THỦ / VIDEO NGUỒN — CẤM CHÉP (không lấy nguyên văn, không chỉ đảo vài chữ): " + (
+            " / ".join(str(x) for x in doi_thu if x) or "(không có)"),
+        ("ĐÃ CÓ (đừng lặp lại): " + " / ".join(str(x) for x in da_co)) if da_co else "",
+        "LUẬT: đúng {0} tiêu đề; mỗi tiêu đề ≤ {1} ký tự; cùng ngôn ngữ với A; {2}mỗi tiêu đề một GÓC BẤM khác hẳn A và "
+        "khác nhau (hai vế / số đếm + trí tuệ + nhãn khoa học / tò mò / chân dung); bám đúng nội dung kịch bản; mọi "
+        "chữ đúng chính tả.".format(n, TIEU_DE_TOI_DA, "giữ nhãn đầu {0}; ".format(nhan.group(1)) if nhan else ""),
+        "Chỉ trả MỘT khối JSON:\n{\"tieu_de\": [\"…\", \"…\"], \"ly_do\": \"1–2 câu: mỗi tiêu đề thử giả thuyết gì\", "
+        "\"do_tin\": 0.0-1.0}",
+    ]
+    return "\n\n".join(d for d in dong if d)
+
+
+def doc_ds_tieu_de(tho: str, cu: str, n: int) -> Optional[Dict[str, Any]]:
+    """Câu trả lời → {tieu_de: [≤ n bản, 6–100 ký tự, khác A, giữ nhãn đầu], ly_do, do_tin} | None."""
+    from ..goi_van_ban import loc_json  # noqa: PLC0415
+
+    try:
+        du = loc_json(tho)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(du, dict) or not isinstance(du.get("tieu_de"), list):
+        return None
+    nhan = _RE_NHAN.match(cu or "")
+    ra: List[str] = []
+    for t in du["tieu_de"]:
+        moi = _chuan(t).strip("“”\"'")
+        if nhan and not moi.startswith(nhan.group(1)) and len(nhan.group(1) + moi) <= TIEU_DE_TOI_DA:
+            moi = nhan.group(1) + moi
+        if 6 <= len(moi) <= TIEU_DE_TOI_DA and re.sub(r"\W", "", moi) != re.sub(r"\W", "", cu or "") and moi not in ra:
+            ra.append(moi)
+    if not ra:
+        return None
+    try:
+        tin = float(du.get("do_tin")) if du.get("do_tin") is not None else None
+    except (TypeError, ValueError):
+        tin = None
+    return {"tieu_de": ra[:max(1, int(n))], "ly_do": _chuan(du.get("ly_do"))[:300], "do_tin": tin}
+
+
+def viet_tieu_de_ab(bs: Any, v: Dict[str, Any], goi_chat: Optional[Callable[..., str]], *, n: int = 2,
+                    ngu_canh: str = "", doi_thu: Sequence[str] = (), da_co: Sequence[str] = (), ly_do: str = "",
+                    luu: bool = True, ghi: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
+    """Giám đốc (cửa chung `quan_ly.goi_quyet("cuu_ctr")`) viết `n` tiêu đề THÊM cho A/B → {tieu_de, ly_do, do_tin,
+    mo_hinh} | {loi}. Soát chữ + luật cứng là việc của `core.ab_tieu_de.soat_tieu_de`."""
+    from .quan_ly import goi_quyet  # noqa: PLC0415
+
+    if goi_chat is None:
+        return {"loi": "không có hàm gọi AI"}
+    q = goi_quyet("cuu_ctr", loi_nhac_tieu_de_ab(bs, v, n, ngu_canh=ngu_canh, doi_thu=doi_thu, da_co=da_co,
+                                                 ly_do=ly_do), so_lieu_video(bs, v), goi_chat, goc=bs.goc,
+                  ma=bs.ma_kenh, luu=luu, ghi=ghi,
+                  khoa="ab-tieu-de-{0}-{1}".format(v["id"], bs.bay_gio.strftime("%Y%m%d")),
+                  nhan={"video_id": v["id"], "moc": (moi_nhat(v) or {}).get("moc")},
+                  doc=lambda tho: doc_ds_tieu_de(tho, v.get("tieu_de") or "", n))
+    if q.get("ket") is None:
+        return {"loi": q.get("loi") or "giám đốc không ra tiêu đề"}
+    hd = q.get("hoi_dong") or {}
+    return dict(q["ket"], do_tin=(hd.get("quyet") or {}).get("do_tin", q["ket"].get("do_tin")), mo_hinh=q.get("mo_hinh"))
+
+
+def _ab_cho_video_truot(goc: str, ma: str, bs: Any, v: Dict[str, Any], kq: Dict[str, Any], goi_chat: Callable[..., str],
+                        *, viet: bool, ghi: Optional[Callable[[str], None]]) -> Optional[Dict[str, Any]]:
+    """Cò (b): video trượt đã qua rào + hội đồng đã viết tiêu đề → A/B thay cho đổi trực tiếp (kênh có A/B). Tiêu đề
+    thêm = tiêu đề hội đồng + 1 bản giám đốc viết thêm; mọi bản qua `ab_tieu_de.soat_tieu_de`. Trả mục sổ A/B (hoặc
+    {"bo": lý do} khi không bản nào qua soát — KHÔNG đổi trực tiếp tiêu đề trượt soát); None = kênh không dùng A/B
+    (nơi gọi đi đường đổi trực tiếp như cũ)."""
+    from .. import ab_tieu_de as ab  # noqa: PLC0415
+
+    if not goc or not ab.bat(bs.cai) or ab.kenh_khong_ab(goc, ma, bs.bay_gio):
+        return None
+    ma_goi = v.get("ma_goi") or ""
+    nc = ab.ngu_canh(goc, ma, ma_goi)
+    dt = ab.tieu_de_doi_thu(goc, ma, ma_goi) + _pool(bs, v["id"])
+    them = viet_tieu_de_ab(bs, v, goi_chat, n=1, ngu_canh=nc.get("ngu_canh") or "", doi_thu=dt,
+                           da_co=[kq["tieu_de_moi"]], ly_do="Video đang trượt CTR so với chính kênh.", luu=viet, ghi=ghi)
+    s = ab.soat_tieu_de(goi_chat, [kq["tieu_de_moi"]] + list(them.get("tieu_de") or []), tieu_de_a=v.get("tieu_de") or "",
+                        ngu_canh=nc.get("ngu_canh") or "", ngon_ngu=str(bs.cai.get("ngon_ngu") or "ja"), doi_thu=dt,
+                        khoa="ab-tieu-de:{0}".format(v["id"]))
+    if not s["dat"]:
+        return {"bo": "không tiêu đề nào qua soát chữ / luật A/B: " + "; ".join(b["ly_do"][:80] for b in s["bo"][:3]),
+                "chua": s["chua"]}
+    if not viet:
+        return {"video_id": v["id"], "tieu_de_them": s["dat"], "trang_thai": "thu"}
+    return ab.lap(goc, ma, video_id=v["id"], ma_goi=ma_goi, tieu_de_a=v.get("tieu_de") or "", tieu_de_them=s["dat"],
+                  nguon="truot", ly_do=kq.get("ly_do") or "", bo=s["bo"], bay_gio=bs.bay_gio, do_tin=kq.get("do_tin"))
+
+
 # ── rào tự áp (16/10/2026 — chủ duyệt "Cho tự đổi, có rào") ────────────────
 
 def _cung_tuoi(bs: Any, v: Dict[str, Any], lay: Callable[[Dict[str, Any]], Any]) -> Tuple[Optional[float],
@@ -520,6 +628,12 @@ def kiem_rao(bs: Any, v: Optional[Dict[str, Any]], ds: List[Dict[str, Any]], *, 
         return khong("không còn số của video trong bảng số kênh")
     if v.get("thang") or v.get("nong") or not khong_thang(v):
         return khong("video đang thắng / nóng / chưa phán trượt — không đụng")
+    if getattr(bs, "goc", ""):      # 16/10/2026: video đã / đang A/B tiêu đề → YouTube chọn, không đổi trực tiếp
+        from .. import ab_tieu_de  # noqa: PLC0415
+
+        ly_ab = ab_tieu_de.chan_doi_truc_tiep(bs.goc, bs.ma_kenh, str(v.get("id") or ""))
+        if ly_ab:
+            return khong(ly_ab)
     q = _chan_doan(bs, v)
     so["cong"] = q.get("cong")
     if q.get("cong") != "ctr":
@@ -650,7 +764,26 @@ def xu_ly(goc: str, ma: str, bs: Any, thuc_don: List[Dict[str, Any]], goi_chat: 
                "anh_du_phong": _anh_du_phong(goc, ma, v.get("ma_goi") or "") if goc else "",
                "trang_thai": "cho_rao", "duyet_boi": "", "cong_hoi_dong": kq.get("cong"),
                "ket": "", "ket_bia": ""}
-        if viet:
+        # 16/10/2026 — cò (b) của A/B: kênh có «Thử nghiệm A/B» → A/B thay đổi trực tiếp (YouTube chọn theo thời gian
+        # xem); kênh không có → đổi trực tiếp như cũ (đường lùi).
+        ab_m = _ab_cho_video_truot(goc, ma, bs, v, kq, goi_chat, viet=viet, ghi=ghi)
+        if ab_m is not None and ab_m.get("bo") and ab_m.get("chua"):
+            if ghi:
+                ghi("  [cứu CTR] {0}: A/B — chưa soát được tiêu đề (AI lỗi), lượt sau".format(v["id"]))
+            continue
+        if ab_m is not None:
+            muc.update(rao=r["so"], rao_ly_do=r["ly_do"], rao_luc=_luc(bs.bay_gio))
+            if ab_m.get("bo"):
+                muc.update(trang_thai="bo", ly_do_bo="A/B: " + ab_m["bo"], bo_luc=_luc(bs.bay_gio))
+            else:
+                muc.update(trang_thai="ab", ab_id=ab_m.get("id"), ab_tieu_de=ab_m.get("tieu_de_them"))
+            if viet:
+                _ghi_nao(goc, ma, muc, muc["trang_thai"], muc.get("ly_do_bo") or "A/B tiêu đề thay đổi trực tiếp",
+                         r["so"])
+            if ghi:
+                ghi("  [cứu CTR] {0}: {1}".format(v["id"], muc.get("ly_do_bo") or "→ Thử nghiệm A/B {0} tiêu đề thêm".format(
+                    len(ab_m.get("tieu_de_them") or []))))
+        elif viet:
             _ap_rao(goc, ma, bs, muc, ds)
         else:
             muc.update(trang_thai="tu_ap", duyet_boi="may", rao=r["so"], rao_ly_do=r["ly_do"])
@@ -865,6 +998,15 @@ def dong_bo(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
             if any(m.get("trang_thai") in ("duyet", "tu_ap") + _TT_CHO_XET for m in ds):
                 dx = pct_de_xuat_kenh(goc, ma)
             for m in ds:
+                if m.get("trang_thai") == "ab":     # A/B Studio không đặt được (kênh / video không có A/B) → đường lùi
+                    from .. import ab_tieu_de  # noqa: PLC0415
+
+                    e = ab_tieu_de.muc_cua(goc, ma, str(m.get("video_id") or ""))
+                    if e is None or e.get("trang_thai") in (ab_tieu_de.TT_BO, ab_tieu_de.TT_KHONG_QUYEN):
+                        m.update(trang_thai="cho_rao", ab_ket=(e or {}).get("trang_thai") or "mất mục sổ A/B",
+                                 ab_ket_luc=_luc(bay_gio))
+                        doi = True
+                    continue
                 if (m.get("trang_thai") in ("duyet", "tu_ap") + _TT_CHO_XET and dx is not None
                         and dx > NGUONG_DE_XUAT):
                     # 12/10/2026: kênh sống bằng ĐỀ XUẤT — không bao giờ đổi tiêu đề sau đăng (kể cả mục duyệt trước).

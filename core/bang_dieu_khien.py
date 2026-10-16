@@ -1519,7 +1519,8 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             from . import giam_doc as _gd3  # noqa: PLC0415
 
             ten = {_gd3.LOAI_TEST_COMPARE: "Bật Thử nghiệm và so sánh bìa trên Studio",
-                   _gd3.LOAI_KIEM_SUC_KHOE: "Đọc Studio kiểm cảnh báo / gậy của kênh"}
+                   _gd3.LOAI_KIEM_SUC_KHOE: "Đọc Studio kiểm cảnh báo / gậy của kênh",
+                   _gd3.LOAI_AB_TIEU_DE: "Đặt Thử nghiệm A/B tiêu đề + bìa trên Studio"}
             nhom: Dict[str, List[Dict[str, Any]]] = {}
             for m in _gd3.doc_viec_may_kieu(goc):
                 nhom.setdefault(str(m.get("loai")), []).append(m)

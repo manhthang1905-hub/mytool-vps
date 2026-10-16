@@ -958,9 +958,11 @@ DANH_MUC: List[KyNang] = [
            "python -m core.nao_bo_phan gom", k_nao_bp, [],
            dieu_kien=d_nao_bp, chay=lambda goc, kenh: _py("-m", "core.nao_bo_phan", "gom"), nhip_gio=1, tu_ap=True,
            toan_may=True),
-    KyNang("D13", "Thử nghiệm và so sánh bìa", "dinh_ky",
-           "Kích hoạt: hàng việc máy có `studio_test_compare` của kênh (đề xuất bộ não) → Studio, trang sửa video: bìa A "
-           "đang chạy + 1–2 bìa ứng viên tốt nhất qua cổng đọc được → Lưu → đọc lại thử nghiệm đang chạy. Kênh thiếu tính "
+    KyNang("D13", "Thử nghiệm A/B tiêu đề + bìa", "dinh_ky",
+           "Kích hoạt: hàng việc máy có `studio_test_compare` (đề xuất bộ não) hoặc `studio_ab_tieu_de` (giám đốc kênh: "
+           "video mới / video trượt, kenh.yaml `ab_tieu_de`) → Studio, trang sửa video, «Thử nghiệm A/B»: «Tiêu đề và "
+           "hình thu nhỏ» (tiêu đề A + 1–2 tiêu đề đã soát, bìa A + 1–2 bìa có dấu cổng chữ) | «Chỉ tiêu đề» | «Chỉ hình "
+           "thu nhỏ» → Lưu → đọc lại thử nghiệm STARTED + tiêu đề. Video đã có thử nghiệm → không đụng. Kênh thiếu tính "
            "năng nâng cao / không còn ứng viên → bỏ việc.",
            "python vm/studio_may_dom.py --kenh K --test-compare", k_test_compare, ["K01"],
            dieu_kien=d_test_compare, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "studio_may_dom.py"), "--kenh", kenh,

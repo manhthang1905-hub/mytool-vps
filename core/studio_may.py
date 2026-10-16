@@ -8,6 +8,8 @@ Chủ: "mục đích cuối VPS này auto 100%". Bộ chạy DOM `vm/studio_may_
                                               của lượt, gói DONE → bỏ trùng (kể cả trùng bìa A đang chạy) → CỔNG đọc
                                               được `do_bia.cham_tep` (trượt = KHÔNG BAO GIỜ tải lên) → xếp điểm giám khảo
     tep_tai_len(duong, thu_muc)               bản tải lên đúng chuẩn bìa YouTube (JPEG 1280×720, < 2 MB)
+    dau_ung_vien(goc, kenh, ma_goi, tep, …)   bìa nhì/ba lưu TRƯỚC cổng chữ (chưa dấu): BẢN SAO ở vm/logs → soát chữ bìa
+                                              (chép đối thủ + đúng chủ đề) → đọc mù 2 lượt → dấu trên bản sao (16/10/2026)
     thieu_tinh_nang(so_cmt, kenh, bay)        kênh đang bị chặn ghim = chưa bật "tính năng nâng cao" (xác minh điện thoại)
     ket_viec_test(ket_video)                  kết quả từng video → trạng thái việc (xong / bo / loi)
     doc_suc_khoe(trang)                       chữ các trang Studio → {canh_bao, chi_tiet, muc}
@@ -177,12 +179,15 @@ def ung_vien_bia(goc: str, kenh: str, ma_goi: str, anh_a: Any = (), *,
                  cham: Optional[Callable[[str], Dict[str, Any]]] = None,
                  van_tay: Optional[Callable[[str], List[int]]] = None,
                  toi_da: int = TOI_DA_UNG_VIEN,
-                 kiem_dau: Optional[Callable[[str], str]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+                 kiem_dau: Optional[Callable[[str], str]] = None,
+                 dau_lai: Optional[Callable[[str], Tuple[str, str]]] = None
+                 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """(chọn, bỏ). `anh_a`: tệp bìa A (bìa đang chạy tải từ i.ytimg.com, bản sao `ho-so-video/anh/<mã>.jpg`, …) — ứng
     viên CÙNG bức với A bị bỏ. Cổng: `cham_tep` phải `dat is True` và bố cục không hỏng (như `do_bia.xep_doi_bia`).
     Xếp: điểm giám khảo giảm dần (chưa có điểm xếp sau), rồi điểm đọc được. `chon` tối đa `toi_da` mục
     {tep, nguon, diem_gk, diem_doc}; `bo` = [{tep, nguon, ly_do}].
-    16/10/2026 — CỔNG CHỮ: chỉ tệp có DẤU cổng chữ (`core/cong_chu.kiem_dau`, đúng sha1) được làm ứng viên."""
+    16/10/2026 — CỔNG CHỮ: chỉ tệp có DẤU cổng chữ (`core/cong_chu.kiem_dau`, đúng sha1) được làm ứng viên. `dau_lai(tệp)`
+    → (lý do, bản sao có dấu): tệp chưa dấu được đóng dấu trên BẢN SAO (`dau_ung_vien`) — ứng viên dùng bản sao ấy."""
     cham = cham or _cham_mac_dinh
     kiem_dau = kiem_dau or _kiem_dau_mac_dinh
     van_tay = van_tay or _van_tay
@@ -209,7 +214,7 @@ def ung_vien_bia(goc: str, kenh: str, ma_goi: str, anh_a: Any = (), *,
         if vt:
             thay_vt.append(vt)
         ly_dau = kiem_dau(p)
-        if ly_dau:
+        if ly_dau and dau_lai is None:
             bo.append(dict(u, ly_do="chưa qua cổng chữ: " + ly_dau[:160]))
             continue
         try:
@@ -223,11 +228,22 @@ def ung_vien_bia(goc: str, kenh: str, ma_goi: str, anh_a: Any = (), *,
         if hong:
             bo.append(dict(u, ly_do="bố cục hỏng: " + "; ".join(hong)[:160]))
             continue
-        tot.append(dict(u, diem_doc=bc.get("diem")))
+        tot.append(dict(u, diem_doc=bc.get("diem"), _chua_dau=bool(ly_dau)))
     tot.sort(key=lambda u: (u.get("diem_gk") is None, -float(u.get("diem_gk") or 0), -float(u.get("diem_doc") or 0)))
-    for u in tot[toi_da:]:
-        bo.append(dict(u, ly_do="đủ {0} ứng viên tốt hơn".format(toi_da)))
-    return tot[:toi_da], bo
+    chon: List[Dict[str, Any]] = []
+    for u in tot:                   # đóng dấu lại (tốn AI) chỉ cho đủ `toi_da` tấm tốt nhất, theo thứ tự
+        chua = u.pop("_chua_dau", False)
+        if len(chon) >= toi_da:
+            bo.append(dict(u, ly_do="đủ {0} ứng viên tốt hơn".format(toi_da)))
+            continue
+        if chua:
+            ly_dau, ban = dau_lai(u["tep"]) if dau_lai is not None else ("chưa có dấu", "")
+            if ly_dau or not ban:
+                bo.append(dict(u, ly_do="chưa qua cổng chữ: " + (ly_dau or "không có bản sao có dấu")[:160]))
+                continue
+            u = dict(u, tep_goc=u["tep"], tep=ban, nguon=u["nguon"] + "+dau-lai")
+        chon.append(u)
+    return chon, bo
 
 
 def tep_tai_len(duong: str, thu_muc: str) -> str:
@@ -281,6 +297,84 @@ def thieu_tinh_nang(so_cmt: Any, kenh: str, bay: _dt.datetime, ngay: int = NGAY_
 KV_DA_DAT, KV_DA_CO, KV_KHONG_UNG_VIEN, KV_KHONG_QUYEN, KV_LOI = "da_dat", "da_co", "khong_ung_vien", "khong_quyen", "loi"
 
 
+def _chu_ve_cua(goc: str, kenh: str, ma_goi: str, tep: str) -> List[str]:
+    """Chữ MONG ĐỢI trên một bìa ứng viên của gói (≤ 2 bản khác nhau): chữ kế hoạch của đúng số tấm (`ke-hoach-bia.json`,
+    số theo hồ sơ `bia_2`/`bia_3` hoặc tên `thumb_N`), chữ lô bìa (`_lo/xep-hang.json` chu_ve / chu), chữ bìa của gói
+    (`cong_chu._chu_mong_goi`)."""
+    from . import cong_chu  # noqa: PLC0415
+    luot = ma_goi[len(kenh) + 1:] if ma_goi.startswith(kenh + "-") else ma_goi.rsplit("-", 1)[-1]
+    tm = os.path.join(goc, "PROJECTS", "AUTO", kenh, luot, "7-thumbnail")
+    ra: List[str] = []
+    so = None
+    mb, mt = _RE_BIA_N.search(tep), _RE_THUMB.match(os.path.basename(tep))
+    hs = _json(os.path.join(goc, "CHANNEL", kenh, "ho-so-video", ma_goi + ".json")) or {}
+    b2 = hs.get("bia_2") if isinstance(hs, dict) and isinstance(hs.get("bia_2"), dict) else {}
+    if mb:
+        b = b2 if mb.group(1) == "2" else (b2.get("bia_3") if isinstance(b2.get("bia_3"), dict) else {})
+        so = b.get("so")
+    elif mt:
+        so = int(mt.group(1))
+    kh = _json(os.path.join(tm, "ke-hoach-bia.json")) or {}
+    if so is not None and isinstance(kh, dict):
+        ra += [str(x.get("chu_du_kien") or "") for x in kh.get("muc") or [] if isinstance(x, dict)
+               and str(x.get("so")) == str(so)]
+    xh = _json(os.path.join(tm, "_lo", "xep-hang.json")) or {}
+    if isinstance(xh, dict):
+        ra += [str(xh.get("chu_ve") or ""), str(xh.get("chu") or "")]
+    try:
+        ra.append(str(cong_chu._chu_mong_goi(goc, kenh, ma_goi).get("chu") or ""))  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        pass
+    gon: List[str] = []
+    for x in (" ".join(x.split()) for x in ra):
+        if x and not any(cong_chu.khop(x, y) for y in gon):
+            gon.append(x)
+    return gon[:2]
+
+
+def dau_ung_vien(goc: str, kenh: str, ma_goi: str, tep: str, thu_muc: str, goi: Optional[Callable[..., str]], *,
+                 nho: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
+    """Bìa ứng viên CHƯA có dấu (bìa nhì/ba lưu trước cổng chữ 16/10/2026) → ("", bản sao CÓ DẤU) | (lý do, ""). Không
+    bao giờ ghi CHANNEL/PROJECTS: bản sao + báo cáo dấu nằm ở `thu_muc` (vm/logs của máy Studio). Chữ mong đợi phải qua
+    `cong_chu.soat_chat` (chính tả + KHÔNG chép chữ bìa đối thủ + ĐÚNG chủ đề — có bản sửa nghĩa là ảnh in chữ chưa sửa
+    → không dùng), rồi `cong_chu.xac_minh` đọc mù 2 lượt khớp tuyệt đối. `nho`: bộ nhớ trong lượt (cùng chữ soát 1 lần)."""
+    import shutil  # noqa: PLC0415
+
+    from . import cong_chu  # noqa: PLC0415
+    nho = {} if nho is None else nho
+    try:
+        os.makedirs(thu_muc, exist_ok=True)
+        ban = tep_tai_len(tep, thu_muc)
+        if os.path.abspath(ban) == os.path.abspath(tep):       # tệp gốc đã đúng chuẩn: vẫn CHÉP — dấu nằm cạnh bản sao
+            ban = os.path.join(thu_muc, "{0}-{1}.jpg".format(os.path.splitext(os.path.basename(tep))[0], _sha(tep)[:8]))
+            if not os.path.isfile(ban):
+                shutil.copy2(tep, ban + ".tam")
+                os.replace(ban + ".tam", ban)
+    except Exception as loi:  # noqa: BLE001
+        return "không dựng được bản sao để đóng dấu: {0}".format(str(loi)[:80]), ""
+    if not cong_chu.kiem_dau(ban):
+        return "", ban
+    if goi is None:
+        return "chưa có dấu cổng chữ (không có hàm gọi AI để đọc lại)", ""
+    nc = cong_chu._ngu_canh(goc, kenh, ma_goi)  # noqa: SLF001
+    cm = cong_chu._chu_mong_goi(goc, kenh, ma_goi)  # noqa: SLF001
+    ly: List[str] = []
+    for chu in _chu_ve_cua(goc, kenh, ma_goi, tep):
+        k = cong_chu.chuan(chu)
+        if k not in nho:
+            nho[k] = cong_chu.soat_chat(goi, chu, tieu_de=nc.get("tieu_de") or "", ngu_canh=nc.get("ngu_canh") or "",
+                                        doi_thu=cm.get("doi_thu") or (), khoa="dau-ung-vien:{0}:soat".format(ma_goi))
+        s = nho[k]
+        if s.get("ok") is not True or s.get("sua"):
+            ly.append("chữ 「{0}」 chưa qua soát: {1}".format(chu[:30], str(s.get("ly_do") or "có bản sửa")[:100]))
+            continue
+        kq = cong_chu.xac_minh(goi, ban, chu, goc=goc, kenh=kenh, ma_goi=ma_goi, khoa="dau-ung-vien:" + ma_goi)
+        if kq.get("ok") is True:
+            return "", ban
+        ly.append("đọc lại 「{0}」: {1}".format(chu[:30], "; ".join(kq.get("ly_do") or [])[:120] or "chưa kiểm được"))
+    return ("; ".join(ly) or "không biết chữ mong đợi của bìa")[:300], ""
+
+
 def ket_viec_test(ket_video: Dict[str, Dict[str, Any]]) -> Tuple[str, str]:
     """Kết quả từng video → (trạng thái việc, lý do). Kênh không có quyền → `bo`; video lỗi → `loi` (thử lại, 5 lần thành
     `bo`); mọi video đã có thử nghiệm (máy vừa đặt / có sẵn) hoặc không có ứng viên, ít nhất một video có → `xong`; không
@@ -297,7 +391,10 @@ def ket_viec_test(ket_video: Dict[str, Dict[str, Any]]) -> Tuple[str, str]:
     co = [v for v, k in ds if k.get("ket") in (KV_DA_DAT, KV_DA_CO)]
     if not co:
         return "bo", "không video nào có bìa ứng viên qua cổng đọc được (bìa nhì/ba không còn trên đĩa)"
-    return "xong", "; ".join("{0}: {1}".format(v, {KV_DA_DAT: "máy vừa đặt thử nghiệm {0} bìa".format(k.get("so_bia") or "?"),
+    return "xong", "; ".join("{0}: {1}".format(v, {KV_DA_DAT: "máy vừa đặt thử nghiệm {0}".format(
+                                                        "{0} biến thể «{1}»".format(k.get("so_bien_the") or "?",
+                                                                                    k.get("che_do")) if k.get("che_do")
+                                                        else "{0} bìa".format(k.get("so_bia") or "?")),
                                                     KV_DA_CO: "đã có thử nghiệm ({0})".format(k.get("trang_thai") or "?"),
                                                     KV_KHONG_UNG_VIEN: "không có ứng viên"}[k["ket"]]) for v, k in ds)[:400]
 
@@ -401,10 +498,10 @@ def viec_mo(goc: str, loai: str, kenh: str) -> List[Dict[str, Any]]:
 
 def dieu_kien_test(goc: str, kenh: str) -> Tuple[bool, str]:
     from . import giam_doc  # noqa: PLC0415
-    ds = viec_mo(goc, giam_doc.LOAI_TEST_COMPARE, kenh)
+    ds = viec_mo(goc, giam_doc.LOAI_TEST_COMPARE, kenh) + viec_mo(goc, giam_doc.LOAI_AB_TIEU_DE, kenh)
     if not ds:
-        return False, "không có việc Thử nghiệm và so sánh"
-    return True, "{0} việc Thử nghiệm và so sánh ({1} video)".format(len(ds), sum(len(m.get("video_ids") or []) for m in ds))
+        return False, "không có việc Thử nghiệm A/B"
+    return True, "{0} việc Thử nghiệm A/B ({1} video)".format(len(ds), sum(len(m.get("video_ids") or []) for m in ds))
 
 
 def dieu_kien_suc_khoe(goc: str, kenh: str, bay: Optional[_dt.datetime] = None) -> Tuple[bool, str]:

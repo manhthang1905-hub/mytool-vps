@@ -12,6 +12,14 @@ khoẻ, luật trạng thái): `core/studio_may.py`.
                    = chưa có thử nghiệm). Video đã có thử nghiệm → ghi lại, không đụng; không đọc được gói → không đặt mù.
                    Kênh chưa có tính năng nâng cao (sổ chặn ghim / nút tắt) → `bo`, không báo chủ (mục "xác minh điện
                    thoại" tuỳ chọn đã gánh). Không còn ứng viên → `bo`, không mở Chrome.
+                   16/10/2026 (chủ duyệt A/B tiêu đề, «Cho dùng»): cùng phiên làm cả việc `studio_ab_tieu_de` (giám đốc
+                   kênh). Tiêu đề thêm từ sổ `giam-doc/ab-tieu-de.json` (đã soát chữ; ở đây soát lại luật cứng với tiêu
+                   đề ĐANG chạy) + bìa có dấu → `core.ab_tieu_de.chon_che_do`: «Tiêu đề và hình thu nhỏ» (cặp tiêu đề +
+                   bìa) | «Chỉ tiêu đề» (không có bìa thứ hai có dấu) | «Chỉ hình thu nhỏ» (kênh tắt `ab_tieu_de` — như
+                   TL4-T7 — hoặc không tiêu đề nào qua soát). Ô tiêu đề 1 phải là tiêu đề đang chạy; gõ ô 2/3 rồi đọc
+                   lại từng ô. Bìa nhì/ba lưu TRƯỚC cổng chữ được đọc mù 2 lượt + đóng dấu trên BẢN SAO ở
+                   `vm/logs/studio-may/<K>/dau-lai/` (`sm.dau_ung_vien` — không ghi CHANNEL/PROJECTS). Đọc lại: thử
+                   nghiệm STARTED, số biến thể, tiêu đề các nhánh (nếu gói ghi) → sổ A/B (`ab_tieu_de.cap_nhat`).
   --suc-khoe       việc `studio_kiem_suc_khoe` (CHỈ ĐỌC): bảng điều khiển, `youtube.com/features` (Cài đặt → Kênh → «Điều
                    kiện sử dụng tính năng»), Kiếm tiền (YPP, «nội dung dùng lại»), Phát hiện nội dung → Bản quyền, danh
                    sách video (ô «Thông báo») → `ket = {canh_bao, chi_tiet, trang, anh, muc}`; THẤY cảnh báo / gậy / nội
@@ -65,7 +73,7 @@ UU_TIEN_KHOA = 3
 TOI_DA_VIDEO_PHIEN = 4
 CHO_LUU_GIAY = 45
 
-LOAI_TEST, LOAI_SUC_KHOE = "studio_test_compare", "studio_kiem_suc_khoe"
+LOAI_TEST, LOAI_SUC_KHOE, LOAI_AB = "studio_test_compare", "studio_kiem_suc_khoe", "studio_ab_tieu_de"
 
 
 class DangXuat(Exception):
@@ -141,24 +149,37 @@ def phan_tich_thu_nghiem(exp: Any) -> Dict[str, Any]:
     trạng thái kiểu RUNNING/ACTIVE/COMPLETE…, số bìa = danh sách dài nhất mang tên nhánh/ảnh (không thấy → None, không so)."""
     if not isinstance(exp, dict) or not exp:
         return {"co": False, "trang_thai": "", "so_bia": None}
-    chu, ds_dai = [], []
+    chu, ds_dai, tieu_de = [], [], []
 
-    def duyet(x, khoa=""):
+    def duyet(x, khoa="", duong=""):
         if isinstance(x, dict):
             for k, v in x.items():
-                duyet(v, str(k))
+                duyet(v, str(k), (duong + "/" + str(k))[-120:])
         elif isinstance(x, list):
             if x and re.search(r"arm|variant|treatment|thumbnail|image|still", khoa, re.I):
                 ds_dai.append(len(x))
             for y in x:
-                duyet(y, khoa)
+                duyet(y, khoa, duong)
         elif isinstance(x, str) and re.search(r"state|status", khoa, re.I):
             chu.append(x)
+        elif (isinstance(x, str) and re.search(r"title", duong, re.I) and not re.search(r"id$|url|token|key", khoa, re.I)
+              and len(x.strip()) >= 2 and " ".join(x.split()) not in tieu_de):
+            tieu_de.append(" ".join(x.split()))      # 16/10/2026: tiêu đề các nhánh (A/B tiêu đề) — đọc RỘNG
     duyet(exp)
     s = " ".join(chu).upper()
     tt = ("xong" if re.search(r"COMPLET|FINISH|ENDED|CONCLUD|DONE|STOPPED|WINNER", s) else
           "dang_chay" if re.search(r"RUNNING|ACTIVE|PROGRESS|STARTED|PENDING|SCHEDULED|LIVE", s) else "co")
-    return {"co": True, "trang_thai": tt, "so_bia": max(ds_dai) if ds_dai else None, "trang_thai_tho": s[:120]}
+    return {"co": True, "trang_thai": tt, "so_bia": max(ds_dai) if ds_dai else None, "trang_thai_tho": s[:120],
+            "tieu_de": tieu_de[:6]}
+
+
+def tieu_de_doc_lai_khop(doc: Any, mong: Any) -> List[str]:
+    """Tiêu đề MONG trên thử nghiệm mà đọc lại KHÔNG thấy (NFKC + gộp khoảng trắng). Đọc lại không ra tiêu đề nào → []
+    (khuôn gói chưa biết: không phán lệch)."""
+    import unicodedata  # noqa: PLC0415
+    ch = lambda t: " ".join(unicodedata.normalize("NFKC", str(t or "")).split())  # noqa: E731
+    co = {ch(x) for x in doc or []}
+    return [t for t in mong or [] if co and ch(t) not in co]
 
 
 #: 16/10/2026 đo thật (Studio vi): nút «Thử nghiệm A/B» nằm DƯỚI ô Tiêu đề của trang sửa (bản mới gộp thử tiêu đề + bìa);
@@ -230,6 +251,22 @@ _JS_O_BIA_HOP = """(() => { const Y = window.__yd;
 #: Chip loại thử nghiệm của hộp: `ytcp-chip#chip-0` Chỉ tiêu đề · `#chip-1` Chỉ hình thu nhỏ · `#chip-2` Tiêu đề và hình thu nhỏ.
 RE_CHIP_BIA = r"^(chỉ hình thu nhỏ|thumbnail only|サムネイルのみ)"
 RE_CHIP_TIEU_DE = r"^(chỉ tiêu đề|title only|タイトルのみ)"
+#: 16/10/2026 (chủ duyệt A/B tiêu đề): chip-2 «Tiêu đề và hình thu nhỏ».
+RE_CHIP_TIEU_DE_BIA = r"^(tiêu đề và hình thu nhỏ|title and thumbnail|タイトルとサムネイル)"
+RE_CHIP_CHE_DO = {"bia": RE_CHIP_BIA, "tieu_de": RE_CHIP_TIEU_DE, "tieu_de_bia": RE_CHIP_TIEU_DE_BIA}
+KHOA_CHIP_CHE_DO = {"bia": "ab_chip_bia", "tieu_de": "ab_chip_tieu_de", "tieu_de_bia": "ab_chip_tieu_de_bia"}
+#: Ô TIÊU ĐỀ của hộp «Thử nghiệm A/B» (đo 16/10 chế độ «Chỉ tiêu đề»: «Tiêu đề (bắt buộc)» ô 1 điền sẵn tiêu đề đang
+#: chạy, «Tiêu đề (bắt buộc)» ô 2, «Tiêu đề» ô 3 — chân hộp «Cần có tiêu đề thứ hai»). Ô sửa chữ (contenteditable /
+#: textarea / input chữ) hiện trong hộp, theo thứ tự trên → dưới; ô lồng trong ô khác bị bỏ.
+_JS_O_TIEU_DE_HOP = """(() => { const Y = window.__yd;
+  const hop = Y.qsa(Y.goc(), 'tp-yt-paper-dialog, ytcp-dialog, [role=dialog]').filter(Y.hien).filter(d => (d.innerText || '').trim());
+  if (!hop.length) return null; const d = hop[hop.length - 1];
+  let o = Y.trong(d, '[contenteditable=true], [contenteditable=""], textarea, input[type=text]').filter(Y.hien);
+  o = o.filter(e => !o.some(x => x !== e && x.contains(e)));
+  o.sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y || a.getBoundingClientRect().x - b.getBoundingClientRect().x);
+  return o.map((e, i) => ({i: i, pt: Y.tra(e, 'o_tieu_de', 'contenteditable', 1),
+    chu: Y.chuan((e.tagName === 'TEXTAREA' || e.tagName === 'INPUT') ? e.value : e.innerText).slice(0, 200),
+    nhan: Y.chuan(e.getAttribute('aria-label') || '').slice(0, 80)})); })()"""
 RE_NUT_THIET_LAP = r"^(thiết lập thử nghiệm|set (up )?test|start test|テストを設定|テストを開始)"
 RE_NUT_XAC_NHAN = r"^(thiết lập|bắt đầu|xác nhận|tiếp tục|ok|đồng ý|set test|start|confirm|continue|開始|確認|続行)"
 
@@ -681,11 +718,48 @@ def _so_o_co_anh(S) -> int:
     return sum(1 for o in (S.js(_JS_O_BIA_HOP) or []) if o.get("co_anh"))
 
 
+def _chuan_nfkc(s: Any) -> str:
+    import unicodedata  # noqa: PLC0415
+    return mdd_chuan(unicodedata.normalize("NFKC", str(s or "")))
+
+
+def dien_tieu_de(S, vid: str, tieu_de_a: str, them: List[str], ghi) -> int:
+    """Ô tiêu đề của hộp: ô 1 phải là tiêu đề ĐANG chạy (Studio điền sẵn — lệch thì dừng, không đặt mù), gõ tiêu đề
+    thêm vào ô 2/3 (Ctrl+A rồi chèn — thay chữ cũ), ĐỌC LẠI từng ô (lệch → gõ lại một lần, vẫn lệch → LoiMuc). Trả số ô
+    có chữ."""
+    o = S.js(_JS_O_TIEU_DE_HOP) or []
+    if len(o) < 1 + len(them):
+        raise tl.LoiMuc("hộp chỉ có {0} ô tiêu đề, cần {1}".format(len(o), 1 + len(them)))
+    if _chuan_nfkc(o[0].get("chu")) != _chuan_nfkc(tieu_de_a):
+        raise tl.LoiMuc("ô tiêu đề 1 «{0}» không phải tiêu đề đang chạy «{1}»".format(_gon(o[0].get("chu"), 50),
+                                                                                    _gon(tieu_de_a, 50)))
+    for i, t in enumerate(them, 1):
+        doc = ""
+        for lan in range(2):
+            o = S.js(_JS_O_TIEU_DE_HOP) or []
+            if len(o) <= i:
+                raise tl.LoiMuc("ô tiêu đề {0} biến mất".format(i + 1))
+            S.st.bam(o[i]["pt"])
+            S.st._ctrl_a()                                          # noqa: SLF001
+            S.st._chen(t)                                           # noqa: SLF001
+            S.ngu(1.0)
+            doc = ((S.js(_JS_O_TIEU_DE_HOP) or [{}] * (i + 1))[i] or {}).get("chu") or ""
+            if _chuan_nfkc(doc) == _chuan_nfkc(t):
+                break
+            ghi("   {0}: ô tiêu đề {1} đọc lại lệch (lần {2}): «{3}»".format(vid, i + 1, lan + 1, _gon(doc, 60)))
+        if _chuan_nfkc(doc) != _chuan_nfkc(t):
+            raise tl.LoiMuc("ô tiêu đề {0} đọc lại lệch sau 2 lần gõ".format(i + 1))
+        ghi("   {0}: ô tiêu đề {1} ← «{2}» (đọc lại khớp)".format(vid, i + 1, _gon(t, 70)))
+    return sum(1 for x in S.js(_JS_O_TIEU_DE_HOP) or [] if x.get("chu"))
+
+
 def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khong_luu: bool = False) -> Dict[str, Any]:
     """MỘT video (đo Studio vi 16/10/2026): trang sửa → gói Studio `videoCreatorExperiment` (đã có thử nghiệm → ghi lại,
-    không đụng) → nút «Thử nghiệm A/B» (`ytcp-button#ab-test-button`, dưới ô Tiêu đề) → chip «Chỉ hình thu nhỏ» → ô 1 = bìa
-    đang chạy (Studio điền sẵn; trống thì tải bìa A) → tải ứng viên vào ô 2/3 → «Thiết lập thử nghiệm» → (Lưu nếu trang
-    sửa còn thay đổi) → ĐỌC LẠI gói Studio. Trả {ket, ly_do, trang_thai, so_bia, tieu_de_test, anh…}."""
+    không đụng) → chế độ (`ab_tieu_de.chon_che_do`: tiêu đề thêm còn hợp lệ với tiêu đề ĐANG chạy × bìa có dấu) → nút
+    «Thử nghiệm A/B» (`ytcp-button#ab-test-button`, dưới ô Tiêu đề) → chip của chế độ → ô tiêu đề 2/3 (`dien_tieu_de`)
+    → ô 1 = bìa đang chạy (Studio điền sẵn; trống thì tải bìa A) → tải ứng viên vào ô 2/3 → «Thiết lập thử nghiệm» →
+    (Lưu nếu trang sửa còn thay đổi) → ĐỌC LẠI gói Studio (STARTED, số biến thể, tiêu đề). Trả {ket, ly_do, che_do,
+    so_bien_the, tieu_de, trang_thai, so_bia, tieu_de_doc_lai, anh…}."""
     goi, kb = doc_trang_sua(S, vid)
     ra: Dict[str, Any] = {"anh_truoc": S.st.ghi_bang_chung("test-truoc-" + vid).get("anh") or ""}
     tn = phan_tich_thu_nghiem((goi or {}).get("videoCreatorExperiment"))
@@ -704,9 +778,26 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
         return dict(ra, ket=sm.KV_LOI, ly_do="không thấy nút «Thử nghiệm A/B» trên trang sửa")
     if thu:
         return dict(ra, ket="doc", ly_do="chỉ đọc (--thu)")
+    # ── 16/10/2026: CHẾ ĐỘ (A/B tiêu đề + bìa): tiêu đề thêm soát lại luật cứng với tiêu đề ĐANG chạy (A có thể đã đổi
+    # từ lúc lập), bìa ứng viên có dấu → «Tiêu đề và hình thu nhỏ» | «Chỉ tiêu đề» | «Chỉ hình thu nhỏ».
+    from core import ab_tieu_de as ab  # noqa: PLC0415
+    tieu_de_a = mdd_chuan(goi.get("title") or S.st.doc_chu("tieu_de") or "")
+    them: List[str] = []
+    for t in kh.get("tieu_de") or []:
+        ly_t = ab.kiem_tieu_de(t, tieu_de_a, them, kh.get("doi_thu") or ())
+        if ly_t:
+            ghi("   {0}: bỏ tiêu đề thêm «{1}» — {2}".format(vid, _gon(t, 60), ly_t))
+        else:
+            them.append(mdd_chuan(t))
     tep = [u.get("tai_len") or u.get("tep") for u in kh.get("chon") or []][:sm.TOI_DA_UNG_VIEN]
-    if not tep:
+    che_do, so_bt = ab.chon_che_do(len(them), len(tep))
+    if not che_do:
         return dict(ra, ket=sm.KV_KHONG_UNG_VIEN)
+    them = them[:so_bt - 1] if che_do in (ab.CHE_DO_TIEU_DE, ab.CHE_DO_TIEU_DE_BIA) else []
+    tep = tep[:so_bt - 1] if che_do in (ab.CHE_DO_BIA, ab.CHE_DO_TIEU_DE_BIA) else []
+    ra.update(che_do=che_do, so_bien_the=so_bt, tieu_de=([tieu_de_a] + them) if them else [])
+    ghi("   {0}: chế độ «{1}» — {2} biến thể · tiêu đề thêm {3} · bìa thêm {4}".format(
+        vid, ab.TEN_CHE_DO[che_do], so_bt, them, [os.path.basename(p) for p in tep]))
     # 16/10/2026 — CỔNG CHỮ ngay trước cửa ra YouTube: mọi tệp sắp tải phải có dấu cổng chữ đúng sha1 (đóng an toàn).
     hong = [(p, kiem_dau_bia(p)) for p in tep]
     hong = [(p, ly) for p, ly in hong if ly]
@@ -723,62 +814,84 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
         return dict(ra, ket=sm.KV_LOI, ly_do="bấm «Thử nghiệm A/B» mà hộp không mở")
     chu_hop = str(hop.get("chu") or "")
     ra["tieu_de_test"] = bool(_nut_hop(S, RE_CHIP_TIEU_DE, True) or RE_TIEU_DE_TEST.search(chu_hop))
+    re_chip = RE_CHIP_CHE_DO[che_do]
     try:
         if RE_KHONG_QUYEN.search(chu_hop):
             return dict(ra, ket=sm.KV_KHONG_QUYEN, ly_do="Studio: " + _gon(chu_hop, 200))
-        chip = _nut_hop(S, RE_CHIP_BIA, True)
+        chip = _nut_hop(S, re_chip, True)
+        if not chip:                                 # chữ chip lạ (ngôn ngữ khác): bộ chọn `ytcp-chip#chip-N`
+            k = _tim_khoa(S, KHOA_CHIP_CHE_DO[che_do])
+            if k and k.get("rect"):
+                chip = {"x": k["rect"]["x"] + k["rect"]["w"] / 2.0, "y": k["rect"]["y"] + k["rect"]["h"] / 2.0,
+                        "chon": str(S.st.doc_thuoc_tinh(k, "aria-selected") or S.st.doc_thuoc_tinh(k, "selected") or "")}
         if not chip:
-            return dict(ra, ket=sm.KV_LOI, ly_do="hộp Thử nghiệm A/B không có lựa chọn «Chỉ hình thu nhỏ»: " + _gon(chu_hop, 160))
+            return dict(ra, ket=sm.KV_LOI, ly_do="hộp Thử nghiệm A/B không có lựa chọn «{0}»: {1}".format(
+                ab.TEN_CHE_DO[che_do], _gon(chu_hop, 160)))
         if str(chip.get("chon")) != "true":
             S.st._bam_diem(round(chip["x"], 1), round(chip["y"], 1))  # noqa: SLF001
             S.ngu(2)
-        if not _cho(S, lambda: str((_nut_hop(S, RE_CHIP_BIA, True) or {}).get("chon")) == "true"
-                    and len(S.js(_JS_O_BIA_HOP) or []) >= 2, 10):
-            return dict(ra, ket=sm.KV_LOI, ly_do="không chọn được «Chỉ hình thu nhỏ» / không thấy ô bìa")
-        o = S.js(_JS_O_BIA_HOP) or []
-        if not o[0].get("co_anh"):                   # ô 1 phải là bìa ĐANG chạy — Studio thường điền sẵn
-            if not kh.get("anh_a"):
-                return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống mà không có bìa A (i.ytimg.com) để tải")
-            tep_a = sm.tep_tai_len(kh["anh_a"], os.path.join(thu_muc_so(), "tai-len"))
-            ly_a = kiem_dau_bia(tep_a)
-            if ly_a:
-                return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống và bìa A chưa qua cổng chữ — không tải: " + ly_a)
-            ra["o1"] = _dat_tep_o(S, o[0], tep_a)
-            _cho(S, lambda: _so_o_co_anh(S) >= 1, 40, 2)
-        for i, duong in enumerate(tep, 1):
-            truoc = _so_o_co_anh(S)
-            o = [x for x in (S.js(_JS_O_BIA_HOP) or []) if not x.get("co_anh")]
-            if not o:
-                break
-            cach = _dat_tep_o(S, o[0], duong)
-            ok = _cho(S, lambda: _so_o_co_anh(S) > truoc, 60, 2)
-            ghi("   {0}: ô bìa {1} ← {2} ({3}) {4}".format(vid, i + 1, os.path.basename(duong), cach, "ĐÃ HIỆN" if ok else "CHƯA HIỆN"))
-            if not ok:
-                loi = _gon((S.js(_JS_HOP_TEST) or {}).get("chu"), 200)
-                return dict(ra, ket=sm.KV_LOI, ly_do="tải bìa {0} vào hộp không hiện ({1})".format(os.path.basename(duong), loi))
-        so_bia = _so_o_co_anh(S)
-        ra["so_bia"] = so_bia
+        if not _cho(S, lambda: str((_nut_hop(S, re_chip, True) or {}).get("chon")) == "true"
+                    and (not tep or len(S.js(_JS_O_BIA_HOP) or []) >= 2)
+                    and (not them or len(S.js(_JS_O_TIEU_DE_HOP) or []) >= 2), 10):
+            ra["anh_hop"] = S.st.ghi_bang_chung("test-hop-" + vid).get("anh") or ""
+            return dict(ra, ket=sm.KV_LOI, ly_do="không chọn được «{0}» / không thấy ô {1}".format(
+                ab.TEN_CHE_DO[che_do], "bìa + tiêu đề" if tep and them else "bìa" if tep else "tiêu đề"))
+        if them:
+            ra["so_tieu_de"] = dien_tieu_de(S, vid, tieu_de_a, them, ghi)
+        if tep:
+            o = S.js(_JS_O_BIA_HOP) or []
+            if not o[0].get("co_anh"):               # ô 1 phải là bìa ĐANG chạy — Studio thường điền sẵn
+                if not kh.get("anh_a"):
+                    return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống mà không có bìa A (i.ytimg.com) để tải")
+                tep_a = sm.tep_tai_len(kh["anh_a"], os.path.join(thu_muc_so(), "tai-len"))
+                ly_a = kiem_dau_bia(tep_a)
+                if ly_a:
+                    return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống và bìa A chưa qua cổng chữ — không tải: " + ly_a)
+                ra["o1"] = _dat_tep_o(S, o[0], tep_a)
+                _cho(S, lambda: _so_o_co_anh(S) >= 1, 40, 2)
+            for i, duong in enumerate(tep, 1):
+                truoc = _so_o_co_anh(S)
+                o = [x for x in (S.js(_JS_O_BIA_HOP) or []) if not x.get("co_anh")]
+                if not o:
+                    break
+                cach = _dat_tep_o(S, o[0], duong)
+                ok = _cho(S, lambda: _so_o_co_anh(S) > truoc, 60, 2)
+                ghi("   {0}: ô bìa {1} ← {2} ({3}) {4}".format(vid, i + 1, os.path.basename(duong), cach,
+                                                             "ĐÃ HIỆN" if ok else "CHƯA HIỆN"))
+                if not ok:
+                    loi = _gon((S.js(_JS_HOP_TEST) or {}).get("chu"), 200)
+                    return dict(ra, ket=sm.KV_LOI, ly_do="tải bìa {0} vào hộp không hiện ({1})".format(
+                        os.path.basename(duong), loi))
+            so_bia = _so_o_co_anh(S)
+            ra["so_bia"] = so_bia
+            if so_bia != 1 + len(tep):
+                ra["anh_hop"] = S.st.ghi_bang_chung("test-hop-" + vid).get("anh") or ""
+                return dict(ra, ket=sm.KV_LOI, ly_do="hộp có {0} bìa, mong {1}".format(so_bia, 1 + len(tep)))
         ra["anh_hop"] = S.st.ghi_bang_chung("test-hop-" + vid).get("anh") or ""
-        if so_bia != 1 + len(tep):
-            return dict(ra, ket=sm.KV_LOI, ly_do="hộp có {0} bìa, mong {1}".format(so_bia, 1 + len(tep)))
+        if them:                                     # đọc lại ô tiêu đề lần cuối (tải bìa có thể dựng lại hộp)
+            n_td = sum(1 for x in S.js(_JS_O_TIEU_DE_HOP) or [] if x.get("chu"))
+            if n_td != 1 + len(them):
+                return dict(ra, ket=sm.KV_LOI, ly_do="hộp có {0} tiêu đề, mong {1}".format(n_td, 1 + len(them)))
         nut_tl = _cho(S, lambda: (lambda k: k if k and not k.get("tat") else None)(_tim_khoa(S, "ab_thiet_lap"))
                       or _nut_hop(S, RE_NUT_THIET_LAP), 20)
         if not nut_tl:
             return dict(ra, ket=sm.KV_LOI, ly_do="nút «Thiết lập thử nghiệm» vẫn tắt: " +
                         _gon((S.js(_JS_HOP_TEST) or {}).get("chu"), 200))
         if khong_luu:
-            return dict(ra, ket="khong_luu", ly_do="đã điền {0} bìa, «Thiết lập thử nghiệm» bật — KHÔNG lưu".format(so_bia))
+            return dict(ra, ket="khong_luu", ly_do="đã điền {0} biến thể «{1}», «Thiết lập thử nghiệm» bật — KHÔNG "
+                                                  "lưu".format(so_bt, ab.TEN_CHE_DO[che_do]))
         if nut_tl.get("rect"):
             S.st.bam(nut_tl)
         else:
             S.st._bam_diem(round(nut_tl["x"], 1), round(nut_tl["y"], 1))  # noqa: SLF001
-        ghi("   {0}: đã bấm «Thiết lập thử nghiệm» ({1} bìa)".format(vid, so_bia))
+        ghi("   {0}: đã bấm «Thiết lập thử nghiệm» ({1} biến thể «{2}»)".format(vid, so_bt, ab.TEN_CHE_DO[che_do]))
         S.ngu(4)
         for _ in range(2):                           # hộp xác nhận (nếu có) — nút đồng ý của CHÍNH hộp đang mở
             if not S.js(_JS_HOP_TEST):
                 break
             xn = _nut_hop(S, RE_NUT_XAC_NHAN)
-            if not xn or re.search(RE_CHIP_BIA + "|" + RE_CHIP_TIEU_DE, xn.get("chu") or "", re.I):
+            if not xn or re.search(RE_CHIP_BIA + "|" + RE_CHIP_TIEU_DE + "|" + RE_CHIP_TIEU_DE_BIA, xn.get("chu") or "",
+                                   re.I):
                 break
             S.st._bam_diem(round(xn["x"], 1), round(xn["y"], 1))  # noqa: SLF001
             S.ngu(4)
@@ -794,7 +907,10 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
     ra["anh_sau_hop"] = S.st.ghi_bang_chung("test-sau-hop-" + vid).get("anh") or ""
     if not luu_dang_tat(S):                          # trang sửa còn thay đổi chưa lưu → Lưu (luồng này được phép)
         tieu_de = mdd_chuan(S.st.doc_chu("tieu_de") or "")
-        if goi.get("title") and tieu_de != mdd_chuan(goi.get("title")):   # chỉ được đổi thử nghiệm — tiêu đề lệch thì bỏ
+        # chỉ được đổi thử nghiệm — tiêu đề lệch thì bỏ. A/B tiêu đề: ô tiêu đề có thể hiện một tiêu đề của thử nghiệm
+        # hoặc bị Studio thay bằng khối thử nghiệm (không đọc được) — cả hai không phải thay đổi lạ.
+        hop_le = {mdd_chuan(goi.get("title"))} | ({mdd_chuan(t) for t in ra.get("tieu_de") or []} | {""} if them else set())
+        if goi.get("title") and tieu_de not in hop_le:
             huy_thay_doi(S, ghi)
             return dict(ra, ket=sm.KV_LOI, ly_do="trang sửa có thay đổi lạ (tiêu đề lệch) — đã huỷ, không lưu")
         S.st.bam("sua_luu", hau_dieu_kien=lambda: luu_dang_tat(S), han_hau=CHO_LUU_GIAY)
@@ -813,9 +929,13 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
     ghi("   {0}: ĐỌC LẠI thử nghiệm {1}".format(vid, ra["doc_lai"]))
     if not tn2["co"]:
         return dict(ra, ket=sm.KV_LOI, ly_do="đọc lại: gói Studio chưa có thử nghiệm (videoCreatorExperiment rỗng)")
-    if tn2["so_bia"] is not None and tn2["so_bia"] != ra["so_bia"]:
-        return dict(ra, ket=sm.KV_LOI, ly_do="đọc lại: thử nghiệm có {0} bìa, mong {1}".format(tn2["so_bia"], ra["so_bia"]))
-    return dict(ra, ket=sm.KV_DA_DAT, trang_thai=tn2["trang_thai"])
+    if tn2["so_bia"] is not None and tn2["so_bia"] != so_bt:
+        return dict(ra, ket=sm.KV_LOI, ly_do="đọc lại: thử nghiệm có {0} biến thể, mong {1}".format(tn2["so_bia"], so_bt))
+    thieu = tieu_de_doc_lai_khop(tn2.get("tieu_de"), ra.get("tieu_de"))
+    if thieu:
+        return dict(ra, ket=sm.KV_LOI, ly_do="đọc lại: thử nghiệm không có tiêu đề {0}".format(
+            " / ".join("«{0}»".format(_gon(t, 40)) for t in thieu)))
+    return dict(ra, ket=sm.KV_DA_DAT, trang_thai=tn2["trang_thai"], tieu_de_doc_lai=tn2.get("tieu_de") or [])
 
 
 def kiem_dau_bia(duong: str) -> str:
@@ -845,8 +965,20 @@ def tai_bia_a(goc: str, kenh: str, vid: str, ghi, tai=None) -> str:
     return dich if os.path.isfile(dich) else ""
 
 
-def ke_hoach_video(goc: str, kenh: str, vid: str, ghi, tai=None, cham=None) -> Dict[str, Any]:
-    """Không mở Chrome: mã gói, bìa A, ứng viên B/C đã qua cổng (bản tải lên chuẩn)."""
+def bat_ab_tieu_de(goc: str, kenh: str) -> bool:
+    """Công tắc `ab_tieu_de` của kênh (`core.ab_tieu_de.bat` — mặc định theo `giam_doc_studio`; TL4-T7 tắt)."""
+    try:
+        from core import ab_tieu_de as ab  # noqa: PLC0415
+        from core.kenh import TEP_KENH, doc_yaml  # noqa: PLC0415
+        return ab.bat(doc_yaml(os.path.join(goc, "CHANNEL", kenh, TEP_KENH)) or {})
+    except Exception:  # noqa: BLE001 — không đọc được công tắc = không thử tiêu đề
+        return False
+
+
+def ke_hoach_video(goc: str, kenh: str, vid: str, ghi, tai=None, cham=None, dau_lai=None) -> Dict[str, Any]:
+    """Không mở Chrome: mã gói, bìa A, ứng viên B/C đã qua cổng (bản tải lên chuẩn) + tiêu đề thêm của sổ A/B
+    (`core.ab_tieu_de.tieu_de_cho_may`, chỉ khi kênh bật `ab_tieu_de`). `dau_lai(tệp)` → (lý do, bản sao có dấu):
+    bìa nhì/ba lưu trước cổng chữ được đọc lại + đóng dấu trên bản sao (`sm.dau_ung_vien`)."""
     ma_goi = sm.ma_goi_cua_video(goc, kenh, vid)
     a = tai_bia_a(goc, kenh, vid, ghi, tai)
     hs = os.path.join(goc, "CHANNEL", kenh, "ho-so-video", "anh", ma_goi + ".jpg") if ma_goi else ""
@@ -856,7 +988,13 @@ def ke_hoach_video(goc: str, kenh: str, vid: str, ghi, tai=None, cham=None) -> D
             cong_chu.chuyen_dau(hs, a)
         except Exception:  # noqa: BLE001
             pass
-    chon, bo = sm.ung_vien_bia(goc, kenh, ma_goi, [x for x in (a, hs) if x], cham=cham) if ma_goi else ([], [])
+    td: Dict[str, Any] = {}
+    if bat_ab_tieu_de(goc, kenh):
+        from core import ab_tieu_de as ab  # noqa: PLC0415
+        td = ab.tieu_de_cho_may(goc, kenh, vid)
+        td["doi_thu"] = ab.tieu_de_doi_thu(goc, kenh, ma_goi)
+    dl = (lambda p: dau_lai(ma_goi, p)) if (dau_lai is not None and ma_goi) else None
+    chon, bo = sm.ung_vien_bia(goc, kenh, ma_goi, [x for x in (a, hs) if x], cham=cham, dau_lai=dl) if ma_goi else ([], [])
     tep = []
     for u in chon:
         try:
@@ -864,19 +1002,62 @@ def ke_hoach_video(goc: str, kenh: str, vid: str, ghi, tai=None, cham=None) -> D
         except Exception as e:  # noqa: BLE001
             bo.append(dict(u, ly_do="không dựng được bản tải lên: {0}".format(str(e)[:80])))
     chon = [dict(u, tai_len=t) for u, t in zip(chon, tep)]
-    ghi("   {0} ({1}): bìa A {2} · ứng viên {3} · bỏ {4}".format(
+    ghi("   {0} ({1}): bìa A {2} · ứng viên {3} · bỏ {4} · tiêu đề thêm {5}".format(
         vid, ma_goi or "?", "có" if a else "KHÔNG", [os.path.basename(u["tep"]) + " gk={0}".format(u.get("diem_gk")) for u in chon],
-        ["{0}: {1}".format(os.path.basename(u["tep"]), u.get("ly_do")) for u in bo][:4]))
-    return {"ma_goi": ma_goi, "anh_a": a, "chon": chon, "bo": [{k: u.get(k) for k in ("tep", "nguon", "ly_do")} for u in bo]}
+        ["{0}: {1}".format(os.path.basename(u["tep"]), u.get("ly_do")) for u in bo][:4], td.get("tieu_de") or []))
+    return {"ma_goi": ma_goi, "anh_a": a, "chon": chon, "bo": [{k: u.get(k) for k in ("tep", "nguon", "ly_do")} for u in bo],
+            "tieu_de": list(td.get("tieu_de") or []), "doi_thu": list(td.get("doi_thu") or []),
+            "ab_muc": (td.get("muc") or {}).get("id") or ""}
+
+
+def _goi_dau_lai(goc: str, kenh: str, ghi):
+    """`dau_lai(ma_goi, tệp)` cho `ke_hoach_video`: hàm gọi AI (phễu chung) dựng LƯỜI — chỉ khi có tấm chưa dấu."""
+    nho: Dict[str, Any] = {}
+    goi: List[Any] = []
+
+    def lam(ma_goi: str, p: str):
+        if not goi:
+            try:
+                from core import cong_chu  # noqa: PLC0415
+                goi.append(cong_chu._goi_that(goc))                # noqa: SLF001
+            except Exception as e:  # noqa: BLE001
+                ghi("   (!) không dựng được hàm gọi AI để đóng dấu lại bìa: {0}".format(str(e)[:120]))
+                goi.append(None)
+        r = sm.dau_ung_vien(goc, kenh, ma_goi, p, os.path.join(thu_muc_so(), kenh, "dau-lai"), goi[0], nho=nho)
+        ghi("   {0}: đóng dấu lại {1} → {2}".format(ma_goi, os.path.basename(p), "CÓ DẤU (bản sao)" if not r[0] else r[0][:160]))
+        return r
+    return lam
+
+
+def _ghi_so_ab(goc: str, kenh: str, vid: str, kv: Dict[str, Any], ghi) -> None:
+    """Kết quả một video → sổ A/B tiêu đề (`core.ab_tieu_de.cap_nhat`) nếu video có mục chờ."""
+    try:
+        from core import ab_tieu_de as ab  # noqa: PLC0415
+        m = ab.muc_cua(goc, kenh, vid)
+        if not m or m.get("trang_thai") not in (ab.TT_CHO, ab.TT_DANG, ab.TT_LOI):
+            return
+        k = kv.get("ket")
+        tt = {sm.KV_DA_DAT: ab.TT_DA_DAT, sm.KV_DA_CO: ab.TT_DA_CO, sm.KV_KHONG_QUYEN: ab.TT_KHONG_QUYEN,
+              sm.KV_KHONG_UNG_VIEN: ab.TT_BO}.get(k, ab.TT_LOI)
+        lan = int(m.get("lan_loi") or 0) + (1 if tt == ab.TT_LOI else 0)
+        if tt == ab.TT_LOI and lan >= 5:
+            tt = ab.TT_BO
+        ab.cap_nhat(goc, kenh, vid, trang_thai=tt, lan_loi=lan, ket={
+            k2: kv.get(k2) for k2 in ("ket", "ly_do", "che_do", "so_bien_the", "tieu_de", "trang_thai", "tieu_de_doc_lai",
+                                      "doc_lai") if kv.get(k2) is not None})
+    except Exception as e:  # noqa: BLE001
+        ghi("   (!) ghi sổ A/B tiêu đề hỏng: {0}".format(str(e)[:120]))
 
 
 def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua_khung: bool = False,
               chi_viec: str = "", rng=None, tai=None, cham=None, phien=None) -> int:
     import datetime as _dt  # noqa: PLC0415
     goc = GOC_TOOL
-    ds = _viec(goc, LOAI_TEST, kenh, chi_viec)
+    # 16/10/2026: cùng một phiên làm cả việc bìa (`studio_test_compare`, đề xuất bộ não) lẫn A/B tiêu đề + bìa
+    # (`studio_ab_tieu_de`, giám đốc kênh — sổ `giam-doc/ab-tieu-de.json`).
+    ds = _viec(goc, LOAI_TEST, kenh, chi_viec) + _viec(goc, LOAI_AB, kenh, chi_viec)
     if not ds:
-        ghi("không có việc Thử nghiệm và so sánh của {0}".format(kenh))
+        ghi("không có việc Thử nghiệm A/B của {0}".format(kenh))
         return MA_KHONG_CAN
     ghi_that = not (thu or khong_luu)
     try:
@@ -888,18 +1069,23 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
     if ly and ghi_that:     # đã biết thiếu tính năng nâng cao → bỏ, không mở Chrome; mục "xác minh điện thoại" đã báo chủ
         for m in ds:
             _cap_nhat(goc, m["id"], ghi, trang_thai="bo", ket={"ly_do": ly, "luc": _bay()})
+            for v in m.get("video_ids") or []:
+                _ghi_so_ab(goc, kenh, v, {"ket": sm.KV_KHONG_QUYEN, "ly_do": ly}, ghi)
         return MA_XONG
     ke = {}
+    dau_lai = _goi_dau_lai(goc, kenh, ghi) if not thu else None
     for m in ds:
         for vid in m.get("video_ids") or []:
             if vid not in ke:
-                ke[vid] = ke_hoach_video(goc, kenh, vid, ghi, tai, cham)
-    can_studio = [m for m in ds if thu or any(ke[v]["chon"] for v in m.get("video_ids") or [])]
+                ke[vid] = ke_hoach_video(goc, kenh, vid, ghi, tai, cham, dau_lai=dau_lai)
+    can_studio = [m for m in ds if thu or any(ke[v]["chon"] or ke[v]["tieu_de"] for v in m.get("video_ids") or [])]
     for m in ds:
         if m not in can_studio and ghi_that:
             kv = {v: {"ket": sm.KV_KHONG_UNG_VIEN, "ma_goi": ke[v]["ma_goi"], "bo": ke[v]["bo"][:6]} for v in m["video_ids"]}
             tt, ly = sm.ket_viec_test(kv)
             _cap_nhat(goc, m["id"], ghi, trang_thai=tt, ket={"ly_do": ly, "video": kv, "luc": _bay()})
+            for v, x in kv.items():
+                _ghi_so_ab(goc, kenh, v, x, ghi)
     if not can_studio:
         return MA_XONG
     dang: List[str] = []
@@ -915,8 +1101,10 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
             for vid in (m.get("video_ids") or [])[:TOI_DA_VIDEO_PHIEN]:
                 _kiem_dung(agent, kenh)
                 kh = ke[vid]
-                if not kh["chon"] and not thu:
+                if not kh["chon"] and not kh.get("tieu_de") and not thu:
                     kv[vid] = {"ket": sm.KV_KHONG_UNG_VIEN, "ma_goi": kh["ma_goi"], "bo": kh["bo"][:6]}
+                    if ghi_that:
+                        _ghi_so_ab(goc, kenh, vid, kv[vid], ghi)
                     continue
                 try:
                     kv[vid] = test_mot_video(S, vid, kh, ghi, thu=thu, khong_luu=khong_luu)
@@ -932,6 +1120,8 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
                     except Exception:  # noqa: BLE001
                         pass
                 kv[vid].setdefault("ma_goi", kh["ma_goi"])
+                if ghi_that:
+                    _ghi_so_ab(goc, kenh, vid, kv[vid], ghi)
                 if kv[vid].get("ket") != sm.KV_DA_DAT:      # không đặt được: không để thay đổi dở trên trang sửa
                     try:
                         if not luu_dang_tat(S):
@@ -952,6 +1142,8 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
                     if ghi_that:
                         _cap_nhat(goc, m2["id"], ghi, trang_thai="bo", ket={"ly_do": ly, "luc": _bay()})
                         xong.append(m2["id"])
+                        for v in m2.get("video_ids") or []:
+                            _ghi_so_ab(goc, kenh, v, {"ket": sm.KV_KHONG_QUYEN, "ly_do": ly}, ghi)
                 break
         return ra
     ma, r = (phien or chay_phien)(kenh, ghi, lam, "test", bo_qua_khung=bo_qua_khung, cho_luu=not thu, rng=rng)

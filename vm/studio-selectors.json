@@ -1058,13 +1058,35 @@
       "phu": true
     },
     "ab_chip_bia": {
-      "ghi_chu": "16/10/2026: chip loại thử nghiệm của hộp Thử nghiệm A/B — chip-0 Chỉ tiêu đề (mặc định), chip-1 Chỉ hình thu nhỏ, chip-2 Tiêu đề và hình thu nhỏ. Máy CHỈ thử bìa.",
+      "ghi_chu": "16/10/2026: chip loại thử nghiệm của hộp Thử nghiệm A/B — chip-0 Chỉ tiêu đề (mặc định), chip-1 Chỉ hình thu nhỏ, chip-2 Tiêu đề và hình thu nhỏ. Máy chọn chip theo chế độ (core/ab_tieu_de.chon_che_do).",
       "chon": [
         "tp-yt-paper-dialog ytcp-chip#chip-1"
       ],
       "chu": [
         "Chỉ hình thu nhỏ",
         "Thumbnail only"
+      ],
+      "phu": true
+    },
+    "ab_chip_tieu_de": {
+      "ghi_chu": "16/10/2026 (chủ duyệt A/B tiêu đề): chip-0 «Chỉ tiêu đề» — ô 1 Studio điền sẵn tiêu đề đang chạy, ô 2 bắt buộc, ô 3 tuỳ chọn",
+      "chon": [
+        "tp-yt-paper-dialog ytcp-chip#chip-0"
+      ],
+      "chu": [
+        "Chỉ tiêu đề",
+        "Title only"
+      ],
+      "phu": true
+    },
+    "ab_chip_tieu_de_bia": {
+      "ghi_chu": "16/10/2026 (chủ duyệt A/B tiêu đề): chip-2 «Tiêu đề và hình thu nhỏ» — mỗi biến thể một cặp tiêu đề + bìa",
+      "chon": [
+        "tp-yt-paper-dialog ytcp-chip#chip-2"
+      ],
+      "chu": [
+        "Tiêu đề và hình thu nhỏ",
+        "Title and thumbnail"
       ],
       "phu": true
     },

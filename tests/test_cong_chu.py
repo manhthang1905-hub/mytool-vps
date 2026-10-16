@@ -45,13 +45,18 @@ class AiGia:
     `theo_lan[i]`); soát chữ: chữ có 意き → sai (bản sửa 惹き trừ khi `khong_sua`); xác nhận kanji: bác mục trong
     `bac`. `hong_doc` = mọi lượt đọc ảnh lỗi mạng."""
 
-    def __init__(self, theo_mau=None, theo_lan=None, hong_doc=False, khong_sua=False, bac=(), viet_lai=""):
+    def __init__(self, theo_mau=None, theo_lan=None, hong_doc=False, khong_sua=False, bac=(), viet_lai="",
+                 lac_de=()):
         self.theo_mau, self.theo_lan = theo_mau or {}, list(theo_lan or [])
         self.hong_doc, self.khong_sua, self.bac, self.viet = hong_doc, khong_sua, set(bac), viet_lai
+        self.lac_de = set(lac_de)        # 16/10/2026: chữ nào bị xét LẠC chủ đề (kiểm đúng chủ đề)
         self.lan: list = []
 
     def __call__(self, loi_nhac, mo_hinh="", khoa="", toi_da_token=0, anh=None):
         self.lan.append((loi_nhac[:30], khoa, mo_hinh))
+        if loi_nhac.startswith("You check that the"):
+            chu = loi_nhac.split("TO CHECK: 「", 1)[1].split("」", 1)[0]
+            return json.dumps({"hop": chu not in self.lac_de, "ly_do": "gia"})
         if loi_nhac.startswith("Read the text printed"):
             if self.hong_doc:
                 raise RuntimeError("mạng rớt")
@@ -122,7 +127,7 @@ def test_can_xac_nhan_bat_kanji_va_cum_ngoai_nguon():
 def test_soat_chat_sua_sai_kanji_va_bac_kanji_khong_sua_duoc():
     ai = AiGia()
     r = cong_chu.soat_chat(ai, SAI, tieu_de=TIEU_DE, ngu_canh=KICH_BAN, thang=("m",))
-    assert r["ok"] is True and r["sua"] and r["chu"] == DUNG and r["phien"] == cong_chu.PHIEN_BAN
+    assert r["ok"] is True and r["sua"] and r["chu"] == DUNG and r["phien"] == cong_chu.PHIEN_SOAT
     # biên tập viên nói "đúng" nhưng kanji ngoài nguồn bị bác ở lượt xác nhận, không có bản sửa → sai (phải viết lại)
     ai2 = AiGia(bac={"猫"})
     r2 = cong_chu.soat_chat(ai2, "猫の秘密", tieu_de=TIEU_DE, ngu_canh=KICH_BAN, thang=("m",))

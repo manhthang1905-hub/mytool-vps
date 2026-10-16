@@ -13,6 +13,10 @@ dự án 16/10: *"việc bìa bị sai chữ là tối kỵ"* — chấm chặt,
    / giống hình, chữ thừa/thiếu/lặp, câu không tự nhiên → bản sửa + danh sách lỗi), rồi MÁY kiểm: mọi kanji (và cụm
    kanji+kana) không có trong tiêu đề/kịch bản phải được biên tập viên XÁC NHẬN từng mục (`can_xac_nhan`). Không sửa
    được → viết lại chữ bìa (`viet_lai`) rồi soát lại từ đầu.
+   16/10/2026 (TL3-T7-0017: chữ bìa hồ sơ là chữ bìa ĐỐI THỦ chép nguyên văn từ `0-bia-doi-thu.txt`, lạc đề video) —
+   thêm hai kiểm TRƯỚC khi vẽ, trượt = viết lại: (a) KHÔNG CHÉP (`kiem_chep`): trùng tuyệt đối / chứa trọn / `do_trung`
+   cửa sổ 3 ký tự > `NGUONG_CHEP_BIA` so chữ bìa đối thủ (`chu_bia_doi_thu`); (b) ĐÚNG CHỦ ĐỀ (`kiem_chu_de`): LLM xét
+   chữ với tiêu đề + kịch bản, trả có/không + lý do (AI hỏng → None: giữ, thử lại).
 2. ẢNH đạt/trượt, không phải điểm (`kiem_anh`): HAI lượt đọc mù ĐỘC LẬP (hai mô hình đứng đầu khác nhau qua phễu chung
    `goi_van_ban`) chép chữ TRÊN ẢNH đúng như vẽ; sau NFKC + bỏ khoảng trắng/xuống dòng/dấu câu, MỖI lượt phải BẰNG
    ĐÚNG chữ đã soát — thiếu, thừa, lặp, khác một ký tự, chữ lạc, ký tự vỡ, vết xoá → TRƯỢT. Hai lượt vênh nhau → TRƯỢT.
@@ -43,12 +47,23 @@ import unicodedata
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 __all__ = ["chuan", "khop", "can_xac_nhan", "soat_chat", "viet_lai", "chot_chu", "xet_doc", "kiem_anh", "ghi_dau",
+           "chu_bia_doi_thu", "kiem_chep", "kiem_chu_de", "viet_chu_bia_rieng",
            "doc_dau", "kiem_dau", "chuyen_dau", "xac_minh", "bao_dam_ma", "ve_bia_ma", "tim_nen_sach",
            "bia_ma_du_phong", "ghi_nao", "tom_tat_dau", "ChuKhongKhop", "anh_goi", "goi_cho_dang", "dau_goi",
            "dau_cac_goi"]
 
 #: Phiên bản luật cổng — kết quả soát/dấu của luật cũ (khớp lỏng ≤2 ký tự thừa, đa số phiếu) không được dùng lại.
 PHIEN_BAN = 2
+#: Phiên bản luật SOÁT CHỮ (chỉ sổ soát `soat-bia.json`, không đụng dấu ảnh): 3 = thêm kiểm chép chữ bìa đối thủ + kiểm
+#: đúng chủ đề (16/10/2026) — kết quả soát luật cũ soát lại.
+PHIEN_SOAT = 3
+#: Chữ bìa CHÉP chữ bìa đối thủ (16/10/2026 — TL3-T7-0017 in nguyên chữ bìa đối thủ, lạc đề với video): tỉ lệ cửa sổ
+#: `N_CHEP_BIA` ký tự (`do_doc_dao.do_trung`) trên ngưỡng này, hoặc trùng / chứa trọn → trượt, viết lại.
+NGUONG_CHEP_BIA = 0.6
+N_CHEP_BIA = 3
+#: Chữ đọc từ ảnh bìa đối thủ (`auto_khau`, từ 16/10/2026) và tả bố cục bìa đối thủ (có trích từng dòng chữ).
+TEP_CHU_BIA_DOI_THU = "0-chu-bia-doi-thu.txt"
+TEP_BIA_DOI_THU = "0-bia-doi-thu.txt"
 SO_LAN_DOC = 2
 #: Hai lượt đọc ĐỘC LẬP: mô hình đứng đầu khác nhau (lượt hỏng thì lùi bậc sau của chính thang đó).
 THANG_DOC = (("claude-opus-5", "claude-fable-5", "claude-sonnet-5"),
@@ -144,13 +159,136 @@ def _tieng(ngon_ngu: str) -> str:
     return t(ngon_ngu)
 
 
+def _doc_tep(duong: str) -> str:
+    try:
+        with io.open(duong, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+_RE_TRICH = re.compile(r"['‘\"“「『]([^'’\"”」』\n]{2,40})['’\"”」』]")
+_RE_CJK = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
+
+
+def chu_bia_doi_thu(thu_muc_luot: str) -> List[str]:
+    """Chữ trên bìa ĐỐI THỦ của một lượt: `0-chu-bia-doi-thu.txt` (chữ đọc từ ảnh, ghi từ 16/10/2026) + các dòng chữ
+    trích trong ngoặc của `0-bia-doi-thu.txt` (tả bố cục — mục TEXT PLACEMENT chép nguyên văn từng dòng chữ), từng dòng
+    và cả khối ghép. Không có → []."""
+    if not thu_muc_luot:
+        return []
+    ra: List[str] = []
+    t = " ".join(_doc_tep(os.path.join(thu_muc_luot, TEP_CHU_BIA_DOI_THU)).split())
+    if t:
+        ra.append(t)
+    dong = [x.strip() for x in _RE_TRICH.findall(_doc_tep(os.path.join(thu_muc_luot, TEP_BIA_DOI_THU)))
+            if len(_RE_CJK.findall(x)) >= 2]
+    dong = list(dict.fromkeys(dong))
+    if dong:
+        ra.append(" ".join(dong))
+        ra += dong
+    return list(dict.fromkeys(x for x in ra if chuan(x)))
+
+
+def kiem_chep(chu: str, doi_thu: Sequence[str] = (), *, nguong: float = NGUONG_CHEP_BIA, n: int = N_CHEP_BIA) -> str:
+    """'' = chữ KHÔNG chép chữ bìa đối thủ; khác → lý do. Trượt khi trùng tuyệt đối, chứa trọn (≥ 6 ký tự), hoặc tỉ lệ
+    cửa sổ `n` ký tự có y nguyên trong chữ đối thủ (`do_doc_dao.do_trung`) > `nguong`."""
+    a = chuan(chu)
+    ds = [x for x in (doi_thu or ()) if chuan(x)]
+    if len(a) < 2 or not ds:
+        return ""
+    for x in ds:
+        b = chuan(x)
+        if a == b or (len(a) >= 6 and a in b):
+            return "chữ bìa 「{0}」 trùng nguyên văn chữ bìa đối thủ 「{1}」".format(str(chu)[:30], str(x)[:30])
+    from .do_doc_dao import do_trung  # noqa: PLC0415
+    ti = max(do_trung(chu, x, n=n)["ti_le"] for x in ds)
+    if ti > nguong:
+        return "chữ bìa 「{0}」 chép chữ bìa đối thủ ({1:.0%} chuỗi {2} ký tự trùng, ngưỡng {3:.0%})".format(
+            str(chu)[:30], ti, n, nguong)
+    return ""
+
+
+LOI_NHAC_CHU_DE = """You check that the {loai} of a {tieng} psychology YouTube video matches THIS video.
+
+Video title: {tieu_de}
+Script excerpt (what the video really says):
+{ngu_canh}
+
+{LOAI} TO CHECK: 「{chu}」
+
+"hop" is true only if the text is about the SAME topic as this video (its main subject, and a promise the video keeps).
+It is false if it talks about a different subject, promises something the video does not cover, or reads like text \
+copied from another video. Do NOT judge style, spelling, length or hook strength.
+Return JSON only: {{"hop": true|false, "ly_do": "one short reason"}}"""
+
+
+def kiem_chu_de(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str = "", ngu_canh: str = "",
+                ngon_ngu: str = "ja", loai: str = "bia", thang: Sequence[str] = (), khoa: str = "chu-de"
+                ) -> Dict[str, Any]:
+    """LLM xét chữ (bìa / tiêu đề) có ĐÚNG CHỦ ĐỀ video không → `{hop: True|False|None, ly_do}`. Không có tiêu đề lẫn
+    kịch bản → True (không có gì để so; ghi lý do). AI hỏng / trả lạc → None (nơi gọi giữ, thử lại)."""
+    if not (str(tieu_de or "").strip() or str(ngu_canh or "").strip()):
+        return {"hop": True, "ly_do": "không có tiêu đề / kịch bản để so chủ đề"}
+    if goi is None:
+        return {"hop": None, "ly_do": "không có hàm gọi AI"}
+    from . import soat_bia  # noqa: PLC0415
+    ten = "YouTube title" if loai == "tieu_de" else "thumbnail text"
+    du = soat_bia._goi_json(goi, LOI_NHAC_CHU_DE.format(  # noqa: SLF001
+        loai=ten, LOAI=ten.upper(), tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "(none)",
+        ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu=" ".join(str(chu or "").split())),
+        thang=tuple(thang) or soat_bia.THANG_MO_HINH_CHU, toi_da_token=400,
+        khoa="{0}:{1}".format(khoa, hashlib.sha1(chuan(chu).encode("utf-8")).hexdigest()[:8]))
+    h = (du or {}).get("hop")
+    hop = h if isinstance(h, bool) else {"true": True, "false": False}.get(str(h).strip().lower())
+    return {"hop": hop, "ly_do": " ".join(str((du or {}).get("ly_do") or ("AI xét chủ đề không trả lời" if hop is None
+                                                                          else "")).split())[:200]}
+
+
 def soat_chat(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str = "", ngu_canh: str = "",
-              ngon_ngu: str = "ja", khoa: str = "soat-bia", thang: Sequence[str] = (), so_vong: int = 2
-              ) -> Dict[str, Any]:
-    """Soát CHẶT chữ bìa: `soat_bia.soat_chu` (biên tập viên LLM soát + sửa ít nhất + soát lại bản sửa), rồi mọi mục
-    `can_xac_nhan` phải được xác nhận ĐÚNG; mục bị bác → bản sửa của biên tập viên đi soát lại từ đầu (≤ `so_vong`).
-    Trả như `soat_chu` + `{phien, can_xac_nhan, xac_nhan}`: `ok` True = chữ (`chu`, có thể đã sửa) đúng; False = sai
-    mà không sửa được (nơi gọi viết lại); None = chưa soát được (AI hỏng — nơi gọi giữ, thử lại)."""
+              ngon_ngu: str = "ja", khoa: str = "soat-bia", thang: Sequence[str] = (), so_vong: int = 2,
+              doi_thu: Sequence[str] = (), chu_de: bool = True, loai: str = "bia") -> Dict[str, Any]:
+    """Soát CHẶT chữ bìa (`loai="tieu_de"`: một tiêu đề — cùng luật): (1) KHÔNG CHÉP chữ đối thủ (`kiem_chep` với
+    `doi_thu`, không gọi AI); (2) chính tả `_soat_chinh_ta`; (3) ĐÚNG CHỦ ĐỀ (`kiem_chu_de`, `chu_de=False` bỏ). Trả như
+    `soat_bia.soat_chu` + `{phien, can_xac_nhan, xac_nhan, chep_doi_thu, chu_de, viet_lai_vi}`: `ok` True = chữ (`chu`,
+    có thể đã sửa) đúng; False = sai mà không sửa được (nơi gọi viết lại — lý do ở `viet_lai_vi`); None = chưa soát
+    được (AI hỏng — nơi gọi giữ, thử lại)."""
+    goc_chu = " ".join(str(chu or "").split())
+    ly = kiem_chep(goc_chu, doi_thu)
+    if ly:
+        return {"ok": False, "chu": goc_chu, "chu_goc": goc_chu, "sua": False, "loi": [], "goi_y": [], "so_luot": 0,
+                "ly_do": ly, "phien": PHIEN_SOAT, "can_xac_nhan": [], "xac_nhan": [], "chep_doi_thu": True,
+                "viet_lai_vi": ly + " — viết chữ RIÊNG của video, không dùng lại chữ bìa đối thủ"}
+    r = _soat_chinh_ta(goi, goc_chu, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, khoa=khoa, thang=thang,
+                       so_vong=so_vong)
+    r["phien"] = PHIEN_SOAT
+    if r.get("ok") is not True:
+        return r
+    if r.get("sua"):
+        ly = kiem_chep(r["chu"], doi_thu)
+        if ly:
+            r.update(ok=False, sua=False, chu=r.get("chu_goc") or goc_chu, ly_do=ly, chep_doi_thu=True,
+                     viet_lai_vi=ly)
+            return r
+    if not chu_de or not chuan(r.get("chu")):
+        return r
+    c = kiem_chu_de(goi, r["chu"], tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, loai=loai, thang=thang,
+                    khoa=khoa + ":chu-de")
+    r["chu_de"] = c
+    if c["hop"] is None:
+        r.update(ok=None, ly_do="chưa xét được chữ có đúng chủ đề video không: " + c["ly_do"])
+    elif c["hop"] is False:
+        ly = "chữ 「{0}」 không đúng chủ đề video: {1}".format(str(r["chu"])[:30], c["ly_do"])
+        r.update(ok=False, sua=False, chu=r.get("chu_goc") or goc_chu, ly_do=ly,
+                 viet_lai_vi=ly + " — viết chữ đúng chủ đề tiêu đề + kịch bản")
+    return r
+
+
+def _soat_chinh_ta(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str = "", ngu_canh: str = "",
+                   ngon_ngu: str = "ja", khoa: str = "soat-bia", thang: Sequence[str] = (), so_vong: int = 2
+                   ) -> Dict[str, Any]:
+    """Soát CHÍNH TẢ chặt: `soat_bia.soat_chu` (biên tập viên LLM soát + sửa ít nhất + soát lại bản sửa), rồi mọi mục
+    `can_xac_nhan` phải được xác nhận ĐÚNG; mục bị bác → bản sửa của biên tập viên đi soát lại từ đầu (≤ `so_vong`)."""
     from . import soat_bia  # noqa: PLC0415
     thang = tuple(thang) or soat_bia.THANG_MO_HINH_CHU
     nguon = "{0}\n{1}".format(tieu_de or "", ngu_canh or "")
@@ -203,7 +341,7 @@ Script excerpt:
 The previous thumbnail text 「{chu_cu}」 was REJECTED by the proofreader: {ly_do}
 Write ONE new thumbnail text with the same curiosity hook: {n_min}-{n_max} characters (spaces and punctuation not \
 counted), written as TWO short parts separated by one space, natural {tieng}, every character correct, and use ONLY \
-kanji that appear in the title or the script above. Never copy the full title.
+kanji that appear in the title or the script above. Never copy the full title or another video's thumbnail text.
 Reply with ONLY one line: THUMB: <text>"""
 
 
@@ -228,23 +366,69 @@ def viet_lai(goi: Optional[Callable[..., str]], chu_cu: str, *, tieu_de: str = "
     return moi if CHU_MOI_TOI_THIEU <= len(chuan(moi)) <= CHU_MOI_TOI_DA + 2 else ""
 
 
+def ly_do_viet_lai(r: Dict[str, Any]) -> str:
+    """Lý do đưa cho lượt viết lại: lỗi chép / lạc chủ đề (`viet_lai_vi`) > các lỗi chính tả > `ly_do`."""
+    return str(r.get("viet_lai_vi") or "") or "; ".join(
+        "{0}→{1}".format(x.get("sai"), x.get("dung")) for x in r.get("loi") or []) or str(r.get("ly_do") or "")
+
+
+LOI_NHAC_CHU_RIENG = """You write the text printed HUGE on a YouTube thumbnail of a {tieng} psychology video.
+
+Video title: {tieu_de}
+Source / script excerpt (what the video covers):
+{ngu_canh}
+
+A competitor's thumbnail for a similar video says 「{chu_doi_thu}」. Use it ONLY as an example of hook style: do NOT \
+reuse its wording, and do NOT take its topic if it differs from the title above.
+Write ONE thumbnail text for THIS video: {n_min}-{n_max} characters (spaces and punctuation not counted), two short \
+parts separated by one space, natural {tieng}, every character correct, about the same topic as the title, using ONLY \
+kanji that appear in the title or the excerpt. Never copy the full title.
+Reply with ONLY one line: THUMB: <text>"""
+
+
+def viet_chu_bia_rieng(goi: Optional[Callable[..., str]], *, tieu_de: str, ngu_canh: str = "", chu_doi_thu: str = "",
+                       ngon_ngu: str = "ja", khoa: str = "chu-bia-rieng", mo_hinh: str = "claude-opus-5") -> str:
+    """16/10/2026 — gốc lỗi TL3-T7-0017: kênh `nguyen_goc` lấy THẲNG chữ đọc từ bìa đối thủ làm chữ bìa. Nay chữ ấy chỉ
+    là mẫu móc câu: MỘT lượt viết chữ bìa RIÊNG theo tiêu đề của video. Hỏng / ngoài khung / vẫn chép đối thủ → ''."""
+    if goi is None or not str(tieu_de or "").strip():
+        return ""
+    try:
+        tra = goi(LOI_NHAC_CHU_RIENG.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de, ngu_canh=(ngu_canh or "")[:2500]
+                                            or "(none)", chu_doi_thu=" ".join(str(chu_doi_thu or "").split()) or "-",
+                                            n_min=CHU_MOI_TOI_THIEU, n_max=CHU_MOI_TOI_DA),
+                  mo_hinh=mo_hinh, khoa=khoa, toi_da_token=300)
+    except Exception as loi:  # noqa: BLE001
+        if type(loi).__name__ == "Cancelled":
+            raise
+        return ""
+    m = re.search(r"THUMB\s*[:：]\s*(.+)", str(tra or ""))
+    moi = " ".join((m.group(1) if m else "").split()).strip("「」\"' ")
+    if not CHU_MOI_TOI_THIEU <= len(chuan(moi)) <= CHU_MOI_TOI_DA + 2:
+        return ""
+    if chu_doi_thu and kiem_chep(moi, [chu_doi_thu]):
+        return ""
+    return moi
+
+
 def chot_chu(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str = "", ngu_canh: str = "",
              ngon_ngu: str = "ja", khoa: str = "soat-bia", thang: Sequence[str] = (),
-             so_lan_viet_lai: int = SO_LAN_VIET_LAI) -> Dict[str, Any]:
-    """`soat_chat`; sai mà không sửa được → `viet_lai` + soát lại (≤ `so_lan_viet_lai`). Trả kết quả soát cuối +
-    `viet_lai` (chữ mới hay không) + `lich_su`. `ok` None = AI hỏng (giữ, thử lại)."""
-    r = soat_chat(goi, chu, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, khoa=khoa, thang=thang)
+             so_lan_viet_lai: int = SO_LAN_VIET_LAI, doi_thu: Sequence[str] = ()) -> Dict[str, Any]:
+    """`soat_chat`; sai mà không sửa được (chính tả / chép chữ đối thủ / lạc chủ đề) → `viet_lai` + soát lại (≤
+    `so_lan_viet_lai`). Trả kết quả soát cuối + `viet_lai` (chữ mới hay không) + `lich_su`. `ok` None = AI hỏng (giữ,
+    thử lại)."""
+    r = soat_chat(goi, chu, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, khoa=khoa, thang=thang,
+                  doi_thu=doi_thu)
     lich = [{"chu": chu, "ok": r.get("ok"), "ly_do": r.get("ly_do")}]
     for lan in range(max(0, int(so_lan_viet_lai))):
         if r.get("ok") is not False:
             break
         moi = viet_lai(goi, r.get("chu_goc") or chu, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu,
-                       ly_do="; ".join("{0}→{1}".format(x.get("sai"), x.get("dung")) for x in r.get("loi") or [])
-                       or str(r.get("ly_do") or ""), khoa=khoa + ":viet-lai", lan=lan)
+                       ly_do=ly_do_viet_lai(r), khoa=khoa + ":viet-lai", lan=lan)
         if not moi:
             lich.append({"chu": "", "ok": None, "ly_do": "viết lại hỏng / ngoài khung"})
             continue
-        r = soat_chat(goi, moi, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, khoa=khoa + ":vl", thang=thang)
+        r = soat_chat(goi, moi, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, khoa=khoa + ":vl", thang=thang,
+                      doi_thu=doi_thu)
         lich.append({"chu": moi, "ok": r.get("ok"), "ly_do": r.get("ly_do")})
         if r.get("ok") is True:
             r.update(sua=True, viet_lai=True, chu_goc=chu)
@@ -627,7 +811,7 @@ def _chu_mong_goi(goc: str, kenh: str, ma: str) -> Dict[str, str]:
             chu = ""
     if not chu:
         chu = str(_doc_json(os.path.join(goc, "CHANNEL", kenh, "ho-so-video", ma + ".json")).get("chu_bia") or "")
-    return dict(nc, chu=chu, thu_muc_thumb=tm if os.path.isdir(tm) else "")
+    return dict(nc, chu=chu, thu_muc_thumb=tm if os.path.isdir(tm) else "", doi_thu=chu_bia_doi_thu(os.path.dirname(tm)))
 
 
 def dau_goi(goi: Optional[Callable[..., str]], goc: str, kenh: str, ma: str, thu_muc_goi: str,
@@ -644,7 +828,8 @@ def dau_goi(goi: Optional[Callable[..., str]], goc: str, kenh: str, ma: str, thu
     if not cm["chu"]:
         ra.update(ok=False, ly_do="không biết chữ bìa mong đợi của gói")
     else:
-        s = chot_chu(goi, cm["chu"], tieu_de=cm["tieu_de"], ngu_canh=cm["ngu_canh"], khoa="dau-goi:{0}:soat".format(ma))
+        s = chot_chu(goi, cm["chu"], tieu_de=cm["tieu_de"], ngu_canh=cm["ngu_canh"], khoa="dau-goi:{0}:soat".format(ma),
+                     doi_thu=cm.get("doi_thu") or ())
         if s.get("ok") is not True:
             ra.update(ok=s.get("ok"), ly_do="chữ bìa chưa qua soát: " + str(s.get("ly_do") or ""))
         else:
@@ -731,6 +916,11 @@ def _ngu_canh(goc: str, kenh: str, ma: str) -> Dict[str, str]:
                 kb = f.read(2500)
         except OSError:
             pass
+        for ten in ("8-phu-de.srt", "3-phu-de.srt") if not kb.strip() else ():   # lượt đã dọn kịch bản: lấy phụ đề
+            kb = " ".join(x.strip() for x in _doc_tep(os.path.join(d, ten)).splitlines()
+                          if x.strip() and not re.match(r"^\d+$|^\d\d:\d\d:\d\d", x.strip()))[:2500]
+            if kb:
+                break
         if not tieu_de:
             tieu_de = str(_doc_json(os.path.join(goc, "CHANNEL", kenh, "ho-so-video", ma + ".json")).get(
                 "tieu_de") or "")

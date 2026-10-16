@@ -117,12 +117,13 @@ def _kenh(goc, *dong):
     _ghi(os.path.join(goc, "CHANNEL", K, "kenh.yaml"), "\n".join(('ma: "{0}"'.format(K),) + dong) + "\n")
 
 
-def _bs_hong(goc, sub=5000):
+def _bs_hong(goc, sub=5000, ab=False):
     hong = {"id": "FAKEhong001", "ma_goi": K + "-0007", "tieu_de": "【脳科学】高いIQを持つ人だけが見てる世界とは",
             "cum": [], "ket_luan": "truot", "thang": False, "hien_thi_48h": 900.0, "tuoi_gio": 70.0,
             "chup": [{"tuoi": 66.0, "moc": "66h", "hien_thi": 3000, "ctr": 3.0, "ctr_browse": 2.0}],
             "lich_su_sua": [], "tieu_de_da_cham": [], "tu_tool": True}
-    bs = BangSo(goc=goc, ma_kenh=K, bay_gio=BAY, cai={"giam_doc": "goi_y", "giam_doc_studio": True},
+    # 16/10/2026: `ab_tieu_de` tắt = kênh KHÔNG dùng A/B → đổi tiêu đề trực tiếp (đường lùi); A/B: tests/test_ab_tieu_de.py
+    bs = BangSo(goc=goc, ma_kenh=K, bay_gio=BAY, cai={"giam_doc": "goi_y", "giam_doc_studio": True, "ab_tieu_de": ab},
                 ctr_muc_tieu=5.0, nguong_thang_48h=6000)
     bs.ypp = {"sub": sub} if sub is not None else {}
     # 12/10/2026: "hỏng cổng CTR" so với CTR của CHÍNH kênh → cần ≥ 3 video tham chiếu (ngoài khung 52–120h).

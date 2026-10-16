@@ -41,7 +41,7 @@ from .gioi_han import doc_chi_dao  # noqa: F401 — cửa công khai cho biên t
 from ._tu_dong import (  # noqa: F401 — tự động hoá "Việc của bạn" + quyền theo thành tích (04/10/2026)
     doc_viec_cho_nao, ghi_viec_may, la_viec_suc_khoe, phan_loai_viec, tu_nang_ha_quyen)
 from ._tu_dong import (  # noqa: F401 — việc máy CÓ KIỂU cho bộ chạy Studio DOM (16/10/2026)
-    LOAI_KIEM_SUC_KHOE, LOAI_TEST_COMPARE, ban_do_video_kenh, cap_nhat_viec_may_kieu, dinh_tuyen_de_xuat_nao,
+    LOAI_AB_TIEU_DE, LOAI_KIEM_SUC_KHOE, LOAI_TEST_COMPARE, ban_do_video_kenh, cap_nhat_viec_may_kieu, dinh_tuyen_de_xuat_nao,
     doc_viec_may_kieu, ghi_viec_may_kieu, kieu_viec_may, phan_loai_de_xuat_nao)
 
 _log = logging.getLogger(__name__)
@@ -205,6 +205,15 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
                 kq.da_lam += [{"viec": "cuu_ctr", "video_id": m["video_id"], "trang_thai": m["trang_thai"],
                                "cu": m["tieu_de_cu"], "moi": m["tieu_de_moi"], "do_tin": m.get("do_tin")}
                               for m in kq.cuu_ctr]
+        # 16/10/2026 — cò (a) của A/B tiêu đề + bìa: video MỚI đăng chưa có thử nghiệm (công tắc `ab_tieu_de`).
+        try:
+            from .. import ab_tieu_de  # noqa: PLC0415
+
+            for m in ab_tieu_de.xu_ly_moi(goc, ma, bs, goi_chat, viet=viet, ghi=ghi):
+                kq.da_lam.append({"viec": "ab_tieu_de", "video_id": m.get("video_id"), "trang_thai": m.get("trang_thai"),
+                                  "moi": m.get("tieu_de_them")})
+        except Exception as loi:  # noqa: BLE001 — A/B hỏng không chặn lượt giám đốc
+            _log.warning("giam_doc: A/B tiêu đề %s hỏng: %s", ma, loi)
     if not viet:
         return kq
 
