@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.210.3** — 2026-10-16 — `vps-jp1` — feat(truc-quan): Giới thiệu thành trang web cuộn kể hành trình Domain Translator, gộp tab Hành trình (/hanh-trinh → /gioi-thieu)
 - **2.210.2** — 2026-10-16 — `vps-jp1` — fix(danh-sach-phat): ten danh sach NGAN (<=20 ky tu, khong dau |) theo kieu danh sach da co tren kenh
 - **2.210.1** — 2026-10-16 — `vps-jp1` — feat(truc-quan): tab Hành trình — Domain Translator: kiến thức → luật → số sống
 - **2.210.0** — 2026-10-16 — `vps-jp1` — feat(danh-sach-phat): danh sach phat chu de tu dong - AI chia video theo nghia, tao tren Studio, them video CHI qua trang sua Studio (khong mo trang xem), chi video cua chinh kenh, khong dung danh sach cua chu; video moi vao dung danh sach…
