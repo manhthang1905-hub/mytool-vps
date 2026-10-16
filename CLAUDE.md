@@ -5,6 +5,7 @@ Máy này vừa chạy kênh thật vừa là chỗ phát triển tool. Nó tiê
 - Luật riêng của từng máy (mạng, số kênh) nằm ở `CLAUDE.local.md`. Tệp này do bộ cài sinh ra.
 - Luật và số liệu của từng kênh nằm ở `CHANNEL/<k>/CLAUDE.md` và `NHAT-KY-KENH.md`. Hai tệp này thắng mọi phân tích chung.
 - Cài đặt và vận hành: `README.md`. Sửa mã và bản đồ module: `docs/PHAT-TRIEN.md`.
+- **Luật và bài học chủ dự án đã chốt (mọi ngách, mọi máy):** `docs/kien-thuc/luat-chu-du-an.md`. Đọc trước khi đổi bất cứ điều gì.
 
 ## 1. Tài sản của chủ: không đụng
 - `PROJECTS/` là kết quả đã trả tiền: không xoá, không dọn, không đổi tên. Dọn video đã đăng là việc của `core/don_dep.py` khi kênh bật `tu_don`.
