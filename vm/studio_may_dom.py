@@ -446,7 +446,7 @@ def _mo_trang_sua(S, vid: str) -> None:
     S.st.mo("https://studio.youtube.com/video/{0}/edit".format(vid), han=60)
     if dang_xuat_url(S.url()):
         raise DangXuat("bị đăng xuất khi mở trang sửa")
-    if not S.st.tim("tieu_de", han=40):
+    if not (S.st.tim("tieu_de", han=40) or S.st.tim("tieu_de_thu_nghiem", han=5)):  # đang A/B tiêu đề: không có ô tiêu đề
         raise tl.LoiMuc("trang sửa video {0} không dựng xong (không thấy ô tiêu đề)".format(vid))
     S.ngu(3)
 
@@ -662,7 +662,7 @@ def doc_trang_sua(S, vid: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]
         S.st.mo(url, han=60)
     if dang_xuat_url(S.url()):
         raise DangXuat("bị đăng xuất khi mở trang sửa")
-    if not S.st.tim("tieu_de", han=40):
+    if not (S.st.tim("tieu_de", han=40) or S.st.tim("tieu_de_thu_nghiem", han=5)):  # đang A/B tiêu đề: không có ô tiêu đề
         raise tl.LoiMuc("trang sửa video {0} không dựng xong (không thấy ô tiêu đề)".format(vid))
     S.ngu(3)
     return goi, doc_khoi_bia(S)

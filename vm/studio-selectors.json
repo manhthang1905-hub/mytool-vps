@@ -1107,6 +1107,12 @@
         "Set test"
       ],
       "phu": true
+    },
+    "tieu_de_thu_nghiem": {
+      "chon": [
+        "ytcp-video-title-experiment"
+      ],
+      "ghi_chu": "16/10/2026: video đang chạy A/B tiêu đề — Studio thay ô tiêu đề bằng khối này (chỉ dùng để biết trang sửa đã dựng xong)"
     }
   },
   "cam_bam_binh_luan": {
