@@ -11,8 +11,8 @@ Trang: `/` chiến trường · `/hau-can` dây chuyền · `/nao` bộ não (`c
 r183 bloom; 2D dự phòng: force-graph; `/nao-bo-phan/do-thi.json`, `/nao-bo-phan/song.json`, `/nao-bo-phan/no-ron.json`
 — `core.nao_bo_phan.do_thi`)
 · `/phong-thi-nghiem` phòng thí nghiệm chọn content (`core.phong_thi_nghiem.truc_quan`; panel Radar đột biến đọc `/radar-dot-bien.json` —
-`core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trình chiếu giới thiệu · `/hanh-trinh` hành trình Domain Translator
-(kiến thức → luật → số sống; chữ từ `/hanh-trinh.json`, số đọc thẳng các JSON chỉ-đọc sẵn có phía trình duyệt)
+`core.radar_dot_bien.truc_quan`) · `/gioi-thieu` trang web cuộn kể hành trình Domain Translator (chữ từ
+`/gioi-thieu.json`, số đọc thẳng các JSON chỉ-đọc sẵn có phía trình duyệt; `/hanh-trinh` cũ chuyển hướng về đây)
 Tĩnh: `/vendor/...` = ui_web/vendor (he-thong.css, chung.js, phông woff2, thư viện JS/ES module kể cả thư mục con
 như `vendor/three/...` — tự chứa, không CDN; máy IPv6-only).
 """
@@ -285,27 +285,18 @@ def tep_tinh(duong_url: str, goc: Optional[str] = None) -> Optional[str]:
 
 
 def noi_dung_gioi_thieu(goc: Optional[str] = None) -> Dict[str, Any]:
-    """Nội dung bài trình chiếu «Giới thiệu»: tệp RIÊNG của máy `workspace/gioi-thieu/noi-dung.json` (không lên kho
-    chung — có số liệu, câu chuyện của máy này); thiếu/hỏng thì bản MẶC ĐỊNH trung tính trong kho
-    `ui_web/vendor/gioi-thieu-mac-dinh.json`. Trả kèm `_nguon` = "may" | "mac_dinh"."""
-    return _noi_dung_rieng(goc or GOC, "gioi-thieu", "gioi-thieu-mac-dinh.json", "slides")
-
-
-def noi_dung_hanh_trinh(goc: Optional[str] = None) -> Dict[str, Any]:
-    """Chữ tường thuật tab «Hành trình» (lộ trình, bản dịch kiến thức → luật, người/máy): riêng máy
-    `workspace/hanh-trinh/noi-dung.json` → mặc định trung tính `ui_web/vendor/hanh-trinh-mac-dinh.json`. Số sống
-    không nằm ở đây — trang tự đọc các JSON chỉ-đọc sẵn có."""
-    return _noi_dung_rieng(goc or GOC, "hanh-trinh", "hanh-trinh-mac-dinh.json", "ban_dich")
-
-
-def _noi_dung_rieng(goc: str, thu_muc: str, mac_dinh: str, khoa: str) -> Dict[str, Any]:
-    for nguon, p in (("may", os.path.join(goc, "workspace", thu_muc, "noi-dung.json")),
-                     ("mac_dinh", os.path.join(VENDOR, mac_dinh))):
+    """Chữ trang «Giới thiệu» (mở đầu, bài toán, Domain Translator, lộ trình, bản dịch, cách máy làm, kinh tế, người/máy):
+    tệp RIÊNG của máy `workspace/gioi-thieu/noi-dung.json` (không lên kho chung — câu chuyện, giả định của máy này);
+    thiếu/hỏng/schema cũ (slide) thì bản MẶC ĐỊNH trung tính `ui_web/vendor/gioi-thieu-mac-dinh.json`. Số sống không nằm
+    ở đây — trang tự đọc các JSON chỉ-đọc sẵn có. Trả kèm `_nguon` = "may" | "mac_dinh"."""
+    goc = goc or GOC
+    for nguon, p in (("may", os.path.join(goc, "workspace", "gioi-thieu", "noi-dung.json")),
+                     ("mac_dinh", os.path.join(VENDOR, "gioi-thieu-mac-dinh.json"))):
         d = _json(p)
-        if isinstance(d.get(khoa), list) and d[khoa]:
+        if isinstance(d.get("ban_dich"), dict) and d["ban_dich"].get("dong"):
             d["_nguon"] = nguon
             return d
-    return {"_nguon": "trong", khoa: []}
+    return {"_nguon": "trong"}
 
 
 class _Xu(BaseHTTPRequestHandler):
@@ -425,9 +416,11 @@ class _Xu(BaseHTTPRequestHandler):
         if self.path.startswith("/gioi-thieu.json"):      # nội dung trình chiếu (riêng máy → mặc định)
             return self._gui(200, "application/json; charset=utf-8",
                              json.dumps(noi_dung_gioi_thieu(), ensure_ascii=False).encode("utf-8"))
-        if self.path.startswith("/hanh-trinh.json"):      # chữ tab Hành trình (riêng máy → mặc định)
-            return self._gui(200, "application/json; charset=utf-8",
-                             json.dumps(noi_dung_hanh_trinh(), ensure_ascii=False).encode("utf-8"))
+        if self.path.startswith("/hanh-trinh"):      # 16/10/2026: tab Hành trình đã gộp vào Giới thiệu
+            self.send_response(302)
+            self.send_header("Location", "/gioi-thieu")
+            self.end_headers()
+            return None
         if self.path.startswith("/su-kien.json"):      # chiến báo: video ta lên sóng, lệnh não, sự cố, kho clip (5 phút)
             try:
                 from core import su_kien_truc_quan  # noqa: PLC0415
@@ -445,8 +438,7 @@ class _Xu(BaseHTTPRequestHandler):
                "nao-do-thi.html" if self.path.startswith("/nao-do-thi") else
                "nao.html" if self.path.startswith("/nao") else
                "phong-thi-nghiem.html" if self.path.startswith("/phong-thi-nghiem") else
-               "gioi-thieu.html" if self.path.startswith("/gioi-thieu") else
-               "hanh-trinh.html" if self.path.startswith("/hanh-trinh") else "chien-truong.html")
+               "gioi-thieu.html" if self.path.startswith("/gioi-thieu") else "chien-truong.html")
         p = os.path.join(GOC, "ui_web", ten)
         try:
             with open(p, "rb") as tep:

@@ -347,10 +347,10 @@
     return `<div class="md">${ra.join("")}</div>`;
   };
 
-  /* ---------- phím tắt toàn trang: 1–5 chuyển trang ---------- */
+  /* ---------- phím tắt toàn trang: 1/2/3/4 chuyển trang ---------- */
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|SELECT|TEXTAREA/.test((e.target || {}).tagName || "") || (e.target || {}).isContentEditable) return;
-    const di = {"1": "/", "2": "/hau-can", "3": "/nao", "4": "/gioi-thieu", "5": "/hanh-trinh"}[e.key];
+    const di = {"1": "/", "2": "/hau-can", "3": "/nao", "4": "/gioi-thieu"}[e.key];
     if (di && location.pathname !== di) location.href = di;
   });
 
