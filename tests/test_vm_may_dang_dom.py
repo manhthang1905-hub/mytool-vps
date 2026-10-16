@@ -864,6 +864,8 @@ def moi(tmp_path):
     _mp4(goi, 600)
     (goi / "3-phu-de.srt").write_text("1\n00:00:00,000 --> 00:00:01,000\nx\n", encoding="utf-8")
     (goi / "thumb_001.png").write_bytes(b"png")
+    from core import cong_chu   # 16/10/2026: bìa gói đã qua cổng chữ (dấu đúng sha1) — máy đăng chỉ tải bìa có dấu
+    cong_chu.ghi_dau(str(goi / "thumb_001.png"), "テスト", doc=["テスト", "テスト"])
     return tmp_path
 
 
@@ -1495,3 +1497,34 @@ def test_may_dang_duong_anh_bo_ma_co_clip_tu_anh(tmp_path):
     (d / "tu-anh.json").write_text(json.dumps({"canh": [1]}), encoding="utf-8")
     assert md._ma_co_clip_tu_anh("TL1-T7", "TL1-T7-0007", str(tmp_path)) is True
     assert md._ma_co_clip_tu_anh("TL1-T7", "TL1-T7-0008", str(tmp_path)) is False
+
+
+class TestCongChuBia:
+    """16/10/2026 — cổng chữ ở cửa ra YouTube (chủ: "bìa sai chữ là tối kỵ"): bìa không có dấu / dấu cũ (tệp đổi sau
+    khi đóng dấu) → GIỮ gói, không tải; đổi bìa (`--sua-video`) không có dấu → không mở trang sửa."""
+
+    def test_bia_khong_dau_thi_giu_goi(self, moi):
+        from core import cong_chu
+        anh = moi / "DONE" / "TL1-T7-0007" / "thumb_001.png"
+        import os as _os
+        _os.remove(cong_chu.duong_dau(str(anh)))
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_HONG
+        assert k.video == [] and k.lan_dat_tep_video == 0 and bao.ds == []
+        assert "cổng chữ" in m.bao_cao["goi"][-1]["ly_do"]
+
+    def test_dau_cu_tep_doi_sau_khi_dong_dau_thi_giu(self, moi):
+        (moi / "DONE" / "TL1-T7-0007" / "thumb_001.png").write_bytes(b"png khac")   # đổi tệp, dấu còn sha1 cũ
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        assert m.chay([_dong()]) == mdd.MA_HONG and k.video == []
+
+    def test_sua_video_bia_khong_dau_khong_mo_trang(self, moi, monkeypatch):
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        monkeypatch.setattr(m, "tab_b", lambda: (_ for _ in ()).throw(AssertionError("không được mở trang sửa")))
+        p = moi / "bia-moi.jpg"
+        p.write_bytes(b"jpg")
+        r = m.sua_video_mot("TL1-T7/TL1-T7-0007", "AAAAAAAAAAA", anh=str(p))
+        assert r["ket"] == "loi" and "cổng chữ" in r["ly_do"]

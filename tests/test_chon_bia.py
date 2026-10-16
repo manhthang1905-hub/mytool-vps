@@ -45,10 +45,14 @@ def _dung_ung_vien(thu_muc: str, so: int, mau=(200, 50, 50)) -> str:
     return duong
 
 
-def _goi_chat_diem(diem_theo_nhan: dict, *, loi_nang_theo_nhan=None, chu_theo_nhan=None):
+def _goi_chat_diem(diem_theo_nhan: dict, *, loi_nang_theo_nhan=None, chu_theo_nhan=None, doc_anh="C"):
     """Giả `goi_chat` — trả điểm CỐ ĐỊNH theo NHÃN (A/B/C…), bất kể ảnh nào
-    được xếp vào nhãn đó (giám khảo giả không "nhìn" ảnh, chỉ theo kịch bản)."""
+    được xếp vào nhãn đó (giám khảo giả không "nhìn" ảnh, chỉ theo kịch bản).
+    16/10/2026: lượt ĐỌC MÙ của cổng chữ trước giám khảo → `doc_anh` (mặc định đúng chữ bìa "C")."""
     def goi(loi_nhac, mo_hinh="claude-sonnet-5", khoa="", toi_da_token=8192, anh=None):
+        if loi_nhac.startswith("Read the text printed"):
+            return json.dumps({"dong": [doc_anh], "chu_thua": [], "ky_tu_hong": False, "vet_xoa": False},
+                              ensure_ascii=False)
         cac = []
         for nhan, diem in diem_theo_nhan.items():
             cac.append({
@@ -122,7 +126,7 @@ def test_sai_chu_bi_loai_khi_che_do_chu_bia_co_dinh(tmp_path):
 
     goi_chat = _goi_chat_diem(
         {"A": _DIEM_10, "B": _DIEM_2},
-        chu_theo_nhan={"A": "chữ hoàn toàn khác", "B": "chữ bìa mong đợi"})
+        chu_theo_nhan={"A": "chữ hoàn toàn khác", "B": "chữ bìa mong đợi"}, doc_anh="chữ bìa mong đợi")
     ket = cb.chon(goc, "K1", thu_muc, ten_kieu_theo_so={1: "portrait_main", 2: "dramatic_scene"},
                  tieu_de="T", chu_bia="chữ bìa mong đợi", chu_bia_co_dinh=True,
                  goi_chat=goi_chat, so_luot_cham=1, seed=1)
@@ -145,7 +149,7 @@ def test_chu_qua_dai_bi_loai_du_diem_cao_nhat(tmp_path):
     chu_dai = "một câu chữ bìa rất là dài quá mười bốn ký tự"  # >> 14 ký tự sau chuẩn hoá
     goi_chat = _goi_chat_diem(
         {"A": _DIEM_10, "B": _DIEM_2},
-        chu_theo_nhan={"A": chu_dai, "B": "ngắn gọn"})
+        chu_theo_nhan={"A": chu_dai, "B": "ngắn gọn"}, doc_anh=chu_dai)
     ket = cb.chon(goc, "K1", thu_muc, ten_kieu_theo_so={1: "portrait_main", 2: "dramatic_scene"},
                  tieu_de="T", chu_bia=chu_dai, goi_chat=goi_chat, so_luot_cham=1, seed=1)
     du = cb.doc_chon_bia(thu_muc)

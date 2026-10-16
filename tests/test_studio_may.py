@@ -83,6 +83,10 @@ def goc(tmp_path):
     _anh(th / "thumb_005.jpg", (90, 90, 0))
     _anh(th / "CHON-thumb_001.jpg", (200, 0, 0))
     _ghi(g / "vm" / "logs" / "so-video-id.json", {K + "/" + MA1: {"video_id": V1}, K + "/" + MA2: {"video_id": V2}})
+    # 16/10/2026: mọi bìa của lô đã qua cổng chữ (dấu đúng sha1) — bài kiểm riêng gỡ dấu để thấy bị từ chối.
+    from core import cong_chu
+    for p in list((hs / "anh").glob("*.jpg")) + list(th.glob("*.jpg")):
+        cong_chu.ghi_dau(str(p), "chu gia", doc=["chu gia", "chu gia"])
     return str(g)
 
 

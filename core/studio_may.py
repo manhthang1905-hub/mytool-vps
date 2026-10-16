@@ -165,15 +165,26 @@ def _lech(a: List[int], b: List[int]) -> float:
     return sum(abs(int(x) - int(y)) for x, y in zip(a, b)) / float(len(a))
 
 
+def _kiem_dau_mac_dinh(duong: str) -> str:
+    try:
+        from . import cong_chu  # noqa: PLC0415
+        return cong_chu.kiem_dau(duong)
+    except Exception as loi:  # noqa: BLE001 — không kiểm được = không có dấu (đóng an toàn)
+        return "không kiểm được dấu cổng chữ: {0}".format(str(loi)[:80])
+
+
 def ung_vien_bia(goc: str, kenh: str, ma_goi: str, anh_a: Any = (), *,
                  cham: Optional[Callable[[str], Dict[str, Any]]] = None,
                  van_tay: Optional[Callable[[str], List[int]]] = None,
-                 toi_da: int = TOI_DA_UNG_VIEN) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+                 toi_da: int = TOI_DA_UNG_VIEN,
+                 kiem_dau: Optional[Callable[[str], str]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """(chọn, bỏ). `anh_a`: tệp bìa A (bìa đang chạy tải từ i.ytimg.com, bản sao `ho-so-video/anh/<mã>.jpg`, …) — ứng
     viên CÙNG bức với A bị bỏ. Cổng: `cham_tep` phải `dat is True` và bố cục không hỏng (như `do_bia.xep_doi_bia`).
     Xếp: điểm giám khảo giảm dần (chưa có điểm xếp sau), rồi điểm đọc được. `chon` tối đa `toi_da` mục
-    {tep, nguon, diem_gk, diem_doc}; `bo` = [{tep, nguon, ly_do}]."""
+    {tep, nguon, diem_gk, diem_doc}; `bo` = [{tep, nguon, ly_do}].
+    16/10/2026 — CỔNG CHỮ: chỉ tệp có DẤU cổng chữ (`core/cong_chu.kiem_dau`, đúng sha1) được làm ứng viên."""
     cham = cham or _cham_mac_dinh
+    kiem_dau = kiem_dau or _kiem_dau_mac_dinh
     van_tay = van_tay or _van_tay
     a_ds = [anh_a] if isinstance(anh_a, str) else list(anh_a or [])
     a_ds = [p for p in a_ds if p and os.path.isfile(p)]
@@ -197,6 +208,10 @@ def ung_vien_bia(goc: str, kenh: str, ma_goi: str, anh_a: Any = (), *,
         thay_sha.add(s)
         if vt:
             thay_vt.append(vt)
+        ly_dau = kiem_dau(p)
+        if ly_dau:
+            bo.append(dict(u, ly_do="chưa qua cổng chữ: " + ly_dau[:160]))
+            continue
         try:
             bc = cham(p) or {}
         except Exception as loi:  # noqa: BLE001 — ảnh hỏng: không qua cổng
@@ -229,6 +244,11 @@ def tep_tai_len(duong: str, thu_muc: str) -> str:
         moi.save(dich, format="JPEG", quality=q)
         if os.path.getsize(dich) <= BIA_TOI_DA_BYTE:
             break
+    try:  # 16/10/2026: bản tải lên do mã xuất lại mang theo dấu cổng chữ của tệp gốc (cùng bức)
+        from . import cong_chu  # noqa: PLC0415
+        cong_chu.chuyen_dau(duong, dich)
+    except Exception:  # noqa: BLE001 — không mang được dấu thì cửa ra tự từ chối
+        pass
     return dich
 
 

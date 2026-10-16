@@ -707,6 +707,12 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
     tep = [u.get("tai_len") or u.get("tep") for u in kh.get("chon") or []][:sm.TOI_DA_UNG_VIEN]
     if not tep:
         return dict(ra, ket=sm.KV_KHONG_UNG_VIEN)
+    # 16/10/2026 — CỔNG CHỮ ngay trước cửa ra YouTube: mọi tệp sắp tải phải có dấu cổng chữ đúng sha1 (đóng an toàn).
+    hong = [(p, kiem_dau_bia(p)) for p in tep]
+    hong = [(p, ly) for p, ly in hong if ly]
+    if hong:
+        return dict(ra, ket=sm.KV_LOI, ly_do="GIỮ — bìa chưa qua cổng chữ, không tải: " + "; ".join(
+            "{0}: {1}".format(os.path.basename(p), ly) for p, ly in hong)[:300])
     # ── hộp «Thử nghiệm A/B» ──
     if pt and not pt.get("tat"):
         S.st.bam(pt)                                 # bấm có kiểm đích (cuộn vào giữa, không bị che, không phần tử cấm)
@@ -733,7 +739,11 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
         if not o[0].get("co_anh"):                   # ô 1 phải là bìa ĐANG chạy — Studio thường điền sẵn
             if not kh.get("anh_a"):
                 return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống mà không có bìa A (i.ytimg.com) để tải")
-            ra["o1"] = _dat_tep_o(S, o[0], sm.tep_tai_len(kh["anh_a"], os.path.join(thu_muc_so(), "tai-len")))
+            tep_a = sm.tep_tai_len(kh["anh_a"], os.path.join(thu_muc_so(), "tai-len"))
+            ly_a = kiem_dau_bia(tep_a)
+            if ly_a:
+                return dict(ra, ket=sm.KV_LOI, ly_do="ô 1 trống và bìa A chưa qua cổng chữ — không tải: " + ly_a)
+            ra["o1"] = _dat_tep_o(S, o[0], tep_a)
             _cho(S, lambda: _so_o_co_anh(S) >= 1, 40, 2)
         for i, duong in enumerate(tep, 1):
             truoc = _so_o_co_anh(S)
@@ -808,6 +818,15 @@ def test_mot_video(S, vid: str, kh: Dict[str, Any], ghi, thu: bool = False, khon
     return dict(ra, ket=sm.KV_DA_DAT, trang_thai=tn2["trang_thai"])
 
 
+def kiem_dau_bia(duong: str) -> str:
+    """'' = tệp có dấu cổng chữ (`core/cong_chu.kiem_dau`); khác → lý do. Không nạp được cổng → không tải."""
+    try:
+        from core import cong_chu  # noqa: PLC0415
+        return cong_chu.kiem_dau(duong)
+    except Exception as loi:  # noqa: BLE001
+        return "không kiểm được dấu cổng chữ: {0}".format(str(loi)[:80])
+
+
 def tai_bia_a(goc: str, kenh: str, vid: str, ghi, tai=None) -> str:
     """Bìa A = bìa ĐANG chạy trên YouTube: `i.ytimg.com/vi/<id>/maxresdefault.jpg` (lùi hqdefault) — như
     `core.khuon_bia.anh_that`, nhưng lưu ở sổ của máy này (`vm/logs/studio-may/<K>/bia-a/`), không đụng CHANNEL/."""
@@ -831,6 +850,12 @@ def ke_hoach_video(goc: str, kenh: str, vid: str, ghi, tai=None, cham=None) -> D
     ma_goi = sm.ma_goi_cua_video(goc, kenh, vid)
     a = tai_bia_a(goc, kenh, vid, ghi, tai)
     hs = os.path.join(goc, "CHANNEL", kenh, "ho-so-video", "anh", ma_goi + ".jpg") if ma_goi else ""
+    if a and hs and os.path.isfile(hs):
+        try:  # bìa A (YouTube nén lại) = bìa đang chạy đã có dấu trong hồ sơ → mang dấu khi cùng bức
+            from core import cong_chu  # noqa: PLC0415
+            cong_chu.chuyen_dau(hs, a)
+        except Exception:  # noqa: BLE001
+            pass
     chon, bo = sm.ung_vien_bia(goc, kenh, ma_goi, [x for x in (a, hs) if x], cham=cham) if ma_goi else ([], [])
     tep = []
     for u in chon:

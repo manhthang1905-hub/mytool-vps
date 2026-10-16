@@ -1232,6 +1232,28 @@ def kiem_clip_that_goi(thu_muc_goi: str, kenh: str, ma: str, goc_tool: str = Non
     return ""
 
 
+def kiem_dau_bia(duong_anh: str, goc_tool: str = None, kenh: str = "", ma: str = "") -> str:
+    """16/10/2026 — CỔNG CHỮ ở cửa ra YouTube (chủ: "bìa sai chữ là tối kỵ"): trả LÝ DO không được tải bìa này (chuỗi
+    rỗng = được). Chỉ tệp có DẤU cổng chữ (`core/cong_chu.py`: hai lượt đọc chữ trên ảnh khớp tuyệt đối chữ đã soát)
+    trùng sha1 của chính tệp mới được tải. Không nạp được cổng → không tải (đóng an toàn). Giữ = ghi não "bia"."""
+    goc_tool = goc_tool or os.path.dirname(GOC)
+    try:
+        if goc_tool not in sys.path:
+            sys.path.append(goc_tool)      # thêm CUỐI, không che module vm/
+        from core import cong_chu  # noqa: PLC0415
+    except Exception as loi:  # noqa: BLE001
+        return "không nạp được cổng chữ (core.cong_chu): {0}".format(str(loi)[:80])
+    if not duong_anh:
+        ly = "gói không có ảnh bìa"
+    else:
+        ly = cong_chu.kiem_dau(duong_anh)
+    if ly:
+        cong_chu.ghi_nao(goc_tool, "loi", kenh=kenh, ma_goi=ma, noi_dung="giữ bìa ở cửa ra YouTube: {0} — {1}".format(
+            os.path.basename(duong_anh or "?"), ly), khoa="cua-ra:{0}:{1}".format(
+            ma, cong_chu.sha1_tep(duong_anh)[:16] if duong_anh else "-"))
+    return ly
+
+
 def tep_goi(thu_muc: str) -> dict:
     """{mp4, anh, srt} của gói. Ảnh: ưu tiên CHON-*.jpg rồi .jpg/.png/.webp đầu."""
     try:
@@ -2474,7 +2496,6 @@ class MayDangDom:
         thì KHÔNG đè (`khong-the`). Bìa: so URL ảnh bìa trong gói Studio trước/sau (`anh_doi`)."""
         nhan = "{0}/{1}".format(str(khoa).split("/", 1)[-1] or khoa, vid)
         self.vid_dang = vid
-        tb = self.tab_b()
         ra = {"ket": "loi", "ly_do": "", "doc_lai": "", "anh_doi": None}
 
         def ket(k, ly_do="", **them):
@@ -2483,6 +2504,13 @@ class MayDangDom:
             (self.nk if k != "loi" else self._canh_bao)("sửa video {0} {1}{2}".format(
                 nhan, muc, " — " + ly_do if ly_do else ""))
             return ra
+        if anh and os.path.isfile(anh):
+            # 16/10/2026: bìa đổi chưa qua cổng chữ → không mở trang, không tải (việc giữ ở hàng, lượt sau thử lại).
+            ly_bia = kiem_dau_bia(anh, getattr(self, "goc_tool", None), self.kenh,
+                                  str(khoa).split("/", 1)[-1])
+            if ly_bia:
+                return ket("loi", "GIỮ — bìa chưa qua cổng chữ, không tải: " + ly_bia)
+        tb = self.tab_b()
         try:
             co_trang, bat_duoc, goi = self._mo_trang_sua_bu(tb, vid)
             if not co_trang:
@@ -3494,6 +3522,12 @@ class MayDangDom:
             self.nk("{0}: KHÔNG TẢI — {1} (luật 07/10/2026: thà không đăng còn hơn sản phẩm "
                     "kém; tool làm lại bằng clip thật rồi bàn giao lại)".format(ma, ly_do_clip))
             return {"ket_qua": "loi_du_lieu", "ly_do": "không phải clip thật: " + ly_do_clip}
+        # 16/10/2026: bìa chưa qua cổng chữ (không có dấu đúng sha1) → GIỮ gói, không tải; lượt sau thử lại.
+        ly_do_bia = kiem_dau_bia(tep["anh"], self.goc_tool, self.kenh, ma)
+        if ly_do_bia:
+            self.nk("{0}: GIỮ GÓI, KHÔNG TẢI — bìa chưa qua cổng chữ: {1} (luật 16/10/2026: bìa sai chữ là tối kỵ; "
+                    "tool đóng dấu xong thì lượt sau tải)".format(ma, ly_do_bia))
+            return {"ket_qua": "loi_du_lieu", "ly_do": "bìa chưa qua cổng chữ: " + ly_do_bia}
         lich, ghi_chu = gio_hen_hieu_luc(d.get("ngay"), d.get("gio"), self.bay_gio())
         if lich is None:
             loi.append(ghi_chu)

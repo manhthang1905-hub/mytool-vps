@@ -422,3 +422,40 @@ def test_doc_bai_hoc_anh_bia_co_so_do_va_khuon_chu(tmp_path):
     chu = kb.doc_bai_hoc_anh_bia(goc, "K3")
     assert "9.73" in chu or "9,73" in chu
     assert "chân dung" in chu
+
+
+# ── 6. 16/10/2026 — vế NỚI của luật bằng chứng (không video nào đạt luật chặt) ──
+
+
+def test_luat_noi_chon_bia_nhieu_luot_bam_nhat_khi_khong_ai_dat_luat_chat(tmp_path):
+    """Kênh không video nào đạt CTR ≥ 7% / ≥ 10k hay ≥ 50k: bìa thật ≥ 10k hiển thị, CTR ≥ 1,2 × trung vị kênh làm
+    khuôn — nhiều LƯỢT BẤM (hiển thị × CTR) nhất thắng; dưới 1,2 × trung vị thì không."""
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidNOI00001", ngay="2026-09-10", moc=[(300, 25000, 6.0)])   # 1.500 lượt bấm
+    _ghi_chi_so(goc, "K4", "vidNOI00002", ngay="2026-09-11", moc=[(300, 12000, 6.5)])   # 780 lượt bấm
+    _ghi_chi_so(goc, "K4", "vidDUOI0001", ngay="2026-09-12", moc=[(300, 30000, 5.0)])   # = trung vị, < 1,2×
+    thang = kb.tim_video_thang(goc, "K4")
+    assert thang["video_id"] == "vidNOI00001" and thang["luat"] == "noi"
+    dat, luat = kb.dat_bang_chung(goc, "K4", kb._ung_vien_cua_kenh(goc, "K4"))  # noqa: SLF001
+    assert luat == "noi" and [u.video_id for u in dat] == ["vidNOI00001", "vidNOI00002"]
+    # có video đạt luật CHẶT → luật chặt thắng như cũ, vế nới không xét
+    _ghi_chi_so(goc, "K4", "vidCAO00001", ngay="2026-09-13", moc=[(300, 31666, 7.71)])
+    t2 = kb.tim_video_thang(goc, "K4")
+    assert t2["video_id"] == "vidCAO00001" and t2["luat"] == "chat"
+
+
+def test_luat_noi_khuon_duoc_khai_thac_cung_luat(tmp_path):
+    from core import bia_theo_khuon as btk
+    goc = str(tmp_path)
+    _kenh_that(goc)
+    _ghi_chi_so(goc, "K4", "vidNOI00001", ngay="2026-09-10", moc=[(300, 25000, 6.0)])
+    ket = kb.cap_nhat(goc, "K4", _goi_chat_gia({}), tai_anh=_tai_anh_gia)
+    assert ket["video_id"] == "vidNOI00001" and ket["luat_bang_chung"] == "noi"
+    tt = btk.trang_thai_khai_thac(goc, "K4")
+    assert tt["che_do"] == "khai_thac", tt["ly_do"]
+    kh = kb.doc_khuon(goc, "K4")
+    kh["luat_bang_chung"] = ""                     # khuôn không chọn bằng vế nới → luật chặt như cũ: thăm dò
+    assert btk.trang_thai_khai_thac(goc, "K4", kh)["che_do"] == "tham_do"
+    assert btk.du_bang_chung(6.0, 25000, ctr_min=7, imp_min=10000, imp_lon=50000, trung_vi=4.5, noi=True)
+    assert not btk.du_bang_chung(6.0, 9000, ctr_min=7, imp_min=10000, imp_lon=50000, trung_vi=4.5, noi=True)

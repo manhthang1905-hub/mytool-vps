@@ -466,15 +466,23 @@ def test_xep_doi_bia_ghi_hang_sua_cho_may_dom(tmp_path):
     _nen("toi").save(nen)
     moi = str(tmp_path / "moi.png")
     btk.ve_chu_len_anh(str(nen), moi, btk.bo_tri_chu("khuon", TANG))
+    from core import cong_chu
+    # 16/10/2026: bìa CHƯA có dấu cổng chữ → không xếp (đóng an toàn)
+    with pytest.raises(RuntimeError, match="cổng chữ"):
+        do_bia.xep_doi_bia(goc, "KX", "KX-0001", moi, ghi=lambda _s: None)
+    assert cuu_ctr.doc_hang(goc) == []
+    cong_chu.ghi_dau(moi, "".join(btk.chu_cua_tang(t) for t in TANG), doc=["x", "x"])
     r = do_bia.xep_doi_bia(goc, "KX", "KX-0001", moi, ghi=lambda _s: None)
     hang = cuu_ctr.doc_hang(goc)
     assert len(hang) == 1 and hang[0]["buoc"] == "bia" and hang[0]["anh"] == os.path.abspath(moi)
     assert hang[0]["video_id"] == "vidGIA00001" and hang[0]["trang_thai"] == "cho" and r["viec"]
     hs = ho_so_video.doc_ho_so(goc, "KX", "KX-0001")
     assert hs["lich_su_sua"] and hs["thumbnail"]["bia_doc_duoc"] in ("cao", "vua")
-    # bìa TRƯỢT thì không xếp
+    assert hs["thumbnail"]["chu_khop"]["ok"] is True, "hồ sơ ghi dấu cổng chữ của bìa mới"
+    # bìa TRƯỢT thì không xếp (kể cả khi có dấu chữ)
     xau = str(tmp_path / "xau.png")
     _bia_kieu_cu(_nen("am_ron"), _font_nhat()).save(xau)
+    cong_chu.ghi_dau(xau, "x", doc=["x", "x"])
     with pytest.raises(RuntimeError, match="chưa ĐẠT"):
         do_bia.xep_doi_bia(goc, "KX", "KX-0001", xau, ghi=lambda _s: None)
 

@@ -9768,13 +9768,15 @@ def _goi_soat(bc: BoiCanh) -> Callable[..., str]:
 
 def _soat_chu_luu(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu: str, tieu_de: str) -> Dict[str, Any]:
     """`soat_bia.soat_chu` có SỔ (`7-thumbnail/soat-bia.json`): cùng một chữ chỉ soát một lần."""
-    from . import soat_bia  # noqa: PLC0415
+    from . import cong_chu, soat_bia  # noqa: PLC0415
     chu = " ".join(str(chu or "").split())
     so = soat_bia.doc_so(thu_muc)
     cu = (so.get("chu") or {}).get(chu)
-    if isinstance(cu, dict) and cu.get("ok") is not None:
+    # 16/10/2026: chỉ dùng lại kết quả của luật CHẶT (`cong_chu.soat_chat`: + kanji ngoài tiêu đề/kịch bản phải được
+    # xác nhận) — kết quả luật cũ soát lại.
+    if isinstance(cu, dict) and cu.get("ok") is not None and int(cu.get("phien") or 0) >= cong_chu.PHIEN_BAN:
         return cu
-    kq = soat_bia.soat_chu(
+    kq = cong_chu.soat_chat(
         _goi_soat(bc), chu, tieu_de=tieu_de, ngu_canh=_doc_chu(os.path.join(luot.thu_muc, "1-kich-ban.txt"))[:2500],
         ngon_ngu=getattr(bc.kenh, "ngon_ngu", "ja"), thang=_thang_soat(bc, soat_bia.THANG_MO_HINH_CHU),
         khoa=_khoa_chat(luot, "soat-chu-bia"))
@@ -9783,8 +9785,34 @@ def _soat_chu_luu(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu: str, tieu_de: 
         so = soat_bia.doc_so(thu_muc)
         so["chu"][chu] = kq
         if kq.get("ok") and kq.get("sua"):
-            so["chu"][kq["chu"]] = {"ok": True, "chu": kq["chu"], "sua": False, "tu": chu, "luc": kq["luc"]}
+            so["chu"][kq["chu"]] = {"ok": True, "chu": kq["chu"], "sua": False, "tu": chu, "luc": kq["luc"],
+                                    "phien": kq.get("phien")}
         soat_bia.ghi_so(thu_muc, so)
+    return kq
+
+
+def _viet_lai_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_de: str,
+                      kq: Dict[str, Any]) -> Dict[str, Any]:
+    """16/10/2026: chữ bìa sai mà biên tập viên không sửa được → viết lại (`cong_chu.viet_lai`, ≤ `SO_LAN_VIET_LAI`
+    lượt), mỗi bản mới soát CHẶT lại từ đầu (`_soat_chu_luu`). Đạt → kết quả soát với `sua`/`viet_lai` True; không →
+    kết quả cuối (`ok` False/None)."""
+    from . import cong_chu  # noqa: PLC0415
+    ly = "; ".join("{0}→{1}".format(x.get("sai"), x.get("dung")) for x in kq.get("loi") or []) or str(kq.get("ly_do"))
+    ngu_canh = _doc_chu(os.path.join(luot.thu_muc, "1-kich-ban.txt"))[:2500]
+    for lan in range(cong_chu.SO_LAN_VIET_LAI):
+        moi = cong_chu.viet_lai(_goi_soat(bc), chu_bia, tieu_de=tieu_de, ngu_canh=ngu_canh,
+                                ngon_ngu=getattr(bc.kenh, "ngon_ngu", "ja"), ly_do=ly,
+                                khoa=_khoa_chat(luot, "viet-lai-chu-bia"), lan=lan)
+        if not moi:
+            bc.ghi("  (viết lại chữ bìa lượt {0}: hỏng / ngoài khung)".format(lan + 1))
+            continue
+        r = _soat_chu_luu(bc, luot, thu_muc, moi, tieu_de)
+        bc.ghi("  ảnh bìa — viết lại chữ bìa 「{0}」 → 「{1}」: soát {2}".format(chu_bia[:30], moi[:30], r.get("ok")))
+        if r.get("ok") is True:
+            return dict(r, sua=True, viet_lai=True, chu=str(r.get("chu") or moi), loi=kq.get("loi") or [])
+        kq = r
+        if r.get("ok") is None:
+            break
     return kq
 
 
@@ -9827,15 +9855,27 @@ def _soat_chu_bia_luot(bc: BoiCanh, luot: LuotChay) -> Dict[str, Any]:
     if kq.get("ok") is None:
         bc.ghi("  ảnh bìa — chưa soát được chính tả chữ bìa ({0}); cổng cuối sẽ soát lại.".format(kq.get("ly_do")))
         return gon
+    nguoi = str((luot.dau_vao or {}).get("chu_bia") or "").strip()
     if kq.get("ok") is False:
         bc.ghi("  (!) ảnh bìa — chữ bìa 「{0}」 có lỗi nhưng chưa tự sửa được: {1}".format(
             chu_bia[:40], "; ".join("{0}→{1}".format(x.get("sai"), x.get("dung")) for x in kq.get("loi") or [])[:200]
             or kq.get("ly_do")))
-        return gon
+        if nguoi and soat_bia.chuan_hoa(nguoi) == soat_bia.chuan_hoa(chu_bia):
+            return dict(gon, nguoi_dua=True)
+        # 16/10/2026 (chủ: "bìa sai chữ là tối kỵ"): sai mà không sửa được → VIẾT LẠI chữ bìa rồi soát lại từ đầu.
+        kq = _viet_lai_chu_bia(bc, luot, thu_muc, chu_bia, tieu_de, kq)
+        gon = {k: kq.get(k) for k in ("ok", "sua", "chu", "loi", "ly_do")}
+        if kq.get("ok") is not True:
+            from . import cong_chu  # noqa: PLC0415
+            ly = "chữ bìa 「{0}」 sai mà sửa / viết lại {1} lần vẫn không đạt soát chữ — GIỮ bìa, chưa vẽ".format(
+                chu_bia[:40], cong_chu.SO_LAN_VIET_LAI)
+            cong_chu.ghi_nao(bc.goc, "loi", kenh=str(getattr(bc.kenh, "ma", "") or ""),
+                             ma_goi="{0}-{1}".format(luot.ma_kenh, luot.ma_luot), noi_dung=ly,
+                             khoa="giu-chu-bia:{0}:{1}".format(luot.ma_luot, soat_bia.chuan_hoa(chu_bia)[:20]))
+            raise RuntimeError("ảnh bìa: " + ly + " (thử lại sau)")
     if not kq.get("sua"):
         return gon
     moi = str(kq["chu"])
-    nguoi = str((luot.dau_vao or {}).get("chu_bia") or "").strip()
     if nguoi and soat_bia.chuan_hoa(nguoi) == soat_bia.chuan_hoa(chu_bia):
         bc.ghi("  (!) ảnh bìa — chữ bìa BẠN đưa 「{0}」 có thể sai chính tả (gợi ý 「{1}」) — giữ nguyên chữ của "
                "bạn.".format(chu_bia[:40], moi[:40]))
@@ -9958,9 +9998,13 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
             except Exception as loi:  # noqa: BLE001 — một ảnh hỏng không giết cả job
                 bc.ghi("    (bìa lô: tải ảnh {0}/{1} hỏng: {2})".format(i + 1, n, str(loi)[:120]))
         return ra
-    kq = bia_lo.chay(bc.goc, bc.kenh.ma, thu_muc_luot=luot.thu_muc, ra=os.path.join(thu_muc, "_lo"),
-                     goi=_goi_soat(bc), ve=ve, mau=mau, log=bc.ghi, ngon_ngu=bc.kenh.ngon_ngu or "ja",
-                     khoa="bia-lo:{0}:{1}{2}".format(luot.ma_kenh, luot.ma_luot, _hau_to_khoa_bia(thu_muc, chu_bia)))
+    from .cong_chu import ChuKhongKhop  # noqa: PLC0415
+    try:
+        kq = bia_lo.chay(bc.goc, bc.kenh.ma, thu_muc_luot=luot.thu_muc, ra=os.path.join(thu_muc, "_lo"),
+                         goi=_goi_soat(bc), ve=ve, mau=mau, log=bc.ghi, ngon_ngu=bc.kenh.ngon_ngu or "ja",
+                         khoa="bia-lo:{0}:{1}{2}".format(luot.ma_kenh, luot.ma_luot, _hau_to_khoa_bia(thu_muc, chu_bia)))
+    except ChuKhongKhop as loi:  # 16/10/2026: bộ vẽ không bảo đảm in đúng chữ đã soát → lô mới (hết vòng thì báo người)
+        raise HetBiaDat(str(loi)) from loi
     if not kq.get("top"):
         if any(not u.get("loai") and u.get("tong") is None for u in kq.get("ung_vien") or []):
             # Giám khảo chưa trả lời (AI lỗi) — KHÔNG bỏ lô đã trả tiền: khâu thử lại, nền + ý tưởng trên đĩa.
@@ -10319,31 +10363,20 @@ def _cong_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_
                        "không loại.".format(do_bia.tom_tat_dai(dai)))
     except Exception as loi:  # noqa: BLE001 — đo điểm ảnh hỏng không được giết khâu (chữ vẫn được đọc)
         bc.ghi("  (đo bố cục bìa hỏng: {0})".format(str(loi)[:120]))
-    # 3) Chữ THẬT trên ảnh (đọc mù).
-    doc: Dict[str, Any] = {}
+    # 3) Chữ THẬT trên ảnh — 16/10/2026 CHẶT (`core/cong_chu.py`): HAI lượt đọc mù độc lập, MỖI lượt phải BẰNG ĐÚNG
+    #    chữ đã soát (không dung sai); đạt → DẤU vào báo cáo cạnh ảnh (cửa ra YouTube chỉ nhận tệp có dấu).
     if not ly:
-        vt = soat_bia.van_tay_tep(tep)
-        khoa_so = "{0}|{1}".format(vt, soat_bia.chuan_hoa(chu_mong))
-        so_soat = soat_bia.doc_so(thu_muc)
-        doc = (so_soat.get("anh") or {}).get(khoa_so) or {}
+        doc = _xac_minh_chu_so(bc, luot, thu_muc, tep, chu_mong)
         if doc.get("dat") is None:
-            doc = soat_bia.kiem_chu_anh(_goi_soat(bc), tep, chu_mong,
-                                        thang=_thang_soat(bc, soat_bia.THANG_MO_HINH_ANH),
-                                        khoa=_khoa_chat(luot, "doc-bia:" + vt))
-            if doc.get("dat") is None:
-                raise RuntimeError("ảnh bìa: chưa đọc được chữ trên bìa ({0}) — thử lại sau, chưa giao".format(
-                    "; ".join(doc.get("ly_do") or [])[:200]))
-            doc["luc"] = soat_bia.bay_gio()
-            so_soat = soat_bia.doc_so(thu_muc)
-            so_soat["anh"][khoa_so] = dict({k: doc.get(k) for k in ("dat", "ly_do", "chu_mong", "luc")},
-                                           doc=[x.get("chu") for x in doc.get("doc") or []],
-                                           tep=os.path.basename(tep))
-            soat_bia.ghi_so(thu_muc, so_soat)
+            raise RuntimeError("ảnh bìa: chưa đọc được chữ trên bìa ({0}) — GIỮ bìa, thử lại sau, chưa giao".format(
+                "; ".join(doc.get("ly_do") or [])[:200]))
         if not doc.get("dat"):
             ly += list(doc.get("ly_do") or ["chữ trên ảnh không khớp"])
     if not ly:
-        bc.ghi("  ảnh bìa — cổng chữ: ĐẠT (tấm {0}, chữ 「{1}」 đọc trên ảnh khớp từng ký tự).".format(
-            so, chu_mong[:40]))
+        bc.ghi("  ảnh bìa — cổng chữ: ĐẠT (tấm {0}, chữ 「{1}」 — hai lượt đọc trên ảnh khớp tuyệt đối, đã đóng "
+               "dấu).".format(so, chu_mong[:40]))
+        if chon:
+            _dau_du_phong(bc, luot, thu_muc, so, chu_bia, tieu_de)
         return {"dat": True, "tep": os.path.basename(tep), "chu": chu_mong}
     ly_do = "; ".join(ly)[:400]
     if not cua_tool:
@@ -10367,8 +10400,97 @@ def _cong_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_
         return {"dat": False, "doi": True, "tep_cu": os.path.basename(tep), "ly_do": ly_do}
     moi = _loai_tam_giao(bc, thu_muc, so, tep, ly_do)
     if not moi:
+        # 16/10/2026: hết tấm có chữ đúng → bìa dự phòng CHỮ VẼ BẰNG MÃ (chữ đã soát) trên nền sạch tốt nhất, cũng
+        # phải qua hai lượt đọc mới được dấu. AI hỏng → giữ, thử lại; không nền nào ra bìa đạt → lô mới.
+        moi = _bia_ma_du_phong(bc, luot, thu_muc, chu_bia, ly_do)
+    if not moi:
         raise HetBiaDat("mọi tấm bìa hợp lệ đều hỏng ở cổng chữ — tấm cuối: {0}".format(ly_do))
     return {"dat": False, "doi": True, "tep_cu": os.path.basename(tep), "tep": moi, "ly_do": ly_do}
+
+
+def _xac_minh_chu_so(bc: BoiCanh, luot: LuotChay, thu_muc: str, tep: str, chu_mong: str) -> Dict[str, Any]:
+    """`cong_chu.xac_minh` có SỔ (`soat-bia.json` → `anh`): tệp có dấu → đạt không gọi AI; trượt đã ghi sổ (cùng
+    tệp, cùng chữ, luật hiện hành) → trượt không đọc lại. Trả `{dat: True|False|None, ly_do, doc}`."""
+    from . import cong_chu, soat_bia  # noqa: PLC0415
+    khoa_so = "v{0}|{1}|{2}".format(cong_chu.PHIEN_BAN, soat_bia.van_tay_tep(tep), soat_bia.chuan_hoa(chu_mong))
+    cu = (soat_bia.doc_so(thu_muc).get("anh") or {}).get(khoa_so) or {}
+    if cu.get("dat") is False:
+        return cu
+    kq = cong_chu.xac_minh(_goi_soat(bc), tep, chu_mong, goc=getattr(bc, "goc", ""),
+                           kenh=str(getattr(bc.kenh, "ma", "") or ""),
+                           ma_goi="{0}-{1}".format(luot.ma_kenh, luot.ma_luot) if luot is not None else "",
+                           khoa=_khoa_chat(luot, "cong-chu"))
+    doc = {"dat": kq["ok"], "ly_do": list(kq.get("ly_do") or []), "chu_mong": chu_mong, "luc": soat_bia.bay_gio(),
+           "doc": [x.get("chu") for x in kq.get("doc") or []], "tep": os.path.basename(tep), "da_co": kq.get("da_co")}
+    if kq["ok"] is not None and not kq.get("da_co"):
+        so = soat_bia.doc_so(thu_muc)
+        so["anh"][khoa_so] = doc
+        soat_bia.ghi_so(thu_muc, so)
+    return doc
+
+
+def _dau_du_phong(bc: BoiCanh, luot: LuotChay, thu_muc: str, so_chon: int, chu_bia: str, tieu_de: str = "",
+                  toi_da: int = 2) -> None:
+    """Bìa đã giao đạt cổng chữ → đóng dấu thêm ≤ 2 tấm hợp lệ kế tiếp (hạng nhì/ba: `-bia-2/-bia-3` của hồ sơ —
+    giám đốc kênh đổi bìa, thử nghiệm A/B chỉ được tải tấm có dấu). Tấm trượt không bị loại khỏi lô (chỉ không có
+    dấu → không bao giờ lên YouTube). Hỏng / AI lỗi → bỏ qua (tấm giao không bị ảnh hưởng)."""
+    from . import chon_bia as _cb  # noqa: PLC0415
+    try:
+        du = _cb.doc_chon_bia(thu_muc) or {}
+        uv = sorted([u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")
+                     and u.get("so") is not None and int(u["so"]) != so_chon and u.get("tong_diem") is not None],
+                    key=lambda u: -float(u.get("tong_diem") or 0))[:toi_da]
+        for u in uv:
+            tep = _tep_bia(thu_muc, int(u["so"]))
+            if not os.path.isfile(tep):
+                continue
+            mong = str(_muc_ke_hoach(thu_muc, int(u["so"])).get("chu_du_kien") or chu_bia or "")
+            if not mong.strip():
+                continue
+            s = _soat_chu_luu(bc, luot, thu_muc, mong, tieu_de)
+            if s.get("ok") is not True or s.get("sua"):
+                continue
+            d = _xac_minh_chu_so(bc, luot, thu_muc, tep, mong)
+            bc.ghi("  ảnh bìa — dấu dự phòng tấm {0}: {1}".format(u["so"], {True: "ĐẠT", False: "trượt", None: "chưa đọc"
+                                                                            }[d.get("dat")]))
+    except Exception as loi:  # noqa: BLE001
+        bc.ghi("  (dấu dự phòng bìa hỏng: {0})".format(str(loi)[:120]))
+
+
+def _bia_ma_du_phong(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, ly_do: str) -> str:
+    """Hết tấm có chữ đúng: `cong_chu.bia_ma_du_phong` (chữ ĐÃ SOÁT vẽ bằng mã trên nền sạch, đọc lại hai lượt) →
+    `CHON-thumb_09N.jpg` + `chon-bia.json`. Trả tên CHON mới; '' khi không ra bìa đạt. AI hỏng → RuntimeError (giữ)."""
+    from . import chon_bia as _cb, cong_chu  # noqa: PLC0415
+    tieu_de = _doc_tieu_de(_doc_chu(os.path.join(luot.thu_muc, "1-tieu-de.txt")))[0] if luot is not None else ""
+    s = _soat_chu_luu(bc, luot, thu_muc, chu_bia, tieu_de) if (luot is not None and chu_bia.strip()) else {}
+    if s.get("ok") is not True or s.get("sua"):
+        return ""
+    kq = cong_chu.bia_ma_du_phong(_goi_soat(bc), thu_muc, chu_bia, goc=getattr(bc, "goc", ""),
+                                  kenh=str(getattr(bc.kenh, "ma", "") or ""),
+                                  ma_goi="{0}-{1}".format(luot.ma_kenh, luot.ma_luot),
+                                  ngon_ngu=getattr(bc.kenh, "ngon_ngu", "ja") or "ja",
+                                  khoa=_khoa_chat(luot, "bia-ma"), log=bc.ghi)
+    if kq.get("chua_kiem"):
+        raise RuntimeError("ảnh bìa: bìa dự phòng chữ vẽ bằng mã chưa đọc lại được (AI lỗi) — GIỮ bìa, thử lại sau")
+    if not kq.get("tep"):
+        return ""
+    so = int(kq["so"])
+    dich = os.path.join(thu_muc, "CHON-thumb_{0:03d}.jpg".format(so))
+    if not _cb._xuat_jpg(kq["tep"], dich) or not cong_chu.chuyen_dau(kq["tep"], dich):  # noqa: SLF001
+        return ""
+    du = _cb.doc_chon_bia(thu_muc) or {}
+    uv = [u for u in du.get("ung_vien") or [] if isinstance(u, dict) and u.get("so") != so]
+    diem = min([float(u.get("tong_diem") or 0) for u in uv if not u.get("loai")] or [1.0]) - 0.1
+    uv.append({"so": so, "kieu": "bia_ma", "nhom": "", "tong_diem": round(diem, 1), "loai": "",
+               "ly_do": "bìa dự phòng chữ vẽ bằng mã trên nền " + os.path.basename(kq["nen"])})
+    du.update(ung_vien=uv, chon={"so": so, "tep": os.path.basename(dich), "kieu": "bia_ma", "chon_boi": "luat",
+                                 "tong_diem": round(diem, 1), "nhom": "", "theo_khuon": False, "tham_do": False,
+                                 "ly_do": ("hết tấm có chữ đúng ({0}) → bìa dự phòng chữ vẽ bằng mã".format(ly_do)
+                                           )[:600]})
+    _cb._ghi_json(_cb.duong_tep_chon_bia(thu_muc), du)  # noqa: SLF001
+    bc.ghi("  ảnh bìa — cổng chữ: hết tấm có chữ đúng → bìa dự phòng chữ vẽ bằng mã {0} (đọc lại hai lượt ĐẠT).".format(
+        os.path.basename(dich)))
+    return os.path.basename(dich)
 
 
 def _rut_chu_bia(bc: BoiCanh, luot: LuotChay, chu_bia: str, lan: int) -> str:
@@ -10417,6 +10539,9 @@ def _goi_chon_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, muc, tieu_de: str,
             them["nhom_theo_so"] = {int(m["so"]): str(m.get("nhom") or "") for m in kh["muc"]}
             them["chu_theo_so"] = {int(m["so"]): str(m["chu_du_kien"]) for m in kh["muc"]
                                    if m.get("chu_du_kien")}
+            # 16/10/2026 (cổng chữ trước giám khảo): tấm chữ do MÃ vẽ — chữ thật sự in (nối các tầng)
+            them["ma_theo_so"] = {int(m["so"]): "".join(_btk.chu_cua_tang(t) for t in m["chu_tang"])
+                                  for m in kh["muc"] if m.get("ve_chu") == "ma" and m.get("chu_tang")}
             them["nhom_uu_tien"] = kh.get("nhom_uu_tien") or None
             them["luot_tham_do"] = bool(kh.get("luot_tham_do"))
             # 13/10/2026: khuôn kiểu HỘP mà lô không có tấm chuẩn ngách — luật ngách "chữ trần, không hộp" không

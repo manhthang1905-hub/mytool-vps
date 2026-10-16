@@ -73,6 +73,8 @@ NGUONG_MAC_DINH: Dict[str, Any] = {
     "bia_khai_thac_ctr_min": 7.0,
     "bia_khai_thac_imp_min": 10000,
     "bia_khai_thac_imp_lon": 50000,
+    # 16/10/2026: vế NỚI của luật bằng chứng (chỉ khi KHÔNG video nào đạt luật chặt) — CTR ≥ hệ số × trung vị kênh.
+    "bia_khai_thac_he_so_tv": 1.2,
     "bia_so_tam_theo_khuon": 3,
     "bia_chu_ky_tham_do": 5,
     "bia_ve_chu": "tron",
@@ -136,16 +138,22 @@ def cau_hinh_kenh(goc: str, kenh: str) -> Dict[str, Any]:
 
 
 def du_bang_chung(ctr: float, imp: float, *, ctr_min: float, imp_min: float, imp_lon: float,
-                  trung_vi: Optional[float]) -> bool:
+                  trung_vi: Optional[float], noi: bool = False, he_so_tv: float = 1.2) -> bool:
     """LUẬT BẰNG CHỨNG (13/10/2026, một câu): bìa đủ làm khuôn của kênh khi (CTR ≥ `ctr_min` VÀ hiển thị ≥
     `imp_min`) HOẶC (hiển thị ≥ `imp_lon` VÀ CTR ≥ trung vị CTR các video thật ≥1.000 hiển thị của kênh).
 
     Vế sau vì bìa thắng hiển thị LỚN có CTR tự nhiên thấp hơn: TL4-T7 (khuôn hộp chữ đỏ) 5,2–5,9% trên
     100k–300k hiển thị bị ngưỡng 7% loại hết. Dùng CHUNG cho `khuon_bia.tim_video_thang` (chọn khuôn) và
-    `trang_thai_khai_thac` (khai thác) — hai nơi không được lệch luật."""
+    `trang_thai_khai_thac` (khai thác) — hai nơi không được lệch luật.
+
+    16/10/2026 — vế NỚI (`noi=True`, chỉ dùng khi KHÔNG video nào của kênh đạt luật chặt): hiển thị ≥ `imp_min` VÀ CTR ≥
+    `he_so_tv` × trung vị kênh. TL1-T7: bìa thắng thật 5,3–6,8% trên 14k–35k hiển thị (trung vị 3,9%) bị luật chặt loại
+    hết → kênh không bao giờ có khuôn để khai thác, trong khi kênh đang tụt."""
     if ctr >= ctr_min and imp >= imp_min:
         return True
-    return trung_vi is not None and imp >= imp_lon and ctr >= trung_vi
+    if trung_vi is not None and imp >= imp_lon and ctr >= trung_vi:
+        return True
+    return bool(noi) and trung_vi is not None and imp >= imp_min and ctr >= float(he_so_tv) * trung_vi
 
 
 def trang_thai_khai_thac(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None
@@ -180,8 +188,10 @@ def trang_thai_khai_thac(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = 
         tv = _so(khuon.get("trung_vi_ctr_that"))
         nguong = float(ch["bia_khai_thac_ctr_min"])
         ra.update(nguong_ctr=round(nguong, 3), trung_vi=tv)
+        # 16/10/2026: khuôn chọn bằng vế NỚI (`khuon_bia`, không video nào đạt luật chặt) xét đúng vế ấy.
         if not du_bang_chung(ctr, imp, ctr_min=nguong, imp_min=ch["bia_khai_thac_imp_min"],
-                             imp_lon=ch["bia_khai_thac_imp_lon"], trung_vi=tv):
+                             imp_lon=ch["bia_khai_thac_imp_lon"], trung_vi=tv,
+                             noi=khuon.get("luat_bang_chung") == "noi", he_so_tv=ch["bia_khai_thac_he_so_tv"]):
             ra["ly_do"] = ("khuôn chưa đủ bằng chứng: CTR {0:.2f}% / {1:.0f} hiển thị (cần ≥{2:.2f}% và ≥{3}, "
                            "hoặc ≥{4} hiển thị và CTR ≥ trung vị kênh {5})").format(
                 ctr, imp, nguong, ch["bia_khai_thac_imp_min"], ch["bia_khai_thac_imp_lon"],

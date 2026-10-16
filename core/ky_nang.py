@@ -543,6 +543,29 @@ def c_bia_gap(goc, kenh):
     return _py(os.path.join(goc, "vm", "may_dang_dom.py"), "--kenh", kenh, "--sua-video", "--toi-da-video", "2")
 
 
+# S05 · Dấu cổng chữ cho gói chờ đăng (16/10/2026) ────────────────────────────
+
+def _goi_chua_dau(goc, kenh) -> List[str]:
+    """Mã gói chờ đăng (kế hoạch chưa ĐÃ ĐĂNG, còn thư mục ở DONE) mà bìa CHƯA có dấu cổng chữ — máy đăng sẽ GIỮ gói."""
+    try:
+        from core import cong_chu  # noqa: PLC0415
+        return [g["ma"] for g in cong_chu.goi_cho_dang(goc, kenh) if cong_chu.kiem_dau(g["anh"])]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def k_dau_bia(goc, kenh):
+    if _dang_o_may_khac(goc, kenh):
+        return KHONG, "đăng ở máy khác"
+    ds = _goi_chua_dau(goc, kenh)
+    return (CHO, "{0} gói chờ đăng chưa có dấu cổng chữ ({1}) — máy đăng giữ".format(len(ds), ", ".join(ds[:3])))         if ds else (DAT, "mọi gói chờ đăng có dấu cổng chữ")
+
+
+def d_dau_bia(goc, kenh):
+    ds = [] if _dang_o_may_khac(goc, kenh) else _goi_chua_dau(goc, kenh)
+    return (True, "{0} gói chờ đăng chưa có dấu cổng chữ".format(len(ds))) if ds else (False, "không có gói thiếu dấu")
+
+
 # S04 · Bàn giao lượt kẹt cấu hình ─────────────────────────────────────────────
 
 #: Lý do dừng nhắc tới khoá kenh.yaml = lỗi CẤU HÌNH (sửa khoá là bàn giao được) — không phải lỗi máy chủ.
@@ -941,6 +964,13 @@ DANH_MUC: List[KyNang] = [
            "chủ) và khoá đã sửa → bàn giao đúng luồng bước 5 (khe trống sớm nhất, cổng chất lượng).",
            "python -m core.ban_giao_dang ban-giao-tay K <lượt> <ngày sổ>", k_ban_giao_ket, ["D02"],
            dieu_kien=d_ban_giao_ket, chay=c_ban_giao_ket, nhip_gio=6, tu_ap=True, nang=True),
+    KyNang("S05", "Dấu cổng chữ bìa chờ đăng", "sua_chua",
+           "Kích hoạt: gói chờ đăng có bìa CHƯA có dấu cổng chữ (bàn giao trước luật 16/10, hoặc bìa đổi tay) → soát chữ bìa, "
+           "đọc chữ trên bìa hai lượt khớp tuyệt đối → đóng dấu; bìa sai chữ → bìa dự phòng chữ vẽ bằng mã; AI lỗi → giữ gói, "
+           "giờ sau thử lại (máy đăng không bao giờ tải bìa không dấu).",
+           "python -X utf8 -m core.cong_chu dau-goi --kenh K", k_dau_bia, ["D02"],
+           dieu_kien=d_dau_bia, chay=lambda goc, kenh: _py("-m", "core.cong_chu", "dau-goi", "--kenh", kenh), nhip_gio=1,
+           tu_ap=True),
 ]
 
 

@@ -789,10 +789,18 @@ def ghi_bao_cao(duong_anh: str, bc: Dict[str, Any], anh=None) -> str:
     try:
         vt = van_tay(anh if anh is not None else duong_anh)
         os.makedirs(os.path.dirname(duong) or ".", exist_ok=True)
+        # 16/10/2026: DẤU cổng chữ (`core/cong_chu.py`, theo sha1 từng tệp) sống qua mọi lần đo lại báo cáo.
+        dau: Dict[str, Any] = {}
+        try:
+            with open(duong, encoding="utf-8") as tep:
+                cu = json.load(tep)
+            dau = {k: cu[k] for k in ("chu_khop", "chu_khop_ds") if isinstance(cu, dict) and k in cu}
+        except (OSError, ValueError):
+            pass
         tam = duong + ".tmp"
         with open(tam, "w", encoding="utf-8") as tep:
             json.dump(dict(bc, tep=os.path.basename(duong_anh), van_tay=vt,
-                           luc=_dt.datetime.now().isoformat(timespec="seconds")), tep, ensure_ascii=False)
+                           luc=_dt.datetime.now().isoformat(timespec="seconds"), **dau), tep, ensure_ascii=False)
         os.replace(tam, duong)
         return duong
     except (OSError, ValueError):
@@ -1812,9 +1820,17 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
     `anh/_truoc-do-bia/`) để vòng học so đúng bìa đang chạy."""
     from . import ho_so_video  # noqa: PLC0415
     from .giam_doc import cuu_ctr  # noqa: PLC0415
+    from . import cong_chu  # noqa: PLC0415
     anh = os.path.abspath(anh)
     if not os.path.isfile(anh):
         raise RuntimeError("không có tệp bìa " + anh)
+    # 16/10/2026 — CỔNG CHỮ (chủ: "bìa sai chữ là tối kỵ"): chỉ tệp có DẤU cổng chữ đúng sha1 mới được lên YouTube.
+    ly_chu = cong_chu.kiem_dau(anh)
+    if ly_chu:
+        cong_chu.ghi_nao(goc, "loi", kenh=kenh, ma_goi=ma, noi_dung="giữ bìa: không xếp đổi bìa {0} — {1}".format(
+            os.path.basename(anh), ly_chu), khoa="xep-doi-bia:{0}:{1}".format(ma, cong_chu.sha1_tep(anh)[:16]))
+        raise RuntimeError("bìa mới chưa qua cổng chữ — không xếp: {0} (đóng dấu: python -X utf8 -m core.cong_chu dau "
+                           "<tệp> --chu \"<chữ bìa>\" --kenh {1} --ma {2})".format(ly_chu, kenh, ma))
     bc = cham_tep(anh)
     if not bc.get("dat"):
         raise RuntimeError("bìa mới chưa ĐẠT độ đọc được — không xếp: " + tom_tat(bc))
@@ -1856,11 +1872,14 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
         os.makedirs(sao, exist_ok=True)
         if not os.path.exists(os.path.join(sao, os.path.basename(anh_hs))):
             shutil.copy2(anh_hs, os.path.join(sao, os.path.basename(anh_hs)))
+            cong_chu.chuyen_dau(anh_hs, os.path.join(sao, os.path.basename(anh_hs)))
         shutil.copy2(anh, anh_hs)
+        cong_chu.chuyen_dau(anh, anh_hs)
     try:
         ho_so_video.ghi_sua(goc, kenh, ma, loai="bia", cu=os.path.basename(anh_hs), moi=os.path.basename(anh),
                             doi_boi="do_bia", ly_do=viec["ly_do"])
         ho_so_video.cap_nhat_bia_doc_duoc(goc, kenh, ma, bc)
+        ho_so_video.cap_nhat_chu_khop(goc, kenh, ma, cong_chu.tom_tat_dau(anh))
     except Exception as loi:  # noqa: BLE001 — việc đã xếp; hồ sơ hỏng chỉ báo
         ghi("  (ghi hồ sơ hỏng: {0})".format(str(loi)[:120]))
     return {"viec": viec["id"], "video_id": "…" + vid[-3:], "anh": anh}

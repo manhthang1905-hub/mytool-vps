@@ -60,7 +60,7 @@ import re
 import statistics
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import ho_so_video
 from .doi_thu_kenh import thu_muc_nghien_cuu
@@ -215,15 +215,33 @@ def trung_vi_ctr_that(ds: List[UngVienThang]) -> Optional[float]:
     return round(statistics.median(cac), 4) if cac else None
 
 
-def _thang_bang_chung(goc: str, kenh: str, ds: List[UngVienThang]) -> Optional[UngVienThang]:
-    """Ứng viên CTR cao nhất (hoà → nhiều hiển thị hơn) thoả `bia_theo_khuon.du_bang_chung`."""
+def dat_bang_chung(goc: str, kenh: str, ds: List[UngVienThang]) -> Tuple[List[UngVienThang], str]:
+    """(ứng viên đạt, luật): luật CHẶT (`bia_theo_khuon.du_bang_chung`) trước — CTR cao trước, hoà thì nhiều hiển thị
+    hơn; không ai đạt → vế NỚI (16/10/2026: ≥ `bia_khai_thac_imp_min` hiển thị và CTR ≥ `bia_khai_thac_he_so_tv` ×
+    trung vị kênh), xếp theo LƯỢT BẤM (hiển thị × CTR) — bìa thật kéo được nhiều người nhất của kênh. ([], "") khi
+    không ai đạt."""
     from . import bia_theo_khuon as _btk  # noqa: PLC0415
     ch = _btk.cau_hinh_kenh(goc, kenh)
     tv = trung_vi_ctr_that(ds)
-    dat = [u for u in ds if _btk.du_bang_chung(
-        u.ctr, u.impressions, ctr_min=float(ch["bia_khai_thac_ctr_min"]), imp_min=float(ch["bia_khai_thac_imp_min"]),
-        imp_lon=float(ch["bia_khai_thac_imp_lon"]), trung_vi=tv)]
-    return max(dat, key=lambda u: (u.ctr, u.impressions)) if dat else None
+    kw = dict(ctr_min=float(ch["bia_khai_thac_ctr_min"]), imp_min=float(ch["bia_khai_thac_imp_min"]),
+              imp_lon=float(ch["bia_khai_thac_imp_lon"]), trung_vi=tv)
+    dat = sorted((u for u in ds if _btk.du_bang_chung(u.ctr, u.impressions, **kw)),
+                 key=lambda u: (-u.ctr, -u.impressions))
+    if dat:
+        return dat, "chat"
+    noi = sorted((u for u in ds if _btk.du_bang_chung(u.ctr, u.impressions, noi=True,
+                                                       he_so_tv=float(ch["bia_khai_thac_he_so_tv"]), **kw)),
+                 key=lambda u: -u.ctr * u.impressions)
+    return noi, ("noi" if noi else "")
+
+
+def _thang_bang_chung(goc: str, kenh: str, ds: List[UngVienThang]) -> Optional[UngVienThang]:
+    """Ứng viên đứng đầu `dat_bang_chung` (luật chặt, không ai đạt thì vế nới) — gắn `luat` vào đối tượng."""
+    dat, luat = dat_bang_chung(goc, kenh, ds)
+    if not dat:
+        return None
+    dat[0].luat = luat  # type: ignore[attr-defined]
+    return dat[0]
 
 
 def _trung_vi_ctr(ds: List[UngVienThang]) -> Optional[float]:
@@ -290,8 +308,8 @@ def tim_video_thang(goc: str, kenh: str,
     except Exception:  # noqa: BLE001 — đọc ngưỡng hỏng: rơi về luật trung vị như cũ
         thang = None
     if thang is not None:
-        return _ket_qua(thang, nguon="kenh", nguong_median=tv_that or 0.0, so_mau=len(rieng),
-                        trung_vi_that=tv_that)
+        return dict(_ket_qua(thang, nguon="kenh", nguong_median=tv_that or 0.0, so_mau=len(rieng),
+                             trung_vi_that=tv_that), luat=getattr(thang, "luat", "chat"))
 
     # 2) Luật TƯƠNG ĐỐI cũ (≥3 mẫu): thắng rõ trung vị của chính kênh — khuôn cho tấm `khuon_thang` lúc thăm dò.
     tv_rieng = _trung_vi_ctr(rieng)
@@ -602,6 +620,8 @@ def cap_nhat(goc: str, kenh: str, goi_chat: Optional[Callable[..., str]], *,
         # 13/10/2026: trung vị CTR video thật của kênh lúc chọn khuôn — vế "hiển thị lớn" của luật bằng chứng
         # khi `bia_theo_khuon.trang_thai_khai_thac` xét khai thác.
         "trung_vi_ctr_that": thang.get("trung_vi_ctr_that"),
+        # 16/10/2026: luật đã chọn khuôn — "chat" | "noi" (vế nới, `dat_bang_chung`) | "" (luật trung vị cũ).
+        "luat_bang_chung": str(thang.get("luat") or ""),
     }
     # 13/10/2026 tối — khuôn kiểu HỘP chữ: 2–3 bìa thắng THẬT sáng/sạch nhất của kênh làm MẪU PHONG CÁCH cho ảnh nền
     # (chủ chê bìa tool làm "xấu, không thu hút như các thumb đã win"). Khuôn chữ trần: không đổi gì.
@@ -654,11 +674,7 @@ def _anh_mau_phong_cach(goc: str, kenh: str, duong_khuon: str, *,
     của khuôn → `bia_theo_khuon.chon_anh_mau_phong_cach` (2–3 tấm sáng/sạch nhất)."""
     from . import bia_theo_khuon as _btk  # noqa: PLC0415
     rieng = _ung_vien_cua_kenh(goc, kenh)
-    ch = _btk.cau_hinh_kenh(goc, kenh)
-    tv = trung_vi_ctr_that(rieng)
-    dat = sorted((u for u in rieng if _btk.du_bang_chung(
-        u.ctr, u.impressions, ctr_min=float(ch["bia_khai_thac_ctr_min"]), imp_min=float(ch["bia_khai_thac_imp_min"]),
-        imp_lon=float(ch["bia_khai_thac_imp_lon"]), trung_vi=tv)), key=lambda u: (-u.ctr, -u.impressions))
+    dat, _luat = dat_bang_chung(goc, kenh, rieng)
     cac = [duong_khuon] if duong_khuon else []
     for u in dat[:6]:
         d = duong_anh_that(goc, kenh, u.video_id)

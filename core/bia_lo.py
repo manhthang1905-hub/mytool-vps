@@ -286,6 +286,13 @@ def bo_cuc_tran(kc: Optional[Dict[str, Any]]) -> str:
     (nhân vật giữa). Theo vị trí nhân vật đo trên bìa thắng, không có thì theo câu tả vị trí chữ."""
     kc = kc or {}
     vt = str((kc.get("nhan_vat") or {}).get("vi_tri") or "")
+    s = str(kc.get("vi_tri_chu") or "").lower()
+    tang = {str(t.get("vi_tri") or "") for t in ((kc.get("chu") or {}).get("tang") or []) if isinstance(t, dict)}
+    # 16/10/2026 (TL1): chữ hai dải NGANG trên + dưới (khuôn tả "horizontal tiers", "top … bottom") là kiểu dải dù nhân
+    # vật lệch một bên — trước đây nhân vật trái → cột chữ phải, sai bố cục bìa thắng.
+    if {"tren", "duoi"} <= tang and not re.search(r"\bleft\b|\bright\b", s) and (
+            "horizontal" in s or ("top" in s and "bottom" in s)):
+        return "dai"
     if vt in ("phai", "trai", "giua"):
         return {"phai": "trai", "trai": "phai", "giua": "dai"}[vt]
     s = str(kc.get("vi_tri_chu") or "").lower()
@@ -397,6 +404,46 @@ def _do_sang_tb(duong: str) -> Optional[float]:
         return None
 
 
+#: Danh sách bìa thắng trong thư mục mẫu (`kenh.yaml: bia_lo_mau`) — `{"bia": [{tep, video_id, imp, ctr}]}`, xếp hạng.
+TEP_DS_THANG = "thang.json"
+
+
+def thu_muc_mau(goc: str, kenh: str, mau: Sequence[str] = ()) -> str:
+    """Thư mục bìa thắng THẬT do chủ chọn (16/10/2026): thư mục trong `mau` (CLI `--mau DIR`) > `kenh.yaml: bia_lo_mau`
+    (đường tương đối theo gốc tool). '' khi không có."""
+    for m in mau or ():
+        if m and os.path.isdir(m):
+            return os.path.abspath(m)
+        # tệp mẫu lấy từ một thư mục bìa thắng (có `thang.json`) — vd `chay()` nhận danh sách tệp của `mau_cua_kenh`
+        if m and os.path.isfile(m) and os.path.isfile(os.path.join(os.path.dirname(m), TEP_DS_THANG)):
+            return os.path.abspath(os.path.dirname(m))
+    try:
+        from .kenh import TEP_KENH, doc_yaml, duong_kenh  # noqa: PLC0415
+        d = str((doc_yaml(os.path.join(duong_kenh(goc, kenh), TEP_KENH)) or {}).get("bia_lo_mau") or "").strip()
+    except Exception:  # noqa: BLE001
+        d = ""
+    d = os.path.join(goc, d) if d and not os.path.isabs(d) else d
+    return os.path.abspath(d) if d and os.path.isdir(d) else ""
+
+
+def bia_thu_muc(thu_muc: str, toi_da: int = SO_BIA_THANG) -> List[Dict[str, Any]]:
+    """Bìa của thư mục mẫu theo THỨ HẠNG: `thang.json` (video_id, imp, ctr) nếu có, không thì tên tệp."""
+    ds: List[Dict[str, Any]] = []
+    du = _doc_json(os.path.join(thu_muc, TEP_DS_THANG))
+    for b in (du.get("bia") if isinstance(du, dict) else None) or []:
+        tep = os.path.join(thu_muc, str((b or {}).get("tep") or "")) if isinstance(b, dict) else ""
+        if tep and os.path.isfile(tep):
+            ds.append({"video_id": str(b.get("video_id") or os.path.basename(tep)), "ctr": b.get("ctr"),
+                       "imp": b.get("imp"), "tep": tep})
+    if not ds:
+        try:
+            ten = sorted(t for t in os.listdir(thu_muc) if t.lower().endswith((".jpg", ".jpeg", ".png")))
+        except OSError:
+            ten = []
+        ds = [{"video_id": t, "ctr": None, "imp": None, "tep": os.path.join(thu_muc, t)} for t in ten]
+    return ds[:toi_da]
+
+
 def duong_mau_thang(goc: str, kenh: str) -> str:
     from .doi_thu_kenh import thu_muc_nghien_cuu  # noqa: PLC0415
     return os.path.join(thu_muc_nghien_cuu(goc, kenh), TEP_MAU_THANG)
@@ -490,21 +537,26 @@ def doc_mau_thang(du: Any, bia: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 def mau_thang(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None, *, goi: Optional[Callable[..., str]] = None,
               log: Callable[[str], None] = print, dem: Optional[Dict[str, int]] = None,
-              tai_anh: Optional[Callable[[str], Optional[bytes]]] = None) -> Dict[str, Any]:
+              tai_anh: Optional[Callable[[str], Optional[bytes]]] = None, thu_muc: str = "") -> Dict[str, Any]:
     """Mẫu tả bìa thắng CỦA kênh (cache `nghien-cuu/mau-bia-thang.json`). Khớp khuôn hiện tại → trả luôn (`moi`
     True). Khác khuôn / chưa có + có `goi` → MỘT lượt AI nhìn 5–7 bìa thật (`bia_thang`) rồi ghi; không `goi` hoặc
-    lượt hỏng → bản cũ (`moi` False) hoặc {}."""
+    lượt hỏng → bản cũ (`moi` False) hoặc {}.
+
+    16/10/2026 — `thu_muc` (thư mục bìa thắng chủ chọn, `thu_muc_mau`): tả ĐÚNG các bìa ấy theo thứ hạng; cache nằm
+    trong chính thư mục (`<thư mục>/mau-bia-thang.json`), làm lại khi tệp trong thư mục đổi."""
     from . import khuon_bia  # noqa: PLC0415
     kh = khuon if khuon is not None else (khuon_bia.doc_khuon(goc, kenh) or {})
-    duong = duong_mau_thang(goc, kenh)
+    bia_tm = bia_thu_muc(thu_muc) if thu_muc else []
+    duong = os.path.join(thu_muc, TEP_MAU_THANG) if bia_tm else duong_mau_thang(goc, kenh)
     cu = _doc_json(duong)
     cu = cu if isinstance(cu, dict) and cu.get("bia") else {}
-    khoa = _khoa_mau(kh)
+    khoa = _bam(*["{0}:{1}".format(os.path.basename(b["tep"]), os.path.getsize(b["tep"])) for b in bia_tm],
+                PHIEN_BAN_MAU, "thu-muc") if bia_tm else _khoa_mau(kh)
     if cu and cu.get("khoa") == khoa:
         return dict(cu, moi=True)
-    if goi is None or not kh.get("video_id"):
+    if goi is None or not (bia_tm or kh.get("video_id")):
         return dict(cu, moi=False) if cu else {}
-    bia = bia_thang(goc, kenh, kh, tai_anh=tai_anh)
+    bia = bia_tm or bia_thang(goc, kenh, kh, tai_anh=tai_anh)
     if not bia:
         return dict(cu, moi=False) if cu else {}
     log("  bìa lô: tả {0} bìa thắng thật của {1} (mẫu few-shot riêng kênh)…".format(len(bia), kenh))
@@ -526,32 +578,47 @@ def mau_thang(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None, *, go
 
 
 def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None, log: Callable[[str], None] = print,
-               dem: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+               dem: Optional[Dict[str, int]] = None, mau: Sequence[str] = ()) -> Dict[str, Any]:
     """Hồ sơ KIỂU bìa thắng của kênh cho cả lô: `kieu` ("hop"/"tran", `kieu_chu` của khuôn), `kc` (khuôn vẽ chữ),
     `bo_cuc` (bên/dải chữ), màu chữ trần, `uu_tien` (kiểu `do_bia`), `nhan_vat` (style.yaml), `nv` + `mau_dau`
     (nv1.png), `mau` (few-shot riêng kênh — cache `mau_thang`; lùi `MAU_THANG` cho kiểu hộp), `nen` (nền bìa thắng),
-    `bia_mau` (chữ trần: bìa khuôn + bìa cùng kiểu — ảnh tham chiếu + mẫu so của giám khảo). Không ném lỗi."""
+    `bia_mau` (chữ trần: bìa khuôn + bìa cùng kiểu — ảnh tham chiếu + mẫu so của giám khảo). Không ném lỗi.
+
+    16/10/2026 — kênh chữ TRẦN có thư mục bìa thắng chủ chọn (`thu_muc_mau`: `mau` / `kenh.yaml: bia_lo_mau`): mẫu tả
+    + ảnh tham chiếu + mẫu so của giám khảo lấy từ ĐÚNG thư mục ấy (theo thứ hạng). `kenh.yaml: bia_lo_kieu` ("tran" |
+    "hop") và `bia_lo_bo_cuc` ("dai" | "trai" | "phai") ghi đè kiểu/bố cục chữ đo từ khuôn (khuôn đổi thì kiểu chữ của
+    lô vẫn theo lựa chọn của chủ)."""
     from . import khuon_bia  # noqa: PLC0415
     try:
         khuon = khuon_bia.doc_khuon(goc, kenh) or {}
     except Exception:  # noqa: BLE001
         khuon = {}
+    try:
+        from .kenh import TEP_KENH, doc_yaml, duong_kenh as _dk  # noqa: PLC0415
+        cai = doc_yaml(os.path.join(_dk(goc, kenh), TEP_KENH)) or {}
+    except Exception:  # noqa: BLE001
+        cai = {}
     kc = khuon.get("khuon_chu") if isinstance(khuon.get("khuon_chu"), dict) else {}
     kieu = kieu_chu(kc)
+    if str(cai.get("bia_lo_kieu") or "").strip() in ("hop", "tran"):
+        kieu = str(cai["bia_lo_kieu"]).strip()
     hs: Dict[str, Any] = {"kieu": kieu, "khuon_video": str(khuon.get("video_id") or "")}
     if kieu == "hop":
         hs["kc"] = kc if btk.kieu_hop(kc) else KHUON_HOP_MAC_DINH
         hs["bo_cuc"] = btk._ben_chu_hop(hs["kc"])  # noqa: SLF001
     else:
-        hs["kc"], hs["bo_cuc"], hs["uu_tien"] = kc, bo_cuc_tran(kc), _uu_tien_vien(kc)
+        bo_ep = str(cai.get("bia_lo_bo_cuc") or "").strip()
+        hs["kc"], hs["uu_tien"] = kc, _uu_tien_vien(kc)
+        hs["bo_cuc"] = bo_ep if bo_ep in ("dai", "trai", "phai") else bo_cuc_tran(kc)
         hs["mau_nen"], hs["mau_do"], hs["mau_vang"] = mau_tran(kc)
+    tm = thu_muc_mau(goc, kenh, mau) if kieu == "tran" else ""
     from .kenh import duong_kenh  # noqa: PLC0415
     nv = os.path.join(duong_kenh(goc, kenh), "nv", "nv1.png")
     hs["nv"] = nv if os.path.isfile(nv) else ""
     hs["mau_dau"] = mau_dau_nv(nv) if hs["nv"] else None
     hs["nhan_vat"] = _nhan_vat_kenh(goc, kenh)
     try:
-        mt = mau_thang(goc, kenh, khuon, goi=goi, log=log, dem=dem)
+        mt = mau_thang(goc, kenh, khuon, goi=goi, log=log, dem=dem, thu_muc=tm)
     except Exception as loi:  # noqa: BLE001
         log("  (bìa lô: mẫu bìa thắng của kênh hỏng: {0})".format(str(loi)[:160]))
         mt = {}
@@ -564,7 +631,15 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         hs.update(mau="- 「{0}」: {1}".format("|".join(str(t.get("noi_dung") or "") for t in tang if isinstance(t, dict)),
                                               kc.get("diem_hut_mat") or kc.get("bo_cuc") or ""),
                   nguon_mau="khuon", hinh_them="")
-    if kieu == "tran":
+    if kieu == "tran" and tm:
+        # Thư mục chủ chọn: ảnh tham chiếu + mẫu so = các bìa ĐẦU BẢNG của thư mục (thứ hạng của chủ), mọi kiểu chữ —
+        # chữ do mã vẽ; ảnh mẫu dạy nét vẽ / cảnh / nhân vật.
+        hs["nen"] = "; ".join(x for x in (mt.get("nen") or "", nen_tu_khuon(kc)) if x)
+        hs["bia_mau"] = [b["tep"] for b in bia_thu_muc(tm)][:SO_MAU_TRAN]
+        hs["thu_muc_mau"] = tm
+        imp = [float(b["imp"]) for b in (mt.get("bia") or bia_thu_muc(tm)) if isinstance(b.get("imp"), (int, float))]
+        hs["bang_chung"] = " ({0}-{1} impressions)".format(_k(min(imp)), _k(max(imp))) if imp else ""
+    elif kieu == "tran":
         hs["nen"] = "; ".join(x for x in (nen_tu_khuon(kc), mt.get("nen") or "") if x)
         cung = [b for b in mt.get("bia") or [] if b.get("kieu_chu") == "tran" and os.path.isfile(str(b.get("tep")))
                 and b.get("video_id") != hs["khuon_video"]]
@@ -1300,10 +1375,11 @@ def mau_cua_kenh(goc: str, kenh: str, mau: Sequence[str] = (), ho_so: Optional[D
     khuôn kênh > `kenh.yaml: bia_lo_mau` (thư mục). Kênh kiểu chữ TRẦN: bìa khuôn + bìa thắng cùng kiểu của chính kênh
     (`ho_so_kieu` → `bia_mau`, đúng thứ tự — bìa khuôn đầu tiên), không lọc theo độ sáng (nền tím TL3 là kiểu thắng)."""
     cac = list(mau)
-    if not cac:
-        hs = ho_so if ho_so is not None else ho_so_kieu(goc, kenh, log=lambda s: None)
-        if hs.get("kieu") == "tran" and hs.get("bia_mau"):
-            return [t for t in hs["bia_mau"] if os.path.isfile(t)]
+    hs = ho_so if ho_so is not None else (ho_so_kieu(goc, kenh, log=lambda s: None, mau=cac) if not cac or any(
+        os.path.isdir(c) for c in cac) else {})
+    # Chữ trần: bìa khuôn + bìa cùng kiểu; có thư mục bìa thắng chủ chọn (16/10/2026) thì các bìa đầu bảng của nó.
+    if hs.get("kieu") == "tran" and hs.get("bia_mau") and (not cac or hs.get("thu_muc_mau")):
+        return [t for t in hs["bia_mau"] if os.path.isfile(t)]
     if not cac:
         try:
             from . import khuon_bia  # noqa: PLC0415
@@ -1347,7 +1423,7 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
         dem["llm"] += 1
         return goi(loi_nhac, **kw)
     # Kiểu bìa thắng CỦA kênh (khuôn hộp / chữ trần, mẫu tả few-shot riêng kênh — tả lại khi khuôn đổi).
-    hs = ho_so_kieu(goc, kenh, goi=goi_dem, log=log)
+    hs = ho_so_kieu(goc, kenh, goi=goi_dem, log=log, mau=mau)
     kc, tran = hs["kc"], hs["kieu"] == "tran"
     log("  bìa lô: kiểu chữ {0} ({1}), mẫu tả: {2}".format(
         "TRẦN" if tran else "HỘP", hs.get("bo_cuc"), hs.get("nguon_mau")))
@@ -1369,6 +1445,12 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     tang = (doc_chu_bia_tran(chu, hs, cach_ai=yt.get("chu") or ()) if tran
             else doc_chu_bia(chu, kc, cach_ai=yt.get("chu") or ()))
     chu_ve = "".join(btk.chu_cua_tang(t) for t in tang)
+    # 16/10/2026 — CỔNG CHỮ (`core/cong_chu.py`): chữ do MÃ vẽ nên bộ vẽ phải BẢO ĐẢM in đúng chữ đã soát (không cắt
+    # bớt, phông đủ nét). Không bảo đảm được → dừng TRƯỚC khi trả tiền ảnh (dây chuyền làm lô mới / báo người).
+    from . import cong_chu  # noqa: PLC0415
+    loi_chu = cong_chu.bao_dam_ma(chu_ve, hook, goc=goc, ngon_ngu=ngon_ngu, kieu_phong="" if tran else "hop")
+    if loi_chu:
+        raise cong_chu.ChuKhongKhop("bìa lô: " + loi_chu)
     nen = "" if tran else str(btk.cau_hinh_kenh(goc, kenh).get("bia_hop_nen") or "")
     uv = sinh_hang_loat(ve, yt["y_tuong"], moi_y, os.path.join(ra, "ung-vien"), kc=kc, nen=nen, khoa=khoa, log=log,
                         dem=dem, ho_so=hs)
@@ -1382,6 +1464,8 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
         return cu
     for u in uv:
         dung_bia(u, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs)
+        # Chữ do mã vẽ = chữ đã soát (bảo đảm ở trên): cổng chữ trước giám khảo không cần lượt đọc; dấu đóng ở tấm giao.
+        u["chu_khop"] = {"ok": True, "cach": "ma", "chu": chu_ve}
     log("  bìa lô: {0}/{1} tấm qua lọc cứng (đầu nhân vật, manh mối, đọc được)".format(
         sum(1 for u in uv if not u["loai"]), len(uv)))
     # Chữ trần: khoá chấm theo vân tay bản vẽ (vẽ lại chữ trên cùng nền → lượt lùi ví ShopAPI không trả lời cũ).
@@ -1500,7 +1584,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ra = os.path.abspath(a.ra or os.path.join(goc, "workspace", "bia-lo", ma))
     goi = _goi_that(goc, print)
     # Mẫu tả bìa thắng của kênh dựng TRƯỚC (một lượt AI khi khuôn đổi) để ảnh tham chiếu là bìa thắng cùng kiểu.
-    mau = mau_cua_kenh(goc, a.kenh, a.mau, ho_so=ho_so_kieu(goc, a.kenh, goi=goi))
+    mau = mau_cua_kenh(goc, a.kenh, a.mau, ho_so=ho_so_kieu(goc, a.kenh, goi=goi, mau=a.mau))
     nv = os.path.join(goc, "CHANNEL", a.kenh, "nv", "nv1.png")
     kq = chay(goc, a.kenh, thu_muc_luot=luot, ra=ra, chu=a.chu, so_y=a.so_y, moi_y=a.moi_y,
               goi=goi, ve=_ve_that(goc, mau + ([nv] if os.path.isfile(nv) else [])), mau=mau)

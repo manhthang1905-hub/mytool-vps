@@ -818,7 +818,8 @@ def _ma_co_clip_tu_anh(channel_code, code, goc_tool=None):
     tien_to = str(channel_code or "") + "-"
     if not channel_code or not str(code or "").startswith(tien_to):
         return False
-    goc_tool = goc_tool or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # `globals().get`: bài kiểm cắt khối hàm này chạy riêng (không có __file__) — trước đây NameError làm hỏng 3 bài
+    goc_tool = goc_tool or os.path.dirname(os.path.dirname(os.path.abspath(globals().get("__file__", ""))))
     duong = os.path.join(goc_tool, "PROJECTS", "AUTO", channel_code, str(code)[len(tien_to):],
                          "6-clip", "tu-anh.json")
     try:
@@ -826,6 +827,26 @@ def _ma_co_clip_tu_anh(channel_code, code, goc_tool=None):
             return bool((json.load(tep) or {}).get("canh"))
     except (OSError, ValueError, AttributeError):
         return False
+
+
+def _ma_bia_chua_dau(code, goc_tool=None):
+    """16/10/2026 — cổng chữ (chủ: "bìa sai chữ là tối kỵ"): gói `code` (DONE máy chủ / máy này) có bìa CHƯA có dấu
+    cổng chữ đúng sha1 (`core/cong_chu.py`) → lý do (đường ảnh KHÔNG tải gói ấy); '' = có dấu, hoặc chưa thấy gói (khi ấy
+    đường ảnh cũng không tải được). Không nạp được cổng chữ → không tải (đóng an toàn)."""
+    for goc_done in (globals().get("SERVER_DONE_ROOT"), globals().get("LOCAL_DONE_ROOT")):
+        thu_muc = os.path.join(goc_done, str(code)) if goc_done else ""
+        if not thu_muc or not os.path.isdir(thu_muc):
+            continue
+        try:
+            goc_tool = goc_tool or os.path.dirname(os.path.dirname(os.path.abspath(globals().get("__file__", ""))))
+            import sys as _sys  # noqa: PLC0415
+            if goc_tool not in _sys.path:
+                _sys.path.append(goc_tool)
+            from core import cong_chu  # noqa: PLC0415
+        except Exception as loi:  # noqa: BLE001
+            return "không nạp được cổng chữ: {0}".format(str(loi)[:80])
+        return cong_chu.kiem_dau(cong_chu.anh_goi(thu_muc)) if cong_chu.anh_goi(thu_muc) else "gói không có ảnh bìa"
+    return ""
 
 
 def get_all_ready_codes(rows, channel_code=None):
@@ -850,6 +871,10 @@ def get_all_ready_codes(rows, channel_code=None):
                 if code and _ma_co_clip_tu_anh(channel_code, code):
                     print("  {0}: KHÔNG tải — còn cảnh dựng từ ảnh (luật 07/10/2026: thà không "
                           "đăng còn hơn sản phẩm kém)".format(code))
+                    continue
+                ly_bia = _ma_bia_chua_dau(code) if code else ""
+                if ly_bia:
+                    print("  {0}: GIỮ, KHÔNG tải — bìa chưa qua cổng chữ: {1}".format(code, ly_bia))
                     continue
                 if code and not _ma_co_video_id(channel_code, code):
                     out.append(code)

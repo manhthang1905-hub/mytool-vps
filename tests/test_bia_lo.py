@@ -632,3 +632,57 @@ def test_bia_lo_tat_giu_duong_cu(tmp_path, monkeypatch):
     da.clear()
     ak._mot_lo_bia(bc, None, None)  # noqa: SLF001
     assert da == ["lo", "cu"], "bật bia_lo mà chưa có bìa thắng làm mẫu → đường cũ"
+
+
+# ── 7) Thư mục bìa thắng chủ chọn + ghi đè kiểu/bố cục (16/10/2026) ─────────
+
+
+def test_thu_muc_mau_kenh_yaml_thu_hang_cache_va_ghi_de(tmp_path):
+    """`kenh.yaml: bia_lo_mau` (thư mục bìa thắng thật, `thang.json` xếp hạng) → mẫu tả few-shot, ảnh tham chiếu + mẫu
+    so của giám khảo lấy từ ĐÚNG thư mục ấy (cache trong thư mục, không đụng `nghien-cuu/`); `bia_lo_bo_cuc` /
+    `bia_lo_kieu` ghi đè bố cục / kiểu chữ đo từ khuôn."""
+    goc = _goc_tran(tmp_path, kc=dict(KC_TRAN, nhan_vat={"vi_tri": "trai"}))   # khuôn: nhân vật trái → cột phải
+    tm = os.path.join(goc, "workspace", "bia-kh", "thang")
+    os.makedirs(tm, exist_ok=True)
+    for i, mau in enumerate([(200, 150, 90), (180, 120, 60), (240, 230, 210)], 1):
+        _anh(os.path.join(tm, "{0}.jpg".format(i)), mau)
+    with io.open(os.path.join(tm, bia_lo.TEP_DS_THANG), "w", encoding="utf-8") as f:
+        json.dump({"bia": [{"tep": "2.jpg", "video_id": "VIDGIA0002", "imp": 35000, "ctr": 5.3},
+                           {"tep": "1.jpg", "video_id": "VIDGIA0001", "imp": 14000, "ctr": 6.8},
+                           {"tep": "3.jpg", "imp": 7000, "ctr": 6.2}]}, f)
+    yaml = os.path.join(duong_kenh(goc, "KH"), TEP_KENH)
+    with io.open(yaml, "a", encoding="utf-8") as f:
+        f.write('bia_lo_mau: "workspace/bia-kh/thang"\nbia_lo_bo_cuc: "dai"\n')
+    lan = []
+
+    def goi(loi_nhac, **kw):
+        lan.append(kw)
+        return json.dumps({"bia": [{"so": 1, "kieu_chu": "box", "chu": "a", "ta": "TA-MOT"},
+                                   {"so": 2, "kieu_chu": "bare", "chu": "b", "ta": "TA-HAI"},
+                                   {"so": 3, "kieu_chu": "bare", "chu": "c", "ta": "TA-BA"}],
+                           "hinh": "H", "nen": "warm room"})
+    hs = bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
+    tm = os.path.abspath(tm)
+    assert hs["kieu"] == "tran" and hs["bo_cuc"] == "dai" and hs["thu_muc_mau"] == tm
+    assert hs["bia_mau"] == [os.path.join(tm, t) for t in ("2.jpg", "1.jpg")], "theo thứ hạng của thang.json"
+    assert len(lan) == 1 and len(lan[0]["anh"]) == 3 and "TA-MOT" in hs["mau"] and "warm room" in hs["nen"]
+    assert os.path.isfile(os.path.join(tm, bia_lo.TEP_MAU_THANG)), "cache nằm trong thư mục mẫu"
+    assert not os.path.isfile(bia_lo.duong_mau_thang(goc, "KH")), "không ghi cache vào nghien-cuu/ của kênh"
+    assert hs["bang_chung"] == " (7k-35k impressions)"
+    assert bia_lo.mau_cua_kenh(goc, "KH", ho_so=hs) == hs["bia_mau"]
+    assert bia_lo.mau_cua_kenh(goc, "KH", [tm]) == hs["bia_mau"], "--mau DIR cũng đi đường thư mục"
+    assert bia_lo.thu_muc_mau(str(tmp_path / "goc-khac"), "KX", [os.path.join(tm, "1.jpg")]) == tm, \
+        "chay() nhận danh sách TỆP của thư mục mẫu (có thang.json) → vẫn là thư mục ấy (không rơi về cache kênh)"
+    bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
+    assert len(lan) == 1, "thư mục không đổi → không tả lại"
+    with io.open(yaml, "a", encoding="utf-8") as f:
+        f.write('bia_lo_kieu: "hop"\n')
+    assert bia_lo.ho_so_kieu(goc, "KH", log=lambda s: None)["kieu"] == "hop"
+
+
+def test_bo_cuc_tran_hai_dai_ngang_tren_duoi():
+    kc = dict(KC_TRAN, nhan_vat={"vi_tri": "trai"},
+              vi_tri_chu="Two horizontal text tiers: top header read first, bottom conclusion read second.")
+    assert bia_lo.bo_cuc_tran(kc) == "dai", "chữ hai dải ngang dù nhân vật lệch trái"
+    assert bia_lo.bo_cuc_tran(dict(kc, vi_tri_chu="Left side stacked vertically")) == "phai"
+    assert bia_lo.bo_cuc_tran(dict(kc, vi_tri_chu="")) == "phai"

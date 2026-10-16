@@ -428,6 +428,14 @@ def test_sua_video_mot_doi_bia_so_url_anh(tmp_path):
     anh = tmp_path / "bia-2.jpg"
     anh.write_bytes(b"jpg")
     tr = TrangSuaVideoGia({"FAKEsua0003": {"title": "t", "thumb": 1}})
+    # 16/10/2026: bìa chưa qua cổng chữ (không dấu) → không tải, không mở trang (não ghi vào gốc TẠM, không gốc thật)
+    m = _may(tmp_path, tr)
+    m.goc_tool = str(tmp_path / "goc-tool")
+    kq = m.sua_video_mot("TL3-T7/0009", "FAKEsua0003", anh=str(anh))
+    assert os.path.isfile(str(tmp_path / "goc-tool" / "nao" / "bo-phan.db")), "giữ bìa ghi não bộ phận bìa"
+    assert kq["ket"] == "loi" and "cổng chữ" in kq["ly_do"] and tr.video["FAKEsua0003"]["thumb"] == 1
+    from core import cong_chu
+    cong_chu.ghi_dau(str(anh), "chu gia", doc=["chu gia", "chu gia"])
     kq = _may(tmp_path, tr).sua_video_mot("TL3-T7/0009", "FAKEsua0003", anh=str(anh))
     assert kq["ket"] == "ok" and kq["anh_doi"] is True and tr.video["FAKEsua0003"]["thumb"] == 2
     assert _may(tmp_path, TrangSuaVideoGia({})).sua_video_mot("k", "FAKEkhong01", tieu_de="x")["ket"] == "khong-the"

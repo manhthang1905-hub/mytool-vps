@@ -41,7 +41,7 @@ UU_TIEN_NANG = ("S03", "S04", "D09", "K20", "D14", "D13")   # việc nặng gấ
 MA_XONG, MA_HOAN = (0, 30), (10, 4)
 TEN_TAC_VU = "ShopAPI-KyNang"
 #: Skill → bộ phận của não (`core.nao_bo_phan.BO_PHAN`) để não học tỉ lệ thành công từng skill.
-BO_PHAN = {"S02": "dieu-phoi", "S03": "bia", "S04": "ban-giao", "D09": "dang-video", "K20": "dang-video",
+BO_PHAN = {"S02": "dieu-phoi", "S03": "bia", "S04": "ban-giao", "S05": "bia", "D09": "dang-video", "K20": "dang-video",
            "D10": "kich-ban", "D11": "bia", "D12": "suc-khoe-may", "D13": "bia", "D14": "chi-so-studio"}
 NHAN = {"se_chay": "sẽ chạy", "nen_chay": "nên chạy — chờ chủ", "cho_nhip": "đã chạy, chờ nhịp", "tam_dung": "tạm dừng",
         "cong_tac_tat": "công tắc chung tắt", "tat_kenh": "tắt ở kênh này", "khong": "chưa cần", "xong": "xong",

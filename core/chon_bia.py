@@ -435,6 +435,55 @@ def _loai_kho_doc(ung_cu_vien: Sequence[_KetQuaCham], duong_theo_so: Dict[int, s
             k.loai = "khó đọc ({0})".format("; ".join(bc.get("ly_do") or [])[:160])
 
 
+# ── Cổng chữ TRƯỚC giám khảo (16/10/2026, `core/cong_chu.py`) ─────────────────
+
+
+def _cong_chu_truoc(goi_chat: Callable[..., str], ung_vien: Sequence[UngVienBia], *, chu_bia: str,
+                    chu_theo_so: Dict[int, str], ma_theo_so: Dict[int, str], khoa: str,
+                    ghi: Callable[[str], None]) -> Tuple[Dict[int, str], Dict[int, Dict[str, Any]]]:
+    """Mỗi ứng viên có chữ mong đợi: tấm chữ do MÃ vẽ đúng chữ (`cong_chu.bao_dam_ma`) → khớp, không gọi AI; tấm mô
+    hình ảnh tự vẽ chữ → MỘT lượt đọc mù, so TUYỆT ĐỐI (`cong_chu.xet_doc`) — trượt thì LOẠI trước khi chấm (sai
+    kanji, chữ lặp/thiếu, chữ vỡ). Lượt đọc hỏng → chưa biết (giữ; cổng cuối đọc hai lượt). Trả (loai, chu_khop)."""
+    from . import cong_chu, soat_bia  # noqa: PLC0415
+    loai: Dict[int, str] = {}
+    ket: Dict[int, Dict[str, Any]] = {}
+    for u in ung_vien:
+        mong = chu_theo_so.get(u.so) or chu_bia
+        if not cong_chu.chuan(mong):
+            continue
+        if u.so in ma_theo_so and not cong_chu.bao_dam_ma(ma_theo_so[u.so], mong):
+            ket[u.so] = {"ok": True, "cach": "ma", "chu": mong}
+            continue
+        d = soat_bia.doc_anh(goi_chat, u.duong, thang=cong_chu.THANG_DOC[0], khoa="{0}:chu-truoc:{1}:{2}".format(
+            khoa or "chon-bia", u.so, cong_chu.sha1_tep(u.duong)[:10]))
+        if d is None:
+            ket[u.so] = {"ok": None, "cach": "doc1", "chu": mong}
+            continue
+        ly = cong_chu.xet_doc(d, mong)
+        ket[u.so] = {"ok": not ly, "cach": "doc1", "chu": mong, "doc": str(d.get("chu") or "")[:80], "ly_do": ly}
+        if ly:
+            loai[u.so] = "cổng chữ: " + "; ".join(ly)[:200]
+            ghi("  ảnh bìa — cổng chữ trước giám khảo: LOẠI tấm {0} ({1})".format(u.so, "; ".join(ly)[:160]))
+    return loai, ket
+
+
+def _bia_ma_truoc(goc: str, kenh: str, thu_muc_thumb: str, chu_bia: str, ghi: Callable[[str], None],
+                  toi_da: int = 3) -> List[UngVienBia]:
+    """Mọi ứng viên trượt cổng chữ: chữ bìa vẽ BẰNG MÃ lên ≤ `toi_da` nền sạch (`cong_chu.tim_nen_sach`) thành ứng viên
+    mới `thumb_09N.jpg` (cổng cuối vẫn đọc hai lượt + đóng dấu). Không có nền sạch → []."""
+    from . import cong_chu, do_bia  # noqa: PLC0415
+    ra: List[UngVienBia] = []
+    nn = do_bia._ngon_ngu_kenh(goc, kenh) or "ja"  # noqa: SLF001
+    for i, nen in enumerate(cong_chu.tim_nen_sach(thu_muc_thumb)[:toi_da]):
+        dich = os.path.join(thu_muc_thumb, "thumb_{0:03d}.jpg".format(90 + i))
+        v = cong_chu.ve_bia_ma(nen, chu_bia, dich, goc=goc, ngon_ngu=nn)
+        if v.get("tep"):
+            ra.append(UngVienBia(so=90 + i, duong=dich, kieu="bia_ma"))
+        else:
+            ghi("  (bìa chữ vẽ bằng mã trên {0}: {1})".format(os.path.basename(nen), v.get("loi")))
+    return ra
+
+
 # ── Xuất jpg ≤2MB 1280×720 ────────────────────────────────────────────────────
 
 
@@ -515,7 +564,8 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
          chu_theo_so: Optional[Dict[int, str]] = None,
          nhom_uu_tien: Optional[str] = None,
          chuan_ngach_khoi: str = "",
-         luot_tham_do: bool = False) -> Optional[Dict[str, Any]]:
+         luot_tham_do: bool = False,
+         ma_theo_so: Optional[Dict[int, str]] = None) -> Optional[Dict[str, Any]]:
     """Chọn MỘT ảnh bìa trong `thu_muc_thumb`, xuất `CHON-thumb_00N.jpg` +
     `chon-bia.json`. Trả bản ghi lựa chọn, hoặc `None` khi không có ứng viên
     nào (thư mục trống). KHÔNG BAO GIỜ ném lỗi ra ngoài.
@@ -532,9 +582,15 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
     nào mọi lượt chấm đều đọc ra chữ khác thì LOẠI "sai chính tả"), `nhom_uu_tien`
     (nhóm A/B tất định của video này — chọn tấm tốt nhất TRONG nhóm; cả nhóm hỏng
     thì lấy tấm tốt nhất còn lại), `chuan_ngach_khoi` (chuẩn ngách cho giám khảo).
+
+    16/10/2026 — CỔNG CHỮ TRƯỚC GIÁM KHẢO (`_cong_chu_truoc`, `core/cong_chu.py`): tấm có chữ trên ảnh khác chữ mong
+    đợi bị LOẠI trước khi chấm (cả đường lùi khi giám khảo hỏng); `ma_theo_so` = chữ thật sự in của tấm do MÃ vẽ
+    (bảo đảm, không tốn lượt đọc). Mọi tấm trượt → chữ bìa vẽ bằng mã lên nền sạch (`_bia_ma_truoc`); không có nền
+    sạch → `het_hop_le` (lô mới) — không bao giờ giao tấm sai chữ.
     """
     nhom_theo_so = dict(nhom_theo_so or {})
     chu_theo_so = dict(chu_theo_so or {})
+    ma_theo_so = dict(ma_theo_so or {})
     def ghi(dong: str) -> None:
         if log is not None:
             log(dong)
@@ -546,6 +602,34 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
     ung_vien = _ung_vien_trong_thu_muc(thu_muc_thumb, ten_kieu_theo_so)
     if not ung_vien:
         return None
+    loai_chu: Dict[int, str] = {}
+    khop_chu: Dict[int, Dict[str, Any]] = {}
+    if goi_chat is not None:
+        try:
+            loai_chu, khop_chu = _cong_chu_truoc(goi_chat, ung_vien, chu_bia=chu_bia, chu_theo_so=chu_theo_so,
+                                                 ma_theo_so=ma_theo_so, khoa=khoa, ghi=ghi)
+        except Exception as loi:  # noqa: BLE001 — cổng trước hỏng: cổng cuối (hai lượt đọc + dấu) vẫn chặn
+            ghi("  (cổng chữ trước giám khảo hỏng: {0})".format(str(loi)[:120]))
+    if loai_chu and all(u.so in loai_chu for u in ung_vien):
+        moi = _bia_ma_truoc(goc, kenh, thu_muc_thumb, chu_bia, ghi) if chu_bia else []
+        for u in moi:
+            khop_chu[u.so] = {"ok": True, "cach": "ma", "chu": chu_bia}
+            ten_kieu_theo_so = {**ten_kieu_theo_so, u.so: "bia_ma"}
+        if not moi:
+            ket_khong = {"so": None, "tep": "", "chon_boi": "khong", "het_hop_le": True,
+                         "ly_do": "mọi ứng viên sai chữ trên ảnh (cổng chữ) và không có nền sạch để vẽ chữ bằng mã",
+                         "ly_do_tung_tam": {str(k): v for k, v in loai_chu.items()}, "canh_bao": "",
+                         "nhom_uu_tien": nhom_uu_tien or "", "luot_tham_do": bool(luot_tham_do)}
+            _ghi_json(duong_tep_chon_bia(thu_muc_thumb), {
+                "chon": ket_khong, "ung_vien": [{"so": u.so, "kieu": u.kieu, "nhom": nhom_theo_so.get(u.so, ""),
+                                                 "tong_diem": None, "loai": loai_chu[u.so],
+                                                 "chu_khop": khop_chu.get(u.so)} for u in ung_vien],
+                "so_luot_cham": 0, "co_khuon_thang": False})
+            ghi("  (!) ảnh bìa: MỌI ứng viên sai chữ trên ảnh — KHÔNG xuất bìa nào (khâu bìa làm lô mới).")
+            return ket_khong
+        ung_vien = ung_vien + moi
+    bi_loai_chu = [u for u in ung_vien if u.so in loai_chu]
+    ung_vien = [u for u in ung_vien if u.so not in loai_chu]
 
     # Đọc TRƯỚC vòng `try` chính: nhánh lùi (`except` bên dưới) cũng cần biến
     # này, và phải LUÔN có giá trị (kể cả khi đọc khuôn hỏng) chứ không được
@@ -610,6 +694,7 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
 
         if not ung_cu_vien:
             raise RuntimeError("giám khảo không trả điểm cho ứng viên nào")
+        ung_cu_vien += [_KetQuaCham(so=u.so, loai=loai_chu[u.so], tong=0.0) for u in bi_loai_chu]
         _loai_kho_doc(ung_cu_vien, {u.so: u.duong for u in ung_vien}, ghi)
 
         canh_bao = ""
@@ -632,7 +717,8 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
                 "chon": ket_khong,
                 "ung_vien": [{"so": k.so, "kieu": ten_kieu_theo_so.get(k.so, ""), "nhom": nhom_theo_so.get(k.so, ""),
                               "tong_diem": round(k.tong, 1), "diem": {a: round(b, 1) for a, b in k.diem.items()},
-                              "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra} for k in ung_cu_vien],
+                              "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra,
+                              "chu_khop": khop_chu.get(k.so)} for k in ung_cu_vien],
                 "so_luot_cham": so_luot_cham, "co_khuon_thang": bool(khuon_thang)})
             ghi("  (!) ảnh bìa: MỌI ứng viên đều bị loại ({0}) — KHÔNG xuất bìa nào (khâu bìa sẽ làm lô "
                 "mới).".format(tom))
@@ -710,7 +796,8 @@ def chon(goc: str, kenh: str, thu_muc_thumb: str, *, ten_kieu_theo_so: Dict[int,
             "ung_vien": [{"so": k.so, "kieu": ten_kieu_theo_so.get(k.so, ""),
                          "nhom": nhom_theo_so.get(k.so, ""),
                          "tong_diem": round(k.tong, 1), "diem": {a: round(b, 1) for a, b in k.diem.items()},
-                         "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra} for k in ung_cu_vien],
+                         "loai": k.loai, "ly_do": k.ly_do, "chu_doc_ra": k.chu_doc_ra,
+                         "chu_khop": khop_chu.get(k.so)} for k in ung_cu_vien],
             "so_luot_cham": so_luot_cham, "co_khuon_thang": bool(khuon_thang),
         }
         _ghi_json(duong_tep_chon_bia(thu_muc_thumb), ket_qua)

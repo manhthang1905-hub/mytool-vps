@@ -143,7 +143,18 @@ def _sao_luu_anh_bia(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> None:
         tam = dich + ".tmp"
         shutil.copy2(duong_anh, tam)
         os.replace(tam, dich)
+        _chuyen_dau(duong_anh, dich)
     except OSError:
+        pass
+
+
+def _chuyen_dau(nguon: str, dich: str) -> None:
+    """16/10/2026: bản sao bìa mang theo DẤU cổng chữ (`core/cong_chu.py`) — cửa ra YouTube (đổi bìa, quay lui bìa,
+    thử nghiệm A/B) chỉ nhận tệp có dấu."""
+    try:
+        from . import cong_chu  # noqa: PLC0415
+        cong_chu.chuyen_dau(nguon, dich)
+    except Exception:  # noqa: BLE001 — thiếu dấu thì cửa ra tự từ chối (đóng an toàn)
         pass
 
 
@@ -177,6 +188,7 @@ def _sao_luu_bia_2(goc: str, kenh: str, ma_goi: str, duong_anh: str) -> Optional
             os.makedirs(os.path.dirname(dich), exist_ok=True)
             shutil.copy2(nguon, dich + ".tmp")
             os.replace(dich + ".tmp", dich)
+            _chuyen_dau(nguon, dich)
             ban = {"tep": os.path.basename(nguon), "so": u["so"], "kieu": str(u.get("kieu") or ""),
                    "nhom": str(u.get("nhom") or ""), "tong_diem": u.get("tong_diem"),
                    "anh": os.path.join("anh", os.path.basename(dich)).replace("\\", "/")}
@@ -337,6 +349,27 @@ def _doc_duoc_bia(duong_anh: str, bc: Optional[Dict[str, Any]] = None) -> Dict[s
         return {}
     return {"bia_diem": bc.get("diem"), "bia_tuong_phan_min": bc.get("tuong_phan_min"),
             "bia_doc_duoc": bc.get("doc_duoc") or "", "bia_do": bc.get("cach") or ""}
+
+
+def cap_nhat_chu_khop(goc: str, kenh: str, ma_goi: str, dau: Dict[str, Any]) -> bool:
+    """16/10/2026: ghi `thumbnail.chu_khop` (dấu cổng chữ của bìa đang chạy — `cong_chu.tom_tat_dau`). False nếu chưa
+    có hồ sơ."""
+    ho_so = doc_ho_so(goc, kenh, ma_goi)
+    if not ho_so:
+        return False
+    th = ho_so.get("thumbnail") if isinstance(ho_so.get("thumbnail"), dict) else {}
+    th["chu_khop"] = dict(dau or {})
+    ho_so["thumbnail"] = th
+    _luu_ho_so(goc, kenh, ma_goi, ho_so)
+    return True
+
+
+def _chu_khop_bia(duong_anh: str) -> Dict[str, Any]:
+    try:
+        from . import cong_chu  # noqa: PLC0415
+        return cong_chu.tom_tat_dau(duong_anh)
+    except Exception as loi:  # noqa: BLE001
+        return {"ok": False, "ly_do": "không đọc được dấu: {0}".format(str(loi)[:80])}
 
 
 def cap_nhat_bia_doc_duoc(goc: str, kenh: str, ma_goi: str, bc: Dict[str, Any]) -> bool:
@@ -539,6 +572,7 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
             ho_so["thumbnail"].update(nhom=tt_chon.get("nhom", ""), theo_khuon=bool(tt_chon["theo_khuon"]),
                                       tham_do=bool(tt_chon.get("tham_do")))
         ho_so["thumbnail"].update(_doc_duoc_bia(duong_anh))
+        ho_so["thumbnail"]["chu_khop"] = _chu_khop_bia(duong_anh)  # 16/10/2026: dấu cổng chữ của bìa giao
         _sao_luu_anh_bia(goc, kenh, ma_goi, duong_anh)
         ho_so["bia_2"] = _sao_luu_bia_2(goc, kenh, ma_goi, duong_anh)
 
