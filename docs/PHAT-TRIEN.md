@@ -69,6 +69,7 @@ Dùng `--chi <tệp…>` khi máy còn tệp dở của người khác: chỉ nh
 - `tu_chay.py`: sản xuất;
 - `tram_nen.py`: trạm;
 - `-m core.gac_tong`: gác tổng;
+- `van_hanh.py`: vận hành — sổ thành phần chạy dài, tự bật lại, dọn khoá sau khởi động (`core/van_hanh.py`);
 - `vm/agent.py`: phiên kênh, do giao diện mở.
 
 | Khâu | Module |
@@ -85,7 +86,7 @@ Dùng `--chi <tệp…>` khi máy còn tệp dở của người khác: chỉ nh
 | Kéo view chéo | `core/keo_cheo.py` (kế hoạch, giới hạn, đo), `vm/keo_cheo_dom.py` (thêm vào danh sách phát trên Chrome kênh lớn) |
 | Đăng: bền với Studio | `vm/tu_chua_dom.py` (AI đề xuất bộ chọn, kiểm trên trang, `TL_TU_CHUA_DOM=0` tắt), `vm/ngon_ngu_tam.py` (tạm `hl=vi` rồi trả), `vm/thiet_lap_kenh_dom.py` (thiết lập kênh một lần) |
 | Việc máy Studio có kiểu | `vm/studio_may_dom.py` (bộ chạy DOM hàng `viec_may` của `nao/viec-tu-giam-doc.json`: `--test-compare` đặt «Thử nghiệm và so sánh» bìa A + 1–2 ứng viên qua cổng `do_bia.cham_tep`, đọc lại; `--suc-khoe` CHỈ ĐỌC gậy / cảnh cáo / «nội dung dùng lại», thấy thật mới `can_nguoi`), `core/studio_may.py` (phần thuần: ứng viên bìa, luật trạng thái, đọc chữ sức khoẻ); lịch = skill D13/D14 (`core/ky_nang.py`, mỗi giờ :35, một kênh mỗi lượt) |
-| Dọn và canh | `core/don_dep.py`, `core/don_dia.py` (nhịp dọn từ gác tổng + xoay log), `core/don_chrome_cu.py` (bản Chrome cũ của Chrome Portable từng kênh), `core/gac_tong.py`, `core/ben_bi.py` (khoá chết, nhịp tim, hồi sinh agent, 36h không sản xuất), `core/chot_an_toan.py` (ví, Windows, hạn VPS, giọng trùng), `core/bao_dong.py`, `core/bao_cao_ngay.py` (06:30), `core/su_co.py`, `core/kiem_may.py`. Xem `docs/BEN-BI.md` |
+| Dọn và canh | `core/don_dep.py`, `core/don_dia.py` (nhịp dọn từ gác tổng + xoay log), `core/don_chrome_cu.py` (bản Chrome cũ của Chrome Portable từng kênh), `core/gac_tong.py`, `core/ben_bi.py` (khoá chết, nhịp tim, hồi sinh agent, 36h không sản xuất), `core/van_hanh.py` (khởi động + tự hồi phục giao diện/trạm/agent/trực quan), `core/chot_an_toan.py` (ví, Windows, hạn VPS, giọng trùng), `core/bao_dong.py`, `core/bao_cao_ngay.py` (06:30), `core/su_co.py`, `core/kiem_may.py`. Xem `docs/BEN-BI.md` |
 | Bộ não | `core/nao.py` (CLI an toàn + phiên sáng 06:45 đợi quét Studio xong; `python -m core.nao lich`), `core/nao_chuong_trinh.py` (chương trình hằng ngày: danh mục kênh, radar nổ, săn khoảng trống, bao bì A/B, giữ chân theo đoạn — mã tính, não quyết), `core/nao_goi_y.py` (video thắng/đang nóng + nguồn nhân bản), `nao/CLAUDE.md` |
 | Trung tâm chỉ huy (chỉ đọc, cổng 8790) | `core/truc_quan.py`, `core/nao_truc_quan.py`, `ui_web/*.html`, `MO-TRUNG-TAM.bat`. Xem `docs/TRUNG-TAM-CHI-HUY.md` |
 | Danh mục skill | `core/ky_nang.py` → `docs/KY-NANG.md` (`python -m core.ky_nang md`) |

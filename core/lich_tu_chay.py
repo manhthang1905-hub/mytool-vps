@@ -79,7 +79,9 @@ __all__ = ["TEN_VIEC", "TEN_VIEC_CANH", "TEN_VIEC_TRAM_DANG_NHAP",
            "TEN_VIEC_GAC_TONG", "dang_ky_gac_tong", "huy_gac_tong",
            "trang_thai_gac_tong",
            "TEN_VIEC_DONG_BO_GIT", "dang_ky_dong_bo_git", "huy_dong_bo_git",
-           "TEN_VIEC_NAO", "dang_ky_nao", "huy_nao"]
+           "TEN_VIEC_NAO", "dang_ky_nao", "huy_nao",
+           "TEN_VIEC_VAN_HANH", "TEN_VIEC_VAN_HANH_DANG_NHAP", "dang_ky_van_hanh", "huy_van_hanh",
+           "trang_thai_van_hanh"]
 
 #: Tên việc trong Task Scheduler — một tool chỉ một việc, tìm/xoá/đọc lại bằng
 #: đúng tên này. Đổi tên là bỏ rơi việc cũ đã đăng ký trên máy khách.
@@ -432,6 +434,10 @@ def _dien_giai_ket_qua(ma: str, lan_chay_cuoi: str, *,
     # Cùng một con số, hai nghĩa khác hẳn: với việc tự chạy, 0 là "mọi kênh
     # xong"; với chó giữ nhà, 0 chỉ là "sau lượt kiểm ấy đã có trạm phục vụ"
     # (xem mã thoát của `tram_nen.py --kiem`). Nói nhầm câu là đọc nhầm máy.
+    if ten_viec in (TEN_VIEC_VAN_HANH, TEN_VIEC_VAN_HANH_DANG_NHAP):
+        if so == 0:
+            return "mọi thành phần khoẻ hoặc đang chờ theo luật (mã 0)"
+        return "có thành phần kẹt / bật lại không lên (mã thoát {0}) — xem workspace/van-hanh/van-hanh.log".format(so)
     if ten_viec in (TEN_VIEC_CANH, TEN_VIEC_TRAM_DANG_NHAP):
         if so == 0:
             return "trạm 8765 có người phục vụ (mã 0)"
@@ -644,3 +650,77 @@ def huy_nao(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[boo
     if not ok:
         return False, "Không gỡ được lịch bộ não — thử mở Task Scheduler xoá tay."
     return True, ("Đã gỡ lịch bộ não." if that_su else "Chưa từng đặt lịch bộ não.")
+
+
+# ── Vận hành: bật máy lên là mọi thứ tự chạy (16/10/2026, `core/van_hanh.py`) ─────────────────────────────────
+#
+# Việc thứ tám + chín: `ShopAPI-VanHanh` mỗi 5 phút một lượt canh (`pythonw van_hanh.py mot-luot` — kiểm giao diện,
+# trạm 8765, agent vm, trực quan 8790; bật cái CHẾT, lùi dần, chạm trần thì báo 1 lần/ngày) và
+# `ShopAPI-VanHanhLucDangNhap` chạy ĐÚNG MỘT lượt lúc đăng nhập (trễ 1 phút cho chuỗi Startup mở giao diện trước) —
+# lượt đầu sau khởi động dọn khoá cũ + ghi báo cáo khởi động. Cùng nguyên tắc "đã đăng nhập, KHÔNG /RU SYSTEM, không
+# lưu mật khẩu" với `dang_ky_gac_tong`: mở giao diện/agent cần đúng phiên người dùng (màn hình, DPAPI, Chrome).
+# Gọi thẳng tệp gốc `van_hanh.py` (không `cmd /c cd /d … -m`) — không cửa sổ đen chớp mỗi 5 phút.
+
+TEN_VIEC_VAN_HANH = "ShopAPI-VanHanh"
+TEN_VIEC_VAN_HANH_DANG_NHAP = "ShopAPI-VanHanhLucDangNhap"
+NHIP_VAN_HANH_PHUT = 5
+
+
+def _duong_van_hanh(goc: str) -> str:
+    return os.path.join(os.path.abspath(goc), "van_hanh.py")
+
+
+def _lenh_van_hanh(goc: str) -> str:
+    return '"{0}" "{1}" mot-luot'.format(_pythonw_cho(goc), _duong_van_hanh(goc))
+
+
+def dang_ky_van_hanh(goc: str, phut: int = NHIP_VAN_HANH_PHUT, *, luc_dang_nhap: bool = True,
+                     chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
+    """Đặt `ShopAPI-VanHanh` (`/SC MINUTE /MO <phut>`) + `ShopAPI-VanHanhLucDangNhap` (`/SC ONLOGON /DELAY 0001:00`).
+    `/F` ghi đè — gọi lại bao nhiêu lần cũng chỉ có đúng hai việc. TỪ CHỐI đường worktree (`.claude/worktrees/`):
+    lịch phải chạy mã của thư mục tool chính, worktree bị dọn là lịch chết im lặng."""
+    try:
+        phut = int(phut)
+    except (TypeError, ValueError):
+        phut = 0
+    if not 1 <= phut <= 1439:
+        return False, "Nhịp vận hành phải từ 1 tới 1439 phút — nhận “{0}”.".format(phut)
+    if not os.path.isfile(_duong_van_hanh(goc)):
+        return False, "Không thấy van_hanh.py trong thư mục tool — không đặt lịch được."
+    chuan = os.path.abspath(goc).replace("\\", "/").lower() + "/"
+    if "/.claude/worktrees/" in chuan:
+        return False, ("Đây là worktree ({0}) — lịch phải trỏ thư mục tool chính. Chạy lại lệnh này từ thư mục "
+                       "tool chính.".format(os.path.abspath(goc)))
+    tr = _lenh_van_hanh(goc)
+    ma, ra = chay_lenh(["schtasks", "/Create", "/TN", TEN_VIEC_VAN_HANH, "/SC", "MINUTE", "/MO", str(phut),
+                        "/TR", tr, "/F"])
+    if ma != 0:
+        return False, ("Không đặt được lịch vận hành — Windows báo: {0}"
+                       .format(ra.strip()[:300] or "(mã thoát {0})".format(ma)))
+    them = ""
+    if luc_dang_nhap:
+        ma2, ra2 = chay_lenh(["schtasks", "/Create", "/TN", TEN_VIEC_VAN_HANH_DANG_NHAP, "/SC", "ONLOGON",
+                              "/DELAY", "0001:00", "/TR", tr, "/F"])
+        them = ("" if ma2 == 0 else " (lượt lúc đăng nhập KHÔNG đặt được: {0} — lịch {1} phút vẫn chạy)"
+                .format(ra2.strip()[:150] or "mã thoát {0}".format(ma2), phut))
+    return True, ("Đã đặt lịch vận hành: mỗi {0} phút kiểm giao diện, trạm 8765, agent, trực quan 8790 — chết thì "
+                  "tự bật lại; lúc đăng nhập dọn khoá cũ + báo cáo khởi động. Máy phải ở trạng thái ĐÃ ĐĂNG NHẬP "
+                  "(AutoAdminLogon) thì việc mới chạy.{1}").format(phut, them)
+
+
+def huy_van_hanh(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
+    """Gỡ cả hai việc vận hành. Chưa từng đăng ký thì coi như xong."""
+    hong, da = [], []
+    for ten in (TEN_VIEC_VAN_HANH, TEN_VIEC_VAN_HANH_DANG_NHAP):
+        ok, that_su = _xoa_viec(ten, chay_lenh)
+        if not ok:
+            hong.append(ten)
+        elif that_su:
+            da.append(ten)
+    if hong:
+        return False, "Không gỡ được: {0} — thử mở Task Scheduler xoá tay.".format(", ".join(hong))
+    return True, ("Đã gỡ lịch vận hành ({0}).".format(", ".join(da)) if da else "Chưa từng đặt lịch vận hành.")
+
+
+def trang_thai_van_hanh(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Dict[str, object]:
+    return trang_thai(goc, chay_lenh=chay_lenh, ten_viec=TEN_VIEC_VAN_HANH)

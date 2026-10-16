@@ -226,6 +226,8 @@ def chup() -> Dict[str, Any]:
                 "agent_song": tuoi_nhip is not None and tuoi_nhip < 300, "nhip_giay": round(tuoi_nhip or -1),
                 "dang_dang": os.path.isfile(os.path.join(VM, "logs", "dang-dodang.json"))},
         "nao": {"phien_hom_nay": os.path.isfile(os.path.join(GOC, "nao", "nhat-ky", hom + ".md"))},
+        # 16/10/2026 — `core.van_hanh` (lượt canh 5'): X/Y thành phần chạy + dòng báo cáo lần khởi động gần nhất.
+        "van_hanh": _json(GOC, "workspace", "van-hanh", "trang-thai.json").get("tom_tat") or {},
         "kenh": kenh, "su_kien": su_kien, "san_xuat": sx, "loi": loi,
     }
 

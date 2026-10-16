@@ -368,12 +368,13 @@ def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
     * `dang_ky_canh_tram()`   → `ShopAPI-CanhTram` + `ShopAPI-TramLucDangNhap`
     * `dang_ky_dieu_phoi()`   → `ShopAPI-DieuPhoi` (10'; chỉ làm khi cai-dat.json bật)
     * `dang_ky_gac_tong()`    → `ShopAPI-GacTong` (15'; gồm kiểm cập nhật)
+    * `dang_ky_van_hanh()`    → `ShopAPI-VanHanh` (5') + `ShopAPI-VanHanhLucDangNhap` (lúc đăng nhập)
     """
     bao = bao or _im_lang
     if thu:
         bao("  [thử] sẽ gọi core.lich_tu_chay.dang_ky(goc, \"{0}\") + "
             "dang_ky_canh_tram(goc, {1}) + dang_ky_dieu_phoi + dang_ky_gac_tong "
-            "— đăng ký 5 việc Task Scheduler.".format(gio, phut_canh))
+            "+ dang_ky_nao + dang_ky_van_hanh — đăng ký các việc Task Scheduler.".format(gio, phut_canh))
         return True
     try:
         from core import lich_tu_chay
@@ -396,6 +397,12 @@ def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
         bao("  ShopAPI-Nao: {0}".format(msg5))
     except Exception as loi:  # noqa: BLE001
         bao("  ShopAPI-Nao: không đăng ký được ({0})".format(str(loi)[:120]))
+    # 16/10/2026: vận hành (core/van_hanh.py) — bật máy lên là mọi thứ tự chạy, chết thì tự bật lại. Lỗi không chặn cài.
+    try:
+        _ok6, msg6 = lich_tu_chay.dang_ky_van_hanh(goc)
+        bao("  ShopAPI-VanHanh + ShopAPI-VanHanhLucDangNhap: {0}".format(msg6))
+    except Exception as loi:  # noqa: BLE001
+        bao("  ShopAPI-VanHanh: không đăng ký được ({0})".format(str(loi)[:120]))
     return ok1 and ok2 and ok3 and ok4
 
 

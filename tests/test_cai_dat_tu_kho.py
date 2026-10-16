@@ -302,6 +302,7 @@ def _lich_gia(monkeypatch):
 
     monkeypatch.setattr(lich_tu_chay, "dang_ky_dieu_phoi", _dieu_phoi)
     monkeypatch.setattr(lich_tu_chay, "dang_ky_gac_tong", _gac_tong)
+    monkeypatch.setattr(lich_tu_chay, "dang_ky_van_hanh", lambda g, *a, **k: (True, "ok-vh"))
     return goi
 
 

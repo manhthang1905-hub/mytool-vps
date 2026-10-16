@@ -15,8 +15,8 @@
 @media (max-width:820px){.anh-hung{grid-template-columns:minmax(0,1fr)}}
 
 /* ---- tài nguyên máy ---- */
-.tai-nguyen{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}
-@media (max-width:1300px){.tai-nguyen{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tai-nguyen{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:1300px){.tai-nguyen{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (max-width:560px){.tai-nguyen{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tn{padding:12px 14px}
 .tn .nhan{display:flex;align-items:center;gap:7px;font:600 10.5px var(--f-hud);letter-spacing:.14em;text-transform:uppercase;color:var(--mo)}
@@ -273,7 +273,10 @@ function taiNguyen() {
   const m = DU.may || {}, ram = m.ram || {}, kenh = DU.kenh || [];
   const coVideo = kenh.filter(k => k.video_mai && k.video_mai.co).length, hen = kenh.filter(k => k.video_mai && k.video_mai.da_hen).length;
   const pRam = ram.tong ? 1 - ram.trong / ram.tong : 0, pO = m.o_tong_gb ? 1 - m.o_trong_gb / m.o_tong_gb : 0;
+  const vh = DU.van_hanh || {}, vhHong = (vh.hong || []).map(h => h.ten).join(", ");
   const o = [
+    ["Vận hành", "shield", !vh.tong ? "canh" : vh.song >= vh.tong ? "tot" : "hong", vh.tong ? `${vh.song}/${vh.tong} chạy` : "Chưa canh",
+     vhHong ? `chưa chạy: ${vhHong}` : (vh.khoi_dong || "lịch ShopAPI-VanHanh chưa chạy")],
     ["Agent", "pulse", m.agent_song ? "tot" : "hong", m.agent_song ? "Đang sống" : "IM LẶNG", m.nhip_giay >= 0 ? `nhịp tim ${m.nhip_giay}s trước` : "không thấy nhịp tim"],
     ["Bộ não", "brain", (DU.nao || {}).phien_hom_nay ? "tot" : "canh", (DU.nao || {}).phien_hom_nay ? "Đã chạy" : "Chờ phiên", (DU.nao || {}).phien_hom_nay ? "phiên hôm nay xong" : "phiên sáng chưa chạy"],
     ["Máy đăng", "upload", m.dang_dang ? "canh" : "tot", m.dang_dang ? "Đang đăng" : "Rảnh", m.dang_dang ? "đang tải video lên" : "sẵn sàng"],

@@ -60,7 +60,7 @@ Tệp này là cửa vào duy nhất. Phiên Claude trên máy đọc thêm `CLA
    Hoặc trên giao diện: **Số liệu kênh → Thêm kênh → "Ngách mới bằng AI"**. Lệnh viết hồ sơ ngách, dựng kênh, viết lại lời nhắc theo ngách, tìm đối thủ rồi chạy nghiên cứu khởi động. Việc còn lại cho người (giọng đọc, Chrome kênh, bật tiền) nằm ở `CHANNEL/<mã>/KHOI-TAO.md`. Chi tiết: `docs/KENH-VA-NGACH.md`.
 
 ## Vận hành hằng ngày
-Máy tự chạy qua 5 lịch Windows:
+Máy tự chạy qua các lịch Windows (đăng ký lại: `python van_hanh.py dang-ky` cho hai lịch vận hành):
 
 | Lịch | Nhịp | Việc |
 |---|---|---|
@@ -69,6 +69,8 @@ Máy tự chạy qua 5 lịch Windows:
 | `ShopAPI-CanhTram` | 5 phút | `tram_nen.py --kiem`: trạm 127.0.0.1:8765 chết thì tự bật lại |
 | `ShopAPI-TramLucDangNhap` | lúc đăng nhập | như trên, sau khi máy khởi động lại |
 | `ShopAPI-GacTong` | 15 phút | `core.gac_tong`: canh lỗi, ví, Windows, và kiểm cập nhật |
+| `ShopAPI-VanHanh` | 5 phút | `van_hanh.py mot-luot`: giao diện, trạm 8765, agent, trung tâm trực quan 8790 — chết thì tự bật lại (lùi dần, chạm trần thì báo 1 lần/ngày) |
+| `ShopAPI-VanHanhLucDangNhap` | lúc đăng nhập | như trên; lượt đầu sau khởi động dọn khoá cũ và ghi "khởi động hh:mm — X/Y thành phần chạy" (`workspace/van-hanh/`) |
 
 Phiên kênh (`vm/agent.py`) mở trình duyệt khoảng 60 phút trước giờ đăng, mỗi lúc chỉ một trình duyệt. Nó quét Studio, đăng video, trả lời bình luận rồi đóng trình duyệt.
 
