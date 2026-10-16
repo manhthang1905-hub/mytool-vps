@@ -50,6 +50,51 @@ def test_doc_cham_giu_cau_ta_va_nhan_ve_len_anh(tmp_path):
     assert im.getpixel((700, 400)) >= (240, 240, 240)
 
 
+def test_co_cung_cua_giam_khao_loai_tam_tru_dau_sao():
+    du = {"khoanh_khac": "a woman reading a message on her phone at a cafe",
+          "ung_vien": [dict(_muc(1, 9, 9, 9, 9), chu=True), dict(_muc(2, 9, 9, 9, 9), danh_dau="true"),
+                       dict(_muc(3, 9, 9, 9, 9), luoi=True), dict(_muc(4, 8, 8, 8, 8), dau=True)]}
+    kq = cac.doc_cham(du, 4)
+    assert [kq[i]["tong"] for i in (1, 2, 3)] == [0.0, 0.0, 0.0]
+    assert kq[4]["tong"] == 8.0 and kq[4]["co"] == ["dau"]          # dấu sao: ghi lại, không loại
+    assert kq[1]["khoanh_khac"].startswith("a woman reading")
+    ghi = cac.ghi_chu_viet_lai([{"tep": "a", "vong": 0, "so": i, "cham": kq[i]} for i in kq])
+    assert "REJECTED for: letters/text in the picture" in ghi and "the moment the picture must show" in ghi
+
+
+def test_kiem_may_gop_vao_diem_va_bao_nghi_cho_giam_khao():
+    kq = cac.doc_cham({"ung_vien": [_muc(1, 9, 9, 9, 9), _muc(2, 8, 8, 8, 8)]}, 2)
+    cac.ap_kiem_may(kq, {1: {"loi": ["luoi"], "nghi": []}, 2: {"loi": [], "nghi": ["mui_ten_do"]}})
+    assert kq[1]["tong"] == 0.0 and "luoi" in kq[1]["co"] and kq[2]["tong"] == 8.0
+    ln = cac.loi_nhac_cham(loi_doc="x", mo_ta="the reference character", phong_cach="", so_tham_chieu=0,
+                           so_ung_vien=2, nghi={2: ["mui_ten_do"]})
+    assert "Machine check" in ln and "candidate 2 has a large pure-red mark" in ln
+    assert "Machine check" not in cac.loi_nhac_cham(loi_doc="x", mo_ta="", phong_cach="", so_tham_chieu=0,
+                                                    so_ung_vien=2)
+
+
+def test_kiem_anh_cung_mui_ten_do_va_luoi(tmp_path):
+    from PIL import Image, ImageDraw
+    from core import kiem_anh_cung as kc
+    sach = tmp_path / "sach.png"
+    Image.new("RGB", (1376, 768), (245, 235, 220)).save(sach)
+    do = tmp_path / "do.png"
+    im = Image.new("RGB", (1376, 768), (245, 235, 220))
+    ImageDraw.Draw(im).polygon([(600, 300), (760, 380), (600, 460), (640, 380)], fill=(230, 25, 35))
+    im.save(do)
+    luoi = tmp_path / "luoi.png"
+    im = Image.new("RGB", (1376, 768), (240, 200, 170))
+    v = ImageDraw.Draw(im)
+    v.line([(688, 0), (688, 768)], fill=(0, 0, 0), width=8)
+    v.line([(0, 384), (1376, 384)], fill=(0, 0, 0), width=8)
+    im.save(luoi)
+    assert kc.kiem(str(sach))["loi"] == [] and kc.kiem(str(sach))["nghi"] == []
+    assert kc.kiem(str(do))["loi"] == ["mui_ten_do"]
+    assert kc.kiem(str(do), cho_do=True)["loi"] == []                 # kênh khai cho dấu đỏ
+    assert kc.kiem(str(luoi))["loi"] == ["luoi"]
+    assert kc.kiem(str(tmp_path / "khong-co.png"))["loi"] == []        # đọc hỏng → coi như sạch
+
+
 def test_doc_cham_rac_thi_rong():
     assert cac.doc_cham(None, 3) == {} and cac.doc_cham({"x": 1}, 3) == {} and cac.doc_cham("abc", 3) == {}
 
@@ -312,6 +357,8 @@ def test_lam_anh_canh_chon_tam_tot_nhat_sau_viet_lai(tmp_path, monkeypatch):
 
     def goi_ai(loi_nhac, kw):
         if "art director of a Japanese YouTube channel" in loi_nhac:
+            # Giám khảo không được xem lời nhắc cảnh (chấm theo lời nhắc thì ảnh nào cũng "khớp") — chỉ câu đọc.
+            assert "dark hallway" not in loi_nhac and "返事が来ない" in loi_nhac
             cham_anh.append(kw.get("anh"))
             if len(cham_anh) == 1:
                 return json.dumps({"ung_vien": [_muc(1, 3), _muc(2, 5, kd=True), _muc(3, 4)], "sua": "brighter"})
@@ -393,3 +440,10 @@ def test_chia_canh_ghi_giay_thay_so_dong_thi_hoi_lai():
     assert auto_khau._ngoai_dai_dong(dung, cue) is False
     assert auto_khau._ngoai_dai_dong([{"img_prompt": "x"}], cue) is False      # không ghi số → để canh_lai lo
     assert auto_khau._ngoai_dai_dong(dung + [{"srt_from": 1, "srt_to": 3}], cue) is False   # một cảnh lệch thôi
+    # Đổi giây về số dòng: mốc bắt đầu/kết thúc gần nhất; lệch xa quá thì chịu (hỏi lại).
+    cue2 = [{"index": 57, "start": 175.57, "end": 178.0}, {"index": 58, "start": 178.1, "end": 182.09},
+            {"index": 59, "start": 183.19, "end": 188.15}]
+    sua = auto_khau._giay_thanh_so_dong([{"srt_from": 175.57, "srt_to": 182.09, "img_prompt": "a"},
+                                         {"srt_from": 183.19, "srt_to": 188.15}], cue2)
+    assert [(x["srt_from"], x["srt_to"]) for x in sua] == [(57, 58), (59, 59)] and sua[0]["img_prompt"] == "a"
+    assert auto_khau._giay_thanh_so_dong([{"srt_from": 120.0, "srt_to": 130.0}], cue2) is None

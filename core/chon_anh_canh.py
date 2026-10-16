@@ -48,14 +48,20 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["SO_UNG_VIEN_MAC_DINH", "NGUONG_DAT", "anh_uoc_moi_canh", "SO_VONG_VIET_LAI", "TIEU_CHI", "GIONG_AN_TOAN", "TEP_SO",
-           "THU_MUC_UV", "so_ung_vien", "giong_an_toan", "ap_giong_an_toan", "tach_than_duoi", "loi_nhac_cham",
+           "THU_MUC_UV", "so_ung_vien", "giong_an_toan", "ap_giong_an_toan", "tach_than_duoi", "loi_nhac_cham", "ap_kiem_may", "CO_CUNG", "CO_LOAI",
            "doc_cham", "diem_tong", "xep_hang", "can_viet_lai", "ghi_chu_viet_lai", "viet_lai_canh", "SoChon",
            "chon_canh", "tom_tat", "anh_data_url"]
 
 #: Số ứng viên mỗi cảnh khi `kenh.yaml` không khai `so_ung_vien_canh`. 0 = tắt (đường một tấm cũ).
 SO_UNG_VIEN_MAC_DINH = 3
 TRAN_UNG_VIEN = 6
-#: Điểm (thang 10, = mục thấp nhất) từ đây trở lên mới coi là đạt. Hiệu chỉnh trên lô thật 17/10 — xem báo cáo.
+#: Điểm (thang 10, = mục thấp nhất) từ đây trở lên mới coi là đạt.
+#:
+#: Hiệu chỉnh 17/10 trên 50 cảnh thật đã chấm bằng thước mù (Claude Max Opus 5.5, chấm lại lần hai tương quan 0,80):
+#: giám khảo ví KHÔNG xem lời nhắc cảnh lệch thước mù −1,1 điểm, tương quan 0,40 (Fable 5; Opus 5 0,30; ghép hai mô
+#: hình 0,31 — không hơn). Ngưỡng 7 ở đây: tấm qua có điểm mù trung bình 6,6, tấm trượt 4,7 — gần nhất với "7 mù" mà
+#: thang điểm nguyên của giám khảo ví cho phép (6 → 5,9). Ví không có mô hình nào mạnh hơn (`/v1/models`: chỉ ba bậc
+#: Claude cùng giá).
 NGUONG_DAT = 7.0
 #: Số vòng viết lại lời nhắc tối đa sau vòng đầu.
 SO_VONG_VIET_LAI = 2
@@ -78,7 +84,9 @@ VAN_CHAM = threading.BoundedSemaphore(SONG_SONG_CHAM)
 #: gỗ, nắng thật — lệch phong cách).
 GIONG_AN_TOAN = ("warm, calm and reassuring everyday mood, clear even lighting kept in the channel's own drawing style, "
                  "every person has a simple friendly face, nothing eerie or unsettling, no looming dark shadows, no "
-                 "faceless, masked or blank-faced figures, no distorted faces, no gloomy dark room")
+                 "faceless, masked or blank-faced figures, no distorted faces, no gloomy dark room, one single "
+                 "continuous picture with no panels, no arrows or marks drawn over the picture, no letters or numbers "
+                 "anywhere")
 
 _KHOA_SO = threading.Lock()
 
@@ -166,32 +174,51 @@ def anh_data_url(duong: str, rong: int = 768, nhan: str = "") -> str:
 LOI_NHAC_CHAM = """You are the art director of a Japanese YouTube channel of WARM, CALM self-understanding psychology
 for adults. The viewer comes to feel understood and at ease: a picture that feels creepy, sinister or scary is a failure
 even when it is clever, and a pretty picture that does not show what is being said is also a failure.
-{ta_anh}
+{ta_anh} Every image carries its label in a red box at the top-left corner ("REF", or the candidate number) — that box
+is ours, ignore it.
 Narration line read while this scene is on screen (Japanese): 「{loi_doc}」
-Scene description the candidates were drawn from: {mo_ta}
-Channel style: {phong_cach}
+Who should appear (ONLY for the nhan_vat check — never judge noi_dung by this): {mo_ta}
+Channel style: {phong_cach}{nghi}
 
-Be a STRICT reviewer: 8 or more means you would publish the picture unchanged. Score EACH candidate 0-10 on:
-- noi_dung: does the picture depict the MEANING of the narration line? 8+ only when a viewer who sees ONLY the picture
-  could guess what the line says. A calm character with a prop or a room the line does not mention is 3-4; loosely
-  related or generic mood is 5; 0 = unrelated or contradicting.
+STEP 1 — before looking at the candidates, write "khoanh_khac": the concrete, literal moment this line describes, as
+WHO is doing WHAT, WHERE, with WHICH key object the line names (for an abstract line: the everyday moment where people
+live it). At most 25 words.
+
+STEP 2 — for each candidate write "ta": what it actually shows, at most 12 words. Then score it 0-10. Be a STRICT
+reviewer: 8 or more means you would publish it unchanged.
+- noi_dung: does it show the moment of STEP 1? 8+ only when the who, the action AND the key object are all visible
+  and a viewer who sees ONLY the picture could guess the line. The right person but the action or the key object
+  missing = 5 at most. A calm character with a prop or a room the line does not mention = 3 at most. Unrelated = 0.
 - giong: tone. 10 = warm, calm, safe. Lower for anything horror-like: creepy, sinister, menacing, oppressive darkness,
   looming shadows or silhouettes, faceless or blank-faced figures (also faceless people in the background), masks,
   distorted or melting faces, huge or empty staring eyes, a face filling the frame in extreme close-up, dark low-key
   rooms or night palettes, twins/doubles/reflections of the character, monsters, cracked or broken bodies, gore.
 - loi: drawing defects. Inspect closely: count the arms, legs and hands of every figure. A limb missing, detached,
-  doubled or passing through furniture, furniture stacked or merged into other furniture, a head cut off by the frame,
-  a melted face, garbled letters or text, panels or a grid = 4 or less. 10 = clean.
+  doubled, see-through or passing through furniture, furniture stacked or merged, a head cut off by the frame, a
+  melted face = 4 at most. 10 = clean.
 - phong_cach: same drawing style and palette as the channel style{va_tham_chieu}, including the channel's own rules in
-  the style note (colours allowed, how many props, how much setting).
+  the style note (colours allowed, how many props, how much setting, the background).
 - nhan_vat: {nhan_vat}
-Set "kinh_di": true when ANY horror or creepy element is present, however small.
-Every image carries its label in a red box at the top-left corner ("REF", or the candidate number). A picture made of
-several panels, a grid, a collage or a storyboard is ONE failed candidate: loi = 0.
-First write "ta": what that candidate actually shows, in at most 12 words — then score it. Keep every text field short.
-Return JSON only: {{"ung_vien": [{{"so": 1, "ta": "<what it shows>", "noi_dung": 0, "giong": 0, "loi": 0, "phong_cach": 0, "nhan_vat": null,
+HARD FAILURES — set the flag true (the candidate is then rejected whatever its scores):
+- "chu": any readable or garbled letters, numbers, words or symbols anywhere (signs, screens, papers, books, labels);
+- "danh_dau": arrows, crosses, circles, ticks or other annotation marks drawn OVER the picture;
+- "luoi": the picture is made of several panels, a grid, a collage, a split frame or a storyboard;
+- "dau": a watermark, logo or sparkle/star mark in a corner.
+Set "kinh_di": true when ANY horror or creepy element is present, however small. Keep every text field short.
+Return JSON only: {{"khoanh_khac": "<STEP 1>", "ung_vien": [{{"so": 1, "ta": "<what it shows>", "noi_dung": 0,
+"giong": 0, "loi": 0, "phong_cach": 0, "nhan_vat": null, "chu": false, "danh_dau": false, "luoi": false, "dau": false,
 "kinh_di": false, "dau_hieu": ["<creepy element>"], "loi_ve": ["<defect>"], "ly_do": "<one short sentence>"}}],
 "sua": "<when no candidate is good: what the image prompt must change, one or two short sentences; else empty>"}}"""
+
+#: Cờ lỗi CỨNG giám khảo trả. Tên cờ → nhãn đọc.
+CO_CUNG = {"chu": "chữ/số trong ảnh", "danh_dau": "mũi tên/dấu vẽ chồng", "luoi": "ảnh chia ô/lưới",
+           "dau": "dấu sao/logo góc ảnh"}
+#: Cờ nào thật sự loại tấm (điểm 0). `dau` KHÔNG loại: dấu sao do nhà cung cấp dán SAU khi vẽ, giống nhau ở mọi ứng
+#: viên — chọn tấm khác không chữa được, việc ấy là của `core/xoa_dau_anh` (giám khảo xem ảnh ĐÃ gỡ dấu; cờ còn bật là
+#: số đo bước gỡ hụt, ghi vào sổ).
+CO_LOAI = ("chu", "danh_dau", "luoi")
+_NGHI = {"mui_ten_do": "has a large pure-red mark (maybe an arrow or annotation drawn over the picture)",
+         "luoi": "may be split into panels (long straight lines across the whole frame)"}
 
 _NHAN_VAT_CO = ("the first {k} image(s) are the character reference(s). Judge (a) HEADCOUNT — every character the "
                 "description names is there exactly once; (b) DESIGN — each one has the same design as its reference "
@@ -201,8 +228,12 @@ _NHAN_VAT_CO = ("the first {k} image(s) are the character reference(s). Judge (a
 _NHAN_VAT_KHONG = "null (no character reference for this scene)."
 
 
-def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: int, so_ung_vien: int) -> str:
+def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: int, so_ung_vien: int,
+                  nghi: Optional[Dict[int, Sequence[str]]] = None) -> str:
+    """`nghi` = {số tấm: [mã nghi của `core.kiem_anh_cung`]} — phép đo máy báo trước để giám khảo nhìn kỹ đúng chỗ."""
     k, n = int(so_tham_chieu), int(so_ung_vien)
+    dong = ["candidate {0} {1}".format(so, _NGHI[m]) for so, ds in sorted((nghi or {}).items()) for m in ds
+            if m in _NGHI]
     ta = ("The first {0} image(s) are REFERENCE designs. The last {1} images are CANDIDATES for ONE scene, numbered "
           "1..{1} in order.".format(k, n) if k else
           "The {0} images are CANDIDATES for ONE scene, numbered 1..{0} in order.".format(n))
@@ -211,7 +242,8 @@ def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: i
         mo_ta=" ".join(str(mo_ta or "").split())[:900] or "(none)",
         phong_cach=" ".join(str(phong_cach or "").split())[:600] or "(none)",
         va_tham_chieu=" and the reference images" if k else "",
-        nhan_vat=_NHAN_VAT_CO.format(k=k) if k else _NHAN_VAT_KHONG)
+        nhan_vat=_NHAN_VAT_CO.format(k=k) if k else _NHAN_VAT_KHONG,
+        nghi=("\nMachine check — look closely: " + "; ".join(dong) + ".") if dong else "")
 
 
 def _diem(v: Any) -> Optional[float]:
@@ -253,20 +285,37 @@ def doc_cham(du: Any, n: int) -> Dict[int, Dict[str, Any]]:
         dau = _ds_chu(x.get("dau_hieu"))
         muc = {"diem": diem, "kinh_di": _co(x.get("kinh_di")), "dau_hieu": dau, "loi_ve": _ds_chu(x.get("loi_ve")),
                "ly_do": " ".join(str(x.get("ly_do") or "").split())[:240],
-               "ta": " ".join(str(x.get("ta") or "").split())[:120]}
+               "ta": " ".join(str(x.get("ta") or "").split())[:120],
+               "co": [c for c in CO_CUNG if _co(x.get(c))]}
         muc["tong"] = diem_tong(muc)
         ra[so] = muc
     if isinstance(du, dict) and ra:
         sua = " ".join(str(du.get("sua") or "").split())[:300]
+        kk = " ".join(str(du.get("khoanh_khac") or "").split())[:200]
         for m in ra.values():
-            m["sua"] = sua
+            m["sua"], m["khoanh_khac"] = sua, kk
     return ra
 
 
 def diem_tong(muc: Dict[str, Any]) -> float:
-    """Điểm một tấm = mục THẤP NHẤT (mục tệ nhất chặn trần). Không có mục nào → 0."""
+    """Điểm một tấm = mục THẤP NHẤT (mục tệ nhất chặn trần). Dính cờ loại (`CO_LOAI` — của giám khảo hay của phép đo
+    máy `core.kiem_anh_cung`) → 0. Không có mục nào → 0."""
+    if any(c in CO_LOAI for c in muc.get("co") or []):
+        return 0.0
     cac = [v for v in (muc.get("diem") or {}).values() if v is not None]
     return round(min(cac), 1) if cac else 0.0
+
+
+def ap_kiem_may(kq: Dict[int, Dict[str, Any]], may: Dict[int, Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+    """Gộp lỗi CHẮC của phép đo máy (`kiem_anh_cung.kiem`, theo số tấm) vào điểm giám khảo: thêm cờ, tính lại `tong`."""
+    ten = {"mui_ten_do": "danh_dau", "luoi": "luoi"}
+    for so, m in kq.items():
+        them = [ten[x] for x in ((may.get(so) or {}).get("loi") or []) if x in ten]
+        if them:
+            m["co"] = sorted(set(list(m.get("co") or []) + them))
+            m["may"] = list((may.get(so) or {}).get("loi") or [])
+            m["tong"] = diem_tong(m)
+    return kq
 
 
 def _tb(muc: Dict[str, Any]) -> float:
@@ -301,12 +350,19 @@ def ghi_chu_viet_lai(ung_vien: Sequence[Dict[str, Any]], toi_da: int = 4) -> str
         phan.append("weakest " + ", ".join("{0}={1:g}".format(k, v) for k, v in thap))
         if c.get("kinh_di"):
             phan.append("CREEPY: " + (", ".join(c.get("dau_hieu") or []) or "yes"))
+        if c.get("co"):
+            phan.append("REJECTED for: " + ", ".join(
+                {"chu": "letters/text in the picture", "danh_dau": "arrows/marks drawn over it",
+                 "luoi": "split into panels", "dau": "corner watermark"}.get(x, x) for x in c["co"]))
         if c.get("loi_ve"):
             phan.append("defects: " + ", ".join(c["loi_ve"][:3]))
         if c.get("ly_do"):
             phan.append(c["ly_do"])
         dong.append("- " + "; ".join(phan))
         sua = sua or str(c.get("sua") or "")
+    kk = next((str(u["cham"].get("khoanh_khac")) for u in ung_vien if (u.get("cham") or {}).get("khoanh_khac")), "")
+    if kk:
+        dong.append("- the moment the picture must show: " + kk)
     if sua:
         dong.append("- director's fix: " + sua)
     return "\n".join(dong)
@@ -323,9 +379,11 @@ Current scene prompt:
 {than}
 
 Write a better scene prompt:
-- show the MEANING of the narration line literally and concretely: an everyday moment a viewer recognises — who, doing
-  what, with which one object, where, at what hour. When the line is abstract, show the everyday situation where
-  people feel it, never a symbolic or surreal metaphor;
+- show the line's literal moment (the director's "moment the picture must show" when given): right after the camera
+  shot name WHO, doing WHAT, with WHICH key object the line names, then WHERE. When the line is abstract, show the
+  everyday situation where people feel it, never a symbolic or surreal metaphor;
+- one single continuous picture: no panels or split frame, no arrows or marks drawn over it, no letters, numbers,
+  signs or screens with writing;
 - warm, calm and safe: soft natural light, friendly relaxed faces. Never horror: no looming shadows or silhouettes, no
   dark rooms, no masks, no blank or faceless figures, no doubles or reflections of the character, no cracks spreading,
   no flood or swallowing shapes, no eyes in the dark, no distorted bodies;

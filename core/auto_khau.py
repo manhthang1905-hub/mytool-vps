@@ -6016,8 +6016,14 @@ def _hoi_chia_canh(bc: BoiCanh, luot: LuotChay, khuon: str,
         #
         # Thử thật TL3-T7/0016 dòng 57–84: AI ghi `srt_from`/`srt_to` bằng GIÂY (175.57, 182.09…). Bước canh lại
         # không khớp được dòng nào, gộp cả 28 dòng thành một cảnh 77 giây rồi cắt theo đồng hồ — 10 cảnh cùng một
-        # câu đọc, cùng một lời nhắc. Quá nửa số cảnh ghi số ngoài dải dòng của khúc → hỏi lại bằng khoá mới.
+        # câu đọc, cùng một lời nhắc. Quá nửa số cảnh ghi số ngoài dải dòng của khúc → đổi GIÂY về số dòng (khớp mốc
+        # bắt đầu/kết thúc của dòng phụ đề); đổi không được thì hỏi lại bằng khoá mới.
         if _ngoai_dai_dong(ds, cue):
+            sua = _giay_thanh_so_dong(ds, cue)
+            if sua is not None:
+                bc.ghi("  khúc {0}/{1}: AI ghi srt_from/srt_to bằng giây — đã đổi về số dòng.".format(
+                    thu_tu + 1, tong_khuc))
+                return sua
             raise LoiNoiDung(
                 "khúc {0}/{1}: AI ghi srt_from/srt_to ngoài số dòng của khúc (có lẽ ghi giây)".format(
                     thu_tu + 1, tong_khuc))
@@ -6069,6 +6075,32 @@ def _ngoai_dai_dong(ds: List[Any], cue: List[Dict[str, Any]]) -> bool:
         except (TypeError, ValueError):
             sai += 1
     return co > 0 and sai * 2 > co
+
+
+def _giay_thanh_so_dong(ds: List[Any], cue: List[Dict[str, Any]], lech: float = 1.5) -> Optional[List[Any]]:
+    """`srt_from`/`srt_to` AI ghi bằng GIÂY → số dòng có mốc bắt đầu / kết thúc gần nhất (lệch ≤ `lech` giây). Một
+    cảnh không khớp được → None (để hỏi lại). Trả bản SAO, không sửa `ds`."""
+    try:
+        moc = [(int(x["index"]), float(x["start"]), float(x["end"])) for x in cue]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not moc:
+        return None
+    ra = []
+    for c in ds:
+        if not isinstance(c, dict) or c.get("srt_from") is None or c.get("srt_to") is None:
+            ra.append(c)
+            continue
+        try:
+            a, b = float(c["srt_from"]), float(c["srt_to"])
+        except (TypeError, ValueError):
+            return None
+        dau = min(moc, key=lambda m: abs(m[1] - a))
+        cuoi = min(moc, key=lambda m: abs(m[2] - b))
+        if abs(dau[1] - a) > lech or abs(cuoi[2] - b) > lech or cuoi[0] < dau[0]:
+            return None
+        ra.append(dict(c, srt_from=dau[0], srt_to=cuoi[0]))
+    return ra
 
 
 #: Cột của sheet `scenes` — **giữ đúng TÊN này** (khâu dựng video và mọi bộ
@@ -7285,6 +7317,8 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
                 d = os.path.join(thu_muc_uv, "v{0}-{1}.png".format(vong, i + 1))
                 try:
                     _tai_ket_qua(bc, goi, i, d)
+                    # Gỡ dấu sao NGAY từng ứng viên (17/10/2026): giám khảo phải xem đúng tấm sẽ lên clip.
+                    _xoa_dau(bc, d)
                     tep_ra.append(d)
                 except Exception as loi:  # noqa: BLE001 — một tấm hỏng không giết cả vòng
                     loi_tai.append(loi)
@@ -7301,19 +7335,29 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         return tep_ra, dung
 
     def cham(tep_ds: List[str], prompt: str) -> Dict[int, Dict[str, Any]]:
-        than, _duoi = cac.tach_than_duoi(prompt, st, them=(DUOI_NOI_CANH,))
-        ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=than, phong_cach=phong, so_tham_chieu=len(refs),
-                               so_ung_vien=len(tep_ds))
+        # Phép đo máy trước (mũi tên đỏ, lưới ô — `core/kiem_anh_cung.py`): lỗi CHẮC đánh 0 thẳng, lỗi NGHI báo
+        # giám khảo nhìn kỹ đúng tấm ấy.
+        from .kiem_anh_cung import kiem as kiem_may  # noqa: PLC0415
+
+        may = {i: kiem_may(p, cho_do=bool(st.get("cho_dau_do"))) for i, p in enumerate(tep_ds, 1)}
+        # Giám khảo KHÔNG được xem lời nhắc cảnh (hiệu chỉnh 17/10 trên 50 cảnh: có lời nhắc thì nó chấm ảnh theo lời
+        # nhắc — ảnh khớp lời nhắc nên điểm nội dung 9/10 trong khi thước mù 5,6, tương quan 0,25; bỏ đi thì lệch −1,
+        # tương quan 0,43). Chỉ đưa "ai phải có mặt" cho vế nhân vật.
+        ai = ", ".join(x for x in (str(c.get("primary_subject") or "").strip(),
+                                   str(c.get("characters_used") or "").strip()) if x) or "(not given)"
+        ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=ai, phong_cach=phong, so_tham_chieu=len(refs),
+                               so_ung_vien=len(tep_ds),
+                               nghi={i: list(m["loi"]) + list(m["nghi"]) for i, m in may.items() if m["loi"] or m["nghi"]})
         anh = ([cac.anh_data_url(p, 512, nhan="REF") for p in refs]
                + [cac.anh_data_url(p, 768, nhan=str(i)) for i, p in enumerate(tep_ds, 1)])
         dau = [_dau_tep(p) for p in tep_ds]
         for lan in range(2):
             try:
                 with cac.VAN_CHAM:
-                    tho = goi_vi(ln, khoa_viec(luot, "cham-uv", so_canh, *(dau + [lan])), 2000, anh=anh)
+                    tho = goi_vi(ln, khoa_viec(luot, "cham-uv", so_canh, ln, *(dau + [lan])), 2000, anh=anh)
                 kq = cac.doc_cham(loc_json(str(tho or "")), len(tep_ds))
                 if kq:
-                    return kq
+                    return cac.ap_kiem_may(kq, may)
                 bc.ghi("    ảnh cảnh {0}: giám khảo trả rác — chấm lại ({1}/2).".format(so_canh, lan + 1))
             except Exception as loi:  # noqa: BLE001 — Dừng thì ném lên; lỗi khác: chấm lại một lần rồi thôi
                 if type(loi).__name__ == "Cancelled":
@@ -7335,7 +7379,6 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
     tam = tep + ".chon.tmp"
     shutil.copyfile(chon["tep"], tam)
     os.replace(tam, tep)
-    _xoa_dau(bc, tep)
     if str(chon.get("prompt") or "").strip() and str(chon["prompt"]).strip() != str(c["img_prompt"]).strip():
         c["img_prompt"] = chon["prompt"]
         _ghi_loi_nhac_da_sua(luot, so_canh, chon["prompt"])
