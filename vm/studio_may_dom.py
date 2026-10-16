@@ -56,7 +56,7 @@ from core import studio_may as sm  # noqa: E402
 nuoi = tl.nuoi
 MA_XONG, MA_LOI = 0, 1
 MA_HOAN, MA_CAN_NGUOI, MA_KHONG_CAN = tl.MA_HOAN, tl.MA_CAN_NGUOI, tl.MA_KHONG_CAN
-DU_KIEN_PHUT = {"test": 15, "suc_khoe": 8, "tham_do": 12}
+DU_KIEN_PHUT = {"test": 15, "suc_khoe": 8, "tham_do": 12, "danh_sach_phat": 18}   # danh_sach_phat: vm/danh_sach_phat_dom.py
 #: Phiên đăng của BẤT KỲ kênh nào (agent, `trang-thai.json`) tới hạn trong [−90', dự kiến + ngần này phút] → nhường.
 NHUONG_PHIEN_PHUT = 20
 NHUONG_PHIEN_QUA_HAN_PHUT = 90

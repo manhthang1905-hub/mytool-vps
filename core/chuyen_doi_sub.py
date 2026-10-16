@@ -722,7 +722,14 @@ def dong_nao(goc: str, kenh: str, k: Any = None, *, bay_gio: Optional[_dt.dateti
             " ×{0} [{1}–{2}]".format(_f(o["ti_so"], 2), _f(o["khoang"][0], 2), _f(o["khoang"][1], 2))
             if o.get("khoang") else ""))
     mh = mhkt_kenh(goc, kenh)
-    dsp = "có" if str(getattr(k, "danh_sach_phat_kenh", "") or "").strip() else "CHƯA khai (video vào danh sách đầu tiên)"
+    dsp = "có" if str(getattr(k, "danh_sach_phat_kenh", "") or "").strip() else ""
+    if not dsp:
+        try:
+            from . import danh_sach_phat  # noqa: PLC0415
+            dsp = danh_sach_phat.mo_ta_ngan(goc, kenh)
+        except Exception:  # noqa: BLE001
+            dsp = ""
+    dsp = dsp or "CHƯA khai (video vào danh sách đầu tiên; skill D15 tự lập)"
     d2 = "    Đòn bẩy sub: {0}{1} · MHKT có nút Đăng ký {2}/{3} (thiếu {4}, chưa đọc {5}, không có {6}) · danh sách " \
          "phát chủ đề: {7}".format("BẬT" if bat else "tắt", " ({0})".format(ly_do) if ly_do else "",
                                    mh["co_dk"], mh["tong"], mh["thieu_dk"], mh["chua_ro"], mh["khong_co"], dsp)

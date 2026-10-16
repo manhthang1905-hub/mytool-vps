@@ -439,7 +439,11 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
     da_co_dong = any(d[o_ma].strip() == ma for d in hang)
     if not da_co_dong:
         dsp = ""
-        if getattr(k, "danh_sach_phat_kenh", ""):
+        # 16/10/2026: kenh.yaml không khai → danh sách phát CHỦ ĐỀ đã tạo của kế hoạch tự lập (`core.danh_sach_phat`);
+        # LLM hỏng/không khớp thì danh sách đầu của kế hoạch (trước đây: mục đầu của hộp tải lên).
+        from . import danh_sach_phat as _dsp  # noqa: PLC0415
+        ten_ds, nguon_ds = _dsp.ten_cho_tai_len(goc, kenh, k)
+        if ten_ds:
             if goi_ai is None:
                 try:
                     from .giam_doc.quan_ly import goi_chat_that  # noqa: PLC0415
@@ -448,8 +452,7 @@ def ban_giao(goc: str, kenh: str, luot: str, thu_muc_done: str,
                                             toi_da_token=64)) if _g else None
                 except Exception:  # noqa: BLE001
                     goi_ai = None
-            dsp = chon_danh_sach_phat(k.danh_sach_phat_kenh, gt["tieu_de"],
-                                      gt["mo_ta"], goi_ai)
+            dsp = _dsp.chon_cho_video(ten_ds, nguon_ds, gt["tieu_de"], gt["mo_ta"], goi_ai)
             if dsp and "Danh sách phát" not in cot:  # thêm cột, giữ tương thích
                 cot = list(cot) + ["Danh sách phát"]
                 hang = [list(h) + [""] for h in hang]

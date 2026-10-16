@@ -868,6 +868,33 @@ def d_suc_khoe_studio(goc, kenh):
     return (False, chan) if chan else (True, ly)
 
 
+# D15 · Danh sách phát chủ đề (16/10/2026) ──────────────────────────────────────────────────────────────────────
+# Phần thuần + LLM `core/danh_sach_phat.py`, bộ chạy DOM `vm/danh_sach_phat_dom.py` (khung `studio_may_dom.chay_phien`).
+# Kênh khai `danh_sach_phat_kenh` trong kenh.yaml → K14 lo, D15 đứng ngoài; kênh chưa được phát → bỏ.
+
+NHIP_DSP_GIO = 3
+
+
+def k_danh_sach_phat(goc, kenh):
+    from core import danh_sach_phat as dsp  # noqa: PLC0415
+    if dsp.ten_yaml(goc, kenh):
+        return KHONG, "kenh.yaml khai danh_sach_phat_kenh (K14)"
+    dung, ly = dsp.can_chay(goc, kenh, _gio())
+    co = bool(dsp.doc(goc, kenh).get("danh_sach"))
+    if dung:
+        return (CHO if co else THIEU), ly
+    return (DAT if co else KHONG), ly
+
+
+def d_danh_sach_phat(goc, kenh):
+    from core import danh_sach_phat as dsp  # noqa: PLC0415
+    dung, ly = dsp.can_chay(goc, kenh, _gio())
+    if not dung:
+        return False, ly
+    chan = _studio_may_chan(goc, kenh)
+    return (False, chan) if chan else (True, ly)
+
+
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
 
 DANH_MUC: List[KyNang] = [
@@ -946,6 +973,16 @@ DANH_MUC: List[KyNang] = [
            dieu_kien=d_suc_khoe_studio, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "studio_may_dom.py"), "--kenh",
                                                                     kenh, "--suc-khoe"),
            nhip_gio=NHIP_SUC_KHOE_GIO, tu_ap=True, nang=True),
+    KyNang("D15", "Danh sách phát chủ đề", "dinh_ky",
+           "Kích hoạt: kênh ĐƯỢC PHÁT, kenh.yaml không khai danh_sach_phat_kenh, và chưa có danh sách phát chủ đề / còn "
+           "danh sách chưa tạo / video chờ thêm / ≥ 8 video mới chưa vào danh sách nào → LLM gom video đã đăng thành 3–5 "
+           "danh sách theo nghĩa (tên + mô tả tiếng kênh, video tốt trước) → nghien-cuu/danh-sach-phat.json → Studio tạo "
+           "(Công khai, tên đã có thì dùng lại, không tạo trùng / xoá / đổi tên) → thêm video qua trang sửa Studio (không mở trang xem) → đọc lại. Chỉ video của chính kênh. Video mới lúc bàn "
+           "giao: LLM chọn danh sách hợp nhất, hỏng thì danh sách đầu.",
+           "python vm/danh_sach_phat_dom.py --kenh K", k_danh_sach_phat, ["K01", "D01"],
+           dieu_kien=d_danh_sach_phat, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "danh_sach_phat_dom.py"),
+                                                                   "--kenh", kenh),
+           nhip_gio=NHIP_DSP_GIO, tu_ap=True, nang=True),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
     KyNang("S02", "Khám cấu hình kênh", "sua_chua",
