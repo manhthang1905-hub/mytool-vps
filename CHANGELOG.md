@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.212.1** — 2026-10-16 — `vps-jp1` — fix(studio-may): trang sua video dang A/B tieu de (khong co o tieu de, chi ytcp-video-title-experiment) van tinh la dung xong - truoc day doc lai bao loi sau khi dat A/B
 - **2.212.0** — 2026-10-16 — `vps-jp1` — fix+feat: tu don launcher Chrome ket (khong chrome con + cong DevTools cam + >=3 phut, bo qua khi dang tai len) o cua canh agent + van_hanh 5 phut; cong doc dao do trung XUYEN NGON NGU (dich nguon sang Nhat, so tung cau, >30% viet lai)
 - **2.211.0** — 2026-10-16 — `vps-jp1` — feat(ab-tieu-de): A/B tieu de + bia tren Studio (chu duyet 16/10) - giam doc viet tieu de phu qua soat chu/khong chep doi thu, video moi + video truot dung A/B thay doi thang; chu bia khong chep bia doi thu + khop noi dung (sua goc chu_bia…
 - **2.210.4** — 2026-10-16 — `vps-jp1` — feat(truc-quan): Giới thiệu đi ngược từ mục tiêu — phần #muc-tieu (30k$/6 tháng → view → thị phần → view/video), dòng nối mục tiêu ở mọi phần
