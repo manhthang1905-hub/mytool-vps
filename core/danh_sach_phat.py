@@ -50,7 +50,9 @@ SO_DS_MIN, SO_DS_MAX = 3, 5
 VIDEO_TOI_THIEU = 6          # ít hơn → chưa lập (3 danh sách × 2 video)
 MOI_TOI_THIEU = 8            # video mới chưa vào danh sách nào → lập lại / gán thêm
 LOI_VIDEO_TOI_DA = 3         # một video hỏng ngần này lần → bỏ
-TEN_TOI_DA, MO_TA_TOI_DA = 60, 400
+#: 16/10/2026: tên NGẮN như danh sách chủ/máy cũ đã làm (một cụm ngắn ~8–15 ký tự) — tên SEO dài «…｜…» bị
+#: cắt cụt trên thẻ danh sách và lệch kiểu cả kênh.
+TEN_TOI_DA, MO_TA_TOI_DA = 20, 400
 THIEU_TOI_DA = 0.3           # LLM bỏ sót > 30% video → kế hoạch hỏng, hỏi lại
 TI_LE_SO_PHU = 0.5           # sổ tool phủ ≥ ngần này bảng Studio → chỉ nhận video có trong sổ (`loc_rieng`)
 SO_LAN_HOI = 2
@@ -287,7 +289,8 @@ def de_bai_ke_hoach(video: Sequence[Dict[str, Any]], cum: Dict[str, Any], nhan: 
         "Yêu cầu:\n"
         "- Mỗi video vào ĐÚNG MỘT danh sách (ghi số thứ tự). Mỗi danh sách ≥ 2 video.\n"
         "- \"ten\": {nn}, tự nhiên, đúng thứ người xem hay tìm (có từ chủ đề rõ), hợp giọng các tiêu đề của kênh, "
-        "≤ {tt} ký tự, không 【】, không emoji, không dấu < >, không tên kênh, các tên khác hẳn nhau.\n"
+        "≤ {tt} ký tự — NGẮN gọn, một cụm chủ đề (~8–15 ký tự), KHÔNG dấu ｜/|, "
+        "không 【】, không emoji, không dấu < >, không tên kênh, các tên khác hẳn nhau.\n"
         "- \"mo_ta\": 1–3 câu {nn} (≤ 200 ký tự): danh sách giúp người xem hiểu/được gì; tự nhiên, có từ khoá chủ đề, "
         "không hashtag, không < >.\n"
         "- Cân nhắc ít nhất HAI cách chia khác nhau, chọn cách người xem sẽ xem liền nhiều nhất; \"ly_do\" (tiếng Việt, "
