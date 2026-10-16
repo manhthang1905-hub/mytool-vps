@@ -1,14 +1,651 @@
 {
  "ma_may": "vps-jp1",
  "ngach": "tam-ly-nhat",
- "xuat_luc": "2026-09-30",
+ "xuat_luc": "2026-10-16",
  "ghi_chu": "Bài học phạm vi kênh (n>=3) của một VPS — máy khác đọc làm tiên nghiệm 'ngoai'.",
  "bai_hoc": [
   {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Để đẩy YPP, ưu tiên nguồn có thể làm thành series hoặc có góc nhìn riêng lặp lại được (cùng tệp người ít bạn, hướng nội, tuổi trung niên…), để người xem có lý do theo dõi kênh chứ không chỉ một video.",
+   "n": 22,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Khi dự đoán CTR, tách riêng CTR trang chủ và CTR tổng; CTR tổng thấp do lưu lượng đề xuất/tìm kiếm không có nghĩa là bìa hay tiêu đề hỏng.",
+   "n": 22,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Chủ đề tâm lý chung chung kiểu 'vì sao' chỉ hút xem lướt (AVD 159s, sub 0): ưu tiên nguồn có lời hứa hành động cụ thể, giải quyết nỗi đau rõ cho một tệp khán giả xác định.",
+   "n": 22,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Chọn nguồn dài, có chuỗi/series nối tiếp (nhiều bước, nhiều tập) để kéo giờ xem và lý do đăng ký, thay vì video giải thích một ý đơn lẻ.",
+   "n": 22,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Với kênh nhỏ, tiêu đề và bìa phải có con số hoặc tình huống đời thật gây tò mò mạnh; đừng dựa vào nhãn 'tâm lý học' để kéo CTR.",
+   "n": 22,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Giữ nguyên từ khóa nhận diện tệp (HSP) và lời hứa định lượng (5選) của nguồn. Đừng đổi khung “心理学” sang “脳科学” khi chưa có bằng chứng, vì làm vậy mất CTR ngoài trang chủ.",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Ở cỡ kênh nhỏ, đừng dự đoán “thắng” chỉ dựa vào CTR. Hãy chọn nguồn dài và giữ chân tốt để mỗi view đóng góp nhiều giờ xem, vì hiển thị mới là nút thắt.",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "CTR cao trên mẫu rất nhỏ (dưới 100 hiển thị) chưa chứng minh nguồn tốt. Hãy ưu tiên chủ đề tâm lý/não bộ có tệp khán giả rộng (quan hệ, thói quen, tiền bạc, công việc) để thuật toán có chỗ mở rộng.",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Tiêu đề kiểu 'người khác kém hơn bạn' câu click tò mò nhưng không tạo lý do đăng ký. Hãy chọn nguồn hứa giúp người xem tự cải thiện, hoặc có thể làm thành chuỗi nhiều tập, để kéo sub/1k view.",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "AVD 93s là quá thấp cho một video phân tích. Hãy chọn nguồn dài, có cấu trúc giữ chân (danh sách nhiều ý, câu chuyện, ví dụ đời thường) để tích giờ xem phục vụ mốc 4.000 giờ.",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Ưu tiên nguồn tâm lý học hành vi có độ tương thích cao với tệp khán giả hiện tại của kênh.",
+   "n": 17,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Thiết kế ảnh bìa trực quan, giật gân hơn để cải thiện tỷ lệ nhấp chuột (CTR) ngay từ 24h đầu.",
+   "n": 17,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Ưu tiên nguồn kiểu 'bạn có phải người thông minh/đặc biệt không' (tự soi bản thân): giữ chân lâu (AVD ~7 phút) và ra sub cao, đúng thứ YPP cần, dù CTR chưa tốt.",
+   "n": 17,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Với nguồn mạnh về retention nhưng CTR thấp, đầu tư lại bìa và tiêu đề cho kênh nhỏ (lời hứa cụ thể, số liệu, gắn thẳng vào người xem) thay vì chép tiêu đề gốc.",
+   "n": 17,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Tránh listicle 'tâm lý người có tật xấu': lời hứa tò mò ngắn hạn, người xem thoát sớm, 0 sub; nhãn 【脳科学】 chỉ dùng khi nội dung thật sự đào sâu để giữ đúng lời hứa.",
+   "n": 17,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Tiêu đề dài giảm CTR dự đoán; cân bằng độ dài và tính cụ thể để tối ưu hiển thị.",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Video low-view cần tối ưu thumbnail và first 3s để cải thiện sub/1k view ratio cho YPP.",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Ưu tiên nguồn thấu cảm sâu, kể chậm (chịu đựng, cô đơn, kiệt sức) vì AVD dài kéo giờ xem cho mốc 4.000 giờ; nguồn mồi 'これ/絶対' chỉ kéo click, khán giả rơi sớm.",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Cả hai video đều 0 sub/1k view: chọn chủ đề có thể làm series nối tiếp và đặt lời mời đăng ký ở đoạn cảm xúc cao nhất để biến view thành sub.",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Đừng tin CTR dưới khoảng 500 hiển thị; với kênh nhỏ, bìa phải nói rõ cảm xúc cho người lạ ở mục đề xuất, không chỉ hợp khán giả quen ở trang chủ.",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Với kênh chưa có tệp khán giả, ưu tiên nguồn dạng chuỗi/series dài (20–40 phút, nhiều tập cùng chủ đề) để dồn giờ xem và tạo lý do đăng ký, thay vì một video tâm lý lẻ chung chung.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Không đăng hay ghi trùng cùng một nguồn; mỗi nguồn chỉ nên ra một video với góc khác biệt rõ để không tự cạnh tranh và tránh bị coi là nội dung lặp.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Với kênh mới, 1 hiển thị là lỗi phân phối, không phải lỗi CTR: hãy chọn liên tục nguồn cùng một tệp rõ ràng (người Nhật 60+, quan hệ gia đình) để thuật toán học được tệp, rồi đánh giá sau ≥7 ngày hoặc ≥1.000 hiển thị.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Để đẩy YPP, ưu tiên nguồn dài (20–40 phút), dạng liệt kê hoặc kể chuyện giữ chân tốt, có lời hứa giá trị lặp lại (chuỗi tâm lý học tuổi già) khiến người xem muốn đăng ký, vì vậy giờ xem và sub/1k view đều cao.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Giữ nguyên móc mạnh của nguồn (nỗi đau cụ thể, lời gọi trực diện đúng đối tượng), đừng làm mềm tiêu đề thành chung chung.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Giữ nguyên móc tò mò sắc của nguồn (kẻ thù cụ thể, 'điểm yếu bất ngờ', 'tâm lý đen') thay vì làm mềm thành lời an ủi chung chung; lời hứa mờ thì vừa ít người bấm, vừa giữ chân kém.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Để đẩy YPP, ưu tiên nguồn dạng phân tích sâu, dài 10–20 phút, có chuỗi ý 'kiểu người A/B/C' dễ làm series: loại này kéo được giờ xem và lý do để bấm đăng ký, tốt hơn các clip ngắn chỉ đánh vào cảm xúc.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Đừng chọn nguồn rồi chỉ đổi một chữ tiêu đề: kênh nhỏ đụng bản gốc đang mạnh sẽ bị bỏ qua. Cần góc hứa riêng như đối tượng, tình huống hoặc hệ quả cụ thể.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Với mục tiêu YPP, ưu tiên nguồn dài, đánh số dạng loạt (phần 1/2/3) để kéo giờ xem và cho người xem lý do đăng ký, thay vì chủ đề “8選” lẻ đã bão hòa.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Chưa đủ khoảng 500 hiển thị thì đừng chấm CTR hay AVD. Trước hết chọn nguồn cùng ngách với video từng có hiển thị để thuật toán có tệp gợi ý ban đầu.",
+   "n": 8,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Ưu tiên nguồn có lượng tìm kiếm mạnh và tệp khán giả rộng để vượt qua hạn chế hiển thị của kênh nhỏ.",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Chọn chủ đề có khả năng kích thích tương tác cao giúp tối ưu hóa tỷ lệ chuyển đổi sub trên mỗi nghìn lượt xem cho YPP.",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Kênh còn quá nhỏ: dưới khoảng 100 hiển thị thì CTR vô nghĩa. Ưu tiên nguồn có nhu cầu tìm kiếm rõ (từ khóa tâm lý phổ biến như 内向型, 一人が好き) để có lưu lượng từ tìm kiếm thay vì trông vào trang chủ.",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Để bật YPP, chọn nguồn dài và sâu, làm thành series cùng một tệp khán giả (người hướng nội, thích ở một mình) để giờ xem tích lũy và người xem có lý do bấm đăng ký sau nhiều video.",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "bien_tap",
+   "cum": "",
+   "cau": "Giữ nguyên cụm từ mang lời hứa đắt nhất của nguồn trong tiêu đề và mở đầu 15 giây bằng đúng lời hứa đó; AVD 4s là dấu hiệu tiêu đề hoặc bìa không khớp với nội dung mở đầu.",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 4/18 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 3.92%, AVD tv 6:43, 2.39 sub/1k view; 0 video chưa phán (n=18).",
+   "n": 18,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 3/16 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — AVD tv 3:38, 1.77 sub/1k view; 2 video chưa phán (n=16).",
+   "n": 16,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 5/16 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 3.67%, AVD tv 4:16, 3.95 sub/1k view; 1 video chưa phán (n=16).",
+   "n": 16,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 0/7 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 0%, AVD tv 0:04, 27.78 sub/1k view; 3 video chưa phán (n=7).",
+   "n": 7,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 0/7 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — AVD tv 0:03, 0 sub/1k view; 2 video chưa phán (n=7).",
+   "n": 7,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 0/6 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — AVD tv 0:04, 23.81 sub/1k view; 5 video chưa phán (n=6).",
+   "n": 6,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "mot_nut",
+   "cau": "Công thức mot_nut (28 ngày): 2/5 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — AVD tv 1:22, 2.98 sub/1k view; 1 video chưa phán (n=5).",
+   "n": 5,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "vph",
+   "cau": "Công thức vph (28 ngày): 2/5 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 17.65%, AVD tv 4:45, 9.3 sub/1k view; 1 video chưa phán (n=5).",
+   "n": 5,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "mot_nut",
+   "cau": "Công thức mot_nut (28 ngày): 1/4 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 12.57%, AVD tv 4:14, 2.5 sub/1k view; 0 video chưa phán (n=4).",
+   "n": 4,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cong_thuc",
+   "cum": "mot_nut",
+   "cau": "Công thức mot_nut (28 ngày): 2/3 video thắng theo thước chung (phân vị cùng tuổi, phán ≥96h) — CTR trang chủ tv 6.36%, AVD tv 3:16, 1.5 sub/1k view; 1 video chưa phán (n=3).",
+   "n": 3,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "cum",
+   "cum": "",
+   "cau": "Quan sát 1 video cho thấy các đề tài thuộc nhóm hành vi lịch sự nằm ngoài cụm chủ đề cốt lõi (trí tuệ/IQ, một mình, người giàu) sẽ bị nín hiển thị ở mức 18.0 lượt dưới ngưỡng 6000.0 lượt dù giữ chân AVD 28.7% cao hơn trung vị kênh 19.9% (k…",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "cum|ngoai_cum_cot_loi|-|"
+  },
+  {
+   "truc": "cum",
+   "cum": "tri-tue",
+   "cau": "Quan sát một video cụm Trí tuệ/IQ cho thấy tiêu đề dạng số đếm trên kênh mới 58 sub với pool đề xuất lệch ngách (72.5%) khiến CTR tổng chỉ đạt 1.37% (33.3% trung vị 4.11%) dù CTR trang chủ đạt 5.0% (khám nghiệm 5 video, 1 video phản)",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "cum|tri-tue|-|tri-tue"
+  },
+  {
+   "truc": "cum",
+   "cum": "tep-hoc-van-iq",
+   "cau": "Quan sát một video: cụm 'học vấn, IQ không đo được' trên kênh mới chưa có pool bị YouTube dừng ở 40.0 lượt hiển thị (trung vị cùng tuổi 118.0, mức thắng 2000.0), dù CTR trang chủ 11.54% và giữ 2 phút 85.7% đều vượt xa trung vị. Video sau n…",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "cum|tep-hoc-van-iq|-|tep-hoc-van-iq"
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "tri-tue",
+   "cau": "cụm tri-tue: 4/10 video thắng, 3 trung bình, 3 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 10,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "tep-tuoi-tac",
+   "cau": "cụm tep-tuoi-tac: 1/7 video thắng, 4 trung bình, 2 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "mot-minh",
+   "cau": "cụm mot-minh: 2/7 video thắng, 3 trung bình, 2 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 7,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "cha-me-con",
+   "cau": "cụm cha-me-con: 1/4 video thắng, 2 trung bình, 1 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "don-dep",
+   "cau": "cụm don-dep: 1/4 video thắng, 2 trung bình, 1 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "vat-chat",
+   "cau": "cụm vat-chat: 3/4 video thắng, 1 trung bình, 0 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "doc-hai",
+   "cau": "cụm doc-hai: 3/4 video thắng, 0 trung bình, 1 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "nao-thoi-quen",
+   "cau": "cụm nao-thoi-quen: 0/3 video thắng, 2 trung bình, 1 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "tep-hoc-van-iq",
+   "cau": "cụm tep-hoc-van-iq: 1/3 video thắng, 0 trung bình, 2 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "tep-no-luc",
+   "cau": "cụm tep-no-luc: 0/3 video thắng, 1 trung bình, 2 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "cum_thang_truot",
+   "cum": "tri-tue",
+   "cau": "cụm tri-tue: 2/3 video thắng, 1 trung bình, 0 trượt (thước chung: phân vị hiển thị so video kênh cùng tuổi, phán ≥96h).",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ]
+  },
+  {
    "truc": "do_dai_avd",
    "cum": "",
-   "cau": "ngắn (≤15,3 phút): AVD trung vị 5:36 (n=8) — dài (>15,3 phút): 4:46 (n=7) (đang mâu thuẫn với số cũ).",
-   "n": 7,
+   "cau": "ngắn (≤16,1 phút): AVD trung vị 5:36 (n=10) — dài (>16,1 phút): 5:36 (n=10) (đang mâu thuẫn với số cũ).",
+   "n": 10,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "ngắn (≤15,5 phút): AVD trung vị 5:24 (n=10) — dài (>15,5 phút): 4:50 (n=10) (đang mâu thuẫn với số cũ).",
+   "n": 10,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "dài (>15,5 phút): AVD trung vị 4:21 (n=9) — ngắn (≤15,5 phút): 4:04 (n=9) (đang mâu thuẫn với số cũ).",
+   "n": 9,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "dài (>18,5 phút): AVD trung vị 5:59 (n=9) — ngắn (≤18,5 phút): 5:31 (n=10) (đang mâu thuẫn với số cũ).",
+   "n": 9,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "ngắn (≤16,2 phút): AVD trung vị 5:33 (n=9) — dài (>16,2 phút): 5:01 (n=9)",
+   "n": 9,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "ngắn (≤14,9 phút): AVD trung vị 3:07 (n=6) — dài (>14,9 phút): 2:24 (n=6)",
+   "n": 6,
+   "dung_cho": [
+    "kich_ban"
+   ]
+  },
+  {
+   "truc": "do_dai_avd",
+   "cum": "",
+   "cau": "dài (>18,0 phút): AVD trung vị 6:44 (n=6) — ngắn (≤18,0 phút): 5:00 (n=6)",
+   "n": 6,
    "dung_cho": [
     "kich_ban"
    ]
@@ -25,8 +662,63 @@
   {
    "truc": "giu_chan",
    "cum": "",
-   "cau": "Kênh: trung vị còn 69% ở 0:30 và 49% ở 2:00; vách rơi dốc nhất thường quanh 1:14 (n=17).",
-   "n": 17,
+   "cau": "Kênh: trung vị còn 70% ở 0:30 và 48% ở 2:00; vách rơi dốc nhất thường quanh 1:42 (n=23).",
+   "n": 23,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "",
+   "cau": "Kênh: trung vị còn 62% ở 0:30 và 43% ở 2:00; vách rơi dốc nhất thường quanh 1:49 (n=21).",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "",
+   "cau": "Kênh: trung vị còn 68% ở 0:30 và 48% ở 2:00; vách rơi dốc nhất thường quanh 1:14 (n=21).",
+   "n": 21,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "",
+   "cau": "Kênh: trung vị còn 65% ở 0:30 và 46% ở 2:00; vách rơi dốc nhất thường quanh 2:13 (n=18).",
+   "n": 18,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "tri-tue",
+   "cau": "cụm tri-tue: còn 46% ở 2:00 (kênh trung vị 46%, n=9).",
+   "n": 9,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "tep-tuoi-tac",
+   "cau": "cụm tep-tuoi-tac: còn 50% ở 2:00 (kênh trung vị 48%, n=8).",
+   "n": 8,
    "dung_cho": [
     "chon",
     "kich_ban",
@@ -36,7 +728,7 @@
   {
    "truc": "giu_chan",
    "cum": "mot-minh",
-   "cau": "cụm mot-minh: còn 54% ở 2:00 (kênh trung vị 49%, n=7).",
+   "cau": "cụm mot-minh: còn 54% ở 2:00 (kênh trung vị 48%, n=7).",
    "n": 7,
    "dung_cho": [
     "chon",
@@ -47,7 +739,7 @@
   {
    "truc": "giu_chan",
    "cum": "vat-chat",
-   "cau": "cụm vat-chat: còn 49% ở 2:00 (kênh trung vị 49%, n=5).",
+   "cau": "cụm vat-chat: còn 48% ở 2:00 (kênh trung vị 48%, n=5).",
    "n": 5,
    "dung_cho": [
     "chon",
@@ -58,7 +750,40 @@
   {
    "truc": "giu_chan",
    "cum": "",
-   "cau": "Kênh: trung vị còn 50% ở 0:30 và 40% ở 2:00; vách rơi dốc nhất thường quanh 1:16 (n=3).",
+   "cau": "Kênh: trung vị còn 71% ở 0:30 và 47% ở 2:00; vách rơi dốc nhất thường quanh 1:12 (n=5).",
+   "n": 5,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "cha-me-con",
+   "cau": "cụm cha-me-con: còn 45% ở 2:00 (kênh trung vị 48%, n=4).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "don-dep",
+   "cau": "cụm don-dep: còn 50% ở 2:00 (kênh trung vị 48%, n=4).",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "giu_chan",
+   "cum": "nao-thoi-quen",
+   "cau": "cụm nao-thoi-quen: còn 42% ở 2:00 (kênh trung vị 43%, n=3).",
    "n": 3,
    "dung_cho": [
     "chon",
@@ -68,8 +793,18 @@
   },
   {
    "truc": "giu_chan",
+   "cum": "",
+   "cau": "Tránh triển khai kịch bản có thời lượng giữ chân avd_pct sụt giảm còn 4.8% (37.0 giây), gây tổn hại chỉ số gx_1k xuống 1.04 khiến lượt hiển thị bị bóp ở mốc 280.0 tại 48h (quan sát 1 video) (khám nghiệm 3 video)",
+   "n": 3,
+   "dung_cho": [
+    "kich_ban"
+   ],
+   "khoa": "giu_chan|avd_pct|-|"
+  },
+  {
+   "truc": "giu_chan",
    "cum": "tri-tue",
-   "cau": "cụm tri-tue: còn 45% ở 2:00 (kênh trung vị 49%, n=3).",
+   "cau": "cụm tri-tue: còn 47% ở 2:00 (kênh trung vị 48%, n=3).",
    "n": 3,
    "dung_cho": [
     "chon",
@@ -78,9 +813,60 @@
    ]
   },
   {
+   "truc": "giu_chan",
+   "cum": "doc-hai",
+   "cau": "cụm doc-hai: còn 47% ở 2:00 (kênh trung vị 47%, n=3).",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "kich_ban",
+    "bien_tap"
+   ]
+  },
+  {
+   "truc": "hook",
+   "cum": "tri-tue",
+   "cau": "Qua quan sát 1 video, cần đi thẳng vào nội dung chính trong 30s đầu để tăng tỷ lệ giữ chân 30s từ 65.0% hướng tới vượt trung vị 70.3% (khám nghiệm 7 video)",
+   "n": 7,
+   "dung_cho": [
+    "kich_ban"
+   ],
+   "khoa": "hook|ngan_gon|+|tri-tue"
+  },
+  {
+   "truc": "hook",
+   "cum": "",
+   "cau": "Thay hook triết lý bằng việc đi thẳng vào mấu chốt tiêu đề trong 30 giây đầu để cải thiện giu_30s từ 50.0% lên trên mức 56.0% (khám nghiệm 5 video)",
+   "n": 5,
+   "dung_cho": [
+    "kich_ban"
+   ],
+   "khoa": "hook|truc_tiep|+|"
+  },
+  {
+   "truc": "nguon",
+   "cum": "",
+   "cau": "Quan sát 1 video cho thấy chủ ngữ hành vi lịch sự (dùng kính ngữ với người trẻ) dù có AVD 44.0% vẫn bị nín hiển thị ở 37.0 lượt (80.4% trung vị 46.0), thấp hơn ngưỡng 6000.0 cần thiết vì không thuộc cụm trí tuệ/IQ mà khán giả ngách tâm lý…",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "nguon|hanh_vi_xa_hoi|-|"
+  },
+  {
+   "truc": "sub_1k_view",
+   "cum": "tri-tue",
+   "cau": "tri-tue: 2,9 sub/1.000 view (n=11) — cả kênh 2,6 (n=20)",
+   "n": 11,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
    "truc": "sub_1k_view",
    "cum": "mot-minh",
-   "cau": "mot-minh: 4,1 sub/1.000 view (n=7) — cả kênh 3,0 (n=15)",
+   "cau": "mot-minh: 3,9 sub/1.000 view (n=7) — cả kênh 2,9 (n=20)",
    "n": 7,
    "dung_cho": [
     "chon"
@@ -88,8 +874,8 @@
   },
   {
    "truc": "sub_1k_view",
-   "cum": "vat-chat",
-   "cau": "vat-chat: 2,2 sub/1.000 view (n=5) — cả kênh 3,0 (n=15)",
+   "cum": "don-dep",
+   "cau": "don-dep: 2,9 sub/1.000 view (n=5) — cả kênh 2,1 (n=19)",
    "n": 5,
    "dung_cho": [
     "chon"
@@ -97,17 +883,140 @@
   },
   {
    "truc": "sub_1k_view",
-   "cum": "tri-tue",
-   "cau": "tri-tue: 3,5 sub/1.000 view (n=3) — cả kênh 3,0 (n=15)",
+   "cum": "vat-chat",
+   "cau": "vat-chat: 2,5 sub/1.000 view (n=4) — cả kênh 2,9 (n=20)",
+   "n": 4,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "sub_1k_view",
+   "cum": "cha-me-con",
+   "cau": "cha-me-con: 1,3 sub/1.000 view (n=3) — cả kênh 2,1 (n=19)",
    "n": 3,
    "dung_cho": [
     "chon"
    ]
   },
   {
+   "truc": "sub_1k_view",
+   "cum": "vat-chat",
+   "cau": "vat-chat: 2,5 sub/1.000 view (n=3) — cả kênh 2,1 (n=19)",
+   "n": 3,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "sub_1k_view",
+   "cum": "tri-tue",
+   "cau": "tri-tue: 3,5 sub/1.000 view (n=3) — cả kênh 2,9 (n=20)",
+   "n": 3,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "sub_1k_view",
+   "cum": "doc-hai",
+   "cau": "doc-hai: 9,6 sub/1.000 view (n=3) — cả kênh 9,9 (n=4)",
+   "n": 3,
+   "dung_cho": [
+    "chon"
+   ]
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "don-dep",
+   "cau": "Quan sát một video cho thấy tiêu đề cụm dọn dẹp thiếu chân dung tuổi tác đạt hiển thị 7759.0 lượt nhưng giờ xem trên 1k hiển thị chỉ đạt 4.7 so với trung vị 8.09 do người xem thoát nhiều ở 30 giây đầu (khám nghiệm 3 video)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|don-dep|-|don-dep"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "tri-tue",
+   "cau": "Qua quan sát một video thuộc cụm tri-tue, tiêu đề dạng số đếm khiến CTR kéo xuống 5.05% so với trung vị 9.73%, cần đổi sang dạng tò mò để hướng tới CTR trang chủ mục tiêu 5.0% (khám nghiệm 3 video)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|so_dem|-|tri-tue"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "nguoi-bi-danh-gia-thap-hon-nang-luc-that",
+   "cau": "Quan sát 1 video cho thấy khi CTR trang chủ đạt 4.58% thấp hơn mục tiêu 5.3%, thuật toán vẫn đẩy hiển thị lên 13277.0 lượt nhưng hiệu suất giờ xem/1k hiển thị bị kéo tụt xuống 2.57 (khám nghiệm 3 video)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|chan_dung|-|nguoi-bi-danh-gia-thap-hon-nang-luc-that"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "mot-minh",
+   "cau": "Quan sát một video cụm Một mình cho thấy khi đặt số đếm ở đầu tiêu đề, hiển thị 48h đạt 20717.0 lượt vượt ngưỡng thắng 13519.5 lượt dù CTR trang chủ đạt 5.35% chưa đạt mục tiêu 6.3% (khám nghiệm 4 video, 1 video phản)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|so_dem|+|mot-minh"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "doc-hai",
+   "cau": "Quan sát một video cụm Người độc hại cho thấy tiêu đề thiếu số đếm đạt CTR trang chủ 7.69% chỉ sát ngưỡng 7.7% và CTR mọi nguồn 1.65% dù hiển thị 7747.0 vượt ngưỡng 10022.25 — cụm này cần số đếm để kích hoạt CTR như các cụm đã thắng (khám…",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|so_dem|+|doc-hai"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "",
+   "cau": "Quan sát một video cho thấy tiêu đề dạng khẳng định thuần túy thiếu cả ba tín hiệu (số đếm, chủ ngữ cụ thể, từ trí tuệ) dẫn đến 0.0 lượt hiển thị ở mốc 48.8 giờ, YouTube không phân phối vì không nhận diện được ngách kênh 0 sub (khám nghiệm…",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|thieu_tin_hieu_phan_loai|-|"
+  },
+  {
+   "truc": "tieu_de",
+   "cum": "",
+   "cau": "Qua quan sát 1 video, tránh dùng nhãn 【雑学】 làm CTR giảm còn 1.72% so với trung vị 2.77% khiến hiển thị bị ngừng ở 2387.0 lượt (khám nghiệm 4 video, 2 video phản)",
+   "n": 2,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ],
+   "khoa": "tieu_de|nhan_ngach|-|"
+  },
+  {
+   "truc": "tieu_de_cum",
+   "cum": "tri-tue",
+   "cau": "tri-tue: CTR trung vị 4,0% (n=11) — trung vị cả kênh 3,7% (n=20)",
+   "n": 11,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ]
+  },
+  {
    "truc": "tieu_de_cum",
    "cum": "mot-minh",
-   "cau": "mot-minh: CTR trung vị 3,2% (n=7) — trung vị cả kênh 4,9% (n=15)",
+   "cau": "mot-minh: CTR trung vị 4,3% (n=7) — trung vị cả kênh 4,9% (n=20)",
    "n": 7,
    "dung_cho": [
     "chon",
@@ -116,8 +1025,8 @@
   },
   {
    "truc": "tieu_de_cum",
-   "cum": "vat-chat",
-   "cau": "vat-chat: CTR trung vị 5,5% (n=5) — trung vị cả kênh 4,9% (n=15)",
+   "cum": "don-dep",
+   "cau": "don-dep: CTR trung vị 5,5% (n=5) — trung vị cả kênh 5,1% (n=19)",
    "n": 5,
    "dung_cho": [
     "chon",
@@ -126,13 +1035,75 @@
   },
   {
    "truc": "tieu_de_cum",
-   "cum": "tri-tue",
-   "cau": "tri-tue: CTR trung vị 3,8% (n=3) — trung vị cả kênh 4,9% (n=15)",
+   "cum": "vat-chat",
+   "cau": "vat-chat: CTR trung vị 5,3% (n=4) — trung vị cả kênh 4,9% (n=20)",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ]
+  },
+  {
+   "truc": "tieu_de_cum",
+   "cum": "cha-me-con",
+   "cau": "cha-me-con: CTR trung vị 6,9% (n=3) — trung vị cả kênh 5,1% (n=19)",
    "n": 3,
    "dung_cho": [
     "chon",
     "tieu_de"
    ]
+  },
+  {
+   "truc": "tieu_de_cum",
+   "cum": "vat-chat",
+   "cau": "vat-chat: CTR trung vị 7,4% (n=3) — trung vị cả kênh 5,1% (n=19)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ]
+  },
+  {
+   "truc": "tieu_de_cum",
+   "cum": "tri-tue",
+   "cau": "tri-tue: CTR trung vị 5,2% (n=3) — trung vị cả kênh 4,9% (n=20)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ]
+  },
+  {
+   "truc": "tieu_de_cum",
+   "cum": "doc-hai",
+   "cau": "doc-hai: CTR trung vị 3,0% (n=3) — trung vị cả kênh 3,0% (n=4)",
+   "n": 3,
+   "dung_cho": [
+    "chon",
+    "tieu_de"
+   ]
+  },
+  {
+   "truc": "tu_do",
+   "cum": "",
+   "cau": "Quan sát 1 video cho thấy kênh mới chưa có pool ổn định khi chọn đề tài ngoài cụm đã thắng bị nín hiển thị ở mức 40.0 lượt với tỉ lệ traffic trang chủ chỉ 50.0% so với trung vị kênh 87.49% (khám nghiệm 6 video)",
+   "n": 6,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "tu_do|tu_do:b180aebc|+|"
+  },
+  {
+   "truc": "tu_do",
+   "cum": "",
+   "cau": "Quan sát một video cụm Người giàu/không ham vật chất với tiêu đề hai vế nhưng thiếu số đếm ở đầu cho CTR trang chủ 5.63% = 89.4% ngưỡng 6.3% dù hiển thị đạt 270142.0 lượt = 71.5× trung vị 3778.0 lượt — số đếm ở đầu giúp CTR bứt phá nhanh h…",
+   "n": 4,
+   "dung_cho": [
+    "chon",
+    "bien_tap"
+   ],
+   "khoa": "tu_do|tu_do:4fa35d38|+|"
   }
  ]
 }
