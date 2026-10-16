@@ -193,6 +193,10 @@ class Kenh:
     #: lời gọi chữ, mỗi lần vẽ lại là một tấm ảnh — kênh của khách không tự
     #: dưng đắt lên.
     cham_anh: bool = False
+    #: Ảnh CẢNH: số ứng viên vẽ mỗi cảnh rồi để giám khảo nội dung/giọng chọn tấm tốt nhất, không đạt thì viết lại
+    #: lời nhắc (`core/chon_anh_canh.py`, 17/10/2026 — chủ dự án: ảnh cảnh "kinh dị", không đúng lời đọc). 0 = tắt
+    #: (một tấm như cũ). Mặc định BẬT 3: chủ dự án không đặt trần chi phí, chỉ cần chất lượng.
+    so_ung_vien_canh: int = 3
     #: Vẽ thêm một tấm ảnh KHUNG CUỐI cho mỗi cảnh rồi ghim clip CẢ HAI đầu
     #: (`auto_khau._anh_khung_cuoi`). Tốn thêm một tấm ảnh mỗi cảnh, đổi lại
     #: đuôi clip không trôi — đo 27/08/2026: cảnh 11 đi 2 → 4 điểm, cảnh 2 đi
@@ -939,6 +943,7 @@ def doc_kenh(goc: str, ma: str) -> Kenh:
         do_dai_tu_do=bool(cai.get("do_dai_tu_do", False)),
         khung_dau=bool(cai.get("khung_dau", False)),
         cham_anh=bool(cai.get("cham_anh", False)),
+        so_ung_vien_canh=min(6, max(0, int(_so(cai.get("so_ung_vien_canh"), 3)))),
         ghim_hai_dau=bool(cai.get("ghim_hai_dau", False)),
         danh_sach_phat_kenh=str(cai.get("danh_sach_phat_kenh") or "").strip(),
         xuat_capcut=bool(cai.get("xuat_capcut", False)),

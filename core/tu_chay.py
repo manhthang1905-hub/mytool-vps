@@ -1855,7 +1855,10 @@ def _uoc_chi_phi_micro(kenh, gia: PriceTable) -> int:
     phut = max(0.1, float(getattr(kenh, "phut_muc_tieu", 10.0) or 10.0))
     so_canh = max(1, int(round(phut * 60.0 / target_seconds_for(engine))))
     ky_tu = int(getattr(kenh, "ky_tu_muc_tieu", 0) or 0)
-    return (hold_for_image(so_canh, gia) + hold_for_video(engine, gia) * so_canh
+    # 17/10/2026: ảnh cảnh vẽ N ứng viên (+ vòng viết lại) — `core.chon_anh_canh.anh_uoc_moi_canh`.
+    from .chon_anh_canh import anh_uoc_moi_canh, so_ung_vien  # noqa: PLC0415
+    so_anh = int(round(so_canh * anh_uoc_moi_canh(so_ung_vien(kenh))))
+    return (hold_for_image(so_anh, gia) + hold_for_video(engine, gia) * so_canh
             + hold_for_tts(ky_tu, gia))
 
 

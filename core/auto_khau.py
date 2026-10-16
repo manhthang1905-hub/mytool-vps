@@ -6012,6 +6012,15 @@ def _hoi_chia_canh(bc: BoiCanh, luot: LuotChay, khuon: str,
             raise LoiNoiDung(
                 "khúc {0}/{1}: {2}/{3} cảnh thiếu lời nhắc".format(
                     thu_tu + 1, tong_khuc, len(rong), len(ds)))
+        # ═══ SỐ DÒNG PHẢI LÀ SỐ DÒNG, KHÔNG PHẢI GIÂY (17/10/2026) ═══
+        #
+        # Thử thật TL3-T7/0016 dòng 57–84: AI ghi `srt_from`/`srt_to` bằng GIÂY (175.57, 182.09…). Bước canh lại
+        # không khớp được dòng nào, gộp cả 28 dòng thành một cảnh 77 giây rồi cắt theo đồng hồ — 10 cảnh cùng một
+        # câu đọc, cùng một lời nhắc. Quá nửa số cảnh ghi số ngoài dải dòng của khúc → hỏi lại bằng khoá mới.
+        if _ngoai_dai_dong(ds, cue):
+            raise LoiNoiDung(
+                "khúc {0}/{1}: AI ghi srt_from/srt_to ngoài số dòng của khúc (có lẽ ghi giây)".format(
+                    thu_tu + 1, tong_khuc))
         return ds
 
     ds = None
@@ -6039,6 +6048,27 @@ def _hoi_chia_canh(bc: BoiCanh, luot: LuotChay, khuon: str,
             bc.ghi("  khúc {0} chưa xong ({1}) — hỏi lại bằng khoá mới.".format(
                 thu_tu + 1, str(loi)[:70]))
     return ds or []
+
+
+def _ngoai_dai_dong(ds: List[Any], cue: List[Dict[str, Any]]) -> bool:
+    """Quá nửa số cảnh có `srt_from`/`srt_to` không phải SỐ DÒNG nằm trong khúc (số lẻ kiểu giây, hay ngoài dải)?
+    Cảnh không ghi hai trường ấy thì không tính — để `canh_lai` lo như cũ."""
+    try:
+        dai = {int(x["index"]) for x in cue}
+    except (KeyError, TypeError, ValueError):
+        return False
+    co, sai = 0, 0
+    for c in ds:
+        if not isinstance(c, dict) or c.get("srt_from") is None or c.get("srt_to") is None:
+            continue
+        co += 1
+        try:
+            a, b = float(c["srt_from"]), float(c["srt_to"])
+            if a != int(a) or b != int(b) or int(a) not in dai or int(b) not in dai:
+                sai += 1
+        except (TypeError, ValueError):
+            sai += 1
+    return co > 0 and sai * 2 > co
 
 
 #: Cột của sheet `scenes` — **giữ đúng TÊN này** (khâu dựng video và mọi bộ
@@ -7098,6 +7128,14 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
             "cảnh {0} không có lời nhắc ảnh — bảng cảnh hỏng, hãy chọn dòng "
             "“Cắt cảnh và viết lời nhắc” rồi bấm “Làm lại từ khâu này”".format(
                 so_canh))
+    # 17/10/2026: mặc định mỗi cảnh vẽ N ứng viên + giám khảo nội dung/giọng + viết lại lời nhắc
+    # (`core/chon_anh_canh.py`). `kenh.yaml: so_ung_vien_canh: 0` mới về đường một tấm dưới đây.
+    from .chon_anh_canh import so_ung_vien  # noqa: PLC0415
+
+    n_uv = so_ung_vien(getattr(bc, "kenh", None))
+    if n_uv > 0:
+        _lam_anh_canh_chon(bc, luot, c, tep, hop, n_uv, so=so)
+        return
     # ═══ KHOÁ PHẢI PHỦ CẢ ẢNH THAM CHIẾU ═══
     #
     # Thân yêu cầu gồm lời nhắc **và** URL ảnh tham chiếu. URL ấy là link ký
@@ -7113,8 +7151,12 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
     # bằng khoá mới — xem `_tai_ket_qua_dat_lai`.
     ten_anh = "ảnh cảnh {0}".format(so_canh)
     dung: Dict[str, str] = {}
+    # Câu giữ giọng ấm (17/10/2026) nối cả ở đường một tấm — chỉ kênh thật có `style.yaml` (đồ giả không có).
+    st_kenh = getattr(getattr(bc, "kenh", None), "style", None)
+    giu_giong = _giong_an_toan(st_kenh) if isinstance(st_kenh, dict) else ""
 
     def ve(ln: str, khoa: str):
+        ln = _ap_giong(ln, giu_giong)
         dung.update(ln=ln, khoa=khoa)
         return _tao_anh(bc, luot, ln, hop, khoa, ten_hien=ten_anh, so=so)
 
@@ -7149,6 +7191,240 @@ def _lam_anh_canh(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         ten_anh)
     _xoa_dau(bc, tep)
     _cham_va_ve_lai(bc, luot, c, tep, hop, so=so)
+
+
+def _giong_an_toan(style: Any) -> str:
+    from .chon_anh_canh import giong_an_toan  # noqa: PLC0415
+
+    return giong_an_toan(style)
+
+
+def _ap_giong(prompt: str, cau: str) -> str:
+    from .chon_anh_canh import ap_giong_an_toan  # noqa: PLC0415
+
+    return ap_giong_an_toan(prompt, cau) if cau else prompt
+
+
+def _tham_chieu_cham(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], hop: "ThamChieu") -> List[str]:
+    """Ảnh tham chiếu TRÊN MÁY cho giám khảo: đường đạo diễn (`_duong` của hộp) hoặc `nv1.png` của kênh khi hộp có
+    URL tham chiếu (tức cảnh được vẽ kèm nhân vật)."""
+    refs = _duong_tham_chieu(bc, luot, c, hop)
+    if refs:
+        return refs
+    try:
+        if not hop.lay():
+            return []
+    except Exception:  # noqa: BLE001
+        return []
+    return [p for p in list(getattr(bc.kenh, "anh_nv", []) or [])[:1] if isinstance(p, str) and os.path.isfile(p)]
+
+
+def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str, hop: "ThamChieu", n: int,
+                       so: Optional[SoTheoDoi] = None) -> None:
+    """Ảnh một cảnh theo lối CHỌN TỐT NHẤT (17/10/2026, `core/chon_anh_canh.py`).
+
+    Mỗi vòng là MỘT job ảnh `n` tấm (khoá phủ lời nhắc + tham chiếu + n + vòng → chạy lại không trả tiền hai lần),
+    MỘT lượt giám khảo nhìn tham chiếu + cả n tấm (đi ví ShopAPI như mọi cửa chấm ảnh: hàng trăm lượt kèm ảnh mỗi
+    video — để thuê bao Claude Max dành cho viết chữ), và tối đa `SO_VONG_VIET_LAI` vòng viết lại lời nhắc. Tấm
+    chọn được chép vào `tep` rồi mới xoá dấu; clip làm từ đúng tấm ấy (khâu ảnh bắn clip sau khi hàm này trả về).
+    Lời nhắc thắng khác bản gốc → ghi vào `4-canh.json` (như đường viết lại khi bị từ chối) để vân tay, "Làm lại"
+    và lượt chạy tiếp cùng một bản. Không đạt sau mọi vòng → cảnh báo, KHÔNG chặn."""
+    from . import chon_anh_canh as cac  # noqa: PLC0415
+    from .noi_canh import DUOI_NOI_CANH  # noqa: PLC0415
+    from .viet_lai_prompt import la_bi_tu_choi, lam_lanh_tho, viet_lai_prompt  # noqa: PLC0415
+
+    so_canh = int(c["scene_id"])
+    st = getattr(bc.kenh, "style", None)
+    st = st if isinstance(st, dict) else {}
+    cau_giong = cac.giong_an_toan(st)
+    thu_muc_uv = os.path.join(luot.thu_muc, cac.THU_MUC_UV, str(so_canh))
+    refs = _tham_chieu_cham(bc, luot, c, hop)
+    phong = " ".join(str(st.get(k) or "") for k in ("scene_plan_style", "palette")).strip()
+    loi_doc = str(c.get("srt_text") or "")
+    mo_hinh = cac.MO_HINH_CHAM
+
+    def goi_vi(loi_nhac: str, khoa: str, toi_da: int, anh: Any = "") -> str:
+        bc.kiem_dung()
+        return _goi(bc, loi_nhac, khoa, toi_da_token=toi_da, anh=anh, mo_hinh=mo_hinh, qua_vi=True)
+
+    def tao(ln: str, khoa: str, ten: str):
+        return _tao_anh(bc, luot, ln, hop, khoa, ten_hien=ten, so=so, n=n)
+
+    def ve(prompt: str, vong: int):
+        """N ứng viên của một vòng → (tệp, lời nhắc thật đã dùng). Bị bộ lọc chặn → viết lại cho lành (như đường
+        cũ), lần cuối thay từ thô và bỏ câu giữ giọng (chính câu cấm có thể là chữ bộ lọc vấp)."""
+        os.makedirs(thu_muc_uv, exist_ok=True)
+        ten = "ảnh cảnh {0} (vòng {1}, {2} ứng viên)".format(so_canh, vong, n)
+        thu = [(prompt, True)]
+        dung, goi, loi_cuoi = prompt, None, None
+        for lan in range(3):
+            base, co_giong = thu[-1]
+            ln = _ap_giong(base, cau_giong) if co_giong else base
+            khoa = khoa_viec(luot, "img-uv", so_canh, ln, "|".join(hop.lay()), n, vong)
+            try:
+                goi, dung = tao(ln, khoa, ten), base
+                break
+            except Exception as loi:  # noqa: BLE001
+                loi_cuoi = loi
+                if not la_bi_tu_choi("", str(loi)) or lan == 2:
+                    raise
+                if lan == 0:
+                    bc.ghi("    ảnh cảnh {0}: bị bộ lọc từ chối — viết lại cho lành rồi thử lại…".format(so_canh))
+                    moi = viet_lai_prompt(lambda l: goi_vi(l, khoa_viec(luot, "vl-img", so_canh, base), 2048),
+                                          base, str(loi))
+                    thu.append((moi or lam_lanh_tho(base), True))
+                else:
+                    thu.append((lam_lanh_tho(thu[-1][0]), False))
+        if goi is None:  # pragma: no cover — vòng trên luôn break hoặc ném
+            raise loi_cuoi or RuntimeError("không tạo được ảnh")
+        khoa_dung = khoa
+        tep_ra: List[str] = []
+        for lan in range(SO_DAT_LAI_KET_QUA_MAT + 1):
+            loi_tai: List[BaseException] = []
+            for i in range(n):
+                d = os.path.join(thu_muc_uv, "v{0}-{1}.png".format(vong, i + 1))
+                try:
+                    _tai_ket_qua(bc, goi, i, d)
+                    tep_ra.append(d)
+                except Exception as loi:  # noqa: BLE001 — một tấm hỏng không giết cả vòng
+                    loi_tai.append(loi)
+            if tep_ra:
+                break
+            mat = [x for x in loi_tai if isinstance(x, LoiTaiVe)
+                   and int(getattr(x, "status", 0) or 0) in MA_KET_QUA_MAT]
+            if not loi_tai or len(mat) < len(loi_tai) or lan >= SO_DAT_LAI_KET_QUA_MAT:
+                raise loi_tai[0] if loi_tai else RuntimeError("job ảnh không có kết quả")
+            bc.ghi("    {0}: máy chủ không còn giữ kết quả — đặt lại bằng khoá mới ({1}/{2}).".format(
+                ten, lan + 1, SO_DAT_LAI_KET_QUA_MAT))
+            goi = tao(_ap_giong(dung, cau_giong) if thu[-1][1] else dung,
+                      khoa_dung + khoa_dat_lai_ket_qua_mat(lan + 1), ten)
+        return tep_ra, dung
+
+    def cham(tep_ds: List[str], prompt: str) -> Dict[int, Dict[str, Any]]:
+        than, _duoi = cac.tach_than_duoi(prompt, st, them=(DUOI_NOI_CANH,))
+        ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=than, phong_cach=phong, so_tham_chieu=len(refs),
+                               so_ung_vien=len(tep_ds))
+        anh = ([cac.anh_data_url(p, 512, nhan="REF") for p in refs]
+               + [cac.anh_data_url(p, 768, nhan=str(i)) for i, p in enumerate(tep_ds, 1)])
+        dau = [_dau_tep(p) for p in tep_ds]
+        for lan in range(2):
+            try:
+                with cac.VAN_CHAM:
+                    tho = goi_vi(ln, khoa_viec(luot, "cham-uv", so_canh, *(dau + [lan])), 2000, anh=anh)
+                kq = cac.doc_cham(loc_json(str(tho or "")), len(tep_ds))
+                if kq:
+                    return kq
+                bc.ghi("    ảnh cảnh {0}: giám khảo trả rác — chấm lại ({1}/2).".format(so_canh, lan + 1))
+            except Exception as loi:  # noqa: BLE001 — Dừng thì ném lên; lỗi khác: chấm lại một lần rồi thôi
+                if type(loi).__name__ == "Cancelled":
+                    raise
+                bc.ghi("    ảnh cảnh {0}: giám khảo hỏng ({1}).".format(so_canh, str(loi)[:100]))
+        return {}
+
+    def viet_lai(prompt: str, ghi_chu: str) -> str:
+        than, duoi = cac.tach_than_duoi(prompt, st, them=(DUOI_NOI_CANH,))
+        moi = cac.viet_lai_canh(lambda l: goi_vi(l, khoa_viec(luot, "vl-uv", so_canh, prompt, ghi_chu), 1500),
+                                than, loi_doc=loi_doc, ghi_chu=ghi_chu)
+        if not moi:
+            return ""
+        return "{0}, {1}".format(moi.rstrip(" ,."), duoi) if duoi else moi
+
+    kq = cac.chon_canh(so_canh=so_canh, prompt=str(c["img_prompt"]), loi_doc=loi_doc, ve=ve, cham=cham,
+                       viet_lai=viet_lai, so=cac.SoChon(luot.thu_muc), ghi=bc.ghi, kiem_dung=bc.kiem_dung)
+    chon = kq["chon"]
+    tam = tep + ".chon.tmp"
+    shutil.copyfile(chon["tep"], tam)
+    os.replace(tam, tep)
+    _xoa_dau(bc, tep)
+    if str(chon.get("prompt") or "").strip() and str(chon["prompt"]).strip() != str(c["img_prompt"]).strip():
+        c["img_prompt"] = chon["prompt"]
+        _ghi_loi_nhac_da_sua(luot, so_canh, chon["prompt"])
+    so_vong = len(kq.get("vong") or [])
+    bc.ghi("    ảnh cảnh {0}: chọn tấm {1} vòng {2} — {3}/10{4}{5}".format(
+        so_canh, chon.get("so"), chon.get("vong"), chon.get("tong"),
+        " (sau {0} vòng viết lại)".format(so_vong - 1) if so_vong > 1 else "",
+        "  ⚠ {0}".format(kq["canh_bao"]) if kq.get("canh_bao") else ""))
+    _ghi_nao_anh_canh(bc, luot, so_canh, kq)
+    try:
+        shutil.rmtree(thu_muc_uv, ignore_errors=True)
+    except Exception:  # noqa: BLE001 — dọn ứng viên thua hỏng không sao, chỉ tốn đĩa
+        pass
+
+
+def _nao_cua_luot(bc: BoiCanh, luot: LuotChay) -> str:
+    """Gốc tool có não (`nao/bo-phan.db`) và lượt nằm trong `PROJECTS/AUTO` của gốc ấy → gốc; không → ""."""
+    try:
+        from .nao_bo_phan import duong_db  # noqa: PLC0415
+
+        goc = str(getattr(bc, "goc", "") or "")
+        auto = os.path.normcase(os.path.abspath(os.path.join(goc, "PROJECTS", "AUTO"))) + os.sep
+        if goc and os.path.isfile(duong_db(goc)) and os.path.normcase(
+                os.path.abspath(luot.thu_muc)).startswith(auto):
+            return goc
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _ghi_nao_anh_canh(bc: BoiCanh, luot: LuotChay, so_canh: int, kq: Dict[str, Any]) -> None:
+    """Não bộ phận `anh-clip`: cảnh có VIẾT LẠI lời nhắc (bản trước → bản thắng + điểm) hoặc có cảnh báo — để giấc
+    ngủ đêm học được kiểu lời nhắc nào thắng. Cảnh đạt ngay vòng đầu chỉ vào tổng kết của lượt."""
+    vong = kq.get("vong") or []
+    if len(vong) <= 1 and not kq.get("canh_bao"):
+        return
+    goc = _nao_cua_luot(bc, luot)
+    if not goc:
+        return
+    try:
+        from .nao_bo_phan import ghi as ghi_nao  # noqa: PLC0415
+
+        chon = kq.get("chon") or {}
+        dau = [(v.get("cham") or {}) for v in vong]
+        diem_vong = [max([float(m.get("tong") or 0) for m in d.values()] or [0]) for d in dau]
+        ma = luot.ma_kenh or getattr(bc.kenh, "ma", "")
+        loai = "loi" if kq.get("canh_bao") else "sua"
+        ghi_nao(goc, "anh-clip", loai, kenh=ma, ma_goi="{0}-{1}".format(ma, luot.ma_luot), nguon="chon_anh_canh",
+                chu_ky="anh-canh-duoi-nguong" if loai == "loi" else "",
+                noi_dung="ảnh cảnh {0}: {1} vòng, điểm tốt nhất từng vòng {2}; chọn vòng {3} ({4}/10).{5} Lời nhắc "
+                         "đầu: {6} → lời nhắc thắng: {7}".format(
+                             so_canh, len(vong), "/".join("{0:g}".format(x) for x in diem_vong), chon.get("vong"),
+                             chon.get("tong"), " Cảnh báo: {0}.".format(kq["canh_bao"]) if kq.get("canh_bao") else "",
+                             str(vong[0].get("prompt") or "")[:300], str(chon.get("prompt") or "")[:300]),
+                so={"canh": so_canh, "so_vong": len(vong), "diem_vong": diem_vong, "vong_chon": chon.get("vong"),
+                    "tong": chon.get("tong"), "kinh_di": chon.get("kinh_di"), "so_anh": kq.get("so_anh")},
+                khoa="anh-canh|{0}|{1}|{2}|{3}".format(ma, luot.ma_luot, so_canh, kq.get("bam_chon")))
+    except Exception:  # noqa: BLE001 — não hỏng không làm hỏng ảnh
+        pass
+
+
+def _tong_ket_anh_canh(bc: BoiCanh, luot: LuotChay) -> None:
+    """Cuối khâu ảnh: một dòng nhật ký + một sự kiện `do` (não `anh-clip`) tóm tắt sổ chọn ảnh của lượt."""
+    try:
+        from .chon_anh_canh import tom_tat  # noqa: PLC0415
+
+        tt = tom_tat(luot.thu_muc)
+    except Exception:  # noqa: BLE001
+        return
+    if not tt:
+        return
+    bc.ghi("  chọn ảnh cảnh: {0} cảnh, điểm TB {1} (vòng đầu {2}), viết lại {3}, dưới ngưỡng {4}, nét rợn {5}, "
+           "{6} ảnh + {7} lượt chấm.".format(tt["so_canh"], tt["diem_tb"], tt["diem_tb_vong_dau"], tt["viet_lai"],
+                                            tt["duoi_nguong"], tt["kinh_di"], tt["so_anh"], tt["so_cham"]))
+    goc = _nao_cua_luot(bc, luot)
+    if not goc:
+        return
+    try:
+        from .nao_bo_phan import ghi as ghi_nao  # noqa: PLC0415
+
+        ma = luot.ma_kenh or getattr(bc.kenh, "ma", "")
+        ghi_nao(goc, "anh-clip", "do", kenh=ma, ma_goi="{0}-{1}".format(ma, luot.ma_luot), nguon="chon_anh_canh",
+                noi_dung="chọn ảnh cảnh: {0} cảnh, điểm TB {1} (vòng đầu {2}), {3} cảnh phải viết lại lời nhắc "
+                         "({4} thắng nhờ viết lại), {5} dưới ngưỡng, {6} còn nét rợn.".format(
+                             tt["so_canh"], tt["diem_tb"], tt["diem_tb_vong_dau"], tt["viet_lai"],
+                             tt["thang_nho_viet_lai"], tt["duoi_nguong"], tt["kinh_di"]),
+                so=tt, khoa="anh-canh-tong|{0}|{1}|{2}|{3}".format(ma, luot.ma_luot, tt["so_canh"], tt["diem_tb"]))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 #: Mỗi cảnh yếu được vẽ thêm tối đa bấy nhiêu ứng viên.
@@ -8024,6 +8300,7 @@ def _khau_anh(bc: BoiCanh):
             _chay_song_song(bc, muc, mot_muc, "ảnh", loai_job="image")
         finally:
             so.dong()
+            _tong_ket_anh_canh(bc, luot)
         if dem["clip"] < tong["clip"]:
             bc.ghi("  còn {0}/{1} clip chưa xong — khâu clip làm nốt.".format(
                 tong["clip"] - dem["clip"], tong["clip"]))
@@ -8133,6 +8410,7 @@ def _khau_anh_noi_canh(bc: BoiCanh):
             chay_cac_chuoi(chuoi, lam_chuoi, SONG_SONG_CHUOI)
         finally:
             so.dong()
+            _tong_ket_anh_canh(bc, luot)
         thieu_anh = [int(c["scene_id"]) for c in canh
                      if not os.path.exists(os.path.join(thu_muc, "{0}.png".format(int(c["scene_id"]))))]
         if thieu_anh and not cu_may_dai:

@@ -539,6 +539,14 @@ def _xay_ho_so(goc: str, kenh: str, thu_muc_luot: str, ma_goi: str) -> Dict[str,
             ho_so["doc_dao"], ho_so["trung_nguon"] = dd, dd.get("ti_le")
     except Exception:  # noqa: BLE001 — metadata phụ, không chặn hồ sơ
         pass
+    try:  # 17/10/2026: chọn ảnh cảnh (N ứng viên + giám khảo) — não/vòng học nối chất lượng ảnh với giữ chân
+        from .chon_anh_canh import tom_tat as _tom_tat_anh  # noqa: PLC0415
+
+        ac = _tom_tat_anh(thu_muc_luot)
+        if ac:
+            ho_so["anh_canh"] = ac
+    except Exception:  # noqa: BLE001 — metadata phụ, không chặn hồ sơ
+        pass
     ho_so["phan"] = _doc_phan(thu_muc_luot)
     ho_so["nhac"] = _doc_json(os.path.join(thu_muc_luot, "8-nhac.json"))
     tu_anh = _doc_json(os.path.join(thu_muc_luot, "6-clip", "tu-anh.json"))
