@@ -577,7 +577,7 @@ def kiem_khoi(goc: str, *, co_test: bool = True, in_ra: Callable[[str], None] = 
 #: chỉ lộ ra SAU khi đã áp + khởi động lại (`_theo_doi` thấy cổng 8767 chết lặp), còn
 #: hỏng `may_dang_dom.py` (agent mở mỗi phiên) thì không bao giờ lộ: agent vẫn sống,
 #: chỉ là không video nào lên. Kiểm khói import cả nhóm này ngay trong bản kiểm.
-MODULE_VM = ("agent", "cdp", "may_dang_dom", "may_cmt_dom", "tu_chua_dom", "thiet_lap_kenh_dom")
+MODULE_VM = ("agent", "cdp", "may_dang_dom", "may_cmt_dom", "tu_chua_dom", "thiet_lap_kenh_dom", "studio_may_dom")
 
 
 def kiem_khoi_vm(goc: str, *, env: Optional[Dict[str, str]] = None, co: int = 0,

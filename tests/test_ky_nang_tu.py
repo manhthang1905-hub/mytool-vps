@@ -212,7 +212,7 @@ def test_thu_chi_in_khong_chay_khong_ghi(tmp_path, monkeypatch):
 
 def test_danh_muc_that_khai_du(tmp_path):
     co = [k for k in kn.DANH_MUC if k.dieu_kien is not None]
-    assert {k.ma for k in co} == {"S02", "S03", "S04", "D09", "K20", "D10", "D11", "D12"}
+    assert {k.ma for k in co} == {"S02", "S03", "S04", "D09", "K20", "D10", "D11", "D12", "D13", "D14"}
     for k in co:
         assert k.ma in knt.BO_PHAN
         assert (k.chay is not None) == k.tu_ap, k.ma

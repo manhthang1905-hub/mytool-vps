@@ -796,6 +796,55 @@ def d_nao_bp(goc, kenh):
         (False, "gom {0:.1f} giờ trước".format(gom))
 
 
+# D13 · Thử nghiệm và so sánh bìa · D14 · Đọc sức khoẻ Studio (hàng việc máy có kiểu, 16/10/2026) ────────────────
+# Bộ chạy `vm/studio_may_dom.py` (phần thuần `core/studio_may.py`). Mỗi lượt tự kích hoạt tối đa MỘT việc nặng = MỘT kênh;
+# bộ chạy tự kiểm khoá máy / van IPv4 / phiên đăng / Chrome kênh đang mở → hoãn (mã 10, không tính hỏng, việc giữ `cho`).
+
+NHIP_TEST_GIO, NHIP_SUC_KHOE_GIO = 3, 6
+
+
+def _studio_may_chan(goc, kenh) -> str:
+    return _san_sang_dom(goc, kenh) or _khung_thiet_lap(_gio()) or \
+        ("đang có máy đăng dở (dang-dodang.json)" if os.path.exists(_vm(goc, "logs", "dang-dodang.json")) else "")
+
+
+def k_test_compare(goc, kenh):
+    from core import studio_may  # noqa: PLC0415
+    dung, ly = studio_may.dieu_kien_test(goc, kenh)
+    return (CHO, ly) if dung else (DAT, ly)
+
+
+def d_test_compare(goc, kenh):
+    from core import studio_may  # noqa: PLC0415
+    dung, ly = studio_may.dieu_kien_test(goc, kenh)
+    if not dung:
+        return False, ly
+    chan = _studio_may_chan(goc, kenh)
+    return (False, chan) if chan else (True, ly)
+
+
+def k_suc_khoe_studio(goc, kenh):
+    from core import studio_may  # noqa: PLC0415
+    dung, ly = studio_may.dieu_kien_suc_khoe(goc, kenh, _gio())
+    if dung:
+        return CHO, ly
+    d = studio_may.lan_doc_suc_khoe(goc, kenh)
+    if not d:
+        return DAT, ly
+    return (LOI if d.get("canh_bao") else DAT), "đọc Studio {0}: {1}".format(str(d.get("luc"))[:16], str(d.get("chi_tiet"))[:90])
+
+
+def d_suc_khoe_studio(goc, kenh):
+    from core import studio_may  # noqa: PLC0415
+    dung, ly = studio_may.dieu_kien_suc_khoe(goc, kenh, _gio())
+    if not dung:
+        return False, ly
+    if studio_may.con_moi_suc_khoe(goc, kenh, _gio()):
+        return True, ly                    # đóng việc bằng lần đọc còn mới — không mở Chrome, khỏi chờ khung
+    chan = _studio_may_chan(goc, kenh)
+    return (False, chan) if chan else (True, ly)
+
+
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
 
 DANH_MUC: List[KyNang] = [
@@ -859,6 +908,21 @@ DANH_MUC: List[KyNang] = [
            "python -m core.nao_bo_phan gom", k_nao_bp, [],
            dieu_kien=d_nao_bp, chay=lambda goc, kenh: _py("-m", "core.nao_bo_phan", "gom"), nhip_gio=1, tu_ap=True,
            toan_may=True),
+    KyNang("D13", "Thử nghiệm và so sánh bìa", "dinh_ky",
+           "Kích hoạt: hàng việc máy có `studio_test_compare` của kênh (đề xuất bộ não) → Studio, trang sửa video: bìa A "
+           "đang chạy + 1–2 bìa ứng viên tốt nhất qua cổng đọc được → Lưu → đọc lại thử nghiệm đang chạy. Kênh thiếu tính "
+           "năng nâng cao / không còn ứng viên → bỏ việc.",
+           "python vm/studio_may_dom.py --kenh K --test-compare", k_test_compare, ["K01"],
+           dieu_kien=d_test_compare, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "studio_may_dom.py"), "--kenh", kenh,
+                                                                 "--test-compare"),
+           nhip_gio=NHIP_TEST_GIO, tu_ap=True, nang=True),
+    KyNang("D14", "Đọc sức khoẻ Studio", "dinh_ky",
+           "Kích hoạt: hàng việc máy có `studio_kiem_suc_khoe` của kênh (cò sức khoẻ giám đốc) → CHỈ ĐỌC Studio: gậy / cảnh "
+           "cáo, kiếm tiền, «nội dung dùng lại»; thấy thật mới báo chủ. Mỗi kênh mở Chrome tối đa 1 lần / 3 ngày.",
+           "python vm/studio_may_dom.py --kenh K --suc-khoe", k_suc_khoe_studio, ["K01"],
+           dieu_kien=d_suc_khoe_studio, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "studio_may_dom.py"), "--kenh",
+                                                                    kenh, "--suc-khoe"),
+           nhip_gio=NHIP_SUC_KHOE_GIO, tu_ap=True, nang=True),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
     KyNang("S02", "Khám cấu hình kênh", "sua_chua",

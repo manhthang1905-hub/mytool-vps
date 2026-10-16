@@ -1044,6 +1044,47 @@
         "[role=alert]",
         "[role=status]"
       ]
+    },
+    "ab_nut": {
+      "ghi_chu": "16/10/2026 đo TL1 (Studio vi): nút «Thử nghiệm A/B» DƯỚI ô Tiêu đề của trang sửa (bản mới gộp thử tiêu đề + bìa, thay «Thử nghiệm và so sánh» ở khối Hình thu nhỏ). vm/studio_may_dom.py --test-compare",
+      "chon": [
+        "ytcp-button#ab-test-button"
+      ],
+      "chu": [
+        "Thử nghiệm A/B",
+        "A/B testing",
+        "A/B テスト"
+      ],
+      "phu": true
+    },
+    "ab_chip_bia": {
+      "ghi_chu": "16/10/2026: chip loại thử nghiệm của hộp Thử nghiệm A/B — chip-0 Chỉ tiêu đề (mặc định), chip-1 Chỉ hình thu nhỏ, chip-2 Tiêu đề và hình thu nhỏ. Máy CHỈ thử bìa.",
+      "chon": [
+        "tp-yt-paper-dialog ytcp-chip#chip-1"
+      ],
+      "chu": [
+        "Chỉ hình thu nhỏ",
+        "Thumbnail only"
+      ],
+      "phu": true
+    },
+    "ab_o_bia": {
+      "ghi_chu": "16/10/2026: 3 ô bìa của hộp — ô 1 Studio điền sẵn bìa đang chạy (#preview-button), ô trống có #select-button «Thêm hình thu nhỏ» + input#file-loader ẩn (jpeg/png)",
+      "chon": [
+        "tp-yt-paper-dialog ytcp-thumbnail-uploader.ytcpCreatorExperimentCreateDialogThumbnailUploader"
+      ],
+      "phu": true
+    },
+    "ab_thiet_lap": {
+      "ghi_chu": "16/10/2026: nút «Thiết lập thử nghiệm» của hộp — TẮT tới khi đủ 2 bìa (chân hộp «Cần có hình thu nhỏ thứ hai» → «Đã sẵn sàng thử nghiệm hình thu nhỏ»)",
+      "chon": [
+        "tp-yt-paper-dialog ytcp-button#set-test-button"
+      ],
+      "chu": [
+        "Thiết lập thử nghiệm",
+        "Set test"
+      ],
+      "phu": true
     }
   },
   "cam_bam_binh_luan": {

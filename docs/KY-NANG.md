@@ -64,6 +64,8 @@ Luật (mỗi luật một câu):
 | D10 | Đòn bẩy đăng ký | Kích hoạt: kênh có phân phối (không bị cờ «không phát») mà `chuyen_doi_sub` đang tắt → CHỈ BÁO nên bật. | `kenh.yaml: chuyen_doi_sub: {bat: true} (chủ duyệt)` | D01 | chỉ báo |
 | D11 | Lô bìa | Kích hoạt: kênh có khuôn bìa thắng THẬT (đủ bằng chứng, đang khai thác) mà chưa bật `bia_lo` → CHỈ BÁO nên bật. | `kenh.yaml: bia_lo: true (chủ duyệt)` | D01 | chỉ báo |
 | D12 | Não bộ phận khỏe | Kích hoạt (toàn máy): lần gom nao/bo-phan.db cũ > 2 giờ → gom lại; giấc ngủ cuối cũ > 30 giờ → báo Việc của bạn. | `python -m core.nao_bo_phan gom` | — | tự chạy · nhịp 1 giờ · toàn máy |
+| D13 | Thử nghiệm và so sánh bìa | Kích hoạt: hàng việc máy có `studio_test_compare` của kênh (đề xuất bộ não) → Studio, trang sửa video: bìa A đang chạy + 1–2 bìa ứng viên tốt nhất qua cổng đọc được → Lưu → đọc lại thử nghiệm đang chạy. Kênh thiếu tính năng nâng cao / không còn ứng viên → bỏ việc. | `python vm/studio_may_dom.py --kenh K --test-compare` | K01 | tự chạy · nhịp 3 giờ · nặng (khoá máy) |
+| D14 | Đọc sức khoẻ Studio | Kích hoạt: hàng việc máy có `studio_kiem_suc_khoe` của kênh (cò sức khoẻ giám đốc) → CHỈ ĐỌC Studio: gậy / cảnh cáo, kiếm tiền, «nội dung dùng lại»; thấy thật mới báo chủ. Mỗi kênh mở Chrome tối đa 1 lần / 3 ngày. | `python vm/studio_may_dom.py --kenh K --suc-khoe` | K01 | tự chạy · nhịp 6 giờ · nặng (khoá máy) |
 
 ## SỬA CHỮA — khi hỏng
 
