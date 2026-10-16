@@ -12,6 +12,7 @@ bằng `pkgutil.iter_modules` (khuôn sổ đăng ký của `core/chien_luoc`). 
     kiem_ket(goc, *, bay_gio, ghi)                       gác tổng: kênh đến hạn ≥ 6 giờ chưa chạy (`giam_doc_ket`)
     viec_cua_ban_kenh(goc, ma)                           "Việc của bạn" của báo cáo cuối (bảng điều khiển, gác tổng)
     phan_loai_viec · ghi_viec_may                        nguoi / cho_so / may — chỉ "nguoi" mới báo chủ (`_tu_dong`)
+    doc_viec_may_kieu · cap_nhat_viec_may_kieu           việc máy CÓ KIỂU (studio_test_compare / studio_kiem_suc_khoe)
     tu_nang_ha_quyen(goc)                                hằng ngày: goi_y ⇄ tu_ap theo `do-chinh-xac.json`
     kham_nghiem.chay · tong.hop_tuan                     khám nghiệm video (trong chay_kenh) · tổng giám đốc (thứ Hai)
     doc_chi_dao(goc, ma)                                 chỉ đạo còn hạn (biên tập viên đọc)
@@ -39,6 +40,9 @@ from .du_lieu import BangSo, tom_tat
 from .gioi_han import doc_chi_dao  # noqa: F401 — cửa công khai cho biên tập viên (Agent B)
 from ._tu_dong import (  # noqa: F401 — tự động hoá "Việc của bạn" + quyền theo thành tích (04/10/2026)
     doc_viec_cho_nao, ghi_viec_may, la_viec_suc_khoe, phan_loai_viec, tu_nang_ha_quyen)
+from ._tu_dong import (  # noqa: F401 — việc máy CÓ KIỂU cho bộ chạy Studio DOM (16/10/2026)
+    LOAI_KIEM_SUC_KHOE, LOAI_TEST_COMPARE, ban_do_video_kenh, cap_nhat_viec_may_kieu, dinh_tuyen_de_xuat_nao,
+    doc_viec_may_kieu, ghi_viec_may_kieu, kieu_viec_may, phan_loai_de_xuat_nao)
 
 _log = logging.getLogger(__name__)
 

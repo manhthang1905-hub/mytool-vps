@@ -23,7 +23,9 @@ Sổ:
 
 * `vm/logs/cmt-dom.json` — theo videoId: `da_dang_moi`, `da_ghim`, `comment_id`,
   `trang_thai` (dang-gui | da-dang | da-ghim | ghim-khac | tat-binh-luan | …),
-  `lan_gui`, `lan_thu_ghim`, bản sao `van_ban` (gói DONE bị dọn sau khi đăng).
+  `lan_gui`, `lan_thu_ghim`, bản sao `van_ban` (gói DONE bị dọn sau khi đăng); ghim bù video cũ
+  (`chon_ghim_bu`, 16/10/2026): `bu_ghim_luc`, `lan_bu_ghim`. Khoá `_kenh:<k>`: `can_xac_minh` (lần cuối bị
+  chặn ghim), `cho_xac_minh_tu` (đầu đợt bị chặn), `ghim_duoc` (lần cuối ghim được).
 * `vm/replied/<k>.txt` — id bình luận ĐÃ trả lời, CHUNG với `may_cmt.py` (cùng id
   `Ugx…` của YouTube) → hai đường không bao giờ trả lời trùng nhau.
 
@@ -77,6 +79,12 @@ TRAN_GUI = 1
 TRAN_THU_GHIM = 3
 #: Trần số bình luận mồi mỗi lượt (an toàn chống spam).
 TOI_DA_MOI_LUOT = 3
+#: GHIM BÙ (16/10/2026): video CŨ đã có mồi mà chưa ghim (mồi lúc ghim còn TẮT 29/09–06/10, hoặc `cho-xac-minh` đã
+#: trôi khỏi cửa sổ 7 ngày) — chỉ GHIM, không gửi gì mới. Mỗi lượt ≤ `TOI_DA_GHIM_BU_LUOT`, mỗi video ≤ 1 lần/ngày;
+#: lỗi không ra kết quả quá `TRAN_BU_GHIM` lần thì thôi (`cho-xac-minh` không tính: chờ chủ kênh, thử mãi mỗi ngày).
+TOI_DA_GHIM_BU_LUOT = 3
+TRAN_BU_GHIM = 5
+TRAN_KIEM_LAI = 3
 
 log = logging.getLogger("may_cmt_dom")
 
@@ -370,11 +378,49 @@ def chon_goi_can_moi(hang: list, so_video: dict, so_cmt: dict, kenh: str, bay_gi
         if int(muc.get("lan_thu_ghim") or 0) >= TRAN_THU_GHIM:
             continue
         if (not muc.get("da_dang_moi") and int(muc.get("lan_gui") or 0) >= TRAN_GUI
-                and int(muc.get("lan_kiem_lai") or 0) >= 3):
+                and int(muc.get("lan_kiem_lai") or 0) >= TRAN_KIEM_LAI):
             continue
         ra.append({"ma": m, "tieu_de": d.get("Tiêu đề") or "", "video_id": vid, "lich": lich,
                    "mo_ta": d.get("Mô tả") or ""})
     ra.sort(key=lambda x: (x["lich"] or datetime.min))
+    return ra
+
+
+def chon_ghim_bu(so_cmt: dict, kenh: str, bay_gio: datetime, bo_vid=()) -> list:
+    """Hàm THUẦN: video CŨ của `kenh` đã có bình luận mồi (`da_dang_moi`) mà CHƯA ghim — ngoài cửa sổ của
+    `chon_goi_can_moi` nên trước 16/10/2026 không bao giờ được thử ghim (45 video TL1–TL3 mồi lúc `ghim_dom` còn tắt:
+    `lan_thu_ghim` 0). Chỉ ghim bình luận ĐÃ có, KHÔNG BAO GIỜ gửi mồi mới (không đọc thấy bình luận → `lan_kiem_lai`
+    +1; `can_kiem_cong_khai=False`: mồi đã lên = video đã
+    công khai). Bỏ: đã ghim, kết thúc (tắt bình luận / ghim khác / thiếu chữ / đang gửi dở), hết trần thử ghim, 3 lần
+    không đọc thấy bình luận, đã thử bù hôm nay, `cho-xac-minh` đã thử hôm nay, và cả kênh nếu hôm nay đã biết bị chặn
+    ghim. Mới đăng trước (video gần đây còn nhiều người xem). Trả [{ma, tieu_de, video_id, lich, mo_ta, bu_ghim}]."""
+    so_cmt = so_cmt or {}
+    hom_nay = bay_gio.strftime("%Y-%m-%d")
+    if str((so_cmt.get("_kenh:" + kenh) or {}).get("can_xac_minh") or "")[:10] == hom_nay:
+        return []
+    bo = set(bo_vid or ())
+    ra = []
+    for vid, muc in so_cmt.items():
+        if not isinstance(muc, dict) or str(vid).startswith("_") or vid in bo or muc.get("kenh") != kenh:
+            continue
+        if not muc.get("da_dang_moi") or muc.get("da_ghim"):
+            continue
+        tt = muc.get("trang_thai")
+        if tt in ("tat-binh-luan", "khong-co-van-ban", "ghim-khac", "dang-gui"):
+            continue
+        if int(muc.get("lan_thu_ghim") or 0) >= TRAN_THU_GHIM or int(muc.get("lan_kiem_lai") or 0) >= TRAN_KIEM_LAI:
+            continue
+        if tt != "cho-xac-minh" and int(muc.get("lan_bu_ghim") or 0) >= TRAN_BU_GHIM:
+            continue
+        if str(muc.get("bu_ghim_luc") or "")[:10] == hom_nay:
+            continue
+        if tt == "cho-xac-minh" and str(muc.get("ghim_cho_xac_minh") or "")[:10] == hom_nay:
+            continue
+        ra.append({"ma": str(muc.get("ma") or ""), "tieu_de": str(muc.get("tieu_de") or ""), "video_id": vid,
+                   "lich": None, "mo_ta": "", "bu_ghim": True, "_luc": str(muc.get("da_dang_moi") or "")})
+    ra.sort(key=lambda x: x["_luc"], reverse=True)
+    for x in ra:
+        x.pop("_luc", None)
     return ra
 
 
@@ -782,7 +828,7 @@ class MayCmtDom:
                          van_ban=van_ban)
         tr = self._tab()
         try:
-            return self._dang_va_ghim_tren_trang(tr, vid, ma, van_ban)
+            return self._dang_va_ghim_tren_trang(tr, vid, ma, van_ban, chi_ghim=bool(goi.get("bu_ghim")))
         except LoiMay:
             self._bang_chung(tr, "cmt-loi-" + vid)
             raise
@@ -796,7 +842,7 @@ class MayCmtDom:
                 if tr in self.tab:
                     self.tab.remove(tr)
 
-    def _dang_va_ghim_tren_trang(self, tr, vid: str, ma: str, van_ban: str) -> str:
+    def _dang_va_ghim_tren_trang(self, tr, vid: str, ma: str, van_ban: str, chi_ghim: bool = False) -> str:
         tt = self.mo_trang_xem(tr, vid)
         if tt == "tat":
             self.so.cap_nhat(vid, trang_thai="tat-binh-luan")
@@ -817,8 +863,10 @@ class MayCmtDom:
             if ghim_khac is not None:
                 self.so.cap_nhat(vid, trang_thai="ghim-khac", da_ghim="")
                 return "video {0} đã có bình luận GHIM khác — không đăng mồi, không đổi ghim".format(vid)
-            if int(muc.get("lan_gui") or 0) >= TRAN_GUI:
+            if chi_ghim or int(muc.get("lan_gui") or 0) >= TRAN_GUI:
                 self.so.cap_nhat(vid, lan_kiem_lai=int(muc.get("lan_kiem_lai") or 0) + 1)
+                if chi_ghim:   # ghim bù: chỉ ghim bình luận đã có, không bao giờ gửi mới (3 lần không thấy → thôi)
+                    return "ghim bù: không đọc thấy bình luận mồi trên trang — không gửi mới, lượt sau thử lại"
                 self.nk("CẢNH BÁO {0}: đã gửi bình luận mồi mà vẫn không đọc thấy — KHÔNG gửi lại, "
                         "cần người xem https://www.youtube.com/watch?v={0}".format(vid))
                 return "đã gửi {0} lần mà không đọc thấy — không gửi lại (cần người xem)".format(TRAN_GUI)
@@ -914,7 +962,10 @@ class MayCmtDom:
             # Không tính vào trần thử ghim: đây là việc của chủ kênh, không phải lỗi bấm.
             self.so.cap_nhat(vid, trang_thai="cho-xac-minh", lan_thu_ghim=int(muc.get("lan_thu_ghim") or 0),
                              ghim_cho_xac_minh=time.strftime("%Y-%m-%d %H:%M:%S"))
-            self.so.cap_nhat("_kenh:" + self.kenh, can_xac_minh=time.strftime("%Y-%m-%d %H:%M:%S"))
+            # `cho_xac_minh_tu`: lần ĐẦU bị chặn của đợt (bảng điều khiển nhắc chủ — tuỳ chọn — khi đợt ≥ 7 ngày).
+            bay = time.strftime("%Y-%m-%d %H:%M:%S")
+            self.so.cap_nhat("_kenh:" + self.kenh, can_xac_minh=bay,
+                             cho_xac_minh_tu=self.so.lay("_kenh:" + self.kenh).get("cho_xac_minh_tu") or bay)
             self._ghi_can_ghim(vid, van_ban, xac_minh=True)
             self.nk("CẢNH BÁO {0}: YouTube CHẶN GHIM — kênh {1} chưa bật 'tính năng nâng cao'. Chủ kênh "
                     "xác minh MỘT LẦN tại https://www.youtube.com/verify (điện thoại), tool tự ghim lượt sau."
@@ -983,6 +1034,8 @@ class MayCmtDom:
     def _xong_ghim(self, vid: str, luong: dict) -> None:
         self.so.cap_nhat(vid, da_ghim=time.strftime("%Y-%m-%d %H:%M:%S"), trang_thai="da-ghim",
                          comment_id=id_luong(luong) or self.so.lay(vid).get("comment_id", ""))
+        # Kênh ghim được → hết đợt "chờ xác minh" (bảng điều khiển thôi nhắc).
+        self.so.cap_nhat("_kenh:" + self.kenh, ghim_duoc=time.strftime("%Y-%m-%d %H:%M:%S"), cho_xac_minh_tu="")
         self.nk("{0}: bình luận mồi ĐÃ GHIM".format(vid))
         self.bao_cao["moi"].append({"video_id": vid, "ghim": True})
         duong = os.path.join(self.goc_tool, "CHANNEL", self.kenh, "can-ghim.md")
@@ -1484,8 +1537,12 @@ def main(argv=None) -> int:
     if lam_moi and not a.kiem_dom:
         cac = chon_goi_can_moi(hang, _doc_json(DUONG_SO_VIDEO), so.doc(), a.kenh, datetime.now(),
                                ma=a.ma, ghim_bat=bool(cai.get("ghim_dom", True)))[:TOI_DA_MOI_LUOT]
+        if cai.get("ghim_dom", True) and not a.ma:
+            # 16/10/2026: ghim BÙ video cũ đã có mồi mà chưa ghim (sau phần mồi của cửa sổ 7 ngày).
+            cac += chon_ghim_bu(so.doc(), a.kenh, datetime.now(),
+                                bo_vid={g.get("video_id") for g in cac})[:TOI_DA_GHIM_BU_LUOT]
         log.info("kênh %s: %d gói cần bình luận mồi/ghim%s", a.kenh, len(cac),
-                 (": " + ", ".join(g["ma"] for g in cac)) if cac else "")
+                 (": " + ", ".join(g["ma"] + (" (ghim bù)" if g.get("bu_ghim") else "") for g in cac)) if cac else "")
     if not a.kiem_dom and not cac and not (lam_tra_loi and toi_da > 0):
         log.info("kênh %s: không có việc bình luận", a.kenh)
         return MA_XONG
@@ -1554,8 +1611,15 @@ def main(argv=None) -> int:
             return ma_thoat
         loi_truoc = loi_sau = 0
         for goi in cac:
+            if goi.get("bu_ghim"):
+                if str(so.lay("_kenh:" + a.kenh).get("can_xac_minh") or "")[:10] == time.strftime("%Y-%m-%d"):
+                    log.info("%s: ghim bù hoãn — hôm nay kênh còn bị chặn ghim (chờ xác minh), mai thử lại", goi["ma"])
+                    continue
+                m_bu = so.lay(goi["video_id"])
+                so.cap_nhat(goi["video_id"], bu_ghim_luc=time.strftime("%Y-%m-%d %H:%M:%S"),
+                            lan_bu_ghim=int(m_bu.get("lan_bu_ghim") or 0) + 1)
             try:
-                ket = may.dang_va_ghim(dict(goi, can_kiem_cong_khai=True))
+                ket = may.dang_va_ghim(dict(goi, can_kiem_cong_khai=not goi.get("bu_ghim")))
                 log.info("%s: %s", goi["ma"], ket)
                 may.bao_cao["moi"].append({"ma": goi["ma"], "ket": ket})
             except LoiMay as loi:

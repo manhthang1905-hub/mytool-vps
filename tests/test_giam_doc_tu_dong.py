@@ -41,8 +41,9 @@ def _kenh(goc, ma="GDT", **cai):
     ("Mở Studio xem video A có bị giảm hiển thị không", "may"),
     ("Kiểm tra bảng pool nguồn của cụm tiền bạc", "may"),
     ("Tự xem lại kịch bản video B", "may"),
-    (VIEC_CHINH_SACH, "nguoi"),
-    ("Đổi tiêu đề video abc “x” thành “y” (CTR thấp).", "nguoi"),
+    # 16/10/2026: câu cò sức khoẻ → máy đọc Studio (`studio_kiem_suc_khoe`); đổi tiêu đề → máy tự đổi có rào.
+    (VIEC_CHINH_SACH, "may"),
+    ("Đổi tiêu đề video abc “x” thành “y” (CTR thấp).", "may"),
     ("Quyết định lớn chờ bạn duyệt: chien_luoc “a” → “b”.", "nguoi"),
     ("Đăng nhập lại Google trên Chrome của kênh X (hết phiên).", "nguoi"),
     ("Nạp tiền ShopAPI, ví còn 2 ngày.", "nguoi"),
@@ -53,8 +54,10 @@ def test_phan_loai_viec_giam_doc(cau, ky_vong):
 
 
 def test_bang_dieu_khien_chi_hien_viec_nguoi_lam_duoc():
-    assert bdk.viec_gd_can_nguoi(VIEC_CHINH_SACH)
-    assert bdk.viec_gd_can_nguoi("Đổi tiêu đề video A")
+    assert not bdk.viec_gd_can_nguoi(VIEC_CHINH_SACH), "16/10/2026: máy đọc Studio, chỉ báo người khi THẤY cảnh báo"
+    assert not bdk.viec_gd_can_nguoi("Đổi tiêu đề video A"), "16/10/2026: máy tự đổi tiêu đề có rào"
+    assert bdk.viec_gd_can_nguoi("Quyết định lớn chờ bạn duyệt: x")
+    assert bdk.viec_gd_can_nguoi("Đăng nhập lại Google trên Chrome của kênh X")
     assert not bdk.viec_gd_can_nguoi("Chờ 4 video qua 48h")
     assert not bdk.viec_gd_can_nguoi("Mở Studio xem kênh có cảnh báo không")
 
@@ -69,10 +72,16 @@ def test_gac_tong_chi_bao_nguoi_viec_cua_nguoi_con_lai_vao_hang_doi_nao(tmp_path
     _kenh(goc, giam_doc="goi_y")
     _bao_cao_gd(goc, "GDT", ["Chờ 3 video qua 48h.", "Mở Studio xem video A có bị giảm không", VIEC_CHINH_SACH])
     sc = gac_tong.kiem_giam_doc(goc, bay_gio=BAY)
-    viec = [s for s in sc if s["loai"] == "giam_doc_viec"]
-    assert len(viec) == 1 and VIEC_CHINH_SACH[:30] in viec[0]["chuyen_gi"]
-    assert viec[0]["lap_gio"] == 24.0, "cảnh báo chính sách: 1 lần/ngày"
-    # việc "may" nằm ở hàng đợi cho bộ não; "chờ số" chỉ vào nhật ký giám đốc
+    # 16/10/2026: cò sức khoẻ KHÔNG còn là việc người — thành việc máy `studio_kiem_suc_khoe` (bộ đọc Studio)
+    assert not [s for s in sc if s["loai"] == "giam_doc_viec"]
+    vk = gd.doc_viec_may_kieu(goc)
+    assert [(m["loai"], m["kenh"], m["trang_thai"]) for m in vk] == [("studio_kiem_suc_khoe", "GDT", "cho")]
+    # bộ đọc THẤY cảnh báo → lúc ấy mới báo người (1 lần/ngày)
+    gd.cap_nhat_viec_may_kieu(goc, vk[0]["id"], trang_thai="can_nguoi",
+                              ket={"canh_bao": True, "chi_tiet": "1 gậy nguyên tắc cộng đồng"})
+    viec = [s for s in gac_tong.kiem_giam_doc(goc, bay_gio=BAY) if s["loai"] == "giam_doc_viec"]
+    assert len(viec) == 1 and "1 gậy" in viec[0]["chuyen_gi"] and viec[0]["lap_gio"] == 24.0
+    # việc "may" chữ tự do nằm ở hàng đợi cho bộ não; "chờ số" chỉ vào nhật ký giám đốc
     hang = gd.doc_viec_cho_nao(goc, BAY)
     assert [m["viec"] for m in hang] == ["Mở Studio xem video A có bị giảm không"] and hang[0]["kenh"] == "GDT"
     assert os.path.isfile(os.path.join(goc, "nao", "viec-tu-giam-doc.json"))

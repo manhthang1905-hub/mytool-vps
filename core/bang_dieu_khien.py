@@ -51,6 +51,8 @@ __all__ = [
     "doc_can_ghim", "doc_nhap_thua", "doc_kiem_dom",
     "so_ngay_con_chay", "dong_may", "doc_da_xong", "danh_dau_xong",
     "doc_tinh_trang", "viec_cua_ban", "da_tu_xu_ly", "duong_tu_xu_ly",
+    # Việc tự động 100% (16/10/2026): bộ phân loại người/máy, ghim chờ xác minh, ổ đĩa.
+    "phan_loai_muc", "ghim_cho_xac_minh", "viec_dia_can_nguoi", "NGAY_NHAC_XAC_MINH_GHIM",
     # Các đường ghi công tắc — thuần, trang mới lẫn trang cũ gọi được.
     "doi_cong_tac", "doi_ngan_sach", "doi_gio_dang", "doi_nhip_dang",
     "doi_phut_phien", "doi_giu_luot", "tam_dung_tat_ca", "bat_lai_tam_dung",
@@ -641,6 +643,67 @@ def doc_can_ghim(goc: str, ma: str) -> List[Dict[str, str]]:
     return ra
 
 
+#: Ghim bị YouTube chặn (kênh chưa bật "tính năng nâng cao" = xác minh điện thoại) liền ngần này ngày mới nhắc chủ —
+#: MỘT mục gộp cho cả máy, TUỲ CHỌN (chủ 13/10: "kênh nào ghim được thì ghim… sau 1 thời gian sẽ ghim được"; máy vẫn tự
+#: thử ghim lại mỗi ngày). Bấm "Đã xử lý" thì ẩn ngần ấy ngày.
+NGAY_NHAC_XAC_MINH_GHIM = 7
+#: Lần bị chặn cuối (`_kenh:<k>.can_xac_minh`) cũ hơn ngần này ngày = máy không còn gặp chặn → không tính kênh đó.
+NGAY_CON_THU_GHIM = 3
+_TT_GHIM_KET_THUC = ("tat-binh-luan", "khong-co-van-ban", "ghim-khac")
+
+
+def _gio_iso(chu: Any) -> Optional[_dt.datetime]:
+    try:
+        return _dt.datetime.fromisoformat(str(chu or "").strip()[:19].replace(" ", "T"))
+    except ValueError:
+        return None
+
+
+def ghim_cho_xac_minh(goc: str, thu_muc_vm: str, bay_gio: _dt.datetime,
+                      cac_ma: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Kênh đang bị YouTube chặn ghim theo sổ `<vm>/logs/cmt-dom.json` → `[{kenh, tu, ngay, so_video}]`: còn video
+    `cho-xac-minh` chưa ghim, lần chặn cuối ≤ `NGAY_CON_THU_GHIM` ngày, chưa ghim được lần nào SAU lần chặn cuối.
+    `tu` (đầu đợt) = sớm nhất của `_kenh:<k>.cho_xac_minh_tu` và mục can-ghim.md của các video ấy (ghi lúc bị chặn
+    LẦN ĐẦU); không có thì lần chặn cuối. `cac_ma`: chỉ các kênh này (kênh bật ghim). Chỉ đọc."""
+    so = _doc_json(os.path.join(thu_muc_vm, "logs", "cmt-dom.json")) if thu_muc_vm else None
+    if not isinstance(so, dict):
+        return []
+    ra: List[Dict[str, Any]] = []
+    for khoa, k in sorted(so.items()):
+        if not str(khoa).startswith("_kenh:") or not isinstance(k, dict):
+            continue
+        ma = str(khoa)[len("_kenh:"):]
+        cuoi = _gio_iso(k.get("can_xac_minh"))
+        if (cac_ma is not None and ma not in cac_ma) or cuoi is None or (bay_gio - cuoi).days >= NGAY_CON_THU_GHIM:
+            continue
+        cua = {v: m for v, m in so.items() if isinstance(m, dict) and not str(v).startswith("_") and m.get("kenh") == ma}
+        cho = [v for v, m in cua.items() if m.get("trang_thai") == "cho-xac-minh" and not m.get("da_ghim")]
+        duoc = [_gio_iso(x) for x in [k.get("ghim_duoc")] + [m.get("da_ghim") for m in cua.values()]]
+        if not cho or any(d is not None and d > cuoi for d in duoc):
+            continue
+        moc = [_gio_iso(k.get("cho_xac_minh_tu"))] + [_gio_iso(p["luc"]) for p in doc_can_ghim(goc, ma)
+                                                       if p["video_id"] in cho]
+        tu = min([d for d in moc if d is not None] or [cuoi])
+        ra.append({"kenh": ma, "tu": tu, "ngay": (bay_gio - tu).total_seconds() / 86400.0, "so_video": len(cho)})
+    return ra
+
+
+def _ghim_may_dang_lo(thu_muc_vm: str, cac_ma: List[str]) -> int:
+    """Số video (kênh bật ghim) đã có bình luận mồi mà chưa ghim, máy còn thử (cửa sổ 7 ngày / ghim bù / chờ xác minh)."""
+    so = _doc_json(os.path.join(thu_muc_vm, "logs", "cmt-dom.json")) if thu_muc_vm else None
+    if not isinstance(so, dict):
+        return 0
+    return sum(1 for v, m in so.items() if isinstance(m, dict) and not str(v).startswith("_") and m.get("kenh") in cac_ma
+               and m.get("da_dang_moi") and not m.get("da_ghim") and m.get("trang_thai") not in _TT_GHIM_KET_THUC
+               and int(m.get("lan_thu_ghim") or 0) < 3)
+
+
+def _da_xong_trong(da_xong: Dict[str, str], khoa: str, bay_gio: _dt.datetime, ngay: float) -> bool:
+    """`khoa` đã bấm "Đã xử lý" trong `ngay` ngày qua."""
+    d = _gio_iso(da_xong.get(khoa))
+    return d is not None and (bay_gio - d).total_seconds() < ngay * 86400.0
+
+
 #: Dòng `dang-dom.log` do `vm/may_dang_dom.py::_canh_bao` ghi qua
 #: `logging.Formatter("%(asctime)s %(levelname)s: %(message)s")`:
 #: `2026-09-29 10:15:23,456 INFO: CẢNH BÁO K1: NHÁP THỪA trên kênh <id> (…)`.
@@ -1149,23 +1212,90 @@ def goi_y_giam_doc(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None)
         from . import giam_doc as _gd  # noqa: PLC0415
 
         ds = [c for c in _gd.viec_cua_ban_kenh(goc, ma, bay_gio=bay_gio) if not viec_gd_can_nguoi(c)]
+        # 16/10/2026: câu là việc máy CÓ KIỂU (đọc Studio kiểm cảnh báo…) → nói rõ máy tự làm, đừng như việc của chủ.
+        ds = ["Máy tự đọc Studio kiểm cảnh báo chính sách / gậy — giám đốc đóng băng thay đổi tới khi số hồi lại"
+              if any(v["loai"] == _gd.LOAI_KIEM_SUC_KHOE for v in _gd.kieu_viec_may(c, ma)) else c for c in ds]
     except Exception:  # noqa: BLE001
         return []
     return [{"ai": "Giám đốc gợi ý", "cau": _mot_cau(c, 220), "luc": ""} for c in ds[:3]]
+
+
+#: Kết quả lượt dọn đĩa THẬT cuối (`core.don_dia`, gác tổng mỗi 3 giờ) cũ hơn ngần này giờ = máy dọn không chạy.
+HAN_KET_QUA_DON_DIA_GIO = 8.0
+
+
+def viec_dia_can_nguoi(goc: str, con_gb: float, bay_gio: _dt.datetime) -> Dict[str, Any]:
+    """Ổ dưới ngưỡng cảnh báo: người phải làm gì chưa → `{"nguoi", "ly_do", "goi_y"}` (đọc
+    `workspace/don-dia/ket-qua-cuoi.json`). Người CHỈ khi: máy dọn rồi mà ổ sau dọn vẫn < `GB_DIA_LUU_Y`; máy dọn không
+    chạy (kết quả quá `HAN_KET_QUA_DON_DIA_GIO` giờ); hoặc chưa có lượt dọn nào mà ổ đã < `GB_DIA_HONG`."""
+    kq = _doc_json(os.path.join(goc, "workspace", "don-dia", "ket-qua-cuoi.json"))
+    kq = kq if isinstance(kq, dict) else {}
+    nang = "→ nâng dung lượng ổ VPS (thêm ≥ 50 GB)"
+    if not kq.get("luc"):
+        if con_gb < GB_DIA_HONG:
+            return {"nguoi": True, "ly_do": "máy chưa có lượt tự dọn nào", "goi_y": nang + ", hoặc dọn tay DONE/PROJECTS cũ"}
+        return {"nguoi": False, "ly_do": "máy tự dọn (video đã đăng, log, Chrome cũ) mỗi 3 giờ", "goi_y": ""}
+    try:
+        tuoi = (bay_gio.timestamp() - float(kq["luc"])) / 3600.0
+    except (TypeError, ValueError):
+        tuoi = 1e9
+    luc = str(kq.get("luc_doc") or "?")
+    if tuoi > HAN_KET_QUA_DON_DIA_GIO:
+        return {"nguoi": True, "ly_do": "máy tự dọn đĩa không chạy từ {0}".format(luc),
+                "goi_y": "→ mở tool kiểm tra gác tổng (lịch ShopAPI-GacTong), hoặc " + nang[2:]}
+    sau = _so(kq.get("con_sau_gb"))
+    if sau is not None and sau >= GB_DIA_LUU_Y:
+        return {"nguoi": False, "ly_do": "máy tự dọn mỗi 3 giờ (lần cuối {0}: còn {1:.0f} GB)".format(luc, sau),
+                "goi_y": ""}
+    them = []
+    if kq.get("kenh_chua_tu_don"):
+        them.append("hoặc bật “Tự dọn” cho " + ", ".join(kq["kenh_chua_tu_don"]))
+    if kq.get("chrome_cho"):
+        them.append("{0} bản Chrome cũ đang dùng, máy xoá lượt sau".format(kq["chrome_cho"]))
+    return {"nguoi": True, "ly_do": "máy đã tự dọn hết phần dọn được (lần cuối {0})".format(luc),
+            "goi_y": nang + ("; " + "; ".join(them) if them else "")}
+
+
+def phan_loai_muc(v: Dict[str, Any]) -> str:
+    """BỘ PHÂN LOẠI DUY NHẤT (16/10/2026) cho mọi mục "Việc của bạn": "nguoi" | "may".
+
+    Người CHỈ làm: đăng nhập Google, 2FA / xác minh điện thoại, tiền (ví), bản quyền Windows, thuê/gia hạn VPS, và
+    quyết định của chủ (duyệt chiến lược lớn, hẹn giờ khi tắt tự duyệt…). Mục tự gắn `loai_viec` thì theo đó; ghim
+    từng video / đổi tiêu đề chờ duyệt → máy; giám đốc kênh → `giam_doc.phan_loai_viec`; đề xuất của bộ não →
+    `giam_doc.phan_loai_de_xuat_nao`. Mục lạ (chưa có bộ chạy máy) → "nguoi": thà hiện còn hơn chết im lặng."""
+    lv = v.get("loai_viec")
+    if lv in ("nguoi", "may"):
+        return lv
+    khoa, chu = str(v.get("khoa") or ""), str(v.get("chu") or "")
+    if khoa.startswith(("ghim:", "duyet-sua:")):
+        return "may"
+    try:
+        from . import giam_doc as _gd  # noqa: PLC0415
+
+        if khoa.startswith("giam-doc:"):
+            return "nguoi" if _gd.phan_loai_viec(chu.split("Giám đốc kênh: ", 1)[-1]) == "nguoi" else "may"
+        if khoa.startswith("nao:"):
+            return _gd.phan_loai_de_xuat_nao(chu, None, str(v.get("kenh") or ""))
+    except Exception:  # noqa: BLE001 — phân loại hỏng → hiện cho người
+        pass
+    return "nguoi"
 
 
 def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetime] = None,
                  so_du_micro: Optional[int] = None,
                  trang_thai_may: Optional[Dict[str, Any]] = None,
                  co_client: bool = True, gio_lich: Optional[str] = None,
-                 thu_muc_vm: str = "") -> List[Dict[str, Any]]:
+                 thu_muc_vm: str = "", may_tu_lam: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Danh sách việc tay của "bạn" — mỗi phần tử `{khoa, muc, kenh, chu,
     goi_y, nut, xong_tay}`, xếp hỏng (✕) trước, cần xem (⚠) sau, thông tin (•)
     cuối (mục 3, bảng "Khối việc của bạn").
 
+    16/10/2026 (chủ: "mục đích cuối VPS này auto 100%"): mọi mục qua `phan_loai_muc` — chỉ "nguoi" ở lại; mục "may"
+    và các dòng máy đang tự lo (ghim, đổi tiêu đề, việc Studio có kiểu, ổ đĩa đang tự dọn) được NỐI vào `may_tu_lam`
+    (nếu người gọi đưa danh sách) — dòng "Máy đang tự làm", không bấm được.
+
     `thu_muc_vm`: `trung_tam.thu_muc_vm(goc)` của người gọi (`anh_bang` tự
-    điền) — để rỗng thì bỏ qua ba dòng đọc từ `vm/` (ghim/nháp thừa vẫn đọc
-    từ `CHANNEL/`, không cần `vm/`).
+    điền) — để rỗng thì bỏ qua các dòng đọc từ `vm/` (nháp thừa, kiểm DOM, ghim).
     """
     bay_gio = bay_gio or _dt.datetime.now()
     kenh_ds = list(anh.get("kenh") or [])
@@ -1198,24 +1328,8 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 nut=[("Chạy lại", "chay_lai", {"ma": ma}),
                      ("Nhật ký", "nhat_ky", {"ma": ma})]))
 
-        # 4) ghim chưa đánh dấu — chỉ khi kênh BẬT ghim (chủ kênh 29/09: "ghim để sau").
-        try:
-            from . import vm_cai_dat  # noqa: PLC0415
-            ghim_bat = bool(vm_cai_dat.doc(goc, ma).get("ghim_dom", False))
-        except Exception:  # noqa: BLE001
-            ghim_bat = False
-        for pin in (doc_can_ghim(goc, ma) if ghim_bat else []):
-            khoa = "ghim:" + pin["video_id"]
-            if khoa in da_xong:
-                continue
-            url = "https://www.youtube.com/watch?v={0}".format(pin["video_id"])
-            ra.append(_viec(
-                khoa, THUONG, kenh=ma,
-                chu="Ghim bình luận mở đầu cho 「{0}」".format(pin.get("tieu_de") or ""),
-                goi_y="→ chép link, ghim bằng điện thoại hoặc máy nhà",
-                nut=[("Chép link", "chep_link", {"url": url}),
-                     ("Đã ghim", "danh_dau_xong", {"khoa": khoa})],
-                xong_tay=True))
+        # 4) ghim (16/10/2026): KHÔNG còn mục từng video — máy tự ghim (cửa sổ 7 ngày + ghim bù video cũ, thử lại mỗi
+        # ngày; `vm/may_cmt_dom.py`). Việc của người chỉ là MỘT mục gộp tuỳ chọn (xác minh điện thoại) — xem 4b dưới.
 
         # 5) nháp thừa chưa đánh dấu.
         if thu_muc_vm:
@@ -1264,6 +1378,32 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
                 chu="Số liệu Studio cũ {0:.0f} ngày".format(tuoi_gio / 24.0),
                 goi_y="→ mở Nghiên cứu để quét lại số liệu",
                 nut=[("Nhật ký", "nhat_ky", {"ma": ma})]))
+
+    # 4b) Ghim bị YouTube chặn ≥ 7 ngày (16/10/2026): MỘT mục gộp, TUỲ CHỌN — xác minh điện thoại là việc chỉ người
+    # làm được; máy vẫn tự thử lại mỗi ngày. Còn lại (ghim được, ghim bù) là việc máy → dòng "Máy đang tự làm".
+    try:
+        ma_ghim = [str(k.get("ma") or "") for k in kenh_ds
+                   if bool(vm_cai_dat.doc(goc, str(k.get("ma") or "")).get("ghim_dom", False))]
+    except Exception:  # noqa: BLE001
+        ma_ghim = []
+    chan = ghim_cho_xac_minh(goc, thu_muc_vm, bay_gio, ma_ghim) if ma_ghim else []
+    lau = [c for c in chan if c["ngay"] >= NGAY_NHAC_XAC_MINH_GHIM]
+    if lau and not _da_xong_trong(da_xong, "ghim-xac-minh", bay_gio, NGAY_NHAC_XAC_MINH_GHIM):
+        ra.append(dict(_viec(
+            "ghim-xac-minh", THUONG,
+            chu="Tuỳ chọn: YouTube chặn ghim bình luận ở {0} ({1} video chờ ghim, từ {2:%d/%m}) — xác minh điện "
+                "thoại một lần để ghim ngay; không làm thì máy vẫn tự thử lại mỗi ngày".format(
+                    ", ".join(c["kenh"] for c in lau), sum(c["so_video"] for c in lau), min(c["tu"] for c in lau)),
+            goi_y="→ mở youtube.com/verify trong Chrome của từng kênh trên, xác minh bằng điện thoại",
+            nut=[("Chép link", "chep_link", {"url": "https://www.youtube.com/verify"}),
+                 ("Đã xử lý", "danh_dau_xong", {"khoa": "ghim-xac-minh"})],
+            xong_tay=True), loai_viec="nguoi"))
+    if may_tu_lam is not None and ma_ghim:
+        n_ghim = _ghim_may_dang_lo(thu_muc_vm, ma_ghim)
+        if n_ghim:
+            may_tu_lam.append({"khoa": "may:ghim", "kenh": "", "chu": "Ghim bình luận: còn {0} video máy tự ghim{1} — "
+                               "thử lại mỗi ngày".format(n_ghim, " ({0} kênh YouTube đang chặn ghim)".format(len(chan))
+                                                          if chan else "")})
 
     # 15b) Kênh không được YouTube phát (12/10/2026, `core/kenh_khong_phat.py`): máy đã dừng làm video MỚI; việc chỉ
     # NGƯỜI làm được — mở Studio kiểm 6 mục. "Đã kiểm Studio" ghi `viec-da-xong.json` → bộ phát hiện đọc làm mốc xoá cờ.
@@ -1338,23 +1478,59 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — giám đốc hỏng không làm hỏng khối việc
         pass
 
-    # 16) Cứu video CTR thấp (01/10/2026): hội đồng đề xuất đổi tiêu đề — 3 lần đầu mỗi kênh chờ chủ DUYỆT.
-    # Bấm chỉ GHI sổ `giam-doc/duyet-sua.json` (`cuu_ctr.ghi_duyet`); nhịp gác tổng xếp hàng sửa giờ vắng.
+    # 15c) Bộ đọc Studio (việc máy `studio_kiem_suc_khoe`, 16/10/2026) THẤY cảnh báo chính sách / gậy → lúc ấy mới là
+    # việc của người. Cò sức khoẻ của giám đốc chỉ xếp việc cho máy đọc Studio, không lên đây.
     try:
-        from .giam_doc import cuu_ctr as _cc  # noqa: PLC0415
+        from . import giam_doc as _gd2  # noqa: PLC0415
 
-        for k in kenh_ds:
-            ma = str(k.get("ma") or "")
-            for m in _cc.cho_duyet(goc, ma):
-                ts = {"ma": ma, "id": str(m.get("id") or "")}
-                ra.append(_viec(
-                    "duyet-sua:" + ts["id"], CANH_BAO, kenh=ma, chu="Giám đốc kênh: " + _cat_chu(_cc.dong_viec_cua_ban(m), 320),
-                    goi_y="→ Duyệt: máy đổi tiêu đề giờ vắng, đo CTR trước/sau, tệ hơn thì tự đổi lại (kênh ≥ 1.000 sub: lần đầu cần bạn)",
-                    nut=[("Duyệt", "duyet_sua", ts), ("Bỏ", "bo_sua", ts),
-                         ("Chép link Studio", "chep_link",
-                          {"url": "https://studio.youtube.com/video/{0}/edit".format(m.get("video_id"))})]))
+        for m in _gd2.doc_viec_may_kieu(goc, _gd2.LOAI_KIEM_SUC_KHOE, "can_nguoi"):
+            khoa = "suc-khoe:" + str(m.get("id") or "")
+            if khoa in da_xong:
+                continue
+            ra.append(dict(_viec(
+                khoa, CANH_BAO, kenh=str(m.get("kenh") or ""),
+                chu="Studio kênh có cảnh báo: " + _cat_chu(str((m.get("ket") or {}).get("chi_tiet")
+                                                               or "cảnh báo chính sách / gậy"), 200),
+                goi_y="→ mở YouTube Studio của kênh, xem và xử lý (kháng nghị / sửa video); máy đã đóng băng thay đổi",
+                nut=[("Mở Studio", "chep_link", {"url": "https://studio.youtube.com"}),
+                     ("Đã xử lý", "danh_dau_xong", {"khoa": khoa})],
+                xong_tay=True), loai_viec="nguoi"))
     except Exception:  # noqa: BLE001
         pass
+
+    # 16) Cứu video CTR thấp: 16/10/2026 chủ duyệt "Cho tự đổi, có rào" — KHÔNG còn mục chờ chủ duyệt; máy xét rào
+    # (`cuu_ctr.kiem_rao`), đổi giờ vắng, đo CTR trước/sau, tệ hơn tự đổi lại. Chỉ một dòng "Máy đang tự làm".
+    if may_tu_lam is not None:
+        try:
+            from .giam_doc import cuu_ctr as _cc  # noqa: PLC0415
+
+            dang = sum(1 for k in kenh_ds for m in _cc.doc_duyet(goc, str(k.get("ma") or ""))
+                       if m.get("trang_thai") in ("cho_duyet", "cho_rao", "duyet", "tu_ap", "da_xep", "da_sua",
+                                                  "cho_quay_lui", "da_sua_bia"))
+            if dang:
+                may_tu_lam.append({"khoa": "may:doi-tieu-de", "kenh": "", "chu": "Đổi tiêu đề video CTR thấp: {0} mục máy "
+                                   "đang lo (xét rào → đổi giờ vắng → đo CTR → tệ hơn tự đổi lại)".format(dang)})
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 16b) Việc máy CÓ KIỂU đang chờ bộ chạy Studio (`giam_doc.doc_viec_may_kieu`) — chỉ để biết, không phải việc người.
+    if may_tu_lam is not None:
+        try:
+            from . import giam_doc as _gd3  # noqa: PLC0415
+
+            ten = {_gd3.LOAI_TEST_COMPARE: "Bật Thử nghiệm và so sánh bìa trên Studio",
+                   _gd3.LOAI_KIEM_SUC_KHOE: "Đọc Studio kiểm cảnh báo / gậy của kênh"}
+            nhom: Dict[str, List[Dict[str, Any]]] = {}
+            for m in _gd3.doc_viec_may_kieu(goc):
+                nhom.setdefault(str(m.get("loai")), []).append(m)
+            for loai, ds_m in sorted(nhom.items()):
+                cu = min((_gio_iso(m.get("tao_luc")) for m in ds_m if _gio_iso(m.get("tao_luc"))), default=None)
+                so_vid = sum(len(m.get("video_ids") or []) for m in ds_m)
+                may_tu_lam.append({"khoa": "may:" + loai, "kenh": "", "chu": "{0}: {1}{2} — chờ máy làm{3}".format(
+                    ten.get(loai, loai), ", ".join(sorted({str(m.get("kenh") or "?") for m in ds_m})),
+                    " ({0} video)".format(so_vid) if so_vid else "", " từ {0:%d/%m}".format(cu) if cu else "")})
+        except Exception:  # noqa: BLE001
+            pass
 
     # 6) ví sắp cạn.
     ma_cac_kenh = [str(k.get("ma") or "") for k in kenh_ds]
@@ -1375,7 +1551,8 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             "dang-nhap", HONG, chu="Chưa đăng nhập ví — kênh không làm video được",
             goi_y="→ đăng nhập lại", nut=[("Đăng nhập", "dang_nhap", {})]))
 
-    # 8) ổ đĩa sắp đầy.
+    # 8) ổ đĩa sắp đầy — 16/10/2026: CHỈ là việc người khi máy đã tự dọn (video đã đăng, log, raw, Chrome cũ — gác tổng
+    # mỗi 3 giờ, `core.don_dia`) mà ổ VẪN dưới ngưỡng cảnh báo, hoặc máy dọn không chạy. Máy đang lo → "Máy đang tự làm".
     o_dia = may["o_dia"]
     if o_dia["muc"] in (HONG, LUU_Y) and o_dia["con_gb"] is not None:
         # 01/10/2026: van ổ (`don_dep_mo_rong.NGUONG_O_GB`) — dưới ngưỡng thì máy không
@@ -1384,12 +1561,15 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
 
         con = float(o_dia["con_gb"])
         ngung = con < NGUONG_O_GB
-        ra.append(_viec(
-            "dia", HONG if o_dia["muc"] == HONG else CANH_BAO,
-            chu="Ổ đĩa chỉ còn {0:.0f} GB{1}".format(con, " — máy đã ngừng mở video mới" if ngung else ""),
-            goi_y=("→ dọn tay DONE/PROJECTS cũ; máy tự chạy lại khi ổ ≥ {0:g} GB".format(NGUONG_O_GB)
-                   if ngung else "→ bật “Tự dọn” ở ⚙ Cài đặt của từng kênh, hoặc dọn tay"),
-            nut=[("Mở thư mục", "mo_thu_muc", {"duong": goc})]))
+        dd = viec_dia_can_nguoi(goc, con, bay_gio)
+        if dd["nguoi"]:
+            ra.append(dict(_viec(
+                "dia", HONG if o_dia["muc"] == HONG else CANH_BAO,
+                chu="Ổ đĩa chỉ còn {0:.0f} GB{1} — {2}".format(
+                    con, " — máy đã ngừng mở video mới" if ngung else "", dd["ly_do"]),
+                goi_y=dd["goi_y"], nut=[("Mở thư mục", "mo_thu_muc", {"duong": goc})]), loai_viec="nguoi"))
+        elif may_tu_lam is not None:
+            may_tu_lam.append({"khoa": "may:dia", "kenh": "", "chu": "Ổ đĩa còn {0:.0f} GB — {1}".format(con, dd["ly_do"])})
 
     # 11) máy chạy nền đã tắt — máy đăng/trả lời chỉ báo khi KHÔNG ở chế độ phiên.
     if trang_thai_may:
@@ -1411,15 +1591,21 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
             "lich", CANH_BAO, chu="Lịch tự chạy đang tắt — kênh sẽ không tự làm video",
             goi_y="→ bật lịch chạy hằng ngày", nut=[("Bật lịch", "bat_lich", {})]))
 
-    # 13) bộ não (`core/nao de-xuat`): việc lớn chờ chủ duyệt. Lỗi = như không có não.
+    # 13) bộ não (`core/nao de-xuat`): việc lớn chờ chủ duyệt. Lỗi = như không có não. 16/10/2026: đề xuất máy làm được
+    # (Thử nghiệm và so sánh bìa…) → việc máy có kiểu (gác tổng `giam_doc.dinh_tuyen_de_xuat_nao`), không lên đây.
     try:
+        from . import giam_doc as _gd4  # noqa: PLC0415
         from . import nao as _nao  # noqa: PLC0415
 
+        ban_do: Optional[Dict[str, str]] = None
         for dx in _nao.viec_de_xuat(goc, bay_gio):
             if dx["khoa"] in da_xong:
                 continue
-            ra.append(_viec(dx["khoa"], CANH_BAO, kenh=dx["kenh"], chu=dx["chu"], goi_y=dx["goi_y"],
-                            nut=[("Đã xử lý", "danh_dau_xong", {"khoa": dx["khoa"]})], xong_tay=True))
+            if ban_do is None:
+                ban_do = _gd4.ban_do_video_kenh(goc)
+            ra.append(dict(_viec(dx["khoa"], CANH_BAO, kenh=dx["kenh"], chu=dx["chu"], goi_y=dx["goi_y"],
+                                 nut=[("Đã xử lý", "danh_dau_xong", {"khoa": dx["khoa"]})], xong_tay=True),
+                           loai_viec=_gd4.phan_loai_de_xuat_nao(dx["chu"], ban_do, dx.get("kenh") or "")))
     except Exception:  # noqa: BLE001
         pass
 
@@ -1448,8 +1634,16 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — skill tự kích hoạt hỏng không làm hỏng khối việc
         pass
 
-    ra.sort(key=lambda v: _THU_TU_MUC.get(v["muc"], 9))
-    return ra
+    # Cổng cuối: MỘT bộ phân loại cho mọi mục — việc máy không bao giờ nằm ở "Việc của bạn".
+    nguoi = []
+    co_viec_kieu = may_tu_lam is not None and any(str(x.get("khoa")).startswith("may:studio_") for x in may_tu_lam)
+    for v in ra:
+        if phan_loai_muc(v) == "nguoi":
+            nguoi.append(v)
+        elif may_tu_lam is not None and not (co_viec_kieu and str(v["khoa"]).startswith("nao:")):
+            may_tu_lam.append({"khoa": v["khoa"], "kenh": v.get("kenh") or "", "chu": v.get("chu") or ""})
+    nguoi.sort(key=lambda v: _THU_TU_MUC.get(v["muc"], 9))
+    return nguoi
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1603,9 +1797,10 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         k2["nuoi_so"] = nuoi_trang_chu_so(goc, str(k.get("ma") or ""))
         kenh.append(k2)
 
+    may_tu_lam: List[Dict[str, Any]] = []
     viec = viec_cua_ban(goc, anh=dict(anh, kenh=kenh), bay_gio=bay_gio, so_du_micro=so_du_micro,
                         trang_thai_may=trang_thai_may, co_client=co_client,
-                        gio_lich=gio_lich, thu_muc_vm=thu_muc_vm)
+                        gio_lich=gio_lich, thu_muc_vm=thu_muc_vm, may_tu_lam=may_tu_lam)
     may = dong_may(goc, anh, bay_gio=bay_gio, so_du_micro=so_du_micro,
                    trang_thai_may=trang_thai_may, gio_lich=gio_lich)
 
@@ -1613,6 +1808,8 @@ def anh_bang(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         "kenh": kenh,
         "kenh_khac": list(anh.get("kenh_khac") or []),
         "viec": viec,
+        # 16/10/2026: việc MÁY đang tự lo (không bấm được) — trang vẽ ở khối Cảnh báo ("Máy đang tự làm").
+        "may_tu_lam": may_tu_lam,
         "may": may,
         "luc": anh.get("luc") or bay_gio.isoformat(timespec="seconds"),
     }

@@ -18,7 +18,11 @@ không mất byte nào — tự học vẫn đọc được).
 * Van ổ: `core/dieu_phoi` → `don_dep_mo_rong.van_o` (không mở lượt mới). Báo
   động: `core/gac_tong._kiem_dia_day` (cùng ngưỡng, nhắc lại mỗi 24h).
 * Nén raw chỉ số: `core/chi_so_ytb/kho_raw.nen_cu` (mọi nơi đọc raw đi qua `kho_raw`).
+* Bản Chrome CŨ trong Chrome Portable của từng kênh: `core/don_chrome_cu` (16/10/2026, chủ duyệt "Cho tự xoá").
 * Mới ở đây chỉ có xoay `*.log`.
+
+Kết quả lượt THẬT cuối (`workspace/don-dia/ket-qua-cuoi.json`: ổ trước/sau, đã giải phóng) — bảng điều khiển đọc để
+chỉ báo "Ổ đĩa" cho người khi máy đã tự dọn mà ổ VẪN dưới ngưỡng cảnh báo (`bang_dieu_khien.GB_DIA_LUU_Y`).
 
 ═══ XOAY LOG ═══
 
@@ -47,7 +51,7 @@ from .chi_so_ytb import kho_raw
 from .kenh import doc_kenh, liet_ke_kenh
 
 __all__ = ["GIOI_HAN_LOG_BYTE", "SO_BAN_LOG_GIU", "NHIP_GIO",
-           "ung_vien_xoay_log", "xoay_log", "chay", "nhip"]
+           "ung_vien_xoay_log", "xoay_log", "chay", "nhip", "tep_ket_qua", "ghi_ket_qua", "doc_ket_qua"]
 
 #: `*.log` vượt cỡ này thì xoay. Lớn hơn trần tự xoay của các log đã tự lo
 #: (`tu-chay.log` 5 MB, `dieu-phoi-<k>.log` 5 MB) để không giành việc của chúng.
@@ -63,6 +67,21 @@ _DUOI_TAM = ".dang-xoay"
 
 def _tep_nhip(goc: str) -> str:
     return os.path.join(goc, "workspace", "don-dia", "lan-cuoi.json")
+
+
+def tep_ket_qua(goc: str) -> str:
+    """Kết quả lượt dọn THẬT cuối — `{luc, con_truoc_gb, con_sau_gb, video_bytes, chrome_bytes, ...}`."""
+    return os.path.join(goc, "workspace", "don-dia", "ket-qua-cuoi.json")
+
+
+def doc_ket_qua(goc: str) -> Dict[str, Any]:
+    """`ket-qua-cuoi.json` ({} nếu chưa có / hỏng). Chỉ đọc."""
+    try:
+        with open(tep_ket_qua(goc), encoding="utf-8") as f:
+            du = json.load(f)
+        return du if isinstance(du, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def _gb(so_byte: float) -> str:
@@ -124,8 +143,10 @@ def xoay_log(duong: str, *, giu: int = SO_BAN_LOG_GIU) -> bool:
 
 def chay(goc: str, *, thu: bool = True,
          danh_sach_kenh: Optional[Sequence[str]] = None,
-         con_trong_gb_fn: Optional[Callable[[str], Optional[float]]] = None) -> Dict[str, Any]:
-    """Một nhịp dọn. `thu=True`: chỉ tính sẽ giải phóng bao nhiêu, không xoá gì."""
+         con_trong_gb_fn: Optional[Callable[[str], Optional[float]]] = None,
+         goc_chrome: Optional[str] = None) -> Dict[str, Any]:
+    """Một nhịp dọn. `thu=True`: chỉ tính sẽ giải phóng bao nhiêu, không xoá gì. `goc_chrome`: thư mục chứa các
+    Chrome Portable (mặc định: thư mục cha của `goc`)."""
     ds = list(danh_sach_kenh) if danh_sach_kenh is not None else liet_ke_kenh(goc)
     con_gb = (con_trong_gb_fn or don_dep._con_trong_gb)(goc)  # noqa: SLF001
     video: Dict[str, Any] = {}
@@ -152,6 +173,12 @@ def chay(goc: str, *, thu: bool = True,
         raw = kho_raw.nen_cu(goc, thu=thu)
     except Exception as loi:  # noqa: BLE001 — nén hỏng không chặn phần dọn còn lại
         raw = {"so_tep": 0, "bytes_truoc": 0, "bytes_sau": 0, "theo_kenh": {}, "loi": str(loi)[:150]}
+    try:  # 16/10/2026: bản Chrome cũ của Chrome Portable từng kênh (giữ bản đang dùng/chờ thay/mới nhất)
+        from . import don_chrome_cu  # noqa: PLC0415
+
+        chrome = don_chrome_cu.chay(goc, thu=thu, cha=goc_chrome)
+    except Exception as loi:  # noqa: BLE001 — dọn Chrome hỏng không chặn phần còn lại
+        chrome = {"thu": thu, "bo": [], "bytes": 0, "so_ban": 0, "loi": str(loi)[:150]}
     return {
         "thu": thu,
         "con_trong_gb": con_gb,
@@ -164,6 +191,7 @@ def chay(goc: str, *, thu: bool = True,
         "log_bytes": sum(u["bytes"] for u in logs),
         "log_da_xoay": da_xoay,
         "raw": raw,
+        "chrome": chrome,
     }
 
 
@@ -182,6 +210,11 @@ def tom_tat(kq: Dict[str, Any]) -> str:
         phan.append("{0} raw {1} nén {2} → {3}{4}".format(
             raw.get("so_tep") or 0, "sẽ" if kq.get("thu") else "đã", _gb(raw.get("bytes_truoc") or 0),
             _gb(raw.get("bytes_sau") or 0), " (lỗi: {0})".format(raw["loi"]) if raw.get("loi") else ""))
+    ch = kq.get("chrome") or {}
+    if ch.get("so_ban") or ch.get("loi") or any(v.get("ket") for x in ch.get("bo") or [] for v in x.get("xoa") or []):
+        from .don_chrome_cu import tom_tat as tt_chrome  # noqa: PLC0415
+
+        phan.append(tt_chrome(ch))
     if not kq["van_o"].get("duoc_mo_moi", True):
         phan.append("VAN Ổ ĐANG ĐÓNG — không mở video mới")
     return dau + " · " + " · ".join(phan)
@@ -204,7 +237,31 @@ def nhip(goc: str, *, bay_gio: Optional[float] = None, nhip_gio: float = NHIP_GI
     os.makedirs(os.path.dirname(tep), exist_ok=True)
     ghi_dia.ghi_json(tep, {"luc": bay_gio,
                            "luc_doc": datetime.datetime.fromtimestamp(bay_gio).strftime("%Y-%m-%d %H:%M")})
-    return chay(goc, thu=False)
+    kq = chay(goc, thu=False)
+    ghi_ket_qua(goc, kq, bay_gio=bay_gio)
+    return kq
+
+
+def ghi_ket_qua(goc: str, kq: Dict[str, Any], *, bay_gio: Optional[float] = None,
+                con_sau_gb: Optional[float] = None) -> Dict[str, Any]:
+    """Ghi `ket-qua-cuoi.json` của một lượt THẬT (ổ trước/sau + phần đã giải phóng). Hỏng ghi → bỏ qua."""
+    bay_gio = time.time() if bay_gio is None else bay_gio
+    if con_sau_gb is None:
+        con_sau_gb = don_dep._con_trong_gb(goc)  # noqa: SLF001
+    ch = kq.get("chrome") or {}
+    du = {"luc": bay_gio, "luc_doc": datetime.datetime.fromtimestamp(bay_gio).strftime("%Y-%m-%d %H:%M"),
+          "con_truoc_gb": kq.get("con_trong_gb"), "con_sau_gb": con_sau_gb,
+          "video_bytes": int(kq.get("video_bytes") or 0), "chrome_bytes": int(ch.get("bytes") or 0),
+          "chrome_cho": sum(1 for x in ch.get("bo") or [] for v in x.get("xoa") or []
+                            if v.get("ket") in ("dang_chay", "dang_dung", "xoa_do", "bo_qua")),
+          "kenh_chua_tu_don": sorted(m for m, v in (kq.get("video") or {}).items()
+                                     if str(v.get("ly_do") or "").startswith("chưa bật"))}
+    try:
+        os.makedirs(os.path.dirname(tep_ket_qua(goc)), exist_ok=True)
+        ghi_dia.ghi_json(tep_ket_qua(goc), du)
+    except Exception:  # noqa: BLE001 — sổ phụ
+        pass
+    return du
 
 
 # ── Dòng lệnh ────────────────────────────────────────────────────────────────
@@ -235,6 +292,12 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         print("  log: {0} ({1:.1f} MB)".format(os.path.relpath(u["duong"], goc), u["bytes"] / 1024 ** 2))
     for ma, r in sorted((kq["raw"].get("theo_kenh") or {}).items()):
         print("  raw {0}: {1} tệp {2} → {3}".format(ma, r["so_tep"], _gb(r["bytes_truoc"]), _gb(r["bytes_sau"])))
+    for x in (kq.get("chrome") or {}).get("bo") or []:
+        if x.get("xoa") or x.get("bo_qua"):
+            print("  Chrome {0}: {1}{2}".format(x["ten"], ", ".join("{0} {1} {2}".format(
+                v["ten"], _gb(v["bytes"]), v.get("ket") or "") for v in x["xoa"]), x.get("bo_qua") or ""))
+    if "--that" in a:
+        ghi_ket_qua(goc, kq)
     print(tom_tat(kq))
     return 0
 

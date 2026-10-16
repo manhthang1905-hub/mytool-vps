@@ -1969,8 +1969,28 @@ def kiem_giam_doc(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
                 "giam_doc_viec", bao_dong.MUC_NHAC, kenh=ma,
                 chuyen_gi="Giám đốc kênh {0}: {1}".format(ma, viec[:300]), can_lam_gi=viec[:300],
                 dedupe_khoa="giam_doc:viec:{0}:{1}".format(ma, hashlib.sha1(viec.encode("utf-8")).hexdigest()[:12]))
-            sc["lap_gio"] = NGUONG_LAP_VIEC_NGUOI_GIO  # cảnh báo chính sách thật: 1 lần/ngày, không phải mỗi 4 giờ
+            sc["lap_gio"] = NGUONG_LAP_VIEC_NGUOI_GIO  # việc chỉ người làm được: 1 lần/ngày, không phải mỗi 4 giờ
             ra.append(sc)
+    # 16/10/2026: đề xuất của bộ não mà máy làm được (bật Thử nghiệm và so sánh…) → việc máy có kiểu, không báo người.
+    if ghi_dia:
+        try:
+            giam_doc.dinh_tuyen_de_xuat_nao(goc, bay_gio=bay_gio)
+        except Exception:  # noqa: BLE001 — hàng đợi hỏng không được làm sập gác tổng
+            pass
+    # Bộ đọc Studio THẤY cảnh báo / gậy (`studio_kiem_suc_khoe` → "can_nguoi") — lúc ấy mới là việc của người.
+    try:
+        for m in giam_doc.doc_viec_may_kieu(goc, giam_doc.LOAI_KIEM_SUC_KHOE, "can_nguoi"):
+            ct = str((m.get("ket") or {}).get("chi_tiet") or "Studio báo cảnh báo chính sách / gậy")[:200]
+            sc = _su_co(
+                "giam_doc_viec", bao_dong.MUC_NHAC, kenh=str(m.get("kenh") or ""),
+                chuyen_gi="Kênh {0}: máy đọc Studio thấy {1}".format(m.get("kenh"), ct),
+                can_lam_gi="Mở YouTube Studio kênh {0} xem và xử lý cảnh báo (kháng nghị / sửa video).".format(
+                    m.get("kenh")),
+                dedupe_khoa="giam_doc:suc_khoe:{0}".format(m.get("id")))
+            sc["lap_gio"] = NGUONG_LAP_VIEC_NGUOI_GIO
+            ra.append(sc)
+    except Exception:  # noqa: BLE001
+        pass
     return ra
 
 

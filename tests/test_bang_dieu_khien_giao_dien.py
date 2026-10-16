@@ -245,35 +245,45 @@ def test_canh_bao_windows_ra_dong_viec_dau_tien(tmp_path, monkeypatch, qapp):
 # ── Mỗi nút gọi đúng đường ghi ────────────────────────────────────────────────
 
 
-def test_nut_da_ghim_goi_danh_dau_xong(trang, monkeypatch, qapp):
+def _ghim_chan_lau(goc):
+    """16/10/2026: ghim không còn mục từng video — mục gộp TUỲ CHỌN khi kênh bị YouTube chặn ghim ≥ 7 ngày (sổ
+    `vm/logs/cmt-dom.json`, giờ so với BÂY GIỜ vì trang dựng việc theo đồng hồ thật)."""
+    import datetime as _dt
+    import json
+
+    from core import vm_cai_dat
+
+    vm_cai_dat.luu(goc, "K2", ghim_dom=True)
+    bay = _dt.datetime.now()
+
+    def f(ngay):
+        return (bay - _dt.timedelta(days=ngay)).strftime("%Y-%m-%d %H:%M:%S")
+    duong = os.path.join(goc, "vm", "logs", "cmt-dom.json")
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    with open(duong, "w", encoding="utf-8") as tep:
+        json.dump({"_kenh:K2": {"can_xac_minh": f(0.1), "cho_xac_minh_tu": f(10)},
+                   "vidGhim": {"kenh": "K2", "ma": "K2-0001", "da_dang_moi": f(10), "trang_thai": "cho-xac-minh"}}, tep)
+
+
+def test_nut_da_xu_ly_muc_ghim_goi_danh_dau_xong(trang, monkeypatch, qapp):
     from core import bang_dieu_khien as bdk
 
     t, _app, goc = trang
-    duong = os.path.join(goc, "CHANNEL", "K2", "can-ghim.md")
-    from core import vm_cai_dat
-    vm_cai_dat.luu(goc, "K2", ghim_dom=True)      # việc ghim chỉ hiện khi kênh BẬT ghim
-    with open(duong, "w", encoding="utf-8") as tep:
-        tep.write("- [2026-09-18 10:00] **Video cần ghim** — "
-                  "https://www.youtube.com/watch?v=vidGhim\n"
-                  "  > bình luận mở đầu\n")
+    _ghim_chan_lau(goc)
     goi = []
     monkeypatch.setattr(bdk, "danh_dau_xong", lambda g, k, **kw: goi.append((g, k)))
     t.lam_moi()
     qapp.processEvents()
-    nut = next(n for n in t._khoi_viec.findChildren(QPushButton) if n.text() == "Đã ghim")
-    nut.click()
-    qapp.processEvents()
-    assert goi == [(goc, "ghim:vidGhim")]
+    for n in [n for n in t._khoi_viec.findChildren(QPushButton) if n.text() == "Đã xử lý"]:
+        n.click()
+        qapp.processEvents()
+    assert (goc, "ghim-xac-minh") in goi
+    assert not [k for _g, k in goi if k.startswith("ghim:")], "không còn mục ghim từng video"
 
 
 def test_chep_link_dat_vao_clipboard(trang, monkeypatch, qapp):
     t, _app, goc = trang
-    duong = os.path.join(goc, "CHANNEL", "K2", "can-ghim.md")
-    from core import vm_cai_dat
-    vm_cai_dat.luu(goc, "K2", ghim_dom=True)
-    with open(duong, "w", encoding="utf-8") as tep:
-        tep.write("- [2026-09-18 10:00] **Video cần ghim** — "
-                  "https://www.youtube.com/watch?v=vidGhim2\n  > ghi chú\n")
+    _ghim_chan_lau(goc)
     t.lam_moi()
     qapp.processEvents()
     nut = next(n for n in t._khoi_viec.findChildren(QPushButton) if n.text() == "Chép link")
@@ -281,7 +291,7 @@ def test_chep_link_dat_vao_clipboard(trang, monkeypatch, qapp):
     qapp.processEvents()
     from PyQt5.QtWidgets import QApplication
 
-    assert "vidGhim2" in QApplication.clipboard().text()
+    assert "youtube.com/verify" in QApplication.clipboard().text()
 
 
 def test_cong_tac_tu_lam_video_ghi_dung_duong(trang, monkeypatch, qapp):

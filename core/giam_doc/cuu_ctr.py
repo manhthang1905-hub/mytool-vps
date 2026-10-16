@@ -19,9 +19,13 @@ Hai chế độ (khoá kenh.yaml `giam_doc_studio`):
       1. HỘI ĐỒNG (`quan_ly.goi_quyet("cuu_ctr")`: 3 chuyên gia + phản biện + chấm) viết tiêu đề mới theo
          khung tiêu đề thắng (`docs/kien-thuc/con-duong-kenh-thang.md` §3) + tiêu đề thắng của kênh và
          ngách, ≤ 100 ký tự, kèm độ tin. Tin thấp (cổng "quan_sat") → không đề xuất.
-      2. DUYỆT: kênh < 1.000 sub TỰ ÁP ngay (đã có đo trước/sau + tự đổi lại); kênh ≥ 1.000 sub: lần sửa đầu chờ chủ
-         bấm "Duyệt" (Phòng điều hành → Việc của bạn); sổ `giam-doc/duyet-sua.json`. Đã duyệt ≥ 1 lần và ≥ 1 lần
-         kết quả TỐT → kênh tự áp.
+      2. TỰ ÁP CÓ RÀO (16/10/2026 — chủ duyệt "Cho tự đổi, có rào"; bỏ cổng chờ chủ duyệt): mọi đề xuất hội đồng tin
+         đủ ("ap" / "thu_nho") qua `kiem_rao` thì máy tự áp, không qua "Việc của bạn". Rào: (a) không bao giờ đụng
+         video đang thắng / nóng / không trượt, hay CTR HOẶC lượt xem ≥ trung vị của chính kênh CÙNG TUỔI (cần ≥ 3
+         video so được, thiếu số = không đụng); (b) mỗi video ≤ 1 lần đổi tiêu đề / `NGAY_GIUA_HAI_LAN_DOI` ngày;
+         (c) mỗi kênh ≤ `TOI_DA_DOI_NGAY_KENH` lần / ngày (vượt → `cho_rao`, hôm sau xét lại); (d) đo trước/sau + tự
+         đổi lại như cũ; (e) mỗi quyết định ghi vào não bộ phận "tieu-de" (`core.nao_bo_phan.ghi`). Mục `cho_duyet`
+         cũ (trước 16/10) được xét lại theo đúng rào ở lượt kế. Sổ `giam-doc/duyet-sua.json`.
       3. HÀNG `vm/logs/hang-sua.json` → máy DOM sửa giờ vắng (`vm/agent.py: chay_sua_video` →
          `vm/may_dang_dom.py: sua_video_mot`), kết quả lượt cuối `vm/logs/sua-cuoi.json`.
       4. `dong_bo` (mỗi nhịp gác tổng, qua `giam_doc.nhip`): xếp hàng mục đã duyệt; máy sửa xong → ghi
@@ -60,9 +64,17 @@ NGUONG_DE_XUAT = 50.0
 TIEU_DE_TOI_DA = 100
 TEP_DUYET = "duyet-sua.json"
 TEP_HANG = os.path.join("vm", "logs", "hang-sua.json")
-SUB_KENH_NHO = 1000       # dưới ngần này sub: tự áp NGAY (đã có đo trước/sau + tự đổi lại nếu tệ hơn) — 04/10/2026
-SO_LAN_DUYET = 1          # kênh ≥ 1.000 sub: chủ duyệt 1 lần sửa đầu
-SO_LAN_TOT = 1            # … và ≥ 1 lần tốt → kênh được tự áp
+SUB_KENH_NHO = 1000       # (cũ, chỉ còn cho `quyen_studio` — 16/10/2026 không còn cổng chờ duyệt)
+SO_LAN_DUYET = 1
+SO_LAN_TOT = 1
+#: Rào tự áp đổi tiêu đề (16/10/2026).
+NGAY_GIUA_HAI_LAN_DOI = 14    # mọi lần đổi tiêu đề (kể cả quay lui) trong ngần này ngày chặn lần đổi MỚI; quay lui tự
+                              # động của `dong_bo` không bị rào này chặn (nó là lưới an toàn)
+TOI_DA_DOI_NGAY_KENH = 1      # mỗi kênh ≤ ngần này lần tự đổi tiêu đề MỖI NGÀY
+CUNG_TUOI_TI_LE = 0.25        # "cùng tuổi" = tuổi bản chụp ± 25% (tối thiểu ± 12 giờ)
+CUNG_TUOI_TOI_THIEU_GIO = 12.0
+#: Trạng thái tự áp: `tu_ap` (đã qua rào, chờ dong_bo xếp hàng) · `cho_rao` (chỉ vướng trần ngày, xét lại lượt sau).
+_TT_CHO_XET = ("cho_duyet", "cho_rao")
 TI_LE_TOT = 1.10          # CTR sau / trước ≥ 1,10 → tốt
 TI_LE_GIU = 1.00          # < 1,00 → quay lui
 DO_TOI_DA_NGAY = 14       # quá hạn mà chưa đủ hiển thị → chua_du (giữ nguyên)
@@ -441,6 +453,138 @@ def chon_tieu_de(bs: Any, d: Dict[str, Any], goi_chat: Callable[..., str], *, lu
                 mo_hinh=q.get("mo_hinh"))
 
 
+# ── rào tự áp (16/10/2026 — chủ duyệt "Cho tự đổi, có rào") ────────────────
+
+def _cung_tuoi(bs: Any, v: Dict[str, Any], lay: Callable[[Dict[str, Any]], Any]) -> Tuple[Optional[float],
+                                                                                         Optional[float], int]:
+    """`(số của video ở bản chụp mới nhất, trung vị các video KHÁC của kênh ở CÙNG TUỔI, n)`. `lay(bản chụp)` → số."""
+    import statistics  # noqa: PLC0415
+
+    from .du_lieu import ban_chup_gan  # noqa: PLC0415
+
+    b = moi_nhat(v) or {}
+    if b.get("tuoi") is None:
+        return None, None, 0
+    tuoi = float(b["tuoi"])
+    w = max(CUNG_TUOI_TOI_THIEU_GIO, CUNG_TUOI_TI_LE * tuoi)
+    ds: List[float] = []
+    for o in bs.video:
+        if o.get("id") == v.get("id"):
+            continue
+        bo = ban_chup_gan(o, tuoi, tuoi - w, tuoi + w)
+        x = _so(lay(bo)) if bo else None
+        if x is not None:
+            ds.append(x)
+    return _so(lay(b)), (round(statistics.median(ds), 2) if ds else None), len(ds)
+
+
+def _ctr_du(b: Dict[str, Any], khoa: str) -> Any:
+    return b.get(khoa) if (b.get("hien_thi") or 0) >= HIEN_THI_TOI_THIEU else None
+
+
+def _lan_doi_gan(v: Dict[str, Any], ds: List[Dict[str, Any]], bay_gio: _dt.datetime,
+                 tru_id: str = "") -> str:
+    """Lần đổi tiêu đề gần nhất của video trong `NGAY_GIUA_HAI_LAN_DOI` ngày ("" = không có): hồ sơ `lich_su_sua`
+    (mọi lần đổi tiêu đề, kể cả quay lui) + mục cứu đang chạy / đã áp trong sổ duyệt."""
+    moc = (bay_gio - _dt.timedelta(days=NGAY_GIUA_HAI_LAN_DOI)).isoformat()
+    for x in v.get("lich_su_sua") or []:
+        if isinstance(x, dict) and x.get("loai") == "tieu_de" and str(x.get("luc") or "")[:19] >= moc[:19]:
+            return str(x.get("luc"))[:16].replace("T", " ")
+    for m in ds:
+        if m.get("video_id") != v.get("id") or m.get("id") == tru_id or m.get("trang_thai") in _TT_CHO_XET + ("bo",):
+            continue
+        luc = max(str(m.get(k) or "") for k in ("tu_ap_luc", "xep_luc", "tieu_de_luc", "quay_lui_tieu_de_luc", "luc"))
+        if m.get("trang_thai") not in ("xong", "loi") or luc[:19] >= moc[:19]:
+            return luc[:16].replace("T", " ") or "?"
+    return ""
+
+
+def _so_doi_hom_nay(ds: List[Dict[str, Any]], bay_gio: _dt.datetime) -> int:
+    hom = bay_gio.date().isoformat()
+    return sum(1 for m in ds if m.get("trang_thai") not in _TT_CHO_XET + ("bo",) and str(
+        m.get("tu_ap_luc") or (m.get("luc") if m.get("duyet_boi") in ("may", "chu") else "") or "")[:10] == hom)
+
+
+def kiem_rao(bs: Any, v: Optional[Dict[str, Any]], ds: List[Dict[str, Any]], *, tru_id: str = "") -> Dict[str, Any]:
+    """Rào tự áp MỘT lần đổi tiêu đề → `{"duoc", "cho" (chỉ vướng trần ngày — xét lại lượt sau), "ly_do", "so"}`.
+
+    Đụng video CHỈ khi: video không thắng/nóng và đã trượt (`khong_thang`); chẩn đoán cổng = "ctr" (dưới CTR riêng của
+    kênh, kênh không sống bằng đề xuất); CTR VÀ lượt xem đều DƯỚI trung vị các video khác của kênh ở CÙNG TUỔI (≥ 3
+    video so được mỗi số — thiếu số thì không đụng); không đổi tiêu đề nào trong 14 ngày; kênh chưa chạm trần ngày."""
+    so: Dict[str, Any] = {}
+
+    def khong(ly: str, cho: bool = False) -> Dict[str, Any]:
+        return {"duoc": False, "cho": cho, "ly_do": ly, "so": so}
+
+    if v is None:
+        return khong("không còn số của video trong bảng số kênh")
+    if v.get("thang") or v.get("nong") or not khong_thang(v):
+        return khong("video đang thắng / nóng / chưa phán trượt — không đụng")
+    q = _chan_doan(bs, v)
+    so["cong"] = q.get("cong")
+    if q.get("cong") != "ctr":
+        return khong("chẩn đoán cổng “{0}”, không phải CTR dưới CTR riêng của kênh".format(q.get("cong")))
+    x, tv, n = _cung_tuoi(bs, v, lambda b: _ctr_du(b, "ctr_browse"))
+    loai = "trang chủ"
+    if x is None or n < N_CTR_RIENG:
+        x, tv, n = _cung_tuoi(bs, v, lambda b: _ctr_du(b, "ctr"))
+        loai = "chung"
+    so.update(ctr=x, ctr_trung_vi=tv, n_ctr=n, loai_ctr=loai)
+    if x is None or tv is None or n < N_CTR_RIENG:
+        return khong("chưa đủ {0} video cùng tuổi để so CTR (mới {1}) — không đụng".format(N_CTR_RIENG, n))
+    if x >= tv:
+        return khong("CTR {0} {1} ≥ trung vị kênh cùng tuổi {2} — không đụng".format(loai, chu_so(x, 1, "%"),
+                                                                                    chu_so(tv, 1, "%")))
+    xem, tvx, nx = _cung_tuoi(bs, v, lambda b: b.get("xem"))
+    so.update(xem=xem, xem_trung_vi=tvx, n_xem=nx, tuoi=(moi_nhat(v) or {}).get("tuoi"))
+    if xem is None or tvx is None or nx < N_CTR_RIENG:
+        return khong("chưa đủ {0} video cùng tuổi để so lượt xem (mới {1}) — không đụng".format(N_CTR_RIENG, nx))
+    if xem >= tvx:
+        return khong("lượt xem {0} ≥ trung vị kênh cùng tuổi {1} — không đụng".format(chu_so(xem), chu_so(tvx)))
+    gan = _lan_doi_gan(v, ds, bs.bay_gio, tru_id)
+    if gan:
+        return khong("đã đổi tiêu đề lúc {0} — mỗi video ≤ 1 lần / {1} ngày".format(gan, NGAY_GIUA_HAI_LAN_DOI))
+    hom = _so_doi_hom_nay(ds, bs.bay_gio)
+    so["da_doi_hom_nay"] = hom
+    if hom >= TOI_DA_DOI_NGAY_KENH:
+        return khong("kênh đã tự đổi {0} tiêu đề hôm nay (trần {1}/ngày) — xét lại lượt sau".format(
+            hom, TOI_DA_DOI_NGAY_KENH), cho=True)
+    return {"duoc": True, "cho": False, "ly_do": "qua rào: CTR {0} {1} < {2}, xem {3} < {4} (cùng tuổi {5:.0f}h)".format(
+        loai, chu_so(x, 1, "%"), chu_so(tv, 1, "%"), chu_so(xem), chu_so(tvx), float(so.get("tuoi") or 0)), "so": so}
+
+
+def _ghi_nao(goc: str, ma: str, m: Dict[str, Any], quyet: str, ly: str, so: Dict[str, Any]) -> None:
+    """Mỗi quyết định tự áp / hoãn / bỏ → một sự kiện não bộ phận "tieu-de" (hỏng không bao giờ chặn lượt)."""
+    if not goc:
+        return
+    try:
+        from .. import nao_bo_phan  # noqa: PLC0415
+
+        nao_bo_phan.ghi(goc, "tieu-de", "chon", kenh=ma, ma_goi=str(m.get("ma_goi") or ""),
+                        noi_dung="cứu CTR {0}: {1} “{2}” → “{3}” — {4}".format(
+                            m.get("video_id"), quyet, str(m.get("tieu_de_cu") or "")[:60],
+                            str(m.get("tieu_de_moi") or "")[:60], ly),
+                        so=dict(so or {}, quyet=quyet, do_tin=m.get("do_tin"), id=m.get("id")), nguon="cuu_ctr",
+                        khoa="cuu-ctr|{0}|{1}|{2}".format(m.get("id"), quyet, str(m.get("rao_luc") or "")[:16]))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _ap_rao(goc: str, ma: str, bs: Any, m: Dict[str, Any], ds: List[Dict[str, Any]]) -> str:
+    """Xét rào cho mục `m` (mới lập hoặc chờ xét) và ĐỔI trạng thái tại chỗ: `tu_ap` | `cho_rao` | `bo`. Ghi não."""
+    r = kiem_rao(bs, bs.video_theo_id(str(m.get("video_id") or "")), ds, tru_id=str(m.get("id") or ""))
+    luc = _luc(bs.bay_gio)
+    m.update(rao=r["so"], rao_ly_do=r["ly_do"], rao_luc=luc)
+    if r["duoc"]:
+        m.update(trang_thai="tu_ap", duyet_boi="may", tu_ap_luc=luc)
+    elif r["cho"]:
+        m.update(trang_thai="cho_rao")
+    else:
+        m.update(trang_thai="bo", ly_do_bo="rào tự áp: " + r["ly_do"], bo_luc=luc)
+    _ghi_nao(goc, ma, m, m["trang_thai"], r["ly_do"], r["so"])
+    return m["trang_thai"]
+
+
 def _anh_du_phong(goc: str, ma: str, ma_goi: str) -> str:
     """Bìa thay thế: bìa hạng nhì đã lưu (`ho-so-video/anh/<mã gói>-bia-2.jpg`); không có → ""."""
     try:
@@ -454,16 +598,30 @@ def _anh_du_phong(goc: str, ma: str, ma_goi: str) -> str:
 
 def xu_ly(goc: str, ma: str, bs: Any, thuc_don: List[Dict[str, Any]], goi_chat: Optional[Callable[..., str]], *,
           viet: bool = True, ghi: Optional[Callable[[str], None]] = None) -> List[Dict[str, Any]]:
-    """`chay_kenh` gọi khi `giam_doc_studio: true`: mỗi việc Studio của `cuu_ctr` đã qua `gioi_han.kiem`
-    → hội đồng viết tiêu đề → mục "chờ duyệt" (hoặc "tự áp" khi kênh đã đủ thành tích và hội đồng tin
-    đủ). `viet=False` (chế độ thử): chỉ hỏi hội đồng, không ghi gì. Trả các mục vừa lập."""
-    if goi_chat is None:
-        return []
+    """`chay_kenh` gọi khi `giam_doc_studio: true`. 16/10/2026 — TỰ ÁP CÓ RÀO, không còn "chờ chủ duyệt":
+    (1) mục `cho_duyet` cũ / `cho_rao` → xét lại `kiem_rao` → `tu_ap` | `cho_rao` | `bo`;
+    (2) mỗi việc Studio của `cuu_ctr` đã qua `gioi_han.kiem` → `kiem_rao` TRƯỚC (không tốn hội đồng cho video rào
+    chặn; vướng trần ngày → để hôm sau) → hội đồng viết tiêu đề → tin đủ ("ap"/"thu_nho") → mục `tu_ap`.
+    Mỗi quyết định ghi não bộ phận "tieu-de". `viet=False` (chế độ thử): chỉ hỏi hội đồng, không ghi gì. Trả các mục
+    vừa lập."""
     from . import so_thi_nghiem as stn  # noqa: PLC0415
 
     ds = doc_duyet(goc, ma) if goc else []
+    doi_cu = False
+    if viet and goc:
+        for m in ds:
+            if m.get("trang_thai") in _TT_CHO_XET:
+                tt_cu = m["trang_thai"]
+                _ap_rao(goc, ma, bs, m, ds)
+                doi_cu = doi_cu or m["trang_thai"] != tt_cu or tt_cu == "cho_duyet"
+                if ghi:
+                    ghi("  [cứu CTR] {0} (mục cũ): {1} — {2}".format(m.get("video_id"), m["trang_thai"],
+                                                                     m.get("rao_ly_do")))
+        if doi_cu:
+            _ghi_duyet(goc, ma, ds)
+    if goi_chat is None:
+        return []
     da_co = {m.get("video_id") for m in ds}
-    q = quyen_studio(goc, ma, ds, sub=_so(((getattr(bs, "ypp", None) or {}).get("sub"))))
     ra = []
     for d in thuc_don:
         if d.get("plugin") != TEN or d.get("loai") != "viec_studio" or not d.get("duoc") or d["video_id"] in da_co:
@@ -471,13 +629,17 @@ def xu_ly(goc: str, ma: str, bs: Any, thuc_don: List[Dict[str, Any]], goi_chat: 
         v = bs.video_theo_id(d["video_id"])
         if v is None:
             continue
+        r = kiem_rao(bs, v, ds)
+        if not r["duoc"]:
+            if ghi:
+                ghi("  [cứu CTR] {0}: rào chặn trước hội đồng — {1}".format(d["video_id"], r["ly_do"]))
+            continue
         kq = chon_tieu_de(bs, d, goi_chat, luu=viet, ghi=ghi)
         if kq.get("loi") or kq.get("cong") == "quan_sat":
             if ghi:
                 ghi("  [cứu CTR] {0}: {1}".format(d["video_id"], kq.get("loi") or "hội đồng tin thấp ({0}) — chỉ "
                                                   "quan sát".format(kq.get("do_tin"))))
             continue
-        tu_ap = q["quyen"] == "tu_ap" and kq.get("cong") == "ap"
         cd = d.get("chan_doan") or {}
         muc = {"id": "s-{0}-{1}".format(v["id"], bs.bay_gio.strftime("%Y%m%d%H%M")), "video_id": v["id"],
                "ma_goi": v.get("ma_goi") or "", "luc": _luc(bs.bay_gio), "tuoi_gio": v.get("tuoi_gio"),
@@ -486,8 +648,12 @@ def xu_ly(goc: str, ma: str, bs: Any, thuc_don: List[Dict[str, Any]], goi_chat: 
                "chan_doan": {"ctr": cd.get("ctr"), "hien_thi": cd.get("hien_thi"), "trang_chu": cd.get("trang_chu"),
                              "muc_tieu": bs.ctr_muc_tieu},
                "anh_du_phong": _anh_du_phong(goc, ma, v.get("ma_goi") or "") if goc else "",
-               "trang_thai": "tu_ap" if tu_ap else "cho_duyet", "duyet_boi": "may" if tu_ap else "",
+               "trang_thai": "cho_rao", "duyet_boi": "", "cong_hoi_dong": kq.get("cong"),
                "ket": "", "ket_bia": ""}
+        if viet:
+            _ap_rao(goc, ma, bs, muc, ds)
+        else:
+            muc.update(trang_thai="tu_ap", duyet_boi="may", rao=r["so"], rao_ly_do=r["ly_do"])
         ra.append(muc)
         if viet:
             ds.append(muc)
@@ -696,10 +862,10 @@ def dong_bo(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
             ds = doc_duyet(goc, ma)
             doi = False
             dx = None
-            if any(m.get("trang_thai") in ("duyet", "tu_ap", "cho_duyet") for m in ds):
+            if any(m.get("trang_thai") in ("duyet", "tu_ap") + _TT_CHO_XET for m in ds):
                 dx = pct_de_xuat_kenh(goc, ma)
             for m in ds:
-                if (m.get("trang_thai") in ("duyet", "tu_ap", "cho_duyet") and dx is not None
+                if (m.get("trang_thai") in ("duyet", "tu_ap") + _TT_CHO_XET and dx is not None
                         and dx > NGUONG_DE_XUAT):
                     # 12/10/2026: kênh sống bằng ĐỀ XUẤT — không bao giờ đổi tiêu đề sau đăng (kể cả mục duyệt trước).
                     m.update(trang_thai="bo", ly_do_bo="kênh có {0:.0f}% traffic đề xuất > {1:.0f}% — không đổi tiêu "

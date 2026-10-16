@@ -1,4 +1,4 @@
-"""Cứu video CTR thấp (01/10/2026): hội đồng → chủ duyệt 3 lần đầu → hàng sửa → máy DOM đổi tiêu đề/bìa →
+"""Cứu video CTR thấp (01/10/2026): hội đồng → rào tự áp (16/10/2026, thay cổng chủ duyệt) → hàng sửa → máy DOM đổi tiêu đề/bìa →
 đo trước/sau → giữ / quay lui; vá lỗ bản chụp 48h; giờ online; luật bìa.
 
 Cô lập: mọi thứ trong `tmp_path`; không mạng, không ví, không đọc/ghi CHANNEL hay vm/logs thật (có bài canh).
@@ -134,13 +134,22 @@ def _bs_hong(goc, sub=5000):
     return bs
 
 
-def test_xu_ly_hoi_dong_lap_muc_cho_duyet_va_chu_duyet(tmp_path, monkeypatch):
+def _them_cung_tuoi(bs, xem_hong=60, xem_ref=200):
+    """Bản chụp CÙNG TUỔI (66h) cho 3 video tham chiếu + lượt xem — rào tự áp (16/10/2026) cần so cùng tuổi."""
+    bs.video[0]["chup"][0]["xem"] = xem_hong
+    for r in bs.video[1:]:
+        r["chup"].insert(0, {"tuoi": 66.0, "moc": "66h", "hien_thi": 4000, "ctr": 4.0, "ctr_browse": 4.5, "xem": xem_ref})
+    return bs
+
+
+def test_xu_ly_hoi_dong_tu_ap_co_rao_khong_cho_duyet(tmp_path, monkeypatch):
+    """16/10/2026 (chủ duyệt "Cho tự đổi, có rào"): hội đồng → qua rào → TỰ ÁP, không còn mục chờ chủ duyệt."""
     from core import bien_tap_content
 
     monkeypatch.setattr(bien_tap_content, "thang_mo_hinh", lambda _g, _k: ["m1"])
     goc = str(tmp_path)
     _kenh(goc, 'giam_doc: "goi_y"', "giam_doc_studio: true")
-    bs = _bs_hong(goc)
+    bs = _them_cung_tuoi(_bs_hong(goc))
     qs = cuu_ctr.quan_sat(bs)
     td = [dict(d, plugin="cuu_ctr", duoc=True) for d in cuu_ctr.de_xuat(bs, qs)]
     assert td and td[0]["chi_goi_y"] is False
@@ -151,15 +160,19 @@ def test_xu_ly_hoi_dong_lap_muc_cho_duyet_va_chu_duyet(tmp_path, monkeypatch):
         return json.dumps({"tieu_de_moi": "IQが高い人だけが気づく世界の違和感５選", "khung": "so_dem_tri_tue",
                            "ly_do": "CTR trang chủ 2,0% < 4%"})
     ra = cuu_ctr.xu_ly(goc, K, bs, td, llm)
-    assert len(ra) == 1 and ra[0]["trang_thai"] == "cho_duyet"
+    assert len(ra) == 1 and ra[0]["trang_thai"] == "tu_ap" and ra[0]["duyet_boi"] == "may"
     assert ra[0]["tieu_de_moi"] == "【脳科学】IQが高い人だけが気づく世界の違和感５選"
     assert "KHUNG TIÊU ĐỀ THẮNG" in loi_nhac[0] and "≤ 100 ký tự" in loi_nhac[0]
-    assert [m["id"] for m in cuu_ctr.cho_duyet(goc, K)] == [ra[0]["id"]]
+    assert not cuu_ctr.cho_duyet(goc, K)
     nk = [json.loads(x) for x in io.open(os.path.join(goc, "CHANNEL", K, "giam-doc", "nhat-ky.jsonl"), encoding="utf-8")]
     assert any(d["viec"] == "viec_studio" and d["video_id"] == "FAKEhong001" for d in nk), "trừ ngân sách 2/tuần"
     assert cuu_ctr.xu_ly(goc, K, bs, td, llm) == [], "mỗi video một lần"
-    assert cuu_ctr.ghi_duyet(goc, K, ra[0]["id"], duyet=True)
-    assert cuu_ctr.doc_duyet(goc, K)[0]["trang_thai"] == "duyet" and not cuu_ctr.cho_duyet(goc, K)
+    # không có lượt xem cùng tuổi → rào chặn TRƯỚC hội đồng (không tốn lượt gọi)
+    goc2 = str(tmp_path / "b")
+    _kenh(goc2, 'giam_doc: "goi_y"', "giam_doc_studio: true")
+    bs2 = _bs_hong(goc2)
+    loi_nhac.clear()
+    assert cuu_ctr.xu_ly(goc2, K, bs2, td, llm) == [] and loi_nhac == []
 
 
 def test_quyen_kenh_lon_duyet_1_lan_dau_roi_tu_ap_khi_co_ket_qua_tot():
@@ -178,13 +191,14 @@ def test_quyen_kenh_nho_duoi_1000_sub_tu_ap_ngay_khong_can_duyet():
     assert cuu_ctr.quyen_studio("", K, [], sub=None)["quyen"] == "tu_ap", "chưa biết sub = kênh nhỏ"
 
 
-def test_xu_ly_kenh_nho_tu_ap_muc_ngay_khong_cho_duyet(tmp_path, monkeypatch):
+def test_xu_ly_kenh_lon_cung_tu_ap_khong_cho_duyet(tmp_path, monkeypatch):
+    """16/10/2026: kênh ≥ 1.000 sub cũng tự áp (rào thay cho cổng duyệt lần đầu)."""
     from core import bien_tap_content
 
     monkeypatch.setattr(bien_tap_content, "thang_mo_hinh", lambda _g, _k: ["m1"])
     goc = str(tmp_path)
     _kenh(goc, 'giam_doc: "goi_y"', "giam_doc_studio: true")
-    bs = _bs_hong(goc, sub=438)
+    bs = _them_cung_tuoi(_bs_hong(goc, sub=5000))
     td = [dict(d, plugin="cuu_ctr", duoc=True) for d in cuu_ctr.de_xuat(bs, cuu_ctr.quan_sat(bs))]
 
     def llm(ln, mo_hinh="", khoa="", toi_da_token=0):

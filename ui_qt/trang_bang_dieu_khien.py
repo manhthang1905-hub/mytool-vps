@@ -1016,13 +1016,14 @@ class _KhoiDanhSach(QFrame):
         self._v.setSpacing(5)
         v.addLayout(self._v)
 
-    def nap(self, dong: List[tuple], dem: bool = False) -> None:
-        """`dong`: `[(muc, chu, tip)]`, đã xếp sẵn (khẩn trước)."""
+    def nap(self, dong: List[tuple], dem: bool = False, so: Optional[int] = None) -> None:
+        """`dong`: `[(muc, chu, tip)]`, đã xếp sẵn (khẩn trước). `so`: số đếm ở tiêu đề (mặc định = số dòng)."""
         while self._v.count():
             w = self._v.takeAt(0).widget()
             if w is not None:
                 w.deleteLater()
-        self._tieu.setText("{0} ({1})".format(self._tieu_goc, len(dong)) if dem and dong else self._tieu_goc)
+        so = len(dong) if so is None else so
+        self._tieu.setText("{0} ({1})".format(self._tieu_goc, so) if dem and so else self._tieu_goc)
         self._rong.setVisible(not dong)
         for muc, chu, tip in dong:
             nh = nhan('<span style="color:{0};">●</span>&nbsp;{1}'.format(_MAU_CHAM.get(muc, theme.XAM), _html(chu)))
@@ -2135,7 +2136,12 @@ class TrangBangDieuKhien(QWidget):
             if isinstance(cb, dict) and cb.get("loai") == "giong_doc_trung" and cb.get("chuyen_gi"):
                 dong.append((bdk.TAT, str(cb["chuyen_gi"])[:150] + " — chủ đã quyết giữ giọng cũ", ""))
         dong.sort(key=lambda d: 0 if d[0] == bdk.HONG else 1)
-        self._khoi_canh_bao.nap(dong, dem=True)
+        so = len(dong)
+        # 16/10/2026: việc MÁY đang tự lo (ghim, đổi tiêu đề, việc Studio, ổ đĩa) — để biết, không đếm, không bấm.
+        for x in (self._bang.get("may_tu_lam") or []):
+            if isinstance(x, dict) and x.get("chu"):
+                dong.append((bdk.TAT, "Máy đang tự làm: " + str(x["chu"])[:150], str(x["chu"])))
+        self._khoi_canh_bao.nap(dong, dem=True, so=so)
 
     def _ve_sap_dang(self) -> None:
         """5 khe đăng gần nhất của cả công ty (`lich_tiep` của từng kênh đang tự chạy)."""

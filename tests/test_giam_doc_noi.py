@@ -311,7 +311,9 @@ def test_gac_tong_su_co_giam_doc_ket_va_viec_cua_ban(tmp_path):
     _kenh_bat(goc)
     gd.kiem_ket(goc, bay_gio=dt.datetime(2026, 10, 1, 0, 30))
     _ghi(os.path.join(du_lieu.thu_muc_giam_doc(goc, "GDK"), bao_cao.TEP_BAO_CAO_JSON),
-         {"luc": "2026-10-01T00:20:00", "che_do": "goi_y", "viec_cua_ban": ["Đổi tiêu đề video A"]})
+         {"luc": "2026-10-01T00:20:00", "che_do": "goi_y",
+          # 16/10/2026: "Đổi tiêu đề video …" là việc máy (tự đổi có rào) — việc NGƯỜI còn lại: quyết định lớn
+          "viec_cua_ban": ["Đổi tiêu đề video A", "Quyết định lớn chờ bạn duyệt: chien_luoc “a” → “b”."]})
     sc = gac_tong.kiem_giam_doc(goc, bay_gio=dt.datetime(2026, 10, 1, 7, 0))
     loai = sorted(s["loai"] for s in sc)
     assert loai == ["giam_doc_ket", "giam_doc_viec"]

@@ -289,15 +289,14 @@ def test_doc_can_ghim_va_bien_mat_khi_da_xong(tmp_path):
     assert pins == [{"luc": "2026-09-29 20:05", "tieu_de": "Video một", "video_id": "abc123",
                      "ghi_chu": "Ghim bình luận mở đầu, hỏi khán giả thích cảnh nào nhất."}]
 
+    # 16/10/2026: KHÔNG còn mục ghim TỪNG VIDEO ở "Việc của bạn" — máy tự ghim (cửa sổ 7 ngày + ghim bù, thử lại mỗi
+    # ngày); can-ghim.md chỉ còn là mốc "đầu đợt bị chặn" cho mục gộp tuỳ chọn (tests/test_viec_tu_dong.py).
     k1 = _k("K1")
     viec = bdk.viec_cua_ban(goc, anh=_anh([k1]), bay_gio=BAY_GIO)
-    khoa = [v["khoa"] for v in viec]
-    assert "ghim:abc123" in khoa
+    assert not [v["khoa"] for v in viec if v["khoa"].startswith("ghim")]
 
-    bdk.danh_dau_xong(goc, "ghim:abc123", bay_gio=BAY_GIO)
+    bdk.danh_dau_xong(goc, "ghim:abc123", bay_gio=BAY_GIO)   # khoá cũ vẫn ghi được (sổ viec-da-xong.json giữ nguyên)
     assert "ghim:abc123" in bdk.doc_da_xong(goc)
-    viec2 = bdk.viec_cua_ban(goc, anh=_anh([k1]), bay_gio=BAY_GIO)
-    assert "ghim:abc123" not in [v["khoa"] for v in viec2]
 
 
 def test_danh_dau_xong_ghi_nguyen_tu(tmp_path):
@@ -504,17 +503,21 @@ def test_viec_dong_9_muc_loi():
     assert "chay_lai" in [n[1] for n in v["nut"]]
 
 
-def test_viec_dong_4_ghim_chua_danh_dau(tmp_path):
+def test_viec_dong_4_ghim_la_viec_may(tmp_path):
+    """16/10/2026: ghim là việc MÁY — không mục "ghim:" nào ở Việc của bạn, chỉ dòng "Máy đang tự làm"."""
     goc = str(tmp_path)
+    thu_muc_vm = os.path.join(goc, "vm")
     _ghi(os.path.join(goc, "CHANNEL", "K1", "can-ghim.md"),
         "- [2026-09-29 20:05] **Video một** — https://www.youtube.com/watch?v=abc123\n"
         "  > ghim mở đầu\n")
+    _ghi_json(os.path.join(thu_muc_vm, "logs", "cmt-dom.json"),
+              {"abc123": {"kenh": "K1", "ma": "K1-0001", "da_dang_moi": "2026-09-29 20:00:00", "trang_thai": "da-dang"}})
     vm_cai_dat.luu(goc, "K1", ghim_dom=True)
     k1 = _k("K1")
-    viec = bdk.viec_cua_ban(goc, anh=_anh([k1]), bay_gio=BAY_GIO)
-    v = _muc_theo_khoa(viec, "ghim:")
-    assert v is not None and v["xong_tay"] is True
-    assert "danh_dau_xong" in [n[1] for n in v["nut"]]
+    may = []
+    viec = bdk.viec_cua_ban(goc, anh=_anh([k1]), bay_gio=BAY_GIO, thu_muc_vm=thu_muc_vm, may_tu_lam=may)
+    assert _muc_theo_khoa(viec, "ghim") is None
+    assert [x["khoa"] for x in may] == ["may:ghim"] and "1 video" in may[0]["chu"]
 
 
 def test_viec_dong_5_nhap_thua_chua_danh_dau(tmp_path):
@@ -711,7 +714,8 @@ def test_anh_bang_goi_du_khoa(tmp_path):
     anh = _anh([_k("K1")])
     ra = bdk.anh_bang(goc, bay_gio=BAY_GIO, anh=anh, gio_lich="02:00",
                       so_du_micro=1_000_000 * MICRO_PER_VND, co_client=True)
-    assert set(ra) == {"kenh", "kenh_khac", "viec", "may", "luc"}
+    assert set(ra) == {"kenh", "kenh_khac", "viec", "may_tu_lam", "may", "luc"}
+    assert isinstance(ra["may_tu_lam"], list)
     assert ra["kenh"][0]["ma"] == "K1"
     assert "muc_the" in ra["kenh"][0]
     assert "video_ke_tiep" in ra["kenh"][0]
