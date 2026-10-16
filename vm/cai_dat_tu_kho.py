@@ -397,6 +397,12 @@ def dang_ky_lich(goc: str, *, gio: str = "02:00", phut_canh: int = 5,
         bao("  ShopAPI-Nao: {0}".format(msg5))
     except Exception as loi:  # noqa: BLE001
         bao("  ShopAPI-Nao: không đăng ký được ({0})".format(str(loi)[:120]))
+    # 16/10/2026: não học + kỹ năng (KyNang, NaoBoPhan, NaoBoPhan-Ngu, PhongThiNghiem) — máy mới cũng tự học như VPS đầu.
+    try:
+        _ok7, msg7 = lich_tu_chay.dang_ky_nao_mo_rong(goc)
+        bao("  Não học + kỹ năng: {0}".format(msg7))
+    except Exception as loi:  # noqa: BLE001
+        bao("  Não học + kỹ năng: không đăng ký được ({0})".format(str(loi)[:120]))
     # 16/10/2026: vận hành (core/van_hanh.py) — bật máy lên là mọi thứ tự chạy, chết thì tự bật lại. Lỗi không chặn cài.
     try:
         _ok6, msg6 = lich_tu_chay.dang_ky_van_hanh(goc)

@@ -652,6 +652,36 @@ def huy_nao(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[boo
     return True, ("Đã gỡ lịch bộ não." if that_su else "Chưa từng đặt lịch bộ não.")
 
 
+# ── Não học + kỹ năng (16/10/2026): bốn việc trước đây đăng ký TAY trên VPS đầu — máy mới cài xong phải tự có ───
+#
+# Thiếu chúng thì máy khách vẫn sản xuất nhưng KHÔNG tích luỹ/chắt lọc bài học và không chạy kỹ năng tự kích hoạt
+# (trong đó S05 đóng dấu chữ bìa — thiếu là gói chờ đăng bị giữ). Lệnh y hệt lịch đang chạy thật trên VPS đầu.
+# (tên, kiểu lịch, tham số lịch, module + đối số)
+VIEC_NAO_MO_RONG = (
+    ("ShopAPI-KyNang", ["/SC", "HOURLY", "/ST", "00:35"], "core.ky_nang tu-kich-hoat"),
+    ("ShopAPI-NaoBoPhan", ["/SC", "HOURLY", "/ST", "00:20"], "core.nao_bo_phan gom"),
+    ("ShopAPI-NaoBoPhan-Ngu", ["/SC", "DAILY", "/ST", "03:40"], "core.nao_bo_phan ngu"),
+    ("ShopAPI-PhongThiNghiem", ["/SC", "DAILY", "/ST", "06:30"], "core.phong_thi_nghiem --ngay"),
+)
+
+
+def dang_ky_nao_mo_rong(goc: str, *, chay_lenh: ChayLenh = _chay_lenh_mac_dinh) -> Tuple[bool, str]:
+    """Đặt 4 việc não học + kỹ năng (`/F` ghi đè — gọi lại bao nhiêu lần cũng vậy). Module nào không có thì bỏ qua
+    việc đó và nói ra; một việc hỏng không chặn việc khác."""
+    goc_tuyet = os.path.abspath(goc)
+    da, hong = [], []
+    for ten, lich, lenh in VIEC_NAO_MO_RONG:
+        mod = lenh.split()[0]
+        if not os.path.isfile(os.path.join(goc_tuyet, *mod.split(".")) + ".py"):
+            hong.append("{0} (thiếu {1})".format(ten, mod))
+            continue
+        tr = 'cmd /c cd /d "{0}" && "{1}" -X utf8 -m {2}'.format(goc_tuyet, _pythonw_cho(goc), lenh)
+        ma, ra = chay_lenh(["schtasks", "/Create", "/TN", ten] + lich + ["/TR", tr, "/F"])
+        (da if ma == 0 else hong).append(ten if ma == 0 else "{0} ({1})".format(ten, ra.strip()[:120] or ma))
+    chu = "Đã đặt {0}/{1} việc não học + kỹ năng: {2}.".format(len(da), len(VIEC_NAO_MO_RONG), ", ".join(da) or "—")
+    return not hong, chu + (" Hỏng: " + "; ".join(hong) if hong else "")
+
+
 # ── Vận hành: bật máy lên là mọi thứ tự chạy (16/10/2026, `core/van_hanh.py`) ─────────────────────────────────
 #
 # Việc thứ tám + chín: `ShopAPI-VanHanh` mỗi 5 phút một lượt canh (`pythonw van_hanh.py mot-luot` — kiểm giao diện,
