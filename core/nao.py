@@ -1719,6 +1719,16 @@ def chay_phien(goc: str = GOC, ep: bool = False, thu: bool = False, bay_gio: Opt
     if not ep and not thu and lan >= LAN_THU_TOI_DA_MOI_NGAY:
         print("Hôm nay đã thử {0} lần mà chưa xong — dừng, xem {1}.".format(lan, duong_log))
         return 1
+    # 17/10/2026 — chủ dự án: "các khâu đi qua ShopAPI, đừng để dính Claude Max 20x (sắp hết token)". Phiên não chỉ
+    # chạy được bằng Claude Code (thuê bao) → chủ chọn ví thì KHÔNG chạy, kể cả khi lịch bị bật lại hay gọi tay.
+    try:
+        from . import cai_dat as _cd  # noqa: PLC0415
+
+        if str(_cd.doc(goc).get("viet_chu_bang") or "").strip().lower() == "vi" and not ep:
+            print("Cài đặt chọn viết bằng ví ShopAPI — phiên não (Claude Code/thuê bao) không chạy. --ep để ép.")
+            return 0
+    except Exception:  # noqa: BLE001
+        pass
     duong = tim_claude(goc)
     if not duong:
         print("Không tìm thấy Claude Code (claude) trên máy.")
