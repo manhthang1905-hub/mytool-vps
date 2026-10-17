@@ -782,7 +782,21 @@ def ngu(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None, goi: Opti
         if ds and goi is None:
             from .. import viet_max  # noqa: PLC0415
 
-            if viet_max.co_claude_code():
+            # 17/10/2026 — chủ dự án: "Claude Max sắp hết token, all mọi thứ dùng ShopAPI". Cài đặt chọn ví
+            # (`viet_chu_bang: "vi"`) thì giấc ngủ cũng đi ví (cùng mô hình mạnh nhất ví có).
+            from .. import cai_dat  # noqa: PLC0415
+
+            if str(cai_dat.doc(goc).get("viet_chu_bang") or "").strip().lower() == "vi":  # chủ CHỌN ví (không phải "tự động thiếu CLI")
+                from ..giam_doc.quan_ly import goi_chat_that  # noqa: PLC0415
+
+                g = goi_chat_that(goc)
+                if g is None:
+                    kq["bo_qua"] = "van ví đang chặn gọi AI — giấc ngủ đợi lượt sau"
+                    ds = []
+                else:
+                    goi = lambda loi_nhac, bp: g(loi_nhac, mo_hinh="claude-opus-5", toi_da_token=4000,  # noqa: E731
+                                                 khoa="nao-bo-phan-ngu:" + bp)
+            elif viet_max.co_claude_code():
                 goi = lambda loi_nhac, bp: goi_max(ra, loi_nhac, bp)  # noqa: E731
             else:
                 kq["bo_qua"] = "máy không có Claude Code — giấc ngủ chỉ chạy bằng thuê bao Claude Max, KHÔNG đi ví"

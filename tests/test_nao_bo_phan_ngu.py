@@ -402,6 +402,24 @@ def test_ngu_khong_co_claude_thi_bo_qua_khong_di_vi(tmp_path, monkeypatch):
     assert kq["bo_phan"] == [] and "KHÔNG đi ví" in kq["bo_qua"]
 
 
+def test_ngu_chu_chon_vi_thi_ngu_bang_vi(tmp_path, monkeypatch):
+    """17/10/2026: Cài đặt `viet_chu_bang: "vi"` → giấc ngủ đi ví, không gọi Claude Max dù máy có CLI."""
+    from core import cai_dat, viet_max
+    from core.giam_doc import quan_ly
+
+    goc = _goc(tmp_path)
+    bg = time.time()
+    _anh_clip(goc, bg)
+    nbp.gom(goc, bay_gio=bg)
+    monkeypatch.setattr(cai_dat, "doc", lambda _g: {"viet_chu_bang": "vi"})
+    monkeypatch.setattr(viet_max, "co_claude_code", lambda: "claude")
+    monkeypatch.setattr(ngu_mod, "goi_max", lambda *a, **k: (_ for _ in ()).throw(AssertionError("không được gọi Max")))
+    da_goi = []
+    monkeypatch.setattr(quan_ly, "goi_chat_that", lambda _g, *a, **k: (lambda de_bai, **kw: (da_goi.append(kw), "")[1]))
+    ngu_mod.ngu(goc, bay_gio=bg, soat_tuan=False)
+    assert da_goi and da_goi[0]["khoa"].startswith("nao-bo-phan-ngu:")
+
+
 # ── B4: soát tuần ────────────────────────────────────────────────────────────────────────────────────────────
 
 def test_soat_tuan(tmp_path):
