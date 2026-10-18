@@ -633,6 +633,7 @@ def dung_kenh(goc: str, ma: str, kenh_goc: str, hang: Dict[str, Any], du: Dict[s
             "tu_chay": False,                                   # CHỈ bật ở `kich_hoat`, sau khi thiết lập kênh `xong`
             "nuoi_trang_chu": False, "thiet_lap_kenh": False,   # bật ở `kich_hoat` (Chrome chưa đăng nhập thì agent chỉ báo `can_nguoi` oan)
             "ngon_ngu_tai_khoan_dich": "",                      # xem `ngon_ngu_dich_bat_cho`: chỉ khai khi ngôn ngữ đã chứng minh
+            "tra_kho": "", "thay_boi": "",                      # 19/10: kênh gốc đã trả kho thì KHÔNG chép dấu trả kho sang kênh mới
         }
         if ctx.get("ngon_ngu"):
             khoa["ngon_ngu"] = ctx["ngon_ngu"]
