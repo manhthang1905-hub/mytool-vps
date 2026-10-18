@@ -2321,7 +2321,14 @@ class MayDangDom:
                 self.nk("bù MHKT {0}: bắt gói Studio lỗi: {1}".format(vid, str(loi)[:120]))
         if not da_mo:
             tb.mo(url, han=60)
-        return bool(tb.tim("tieu_de", han=40)), bat_duoc, goi
+        # 18/10/2026: video đang Thử nghiệm A/B tiêu đề không có ô tiêu đề (`ytcp-video-title-experiment` thay chỗ) —
+        # trước vá: "không mở được trang sửa" cho MỌI việc (bìa, MHKT) của video A/B, và hỏi bộ tự chữa vô ích.
+        co_chon = getattr(tb, "co_chon", None)
+        for _ in range(13):                                   # ≈ 40 giây như cũ (mỗi lượt dò 3 giây)
+            if tb.tim("tieu_de", han=3, tu_chua=False) or (
+                    callable(co_chon) and co_chon(["ytcp-video-title-experiment"])):
+                return True, bat_duoc, goi
+        return bool(tb.tim("tieu_de", han=3)), bat_duoc, goi   # hụt hẳn: có thể Studio đổi giao diện → cho tự chữa
 
     def _doc_phan_tu_mhkt(self, tb) -> list:
         try:
@@ -2470,14 +2477,18 @@ class MayDangDom:
         loi = []
         # ô tệp ẩn đứng thứ hai: nút ⋮ chỉ hiện khi rê chuột (đo 01/10: `tim` không thấy), còn ô
         # `input#file-loader` luôn có — đặt tệp thẳng vào đó là đường ít bấm nhất.
-        for duong in (("sua_bia_tai",), ("sua_bia_input",), ("sua_bia_menu", "sua_bia_doi"), ("nut_thumbnail",)):
+        cac_duong = (("sua_bia_tai",), ("sua_bia_input",), ("sua_bia_menu", "sua_bia_doi"), ("nut_thumbnail",))
+        for duong in cac_duong:
+            # 18/10/2026: mỗi đường chỉ có ở MỘT trạng thái trang (chưa / đã có bìa tuỳ chỉnh) — vắng là thường, KHÔNG
+            # hỏi bộ tự chữa; chỉ đường cuối cùng (mọi đường đều hụt = có thể Studio đổi giao diện) mới được chữa.
+            cuoi = duong is cac_duong[-1]
             try:
                 if len(duong) == 2:
-                    if not tb.tim(duong[0], han=5):
+                    if not tb.tim(duong[0], han=5, tu_chua=False):
                         loi.append("không thấy " + duong[0])
                         continue
                     tb.bam(duong[0], hau_dieu_kien=lambda: tb.co(duong[1]), han_hau=8)
-                elif not tb.tim(duong[0], han=5, hien=duong[0] != "sua_bia_input", cho_tat=True):
+                elif not tb.tim(duong[0], han=5, hien=duong[0] != "sua_bia_input", cho_tat=True, tu_chua=cuoi):
                     loi.append("không thấy " + duong[0])
                     continue
                 return "{0}:{1}".format(duong[-1], tb.dat_tep(duong[-1], anh, khoa_input="sua_bia_input"))
@@ -2517,7 +2528,15 @@ class MayDangDom:
                 if bat_duoc and goi is None:
                     return ket("khong-the", "video không còn trên kênh (Studio không trả video này)")
                 return ket("loi", "không mở được trang sửa video")
-            hien = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or (goi or {}).get("title") or "")
+            # 18/10/2026: video đang Thử nghiệm A/B tiêu đề — ô tiêu đề được thay bằng `ytcp-video-title-experiment`
+            # (5/19 lần tự chữa DOM hỏi AI vì ô này "biến mất"). YouTube đang chọn tiêu đề: KHÔNG đổi trực tiếp
+            # (luật A/B, `ab_tieu_de.TT_CHAN`) — bỏ phần tiêu đề, vẫn làm bìa nếu có.
+            if tieu_de and tb.co_chon(["ytcp-video-title-experiment"], han=3):
+                if not anh:
+                    return ket("khong-the", "video đang Thử nghiệm A/B tiêu đề — YouTube chọn tiêu đề, không đổi trực tiếp")
+                self.nk("sửa video {0}: đang Thử nghiệm A/B tiêu đề — bỏ phần tiêu đề, chỉ đổi bìa".format(nhan))
+                tieu_de = None
+            hien = chuan_hoa_tieu_de((tb.doc_chu("tieu_de") if tieu_de else "") or (goi or {}).get("title") or "")
             anh_truoc = url_anh_cua_goi(goi)
             if tieu_de:
                 if hien == chuan_hoa_tieu_de(tieu_de):
@@ -2556,7 +2575,8 @@ class MayDangDom:
         self.ngu(3)
         try:
             co_trang, _bat, goi2 = self._mo_trang_sua_bu(tb, vid)
-            doc2 = chuan_hoa_tieu_de(tb.doc_chu("tieu_de") or (goi2 or {}).get("title") or "") if co_trang else ""
+            doc2 = chuan_hoa_tieu_de(((tb.doc_chu("tieu_de") if tieu_de else "") or (goi2 or {}).get("title") or "")
+                                     ) if co_trang else ""
             tb.ghi_bang_chung("sua-doc-lai-" + vid)
         except Exception as loi:  # noqa: BLE001
             return ket("loi", "đã lưu nhưng đọc lại hỏng: {0}".format(str(loi)[:120]))

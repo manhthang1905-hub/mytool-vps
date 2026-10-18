@@ -248,6 +248,15 @@ class TestTrongKhauKichBan:
         assert bb["lan"] and all(not x["nhan"] and "độ dài" in x["ly_do"] for x in bb["lan"])
         assert bb["cuoi"] == 1.0 and bb["canh_bao"]                        # cảnh báo, nhưng KHÔNG chặn lượt
 
+    def test_ban_viet_lai_lech_20_phan_tram_van_nhan(self):
+        """18/10/2026 (TL1-T7/0033): bản hết chép lệch độ dài 17–21% từng bị loại → giữ bản chép 46%. Nay cổng độc đáo
+        chịu lệch tới max(2 × dung sai, 30%)."""
+        nguon = _chu(47, 3000)
+        ai = _AI(nguon, lambda _ln: _chu(48, 2400))                        # −20% — ngoài 15% của kênh, trong 30%
+        with tempfile.TemporaryDirectory() as d:
+            kb, bb, _log = _chay(d, ai)
+        assert bb["viet_lai"] and bb["cuoi"] < 0.05 and not bb["canh_bao"]
+
     def test_kenh_tat_khong_goi_viet_lai(self):
         nguon = _chu(44, 3000)
         ai = _AI(nguon, lambda _ln: pytest.fail("kênh tắt mà vẫn gọi viết lại"))

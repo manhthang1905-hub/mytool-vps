@@ -543,7 +543,7 @@ class StudioGia:
         }
         return bool(m.get(khoa))
 
-    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0):
+    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0, tu_chua=True):
         if khoa in self.k.loi and khoa in ("nut_chon_tep", "o_tep_video"):
             return None
         if not self._hien(khoa):
@@ -575,6 +575,9 @@ class StudioGia:
 
     def tim_chu(self, chu, han=5, cho_tat=False):
         return None
+
+    def co_chon(self, chon, han=0.0):
+        return False
 
     def co(self, khoa, **kw):
         return self.tim(khoa) is not None

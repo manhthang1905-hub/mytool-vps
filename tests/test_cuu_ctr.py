@@ -355,9 +355,12 @@ class TrangSuaVideoGia:
     def _ban(self):
         return self.dang is not None or self.anh_cho is not None
 
-    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0):
+    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0, tu_chua=True):
         v = self.video.get(self.vid)
         if v is None:
+            return None
+        if khoa == "tieu_de" and v.get("ab"):           # Thử nghiệm A/B tiêu đề: ô tiêu đề không có
+            self.tu_chua_hoi = getattr(self, "tu_chua_hoi", 0) + (1 if tu_chua else 0)
             return None
         if khoa in ("tieu_de", "sua_bia_input", "sua_huy_thay_doi"):  # như trang thật: chỉ có ô tệp ẩn
             return {"khoa": khoa}
@@ -368,7 +371,12 @@ class TrangSuaVideoGia:
     def co(self, khoa, **kw):
         return self.tim(khoa) is not None
 
+    def co_chon(self, chon, han=0.0):
+        return "ytcp-video-title-experiment" in chon and bool((self.video.get(self.vid) or {}).get("ab"))
+
     def doc_chu(self, x, han=5):
+        if x == "tieu_de" and not self.tim("tieu_de"):
+            return None
         v = self.video.get(self.vid) or {}
         return self.dang if self.dang is not None else v.get("title", "")
 
@@ -417,6 +425,14 @@ def test_sua_video_mot_doi_tieu_de_doc_lai_luu(tmp_path):
     kq = _may(tmp_path, tr).sua_video_mot("TL3-T7/0007", "FAKEsua0001", tieu_de="mới", tieu_de_cu="cũ")
     assert kq["ket"] == "ok" and kq["doc_lai"] == "mới" and tr.video["FAKEsua0001"]["title"] == "mới"
     assert tr.dem_luu == 1 and any(b.startswith("sua-doc-lai-") for b in tr.bang_chung)
+
+
+def test_sua_video_mot_dang_ab_tieu_de_thi_bo_khong_hoi_tu_chua(tmp_path):
+    """18/10/2026: ô tiêu đề vắng vì video đang Thử nghiệm A/B → bỏ việc (YouTube chọn tiêu đề), không hỏi tự chữa."""
+    tr = TrangSuaVideoGia({"FAKEsuaAB01": {"title": "cũ", "thumb": 1, "ab": True}})
+    kq = _may(tmp_path, tr).sua_video_mot("TL6-T7/0004", "FAKEsuaAB01", tieu_de="mới", tieu_de_cu="cũ")
+    assert kq["ket"] == "khong-the" and "A/B" in kq["ly_do"] and tr.dem_luu == 0
+    assert getattr(tr, "tu_chua_hoi", 0) == 0
 
 
 def test_sua_video_mot_chu_da_sua_tay_thi_khong_de(tmp_path):

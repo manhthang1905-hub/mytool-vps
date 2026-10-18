@@ -151,6 +151,17 @@ def test_chua_thanh_cong_ghi_tep_va_dung_lai(tmp_path):
     assert len(ai.de_bai) == 1
 
 
+def test_phan_tu_tuy_trang_thai_khong_hoi_tu_chua(tmp_path):
+    """18/10/2026: 19/19 lần tự chữa là phần tử VẮNG THEO TRẠNG THÁI (ô "Tải tệp lên" khi đã có bìa, ô tiêu đề khi đang
+    A/B) — nơi gọi đánh dấu `tu_chua=False` thì không hỏi AI, không ghi sổ."""
+    ai = AiGia({"chon": ["ytcp-button#next-v2"], "ly_do": "x"})
+    t, _nk = _trang([dict(NUT_MOI)], _chua(tmp_path, ai))
+    assert t.tim("nut_tiep", han=0, tu_chua=False) is None
+    assert ai.de_bai == [] and not (tmp_path / "tu-chua.jsonl").exists()
+    assert t.co_chon(["ytcp-button#next-v2"]) and not t.co_chon(["#khong-co"])
+    assert ai.de_bai == []
+
+
 def test_bo_chon_goc_khop_thi_khong_dung_toi_ai(tmp_path):
     ai = AiGia({"chon": ["ytcp-button#next-v2"]})
     dom = [{"khop": {"ytcp-uploads-dialog #next-button"}, "tag": "ytcp-button", "chu": "Tiếp"}]

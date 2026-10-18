@@ -553,6 +553,19 @@ def xet_doc(d: Dict[str, Any], mong: str) -> List[str]:
     return ly
 
 
+def doc_mot_luot(goi: Callable[..., str], tep: str, *, thang: Sequence[str], khoa: str) -> Optional[Dict[str, Any]]:
+    """MỘT lượt đọc mù (`soat_bia.doc_anh`). Lượt trả RỖNG (không dòng chữ nào — 18/10/2026 TL4-T7-K2-0012: ShopAPI 409
+    `idempotency_conflict` rồi một lượt rỗng bị chấm 「」 ≠ chữ đã soát) là lượt ĐỌC HỎNG, không phải "ảnh không có chữ":
+    đọc lại MỘT lần bằng khoá MỚI + mô hình kế; vẫn rỗng → None (chưa kiểm — giữ, thử lại). Bìa ngách luôn có chữ."""
+    from . import soat_bia  # noqa: PLC0415
+    d = soat_bia.doc_anh(goi, tep, thang=tuple(thang), khoa=khoa)
+    if d is not None and chuan(d.get("chu")):
+        return d
+    th = tuple(thang)
+    d = soat_bia.doc_anh(goi, tep, thang=th[1:] + th[:1] if len(th) > 1 else th, khoa=khoa + ":lai")
+    return d if d is not None and chuan(d.get("chu")) else None
+
+
 def kiem_anh(goi: Optional[Callable[..., str]], tep: str, mong: str, *, khoa: str = "cong-chu",
              so_lan: int = SO_LAN_DOC, thang: Sequence[Sequence[str]] = THANG_DOC) -> Dict[str, Any]:
     """`so_lan` (≥ 2) lượt đọc mù ĐỘC LẬP; MỌI lượt phải khớp tuyệt đối. Một lượt trượt → `ok` False (dừng ngay — hai
@@ -569,9 +582,9 @@ def kiem_anh(goi: Optional[Callable[..., str]], tep: str, mong: str, *, khoa: st
         ra.update(ok=False, ly_do=["không đọc được tệp ảnh"])
         return ra
     for i in range(so_lan):
-        d = soat_bia.doc_anh(goi, tep, thang=tuple(thang[i % len(thang)]), khoa="{0}:{1}:{2}".format(khoa, sha[:12], i))
+        d = doc_mot_luot(goi, tep, thang=tuple(thang[i % len(thang)]), khoa="{0}:{1}:{2}".format(khoa, sha[:12], i))
         if d is None:
-            ra["ly_do"].append("lượt đọc {0} không trả lời".format(i + 1))
+            ra["ly_do"].append("lượt đọc {0} không trả lời / đọc rỗng".format(i + 1))
             continue
         p = xet_doc(d, mong)
         ra["doc"].append(dict(d, ly_do=p))
@@ -870,7 +883,10 @@ def goi_cho_dang(goc: str, kenh: str) -> List[Dict[str, str]]:
         if not ma or "ĐÃ ĐĂNG" in tt or tt.startswith("BỎ"):
             continue
         goi = os.path.join(done, ma)
-        if os.path.isdir(goi):
+        # 18/10/2026 (TL1-T7-0006): gói ĐÃ DỌN (`da-don.json` — gói Bỏ / đã lên YouTube, video đã xoá) không còn chờ
+        # đăng — trước đây S05 cứ đòi dấu cho gói không ảnh này và bị tạm dừng sau 5 lần "hỏng".
+        if os.path.isdir(goi) and not (os.path.isfile(os.path.join(goi, "da-don.json"))
+                                       and not os.path.isfile(os.path.join(goi, "8-video.mp4"))):
             ra.append({"ma": ma, "goi": goi, "anh": anh_goi(goi)})
     return ra
 
@@ -898,42 +914,106 @@ def _chu_mong_goi(goc: str, kenh: str, ma: str) -> Dict[str, str]:
     return dict(nc, chu=chu, thu_muc_thumb=tm if os.path.isdir(tm) else "", doi_thu=chu_bia_doi_thu(os.path.dirname(tm)))
 
 
+def doc_chu_that(goi: Optional[Callable[..., str]], tep: str, *, khoa: str,
+                 thang: Sequence[Sequence[str]] = THANG_DOC) -> Dict[str, Any]:
+    """Chữ THẬT trên ảnh: HAI lượt đọc mù độc lập (mô hình đầu khác nhau, `doc_mot_luot`). `{ok: True, chu, doc}` khi
+    hai lượt khớp tuyệt đối nhau và không có chữ lạc / ký tự vỡ / vết xoá; `{ok: False, ly_do}` khi vênh nhau hoặc có
+    lỗi thấy được; `{ok: None}` khi một lượt hỏng (chưa đọc được — giữ, thử lại)."""
+    if goi is None:
+        return {"ok": None, "ly_do": "không có hàm gọi AI"}
+    sha = sha1_tep(tep)
+    doc = []
+    for i in range(SO_LAN_DOC):
+        d = doc_mot_luot(goi, tep, thang=tuple(thang[i % len(thang)]), khoa="{0}:{1}:{2}".format(khoa, sha[:12], i))
+        if d is None:
+            return {"ok": None, "ly_do": "lượt đọc {0} không trả lời / đọc rỗng — chưa kiểm".format(i + 1), "doc": doc}
+        doc.append(d)
+    a, b = doc
+    if not khop(a.get("chu"), b.get("chu")):
+        return {"ok": False, "ly_do": "hai lượt đọc vênh nhau: 「{0}」 / 「{1}」".format(
+            str(a.get("chu"))[:30], str(b.get("chu"))[:30]), "doc": doc}
+    loi = [x for d in doc for x in xet_doc(d, d.get("chu") or "")]
+    if loi:
+        return {"ok": False, "ly_do": "; ".join(dict.fromkeys(loi))[:300], "doc": doc}
+    return {"ok": True, "chu": " ".join(str(a.get("chu") or "").split()), "doc": doc}
+
+
+def _khoa_lan(ma: str) -> str:
+    """Khoá idempotency theo GIỜ cho các lượt đọc/soát của S05: trong một lượt chạy cùng khoá (gọi lại = cùng việc);
+    lượt S05 sau (giờ khác) khoá MỚI — trước đây khoá cố định theo sha1 làm lượt đọc rỗng/lỗi bị phát lại mãi và lời
+    nhắc đổi thì ShopAPI trả 409 `idempotency_conflict` (TL4-T7-K2-0012, 18/10/2026)."""
+    return "dau-goi:{0}:{1}".format(ma, _dt.datetime.now().strftime("%Y%m%d%H"))
+
+
 def dau_goi(goi: Optional[Callable[..., str]], goc: str, kenh: str, ma: str, thu_muc_goi: str,
             log: Callable[[str], None] = print) -> Dict[str, Any]:
-    """MỘT gói chờ đăng: bìa đã có dấu → xong. Không: soát chữ bìa (sai → viết lại) → đọc bìa hai lượt → dấu; bìa sai
-    chữ → bìa dự phòng chữ vẽ bằng mã trên nền sạch của lượt (thay `CHON-*` của gói, bản cũ vào `_bi-loai/`, cập nhật
-    hồ sơ). AI hỏng → GIỮ (`ok` None, ghi não) — máy đăng không tải gói không dấu, lượt sau thử lại."""
+    """MỘT gói chờ đăng: bìa đã có dấu → xong. Không có dấu:
+
+    1. (18/10/2026 — gói bàn giao TRƯỚC khi có cổng, chữ bìa trong hồ sơ/kế hoạch cũ/lệch: TL4-T7-K2-0012 bìa in
+       「嫌いじゃない。でも、会いたくない。」 mà S05 so với 「会いたい 気がしない」) đọc CHỮ THẬT trên ảnh hai lượt độc lập
+       (`doc_chu_that`); khớp nhau → soát chữ ấy bằng luật hiện hành (`soat_chat`: đúng tiếng Nhật, đúng chủ đề, không
+       chép đối thủ) → đạt thì ĐÓNG DẤU chữ ấy;
+    2. hai lượt vênh / chữ trên ảnh không qua soát → chữ bìa mong đợi của gói (`_chu_mong_goi`) soát (sai → viết lại);
+       chữ trên ảnh trùng chữ ấy → dấu; không → bìa dự phòng chữ ĐÃ SOÁT vẽ bằng mã trên nền sạch của lượt (đúng kiểu
+       kênh, không che mặt — thay `CHON-*` của gói, bản cũ vào `_bi-loai/`); không vẽ được → GIỮ.
+    Lượt đọc/AI hỏng → GIỮ (`ok` None — "chưa kiểm", không tính lần hỏng của S05). Máy đăng không tải gói không dấu."""
     anh = anh_goi(thu_muc_goi)
     ra: Dict[str, Any] = {"ma": ma, "anh": os.path.basename(anh), "ok": None, "ly_do": ""}
     if anh and not kiem_dau(anh):
         ra.update(ok=True, ly_do="đã có dấu")
         return ra
     cm = _chu_mong_goi(goc, kenh, ma)
-    if not cm["chu"]:
-        ra.update(ok=False, ly_do="không biết chữ bìa mong đợi của gói")
-    else:
-        s = chot_chu(goi, cm["chu"], tieu_de=cm["tieu_de"], ngu_canh=cm["ngu_canh"], khoa="dau-goi:{0}:soat".format(ma),
-                     doi_thu=cm.get("doi_thu") or ())
-        if s.get("ok") is not True:
-            ra.update(ok=s.get("ok"), ly_do="chữ bìa chưa qua soát: " + str(s.get("ly_do") or ""))
-        else:
-            chu = str(s["chu"])
-            kq = xac_minh(goi, anh, chu, goc=goc, kenh=kenh, ma_goi=ma, khoa="dau-goi:" + ma) if anh else {
-                "ok": False, "ly_do": ["gói không có ảnh bìa"]}
-            ra.update(ok=kq["ok"], ly_do="; ".join(kq.get("ly_do") or []), chu=chu)
-            if kq["ok"] is False and cm["thu_muc_thumb"]:
-                d = bia_ma_du_phong(goi, cm["thu_muc_thumb"], chu, goc=goc, kenh=kenh, ma_goi=ma,
-                                    khoa="dau-goi:{0}:ma".format(ma), log=log)
-                if d.get("tep"):
-                    _thay_anh_goi(goc, kenh, ma, thu_muc_goi, anh, d["tep"])
-                    ra.update(ok=True, ly_do="bìa cũ sai chữ ({0}) → bìa dự phòng chữ vẽ bằng mã {1}".format(
-                        ra["ly_do"][:120], os.path.basename(d["tep"])), thay=os.path.basename(d["tep"]))
-                elif d.get("chua_kiem"):
-                    ra.update(ok=None, ly_do=ra["ly_do"] + " — bìa dự phòng chưa đọc lại được (AI lỗi)")
+    ra.update(_dau_goi_buoc(goi, goc, kenh, ma, thu_muc_goi, anh, cm, _khoa_lan(ma), log))
     if ra["ok"] is not True:
         ghi_nao(goc, "loi", kenh=kenh, ma_goi=ma, noi_dung="GIỮ gói chờ đăng {0}: bìa chưa có dấu cổng chữ — {1}".format(
             ma, ra["ly_do"][:300]), khoa="dau-goi:{0}:{1}:{2}".format(ma, _dt.date.today().isoformat(), ra["ok"]))
     return ra
+
+
+def _dau_goi_buoc(goi: Optional[Callable[..., str]], goc: str, kenh: str, ma: str, thu_muc_goi: str, anh: str,
+                  cm: Dict[str, Any], khoa: str, log: Callable[[str], None]) -> Dict[str, Any]:
+    """Các bước của `dau_goi` cho bìa CHƯA có dấu → `{ok, ly_do, [chu, thay]}` (ok None = GIỮ, thử lại)."""
+    loi_anh = "gói không có ảnh bìa"
+    that: Dict[str, Any] = {}
+    if anh:
+        that = doc_chu_that(goi, anh, khoa=khoa + ":doc")
+        if that["ok"] is None:
+            return {"ok": None, "ly_do": "chưa đọc được chữ trên bìa (" + that["ly_do"] + ") — GIỮ, thử lại"}
+        if that["ok"]:
+            s = soat_chat(goi, that["chu"], tieu_de=cm["tieu_de"], ngu_canh=cm["ngu_canh"], khoa=khoa + ":soat-anh",
+                          doi_thu=cm.get("doi_thu") or ())
+            if s.get("ok") is None:
+                return {"ok": None, "ly_do": "chưa soát được chữ trên bìa: " + str(s.get("ly_do") or "")}
+            if s.get("ok") is True and not s.get("sua"):
+                dau = ghi_dau(anh, that["chu"], doc=[x.get("chu") or "" for x in that["doc"]], cach="doc2-goi")
+                return {"ok": True if dau else None, "chu": that["chu"],
+                        "ly_do": "chữ trên bìa 「{0}」 đọc 2 lượt khớp + qua soát → đóng dấu".format(that["chu"][:40])
+                        if dau else "không ghi được dấu"}
+            loi_anh = "chữ trên bìa 「{0}」 không qua soát: {1}".format(that["chu"][:30], ly_do_viet_lai(s)[:160])
+        else:
+            loi_anh = that["ly_do"]
+    # Chữ trên ảnh không dùng được → chữ bìa mong đợi của gói (soát, sai → viết lại) → bìa dự phòng vẽ bằng mã.
+    if not cm["chu"]:
+        return {"ok": None, "ly_do": loi_anh + " — không biết chữ bìa mong đợi: GIỮ (cần người xem)"}
+    s = chot_chu(goi, cm["chu"], tieu_de=cm["tieu_de"], ngu_canh=cm["ngu_canh"], khoa=khoa + ":soat",
+                 doi_thu=cm.get("doi_thu") or ())
+    if s.get("ok") is not True:
+        return {"ok": s.get("ok"), "ly_do": loi_anh + "; chữ bìa mong đợi chưa qua soát: " + str(s.get("ly_do") or "")}
+    chu = str(s["chu"])
+    if anh and that.get("chu") and khop(that["chu"], chu):
+        dau = ghi_dau(anh, chu, doc=[x.get("chu") or "" for x in that["doc"]], cach="doc2-goi")
+        return {"ok": True if dau else None, "chu": chu, "ly_do": "chữ trên bìa = chữ bìa đã soát → đóng dấu"}
+    if not cm["thu_muc_thumb"]:
+        return {"ok": None, "chu": chu, "ly_do": loi_anh + " — lượt đã dọn, không còn nền sạch để vẽ bìa thay: GIỮ"}
+    d = bia_ma_du_phong(goi, cm["thu_muc_thumb"], chu, goc=goc, kenh=kenh, ma_goi=ma, khoa=khoa + ":ma", log=log)
+    if d.get("tep"):
+        _thay_anh_goi(goc, kenh, ma, thu_muc_goi, anh, d["tep"])
+        return {"ok": True, "chu": chu, "thay": os.path.basename(d["tep"]),
+                "ly_do": "bìa cũ không dùng được ({0}) → bìa dự phòng chữ vẽ bằng mã {1}".format(
+                    loi_anh[:120], os.path.basename(d["tep"]))}
+    if d.get("chua_kiem"):
+        return {"ok": None, "chu": chu, "ly_do": loi_anh + " — bìa dự phòng chưa đọc lại được (AI lỗi): GIỮ"}
+    return {"ok": None, "chu": chu, "ly_do": loi_anh + " — không nền sạch nào ra bìa dự phòng đạt: GIỮ"}
 
 
 def _thay_anh_goi(goc: str, kenh: str, ma: str, thu_muc_goi: str, cu: str, moi: str) -> None:
@@ -968,7 +1048,7 @@ def dau_cac_goi(goc: str, kenh: str, goi: Optional[Callable[..., str]] = None,
     ra = []
     for g in ds:
         r = dau_goi(goi, goc, kenh, g["ma"], g["goi"], log=log)
-        log("{0}: {1} — {2}".format(g["ma"], {True: "CÓ DẤU", False: "TRƯỢT (giữ)", None: "GIỮ (AI lỗi)"}[r["ok"]],
+        log("{0}: {1} — {2}".format(g["ma"], {True: "CÓ DẤU", False: "TRƯỢT (giữ)", None: "GIỮ (chưa xong — thử lại)"}[r["ok"]],
                                     r.get("ly_do")))
         ra.append(r)
     return ra
@@ -1026,7 +1106,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         kenh = [a.kenh] if a.kenh else sorted(k for k in os.listdir(os.path.join(goc, "CHANNEL"))
                                               if not k.startswith("_") and os.path.isdir(os.path.join(goc, "CHANNEL", k)))
         ra = [r for k in kenh for r in dau_cac_goi(goc, k)]
-        return 0 if all(r["ok"] is True for r in ra) else 1
+        # 18/10/2026: GIỮ (chưa kiểm được / chưa làm được bìa thay) = mã HOÃN 10 của skill (`ky_nang_tu.MA_HOAN`) — không
+        # tính lần hỏng (S05 TL1 bị tạm dừng sau 5 lần "hỏng" do lượt đọc lỗi / gói cũ không ảnh).
+        return 0 if all(r["ok"] is True for r in ra) else 1 if any(r["ok"] is False for r in ra) else 10
     if a.lenh == "kiem":
         for t in a.tep:
             print("{0}: {1}".format(t, kiem_dau(t) or "CÓ DẤU — " + json.dumps(tom_tat_dau(t), ensure_ascii=False)))

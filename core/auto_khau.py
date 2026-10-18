@@ -135,6 +135,8 @@ TOKEN_CANH = 16384
 #:
 #: Đặt `chenh_cho_phep` trong `kenh.yaml` để nới; bỏ trống thì lấy số này.
 CHENH_CHO_PHEP = 0.15
+#: Bản viết lại của CỔNG ĐỘC ĐÁO (bớt chép nguồn) được lệch độ dài tối thiểu ngần này (xem `_khau_doc_dao` / `kiem`).
+DOC_DAO_LECH_TOI_THIEU = 0.30
 
 
 def _chenh_cho_phep(k: Kenh) -> float:
@@ -2715,10 +2717,16 @@ def _cong_doc_dao(bc: "BoiCanh", luot: LuotChay, k: Kenh, chung: Dict[str, Any],
                        toi_da_token=max(_token_viet(len(ban_dang), mt), min(TOKEN_VIET_TRAN, 2 * len(ban_dang))))
             return _don_ban(moi, k.ngon_ngu)
 
+        # 18/10/2026 (tự kiểm, `workspace/chan-doan/loi-lap-lai-17-10.md`): TL1-T7/0033 viết lại hết chép 46% → 3,1% và
+        # 1,1% nhưng cả hai bản bị LOẠI vì lệch độ dài 17% / 21% > 15% → giữ bản chép 46% ("vẫn đi tiếp"). Chép là rủi ro
+        # lớn nhất lúc xét kiếm tiền; độ dài thì chủ "không quá quan trọng trong 10–15 phút". Bản viết lại của cổng độc
+        # đáo được lệch tới `max(2 × dung sai kênh, DOC_DAO_LECH_TOI_THIEU)`.
+        cp_dd = max(2.0 * cp, DOC_DAO_LECH_TOI_THIEU)
+
         def kiem(moi: str, goc: str) -> str:
-            if mt > 0 and _lech(moi, mt) > max(_lech(goc, mt), cp) + 1e-9:
-                return "lệch độ dài {0:.0%} (kênh cho phép {1:.0%})".format(_lech(moi, mt), cp)
-            if mt <= 0 and abs(_do_doc(moi) - _do_doc(goc)) > cp * max(1, _do_doc(goc)):
+            if mt > 0 and _lech(moi, mt) > max(_lech(goc, mt), cp_dd) + 1e-9:
+                return "lệch độ dài {0:.0%} (cổng độc đáo cho phép {1:.0%})".format(_lech(moi, mt), cp_dd)
+            if mt <= 0 and abs(_do_doc(moi) - _do_doc(goc)) > cp_dd * max(1, _do_doc(goc)):
                 return "đổi độ dài {0} → {1} ký tự".format(_do_doc(goc), _do_doc(moi))
             if ghi_chu_ky_thuat_con_lai(moi):
                 return "còn ghi chú kỹ thuật của AI"
@@ -8784,6 +8792,33 @@ class LoiCanhKhongLamDuoc(RuntimeError):
     """Có cảnh đã cứu hết vòng mà vẫn không ra clip thật — cần người xem."""
 
 
+#: ĐỢT CỨU MỚI (18/10/2026, tự kiểm `workspace/chan-doan/loi-lap-lai-17-10.md`): TL6-T7/0012 cảnh 138 hết 2 vòng cứu
+#: lúc 15/10 15:40 giữa một cơn máy chủ treo ("nhận việc rồi bỏ đó … chưa trả kết quả" — lỗi PHÍA MÁY CHỦ, không phải
+#: lỗi cảnh), rồi sổ `_cuu-clip.json` đóng băng cảnh ấy vĩnh viễn: 85 lần nhặt lại trong 49 giờ không gọi máy chủ lần
+#: nào, tới khi L3 bỏ cả video. Nay: cảnh hết vòng được một ĐỢT CỨU MỚI (đủ `SO_VONG_CUU_CANH` vòng: thử lại → viết lại
+#: lời nhắc clip → vẽ lại ảnh — cùng chuẩn chất lượng) sau `GIO_DOT_CUU_MAY_CHU` giờ (lỗi cuối phía máy chủ) hoặc
+#: `GIO_DOT_CUU_NOI_DUNG` giờ (lỗi nội dung), tối đa `DOT_CUU_TOI_DA` đợt. Chưa tới giờ đợt mới → `LoiClipChoDotCuu`
+#: (câu có "máy chủ vẫn chưa trả kết quả" → `su_co.CHO_TIEP`, L3 không tính lần). Hết đợt → `LoiCanhKhongLamDuoc` như cũ.
+DOT_CUU_TOI_DA = 3
+GIO_DOT_CUU_MAY_CHU, GIO_DOT_CUU_NOI_DUNG = 3.0, 6.0
+
+
+class LoiClipChoDotCuu(RuntimeError):
+    """Cảnh hết vòng cứu đang chờ đợt cứu mới — lượt dừng tạm, lượt nhặt lại sau tự cứu tiếp."""
+
+
+def gio_cho_dot_cuu(muc: Dict[str, Any], bay: Optional[float] = None) -> float:
+    """Còn bao nhiêu giờ nữa tới đợt cứu mới của một mục sổ cứu (≤ 0 = tới rồi). Thuần."""
+    bay = time.time() if bay is None else bay
+    loi = str(muc.get("loi") or "")
+    gio = GIO_DOT_CUU_NOI_DUNG if ("vì nội dung" in loi or "từ chối" in loi) else GIO_DOT_CUU_MAY_CHU
+    try:
+        luc = time.mktime(time.strptime(str(muc.get("luc") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, OverflowError):
+        return 0.0
+    return gio - (bay - luc) / 3600.0
+
+
 def _dau_loi_nhac(c: Dict[str, Any]) -> str:
     return VanTay._dau(c.get("video_prompt") or "", c.get("img_prompt") or "")
 
@@ -8854,6 +8889,7 @@ def _cuu_canh_thieu_clip(bc: BoiCanh, luot: LuotChay, con: Sequence[Dict[str, An
     so_cuu = _doc_so_cuu(luot)
     het_vong: List[int] = []
     moi_het: List[int] = []
+    cho_dot: List[Tuple[int, float]] = []
     hop: List[Any] = []     # ThamChieu dựng lười — chỉ khi phải vẽ lại ảnh
 
     def lay_hop():
@@ -8870,6 +8906,17 @@ def _cuu_canh_thieu_clip(bc: BoiCanh, luot: LuotChay, con: Sequence[Dict[str, An
         if muc.get("dau") and muc.get("dau") != _dau_loi_nhac(c):
             muc = {}        # người đã sửa lời nhắc → cứu lại từ đầu
         vong = int(muc.get("vong") or 0)
+        dot = int(muc.get("dot") or 0)
+        if vong >= SO_VONG_CUU_CANH and not co_clip(so_canh) and dot < DOT_CUU_TOI_DA:
+            con_gio = gio_cho_dot_cuu(muc)
+            if con_gio > 0:
+                cho_dot.append((so_canh, con_gio))
+            else:
+                dot += 1
+                bc.ghi("  cứu cảnh {0}: ĐỢT CỨU MỚI {1}/{2} — đợt trước hết vòng lúc {3} ({4}).".format(
+                    so_canh, dot, DOT_CUU_TOI_DA, str(muc.get("luc") or "?")[:16].replace("T", " "),
+                    str(muc.get("loi") or "?")[:100]))
+                vong = 0
         loi = loi_canh.get(so_canh)
         while vong < SO_VONG_CUU_CANH and not co_clip(so_canh):
             bc.kiem_dung()
@@ -8884,11 +8931,14 @@ def _cuu_canh_thieu_clip(bc: BoiCanh, luot: LuotChay, con: Sequence[Dict[str, An
                 bc.ghi("  cứu cảnh {0}: đã có clip thật.".format(so_canh))
                 break
             so_cuu[str(so_canh)] = {"vong": vong, "loi": str(loi or "")[:300],
-                                    "dau": _dau_loi_nhac(c),
+                                    "dau": _dau_loi_nhac(c), "dot": dot,
                                     "luc": time.strftime("%Y-%m-%dT%H:%M:%S")}
             _ghi_so_cuu(luot, so_cuu)
             if vong >= SO_VONG_CUU_CANH:
-                moi_het.append(so_canh)
+                if dot < DOT_CUU_TOI_DA:
+                    cho_dot.append((so_canh, gio_cho_dot_cuu(so_cuu[str(so_canh)])))
+                else:
+                    moi_het.append(so_canh)
         if co_clip(so_canh):
             if str(so_canh) in so_cuu:
                 so_cuu.pop(str(so_canh), None)
@@ -8897,6 +8947,14 @@ def _cuu_canh_thieu_clip(bc: BoiCanh, luot: LuotChay, con: Sequence[Dict[str, An
             het_vong.append(so_canh)
     if not het_vong:
         return "xong"
+    cho = {s: g for s, g in cho_dot if s in het_vong}
+    if cho and len(cho) == len(het_vong):
+        cau = ("cảnh {0} chờ đợt cứu mới sau {1:.1f} giờ (đợt trước hết vòng — lỗi cuối: {2}); máy chủ vẫn chưa trả "
+               "kết quả cho cảnh này — lượt tự chạy tiếp ở lần nhặt lại sau, không dựng video vá.").format(
+                   ", ".join(str(s) for s in sorted(cho)), max(0.0, max(cho.values())),
+                   str((so_cuu.get(str(min(cho))) or {}).get("loi") or "?")[:120])
+        bc.ghi("  [CHỜ ĐỢT CỨU] " + cau)
+        raise LoiClipChoDotCuu(cau)
     ds = ", ".join(str(x) for x in het_vong[:12]) + ("…" if len(het_vong) > 12 else "")
     ly_do = str((so_cuu.get(str(het_vong[0])) or {}).get("loi") or "")[:160]
     cau = ("cảnh {0} không làm được clip thật — cần người xem (đã thử lại, viết lại lời nhắc "

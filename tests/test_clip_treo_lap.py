@@ -208,6 +208,7 @@ def test_het_vong_cuu_van_dung_bao_nguoi_va_lan_sau_nem_ngay(cong, monkeypatch):
 
     bao = []
     monkeypatch.setattr(bao_dong, "bao_dong_khan", lambda *a, **k: bao.append(a) or True)
+    monkeypatch.setattr(ak, "DOT_CUU_TOI_DA", 0)        # đợt cuối (không còn đợt cứu mới)
     cong.trang["treo"] = lambda so, *_a: so == 2       # treo với mọi ảnh, mọi lời nhắc
     with pytest.raises(ak.LoiCanhKhongLamDuoc):
         ak._khau_clip(cong.bc)(cong.luot, cong.luot.tt("clip"))
@@ -255,3 +256,39 @@ def test_het_han_muc_van_quay_ve_cho(cong, monkeypatch):
     assert ket == {"so_clip": 3}
     assert cong.trang["goi_ai"] == [] and cong.trang["ve_anh"] == []
     assert any("hết hạn mức" in x for x in cong.nhat_ky)
+
+
+def test_het_vong_cho_dot_cuu_moi_roi_tu_cuu_lai(cong, monkeypatch):
+    """18/10/2026 (TL6-T7/0012): hết vòng vì máy chủ treo KHÔNG đóng băng cảnh vĩnh viễn — chờ đợt cứu mới (không
+    báo người), tới giờ thì cứu lại đủ vòng; hết mọi đợt mới báo người."""
+    from core import bao_dong, su_co
+
+    bao = []
+    monkeypatch.setattr(bao_dong, "bao_dong_khan", lambda *a, **k: bao.append(a) or True)
+    monkeypatch.setattr(ak, "DOT_CUU_TOI_DA", 1)
+    cong.trang["treo"] = lambda so, *_a: so == 2
+    with pytest.raises(ak.LoiClipChoDotCuu) as e:
+        ak._khau_clip(cong.bc)(cong.luot, cong.luot.tt("clip"))
+    assert su_co.phan_loai(e.value) == su_co.CHO_TIEP and bao == []
+    ve = len(cong.trang["ve_anh"])
+    with pytest.raises(ak.LoiClipChoDotCuu):
+        ak._khau_clip(cong.bc)(cong.luot, cong.luot.tt("clip"))
+    assert len(cong.trang["ve_anh"]) == ve, "chưa tới giờ đợt mới: không vào vòng cứu"
+    p = os.path.join(cong.luot.thu_muc, ak.TEP_CUU_CANH)
+    so = json.loads(open(p, encoding="utf-8").read())
+    so["2"]["luc"] = "2026-01-01T00:00:00"                 # đợt trước đã lâu
+    with open(p, "w", encoding="utf-8") as tep:
+        json.dump(so, tep)
+    with pytest.raises(ak.LoiCanhKhongLamDuoc):
+        ak._khau_clip(cong.bc)(cong.luot, cong.luot.tt("clip"))
+    assert len(cong.trang["ve_anh"]) == ve + ak.SO_VONG_CUU_CANH, "đợt mới: vẽ lại ảnh đủ vòng"
+    assert [a[0] for a in bao] == ["clip_canh_khong_lam_duoc"]
+    assert json.loads(open(p, encoding="utf-8").read())["2"]["dot"] == 1
+
+
+def test_gio_cho_dot_cuu():
+    import time as _t
+    luc = _t.strftime("%Y-%m-%dT%H:%M:%S", _t.localtime(_t.time() - 3600))
+    assert 1.9 < ak.gio_cho_dot_cuu({"luc": luc, "loi": "máy chủ treo"}) < 2.1
+    assert 4.9 < ak.gio_cho_dot_cuu({"luc": luc, "loi": "job hỏng vì nội dung"}) < 5.1
+    assert ak.gio_cho_dot_cuu({}) == 0.0

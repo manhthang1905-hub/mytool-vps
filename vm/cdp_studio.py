@@ -553,10 +553,19 @@ class TrangStudio:
         return pt[khoa]
 
     def tim(self, khoa: str, han: float = 10.0, hien: bool = True,
-            cho_tat: bool = False, trong: dict = None, thu: int = 0):
+            cho_tat: bool = False, trong: dict = None, thu: int = 0, tu_chua: bool = True):
         """Dò `khoa` tới khi thấy hoặc hết `han` giây (hỏi DOM cục bộ mỗi
-        0,5–1s, không gọi mạng). Trả dict {khop, cach, rect, id, ...} hoặc None."""
-        return self._tim_spec(khoa, self._spec(khoa), han, hien, cho_tat, trong, thu)
+        0,5–1s, không gọi mạng). Trả dict {khop, cach, rect, id, ...} hoặc None.
+
+        `tu_chua=False` (18/10/2026): phần tử TUỲ TRẠNG THÁI trang (ô "Tải tệp lên" chỉ có khi video CHƯA có bìa
+        tuỳ chỉnh; ô tiêu đề vắng khi video đang Thử nghiệm A/B) — vắng là chuyện thường, nơi gọi còn đường khác:
+        KHÔNG hỏi bộ tự chữa. Trước vá 19/19 lần tự chữa đều là các ca này (AI đáp "trang ở trạng thái khác") → 0%."""
+        return self._tim_spec(khoa, self._spec(khoa), han, hien, cho_tat, trong, thu, tu_chua=tu_chua)
+
+    def co_chon(self, chon: list, han: float = 0.0) -> bool:
+        """Có phần tử khớp một trong `chon` (bộ chọn CSS thô, không qua studio-selectors, không dự phòng/tự chữa)."""
+        return self._tim_spec("chon:" + "|".join(chon), {"chon": list(chon), "chu": []}, han, False, True, None, 0,
+                              ghi_du_phong=False) is not None
 
     def tim_chu(self, chu: list, han: float = 5.0, cho_tat: bool = False):
         """Dò nút/mục theo CHỮ bằng (mục menu ngôn ngữ...). Không tính dự phòng."""
@@ -565,7 +574,7 @@ class TrangStudio:
         return pt
 
     def _tim_spec(self, khoa, spec, han, hien=True, cho_tat=False, trong=None, thu=0,
-                  ghi_du_phong=True):
+                  ghi_du_phong=True, tu_chua=True):
         het = time.monotonic() + max(0.0, float(han))
         o = {"an": (not hien) or bool(spec.get("an")), "cho_tat": cho_tat, "thu": thu}
         if trong and trong.get("id"):
@@ -590,7 +599,7 @@ class TrangStudio:
                     self.du_phong[khoa] = kq.get("cach")
                 return kq
             if time.monotonic() >= het:
-                if ghi_du_phong and not trong and float(han) >= tu_chua_dom.NGUONG_HAN and not o["an"]:
+                if tu_chua and ghi_du_phong and not trong and float(han) >= tu_chua_dom.NGUONG_HAN and not o["an"]:
                     return self._thu_tu_chua(khoa, o)
                 return None
             self.cdp.bom(0.1)

@@ -126,7 +126,7 @@ class TrangSuaGia:
             "hop_con_huy": s == "soan",
         }.get(khoa))
 
-    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0):
+    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0, tu_chua=True):
         if not self._hien(khoa):
             return None
         so = 6 if khoa == "mhkt_mau" else 1

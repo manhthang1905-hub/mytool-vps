@@ -633,6 +633,11 @@ def _dung_vi_phia_shopapi(run: Dict[str, Any]) -> bool:
     thật (không dựa vào loại mặc định `CHET` của câu lạ)."""
     sx = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else {}
     for cau in (sx.get("loi") or "", sx.get("loi_dung") or ""):
+        # 18/10/2026: cảnh đã hết MỌI đợt cứu clip ("không làm được clip thật") là lỗi CỦA LƯỢT dù lỗi cuối có chữ
+        # "máy chủ vẫn chưa trả kết quả" — trước vá TL6-T7/0012 được miễn trần, nhặt lại 85 lần/49 giờ không làm gì.
+        # (Chờ đợt cứu mới — `auto_khau.LoiClipChoDotCuu` — vẫn là chờ phía máy chủ.)
+        if "không làm được clip thật" in str(cau):
+            return False
         if cau and su_co.phan_loai(RuntimeError(str(cau))) in _LOAI_LOI_CHO_NGOAI:
             return True
     return False

@@ -456,6 +456,7 @@ def go_bom(goc, kenh) -> Tuple[bool, str]:
 # S03 · Đổi bìa gấp ────────────────────────────────────────────────────────────
 
 GIO_BIA_GAP = 12           # video lên sóng trong ngần này giờ (hoặc đã lên) thì không đợi khe đêm
+GIO_SUA_DOI = 36           # việc sửa (bìa / tiêu đề) chờ khe đêm quá ngần này giờ = đói khe → làm ngay khi máy rảnh
 NHUONG_PHIEN_PHUT = 68     # = agent.SUA_NHUONG_PHIEN_PHUT (60) + BU_MHKT_TOI_THIEU_PHUT (8)
 
 
@@ -484,11 +485,18 @@ def _bia_gap(goc, kenh, bay) -> List[dict]:
     """Việc `bia` còn phải làm trong `vm/logs/hang-sua.json` (ĐÚNG bộ lọc `may_dang_dom.hang_sua_kenh` mà agent dùng)
     của video lên sóng < `GIO_BIA_GAP` giờ nữa hoặc đã lên sóng."""
     mdd = _nap_vm("may_dang_dom")
-    viec = [v for v in mdd.hang_sua_kenh(mdd.doc_hang_sua(_vm(goc, "logs", "hang-sua.json")), kenh,
-                                         bay.date().isoformat(), toi_da=99) if v.get("anh")]
+    viec = list(mdd.hang_sua_kenh(mdd.doc_hang_sua(_vm(goc, "logs", "hang-sua.json")), kenh,
+                                  bay.date().isoformat(), toi_da=99))
     gio = _gio_len_song(goc, kenh) if viec else {}
-    return [dict(v, len_song=gio[v.get("ma_goi")]) for v in viec
-            if v.get("ma_goi") in gio and gio[v["ma_goi"]] - bay < _dt.timedelta(hours=GIO_BIA_GAP)]
+
+    def doi(v) -> bool:
+        """18/10/2026 (tự kiểm): việc sửa (bìa HAY tiêu đề) chờ khe đêm quá `GIO_SUA_DOI` giờ — khe 02–05 chật (nhường
+        phiên đăng + quét ngày), TL6-T7-0004 đổi tiêu đề chờ 166 giờ không tới lượt → làm như việc gấp."""
+        t = _doc_luc(v.get("them_luc"))
+        return bool(t and bay - t > _dt.timedelta(hours=GIO_SUA_DOI))
+    return [dict(v, len_song=gio.get(v.get("ma_goi")) or bay, doi=doi(v)) for v in viec
+            if (v.get("anh") and v.get("ma_goi") in gio and gio[v["ma_goi"]] - bay < _dt.timedelta(hours=GIO_BIA_GAP))
+            or doi(v)]
 
 
 def _nhuong_phien(goc, bay) -> str:
@@ -527,7 +535,7 @@ def d_bia_gap(goc, kenh):
         return False, "đang khe đêm 02–05 — agent tự sửa"
     dem = bay.replace(hour=2, minute=0, second=0, microsecond=0)
     dem += _dt.timedelta(days=1) if dem <= bay else _dt.timedelta(0)
-    if dem - bay <= _dt.timedelta(hours=2):
+    if dem - bay <= _dt.timedelta(hours=2) and not any(v.get("doi") for v in gap):
         return False, "khe đêm 02:00 còn ≤ 2 giờ — để agent sửa"
     ly = (_san_sang_dom(goc, kenh) or ("kênh tắt sua_video" if _cau_hinh_vm(goc, kenh).get("sua_video") is False else "")
           or _nhuong_phien(goc, bay)
@@ -994,7 +1002,8 @@ DANH_MUC: List[KyNang] = [
            "python -m core.ky_nang go-bom K", k_cau_hinh, [],
            dieu_kien=d_cau_hinh, chay=lambda goc, kenh: _py("-m", "core.ky_nang", "go-bom", kenh), nhip_gio=24, tu_ap=True),
     KyNang("S03", "Đổi bìa gấp", "sua_chua",
-           "Kích hoạt: hàng sửa có việc bìa đang chờ cho video lên sóng < 12 giờ hoặc đã lên sóng, mà khe đêm 02–05 còn "
+           "Kích hoạt: hàng sửa có việc bìa đang chờ cho video lên sóng < 12 giờ hoặc đã lên sóng — hoặc việc sửa bất kỳ "
+           "(bìa / tiêu đề) chờ khe đêm quá 36 giờ (đói khe) — mà khe đêm 02–05 còn "
            "> 2 giờ (nhường phiên đăng 60', không đụng máy đăng dở) → sửa video ngay khi khoá máy rảnh.",
            "python vm/may_dang_dom.py --kenh K --sua-video", k_bia_gap, ["K01"],
            dieu_kien=d_bia_gap, chay=c_bia_gap, nhip_gio=1, tu_ap=True, nang=True),

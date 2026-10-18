@@ -592,3 +592,74 @@ def test_tep_bia_co_tim_ca_jpg_cua_bia_lo_va_chon_tep_moi_hon(tmp_path):
     assert auto_khau._tep_bia_co(d, 2) == jpg, "lô bìa lô (jpg) mới hơn png của lô cũ"  # noqa: SLF001
     os.utime(jpg, (0, 0))
     assert auto_khau._tep_bia_co(d, 2) == png  # noqa: SLF001
+
+
+
+# ── 18/10/2026: S05 gói bàn giao TRƯỚC cổng chữ — so CHỮ THẬT trên ảnh, lượt đọc hỏng = chưa kiểm ──────────────────
+
+
+class AiRong(AiGia):
+    """Như AiGia nhưng `rong` lượt đọc ảnh đầu tiên trả RỖNG (không dòng nào) — như lượt đọc sau 409 của ShopAPI."""
+
+    def __init__(self, rong=0, **kw):
+        super().__init__(**kw)
+        self.rong, self.khoa_doc = rong, []
+
+    def __call__(self, loi_nhac, mo_hinh="", khoa="", toi_da_token=0, anh=None):
+        if loi_nhac.startswith("Read the text printed"):
+            self.khoa_doc.append(khoa)
+            if self.rong > 0:
+                self.rong -= 1
+                self.lan.append((loi_nhac[:30], khoa, mo_hinh))
+                return json.dumps({"dong": [], "chu_thua": [], "ky_tu_hong": False, "vet_xoa": False})
+        return super().__call__(loi_nhac, mo_hinh=mo_hinh, khoa=khoa, toi_da_token=toi_da_token, anh=anh)
+
+
+def test_goi_cu_chu_ho_so_lech_thi_dau_bang_chu_that_tren_anh(tmp_path):
+    # hồ sơ/THUMB của lượt ghi chữ CŨ; bìa thật in chữ khác, đúng chính tả + đúng chủ đề → đóng dấu chữ thật
+    g, k, ma, goi = _goi_cho(tmp_path, chu="人を惹きつける 習慣の正体")
+    r = cong_chu.dau_goi(AiGia(theo_lan=[DUNG, DUNG]), g, k, ma, goi, log=lambda s: None)
+    assert r["ok"] is True and r["chu"] == DUNG and "đọc 2 lượt khớp" in r["ly_do"]
+    assert cong_chu.kiem_dau(cong_chu.anh_goi(goi), DUNG) == ""
+    # chữ thật CHÉP chữ bìa đối thủ → không dấu chữ ấy; chữ mong đợi khác ảnh, lượt đã dọn nền → GIỮ (None, không "hỏng")
+    g2, k2, ma2, goi2 = _goi_cho(tmp_path / "b", chu="人を惹きつける 習慣の正体")
+    with open(os.path.join(g2, "PROJECTS", "AUTO", k2, "0001", cong_chu.TEP_CHU_BIA_DOI_THU), "w",
+              encoding="utf-8") as f:
+        f.write(DUNG)
+    r2 = cong_chu.dau_goi(AiGia(theo_lan=[DUNG, DUNG]), g2, k2, ma2, goi2, log=lambda s: None)
+    assert r2["ok"] is None and "chữ bìa đối thủ" in r2["ly_do"] and cong_chu.kiem_dau(cong_chu.anh_goi(goi2))
+
+
+def test_goi_luot_doc_rong_hoac_hong_la_chua_kiem_khong_phai_truot(tmp_path):
+    g, k, ma, goi = _goi_cho(tmp_path)
+    # một lượt rỗng → đọc lại MỘT lần bằng khoá mới → đạt
+    ai = AiRong(rong=1, theo_lan=[DUNG, DUNG])
+    r = cong_chu.dau_goi(ai, g, k, ma, goi, log=lambda s: None)
+    assert r["ok"] is True and ai.khoa_doc[1] == ai.khoa_doc[0] + ":lai"
+    g2, k2, ma2, goi2 = _goi_cho(tmp_path / "b")
+    r2 = cong_chu.dau_goi(AiRong(rong=9), g2, k2, ma2, goi2, log=lambda s: None)
+    assert r2["ok"] is None and "chưa đọc được" in r2["ly_do"] and "≠" not in r2["ly_do"], r2
+    assert cong_chu.kiem_dau(cong_chu.anh_goi(goi2)), "không bao giờ dấu khi chưa đọc được"
+    # khoá theo GIỜ: lượt S05 sau không phát lại kết quả đọc cũ
+    assert cong_chu._khoa_lan(ma) != "dau-goi:" + ma and cong_chu._khoa_lan(ma).startswith("dau-goi:" + ma + ":")  # noqa: SLF001
+    # kiem_anh: hai lượt rỗng → chưa kiểm (None), không phải TRƯỢT 「」 ≠ X
+    kq = cong_chu.kiem_anh(AiRong(rong=9), cong_chu.anh_goi(goi2), DUNG)
+    assert kq["ok"] is None
+
+
+def test_dau_goi_cli_giu_la_ma_hoan(tmp_path, monkeypatch):
+    from core import ky_nang_tu
+    g, k, ma, goi = _goi_cho(tmp_path)
+    monkeypatch.setattr(cong_chu, "_goi_that", lambda goc: AiRong(rong=99))
+    assert cong_chu.main(["dau-goi", "--kenh", k, "--goc", g]) == 10 and 10 in ky_nang_tu.MA_HOAN
+    monkeypatch.setattr(cong_chu, "_goi_that", lambda goc: AiGia(theo_lan=[DUNG, DUNG]))
+    assert cong_chu.main(["dau-goi", "--kenh", k, "--goc", g]) == 0
+
+
+
+def test_goi_da_don_khong_con_cho_dang(tmp_path):
+    g, k, ma, goi = _goi_cho(tmp_path)
+    assert [x["ma"] for x in cong_chu.goi_cho_dang(g, k)] == [ma]
+    with open(os.path.join(goi, "da-don.json"), "w", encoding="utf-8") as f:
+        json.dump({"ma_goi": ma, "ly_do": "DONE: gói Bỏ", "xoa": ["8-video.mp4", "thumb_001.png"]}, f)
+    assert cong_chu.goi_cho_dang(g, k) == [], "gói đã dọn (Bỏ / đã lên YouTube) không còn chờ đăng"

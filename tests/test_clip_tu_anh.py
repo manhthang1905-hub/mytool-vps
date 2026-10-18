@@ -433,6 +433,7 @@ def test_het_vong_cuu_thi_dung_luot_bao_can_nguoi_xem(cuu, monkeypatch):
     from core import bao_dong
     bao = []
     monkeypatch.setattr(bao_dong, "bao_dong_khan", lambda *a, **k: bao.append(a) or True)
+    monkeypatch.setattr(ak, "DOT_CUU_TOI_DA", 0)        # đợt cuối (không còn đợt cứu mới)
     cuu.trang["chan_loi_nhac"].update({LOI_NHAC_MOI})
     dc = cuu.dc
     goc = ak._lam_clip

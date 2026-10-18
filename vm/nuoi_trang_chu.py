@@ -1111,6 +1111,20 @@ def co_nguoi_xep_hang(goc_tool: str = GOC_TOOL) -> bool:
         return False
 
 
+def goi_giu_vi_bia(kenh: str, goc_tool: str = "") -> set:
+    """Mã gói chờ đăng mà máy đăng SẼ GIỮ (bìa chưa có dấu cổng chữ — `may_dang_dom` không tải). 18/10/2026: TL4-T7-K2
+    giữ gói vì bìa thiếu dấu → thiết lập kênh "nhường gói chờ tải lên" mỗi 10 phút suốt ngày (64 lần) mà gói ấy không
+    bao giờ tải được tới khi S05 đóng dấu. Gói bị giữ không phải việc đăng đang chờ — không nhường nó."""
+    try:
+        goc_tool = goc_tool or GOC_TOOL
+        if goc_tool not in sys.path:
+            sys.path.insert(0, goc_tool)
+        from core import cong_chu  # noqa: PLC0415
+        return {g["ma"] for g in cong_chu.goi_cho_dang(goc_tool, kenh) if not g.get("anh") or cong_chu.kiem_dau(g["anh"])}
+    except Exception:  # noqa: BLE001 — đọc hỏng: không lọc gì (giữ hành vi cũ)
+        return set()
+
+
 def viec_dang_cho(agent, luc: float, kenh: str) -> str:
     """Lý do phải NHƯỜNG riêng KÊNH này (có việc đăng chờ), hoặc "". Cùng nguồn với agent:
     phiên kênh sắp tới giờ, gói chờ tải lên, bình luận chờ ghim, máy đăng dở."""
@@ -1132,7 +1146,9 @@ def viec_dang_cho(agent, luc: float, kenh: str) -> str:
             if tm and tm.tm_hour * 60 + tm.tm_min <= _phut(luc) + NHIN_TRUOC_PHIEN_PHUT:
                 return "phiên kênh {0} (mục tiêu {1}) sắp/đã tới giờ".format(kenh, mt)
         try:
-            if agent.ma_can_tai_bo_sung(nguon_tool._tai_csv(ch, kenh), kenh, so_id, luc):   # noqa: SLF001
+            ma_cho = agent.ma_can_tai_bo_sung(nguon_tool._tai_csv(ch, kenh), kenh, so_id, luc)   # noqa: SLF001
+            ma_cho = [m for m in ma_cho or [] if m not in goi_giu_vi_bia(kenh)]
+            if ma_cho:
                 return "kênh {0} có gói chờ tải lên".format(kenh)
         except Exception:  # noqa: BLE001 — không đọc được kế hoạch: không chặn
             pass

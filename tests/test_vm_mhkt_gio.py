@@ -43,7 +43,7 @@ class TrinhSoanGia:
     def _luu_tat(self):
         return any(self._loi(i) for i in range(len(self.hang)))
 
-    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0):
+    def tim(self, khoa, han=10, hien=True, cho_tat=False, trong=None, thu=0, tu_chua=True):
         if khoa == "mhkt_luu":
             return {"khoa": khoa, "id": "luu", "tat": self._luu_tat()}
         if khoa == "mhkt_phan_tu":
