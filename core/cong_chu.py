@@ -55,8 +55,10 @@ __all__ = ["chuan", "khop", "can_xac_nhan", "soat_chat", "viet_lai", "chot_chu",
 #: Phiên bản luật cổng — kết quả soát/dấu của luật cũ (khớp lỏng ≤2 ký tự thừa, đa số phiếu) không được dùng lại.
 PHIEN_BAN = 2
 #: Phiên bản luật SOÁT CHỮ (chỉ sổ soát `soat-bia.json`, không đụng dấu ảnh): 3 = thêm kiểm chép chữ bìa đối thủ + kiểm
-#: đúng chủ đề (16/10/2026) — kết quả soát luật cũ soát lại.
-PHIEN_SOAT = 3
+#: đúng chủ đề (16/10/2026) — kết quả soát luật cũ soát lại; 4 = xác nhận kanji bằng phiếu độc lập + `loai` lỗi chữ
+#: (18/10/2026) — chỉ kết quả TRƯỢT của luật cũ soát lại (`PHIEN_SOAT_DAT`: kết quả ĐẠT luật 3 vẫn dùng).
+PHIEN_SOAT = 4
+PHIEN_SOAT_DAT = 3
 #: Chữ bìa CHÉP chữ bìa đối thủ (16/10/2026 — TL3-T7-0017 in nguyên chữ bìa đối thủ, lạc đề với video): tỉ lệ cửa sổ
 #: `N_CHEP_BIA` ký tự (`do_doc_dao.do_trung`) trên ngưỡng này, hoặc trùng / chứa trọn → trượt, viết lại.
 NGUONG_CHEP_BIA = 0.6
@@ -144,14 +146,87 @@ Script excerpt (context for the intended meaning):
 
 THUMBNAIL TEXT (a space only marks a line break): 「{chu}」
 
-A machine check flagged these characters / words because they do NOT appear anywhere in the title or the script: {muc}
-For EACH flagged item decide whether it is exactly the right character / word for the intended meaning — not a \
-homophone, not a look-alike kanji (e.g. 意 written instead of 惹 in 惹きつける / 惹かれる), not a typo.
-"dung" is true only if EVERY flagged item is correct.
+A machine check flagged these items only because they are not copied letter for letter from the title or the script: \
+{muc}
+That alone is NOT a problem: a thumbnail may use its own words, synonyms and paraphrases (e.g. 賢い人 where the script \
+says 頭がいい人, 限界 where it says 見切り). Do NOT judge word choice, style, consistency with the script's wording, \
+length or hook strength. Judge ONLY whether each item is WRITTEN correctly for the word the text clearly means, and \
+give its "loai":
+  "dung" — a real, correctly written {tieng} word / kanji (also when the script uses another word),
+  "dong_am" — wrong kanji with the same reading (homophone),
+  "giong_hinh" — wrong look-alike kanji (e.g. 意 written instead of 惹 in 惹きつける / 惹かれる),
+  "okurigana" — wrong okurigana,
+  "go_sai" — typo, missing or extra character,
+  "khong_co_tu" — the word does not exist in {tieng}.
+For every item that is not "dung", "dung_la" is the correct spelling of the SAME word.
 If any item is wrong, "chu_sua" is the full corrected text (smallest change, same length ±2, keep the space at the same \
 line break); otherwise "chu_sua" is "".
-Return JSON only: {{"dung": true|false, "xac_nhan": [{{"muc": "...", "dung": true|false, "ly_do": "short"}}], \
-"chu_sua": ""}}"""
+Return JSON only: {{"xac_nhan": [{{"muc": "...", "loai": "dung", "dung_la": "", "ly_do": "short"}}], "chu_sua": ""}}"""
+
+#: Các `loai` của lượt xác nhận là LỖI CHỮ thật (sai kanji / okurigana / gõ sai / từ không có). Lời bác vì "không có trong
+#: kịch bản", "nên dùng từ của kịch bản" không phải lỗi chữ (18/10/2026 — TL3-T7-0029 「賢い人ほど」, 0030 「限界」 bị bác oan).
+LOAI_LOI_XAC_NHAN = ("dong_am", "giong_hinh", "okurigana", "go_sai", "khong_co_tu")
+#: Một mục bị BÁC khi ≥ ngần này lượt xác nhận độc lập (≤ `SO_PHIEU_XAC_NHAN`, mô hình đứng đầu khác nhau) cùng bác.
+PHIEU_BAC_TOI_THIEU, SO_PHIEU_XAC_NHAN = 2, 3
+
+
+def doc_xac_nhan(du: Any, muc: Sequence[str]) -> Optional[Dict[str, Any]]:
+    """JSON lượt xác nhận → `{sai: {mục: {loai, dung_la, ly_do}}, chu_sua}` (chỉ mục bị coi là SAI). Mục có `loai` lỗi
+    chữ (`LOAI_LOI_XAC_NHAN`) → sai; `loai` "dung" → đúng; thiếu/lạ `loai` mà `dung` False (dạng cũ) hoặc mục bị bỏ
+    sót → coi là SAI (chặt: không rõ thì không cho qua — phiếu khác phân xử). None = không phải câu trả lời dùng được."""
+    if not isinstance(du, dict) or not isinstance(du.get("xac_nhan", []), list):
+        return None
+    theo: Dict[str, Dict[str, Any]] = {}
+    for x in du.get("xac_nhan") or []:
+        if isinstance(x, dict) and str(x.get("muc") or "").strip():
+            theo.setdefault(str(x["muc"]).strip().strip("「」"), x)
+    if not theo and "dung" not in du:
+        return None
+    sai: Dict[str, Dict[str, Any]] = {}
+    for m in muc:
+        x = theo.get(m)
+        if x is None:
+            x = next((v for k, v in theo.items() if m in k or (k and k in m)), None)
+        loai = str((x or {}).get("loai") or "").strip().lower()
+        if x is None:
+            loai = "dung" if (du.get("dung") is True and not theo) else "thieu"
+        elif loai not in LOAI_LOI_XAC_NHAN and loai != "dung":
+            loai = "dung" if x.get("dung") is True else "chua_ro"
+        if loai != "dung":
+            sai[m] = {"loai": loai, "dung_la": str((x or {}).get("dung_la") or "")[:40],
+                      "ly_do": str((x or {}).get("ly_do") or "")[:160]}
+    return {"sai": sai, "chu_sua": " ".join(str(du.get("chu_sua") or "").split()).strip("「」\"' ")}
+
+
+def _xac_nhan_phieu(goi: Callable[..., str], chu: str, muc: Sequence[str], *, tieu_de: str, ngu_canh: str,
+                    ngon_ngu: str, thang: Sequence[str], khoa: str) -> Optional[Dict[str, Any]]:
+    """Xác nhận các mục `muc` bằng PHIẾU độc lập: lượt 1; có mục bị coi là sai → lượt 2 (mô hình đứng đầu khác); hai
+    lượt vênh nhau → lượt 3 phân xử. Mục bị BÁC = ≥ `PHIEU_BAC_TOI_THIEU` phiếu coi là sai. Trả `{dung, bac: [{muc,
+    loai, dung_la, ly_do}], chu_sua, phieu}`; None khi một lượt không trả lời (chưa xác nhận được)."""
+    from . import soat_bia  # noqa: PLC0415
+    thang = tuple(thang) or soat_bia.THANG_MO_HINH_CHU
+    loi_nhac = LOI_NHAC_XAC_NHAN.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "",
+                                        ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu=chu,
+                                        muc="、".join("「{0}」".format(x) for x in muc))
+    phieu: List[Dict[str, Any]] = []
+    for i in range(SO_PHIEU_XAC_NHAN):
+        if i == 1 and not phieu[0]["sai"]:
+            break
+        if i == 2 and all((m in phieu[0]["sai"]) == (m in phieu[1]["sai"]) for m in muc):
+            break
+        th = thang[i % len(thang):] + thang[:i % len(thang)]
+        p = doc_xac_nhan(soat_bia._goi_json(goi, loi_nhac, thang=th, khoa="{0}:p{1}".format(khoa, i) if i  # noqa: SLF001
+                                            else khoa), muc)
+        if p is None:          # AI hỏng → chưa xác nhận được (giữ, thử lại) — không bao giờ coi là đúng hay sai
+            return None
+        phieu.append(p)
+    bac = []
+    for m in muc:
+        phieu_sai = [p["sai"][m] for p in phieu if m in p["sai"]]
+        if len(phieu_sai) >= PHIEU_BAC_TOI_THIEU:
+            bac.append(dict(phieu_sai[0], muc=m))
+    sua = next((p["chu_sua"] for p in phieu if p["sai"] and p["chu_sua"]), "")
+    return {"dung": not bac, "bac": bac, "chu_sua": sua, "phieu": [sorted(p["sai"]) for p in phieu]}
 
 
 def _tieng(ngon_ngu: str) -> str:
@@ -302,20 +377,21 @@ def _soat_chinh_ta(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str 
         r["can_xac_nhan"] = muc
         if not muc:
             return r
-        du = soat_bia._goi_json(goi, LOI_NHAC_XAC_NHAN.format(  # noqa: SLF001
-            tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "", ngu_canh=(ngu_canh or "")[:2500] or "(none)",
-            chu=r["chu"], muc="、".join("「{0}」".format(x) for x in muc)), thang=thang,
-            khoa="{0}:xn{1}:{2}".format(khoa, vong, hashlib.sha1(r["chu"].encode("utf-8")).hexdigest()[:8]))
-        if du is None or "dung" not in du:
+        # 18/10/2026: phiếu độc lập + `loai` lỗi chữ — "không có trong kịch bản" / "nên dùng từ của kịch bản" không
+        # phải lỗi (TL3-T7-0029 「賢い人ほど」, 0030 「限界のサイン」 bị bác oan, kẹt khâu bìa).
+        du = _xac_nhan_phieu(goi, r["chu"], muc, tieu_de=tieu_de, ngu_canh=ngu_canh, ngon_ngu=ngon_ngu, thang=thang,
+                             khoa="{0}:xn{1}:{2}".format(khoa, vong, hashlib.sha1(r["chu"].encode("utf-8")).hexdigest()[:8]))
+        if du is None:
             r.update(ok=None, ly_do="AI xác nhận kanji không trả lời — chưa soát xong")
             return r
-        bac = [x for x in (du.get("xac_nhan") or []) if isinstance(x, dict) and x.get("dung") is False]
-        if du.get("dung") is True and not bac:
+        r["phieu_xac_nhan"] = du["phieu"]
+        bac = du["bac"]
+        if not bac:
             r["xac_nhan"] = muc
             return r
-        r["loi"] = list(r.get("loi") or []) + [{"sai": str(x.get("muc") or ""), "dung": "", "ly_do": str(
-            x.get("ly_do") or "")[:120]} for x in bac][:6]
-        moi = " ".join(str(du.get("chu_sua") or "").split()).strip("「」\"' ")
+        r["loi"] = list(r.get("loi") or []) + [{"sai": x["muc"], "dung": x.get("dung_la") or "", "ly_do": "{0}: {1}".format(
+            x.get("loai"), x.get("ly_do") or "")[:120]} for x in bac][:6]
+        moi = du["chu_sua"]
         if not moi or chuan(moi) == chuan(r["chu"]) or abs(len(chuan(moi)) - goc_dai) > 3:
             r.update(ok=False, sua=False, chu=r.get("chu_goc") or chu,
                      ly_do="kanji không có trong tiêu đề/kịch bản bị bác ({0}) mà không có bản sửa dùng được".format(
@@ -351,19 +427,27 @@ def viet_lai(goi: Optional[Callable[..., str]], chu_cu: str, *, tieu_de: str = "
     """MỘT lượt viết lại chữ bìa (khi chữ cũ sai mà không sửa được). Hỏng / ngoài khung → ''."""
     if goi is None:
         return ""
-    try:
-        tra = goi(LOI_NHAC_VIET_LAI.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "",
-                                           ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu_cu=chu_cu,
-                                           ly_do=(ly_do or "wrong character")[:200], n_min=CHU_MOI_TOI_THIEU,
-                                           n_max=CHU_MOI_TOI_DA),
-                  mo_hinh=mo_hinh, khoa="{0}:{1}".format(khoa, lan), toi_da_token=300)
-    except Exception as loi:  # noqa: BLE001
-        if type(loi).__name__ == "Cancelled":
-            raise
-        return ""
-    m = re.search(r"THUMB\s*[:：]\s*(.+)", str(tra or ""))
-    moi = " ".join((m.group(1) if m else "").split()).strip("「」\"' ")
-    return moi if CHU_MOI_TOI_THIEU <= len(chuan(moi)) <= CHU_MOI_TOI_DA + 2 else ""
+    loi_nhac = LOI_NHAC_VIET_LAI.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "",
+                                        ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu_cu=chu_cu,
+                                        ly_do=(ly_do or "wrong character")[:200], n_min=CHU_MOI_TOI_THIEU,
+                                        n_max=CHU_MOI_TOI_DA)
+    # 18/10/2026 (TL3-T7-0029: Opus trả 「頭脳 恋遠」 4 ký tự → hỏng cả hai lượt): ngoài khung thì hỏi lại MỘT lần, nói rõ.
+    for thu in range(2):
+        try:
+            tra = goi(loi_nhac, mo_hinh=mo_hinh, khoa="{0}:{1}{2}".format(khoa, lan, ":k" if thu else ""),
+                      toi_da_token=400)
+        except Exception as loi:  # noqa: BLE001
+            if type(loi).__name__ == "Cancelled":
+                raise
+            return ""
+        m = re.search(r"THUMB\s*[:：]\s*(.+)", str(tra or ""))
+        moi = " ".join((m.group(1) if m else "").split()).strip("「」\"' ")
+        if CHU_MOI_TOI_THIEU <= len(chuan(moi)) <= CHU_MOI_TOI_DA + 2:
+            return moi
+        loi_nhac += ("\n\nYour answer 「{0}」 has {1} characters — it must have {2}-{3} (spaces and punctuation not "
+                     "counted), natural {4} a native viewer understands at once. Reply again: THUMB: <text>").format(
+                         moi[:30], len(chuan(moi)), CHU_MOI_TOI_THIEU, CHU_MOI_TOI_DA, _tieng(ngon_ngu))
+    return ""
 
 
 def ly_do_viet_lai(r: Dict[str, Any]) -> str:

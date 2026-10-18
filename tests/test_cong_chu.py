@@ -132,7 +132,7 @@ def test_soat_chat_sua_sai_kanji_va_bac_kanji_khong_sua_duoc():
     ai2 = AiGia(bac={"猫"})
     r2 = cong_chu.soat_chat(ai2, "猫の秘密", tieu_de=TIEU_DE, ngu_canh=KICH_BAN, thang=("m",))
     assert r2["ok"] is False and r2["can_xac_nhan"] == ["猫", "秘", "密"]
-    assert sum(1 for x in ai2.lan if x[0].startswith("You are a meticulous")) == 2, "soát + một lượt xác nhận"
+    assert sum(1 for x in ai2.lan if x[0].startswith("You are a meticulous")) == 3, "soát + hai phiếu xác nhận cùng bác"
     # xác nhận được → đúng
     assert cong_chu.soat_chat(AiGia(), "猫の秘密", tieu_de=TIEU_DE, thang=("m",))["ok"] is True
 
@@ -144,6 +144,81 @@ def test_chot_chu_khong_sua_duoc_thi_viet_lai_roi_soat_lai():
     assert [x["ok"] for x in r["lich_su"]] == [False, True]
     r = cong_chu.chot_chu(AiGia(khong_sua=True, viet_lai="x"), SAI, tieu_de=TIEU_DE, thang=("m",))
     assert r["ok"] is False, "viết lại ngoài khung → vẫn sai, nơi gọi giữ bìa"
+
+
+class AiPhieu:
+    """Lượt xác nhận kanji giả: trả lần lượt các phiếu `phieu` (dict hoặc None = lỗi mạng); soát chính tả luôn "đúng"."""
+
+    def __init__(self, phieu):
+        self.phieu, self.goi = list(phieu), []
+
+    def __call__(self, loi_nhac, mo_hinh="", khoa="", toi_da_token=0, anh=None):
+        if "machine check flagged" in loi_nhac:
+            self.goi.append(khoa)
+            p = self.phieu.pop(0) if self.phieu else None
+            if p is None:
+                raise RuntimeError("mạng rớt")
+            return json.dumps(p, ensure_ascii=False)
+        if loi_nhac.startswith("You check that the"):
+            return json.dumps({"hop": True, "ly_do": "gia"})
+        return json.dumps({"dung": True, "loi": [], "chu_sua": ""})
+
+
+_DUNG_XN = {"xac_nhan": [{"muc": "賢", "loai": "dung"}], "chu_sua": ""}
+_BAC_OAN = {"xac_nhan": [{"muc": "賢", "loai": "khong_trong_kich_ban", "dung": False,
+                          "ly_do": "タイトルに出現しない"}], "chu_sua": "頭がいい人ほど 恋に落ちない"}
+_BAC_THAT = {"xac_nhan": [{"muc": "腎", "loai": "giong_hinh", "dung_la": "賢"}], "chu_sua": "賢い人ほど 恋に落ちない"}
+
+
+def test_doc_xac_nhan_chi_loai_loi_chu_moi_la_sai():
+    assert cong_chu.doc_xac_nhan(_DUNG_XN, ["賢"])["sai"] == {}
+    assert set(cong_chu.doc_xac_nhan(_BAC_THAT, ["腎"])["sai"]) == {"腎"}
+    assert cong_chu.doc_xac_nhan(_BAC_THAT, ["腎"])["sai"]["腎"]["dung_la"] == "賢"
+    # loai lạ + dung False / mục bị bỏ sót → chặt: coi là sai (phiếu khác phân xử)
+    assert set(cong_chu.doc_xac_nhan(_BAC_OAN, ["賢"])["sai"]) == {"賢"}
+    assert set(cong_chu.doc_xac_nhan({"xac_nhan": [{"muc": "賢", "loai": "dung"}]}, ["賢", "恋"])["sai"]) == {"恋"}
+    assert cong_chu.doc_xac_nhan({"dung": True, "xac_nhan": []}, ["賢"])["sai"] == {}, "dạng cũ: đúng hết"
+    assert cong_chu.doc_xac_nhan("rác", ["賢"]) is None and cong_chu.doc_xac_nhan({}, ["賢"]) is None
+
+
+def test_xac_nhan_kanji_mot_phieu_bac_oan_thi_phieu_khac_phan_xu_cho_qua():
+    # TL3 18/10: 「賢」 không có trong tiêu đề/kịch bản (kịch bản viết 頭がいい) — một phiếu bác oan, hai phiếu kia: đúng
+    ai = AiPhieu([_BAC_OAN, _DUNG_XN, _DUNG_XN])
+    r = cong_chu.soat_chat(ai, "賢い人ほど 恋に落ちない", tieu_de="頭がいい人ほど恋に落ちない理由", thang=("a", "b", "c"))
+    assert r["ok"] is True and r["chu"] == "賢い人ほど 恋に落ちない" and not r.get("sua")
+    assert len(ai.goi) == 3 and len(set(ai.goi)) == 3, "ba phiếu, ba khoá khác nhau"
+    # phiếu 1 đúng → không cần phiếu 2
+    ai = AiPhieu([_DUNG_XN])
+    assert cong_chu.soat_chat(ai, "賢い人ほど 恋に落ちない", tieu_de="人ほど恋に落ちない", thang=("a",))["ok"] is True and len(ai.goi) == 1
+
+
+def test_xac_nhan_kanji_loi_that_hai_phieu_cung_bac_van_chan():
+    ai = AiPhieu([_BAC_THAT, _BAC_THAT, {"xac_nhan": [{"muc": "賢", "loai": "dung"}]}])
+    r = cong_chu.soat_chat(ai, "腎い人ほど 恋に落ちない", tieu_de="頭がいい人ほど恋に落ちない理由", thang=("a", "b"))
+    # bác → bản sửa 「賢い人ほど…」 soát lại (賢 ngoài nguồn → phiếu 3 xác nhận đúng) → đạt bằng bản SỬA, không bao giờ bản sai
+    assert r["ok"] is True and r["sua"] and r["chu"] == "賢い人ほど 恋に落ちない"
+    assert any(x["sai"] == "腎" and x["dung"] == "賢" for x in r["loi"])
+    ai = AiPhieu([_BAC_THAT, _BAC_THAT, _BAC_THAT, _BAC_THAT])
+    r = cong_chu.soat_chat(ai, "腎い人ほど 恋に落ちない", tieu_de="x", thang=("a", "b"))
+    assert r["ok"] is False or r["chu"] != "腎い人ほど 恋に落ちない"
+
+
+def test_xac_nhan_kanji_ai_hong_la_chua_soat_khong_bao_gio_dat():
+    r = cong_chu.soat_chat(AiPhieu([_BAC_OAN, None]), "賢い人ほど 恋に落ちない", tieu_de="x", thang=("a", "b"))
+    assert r["ok"] is None
+    r = cong_chu.soat_chat(AiPhieu([None]), "賢い人ほど 恋に落ちない", tieu_de="x", thang=("a",))
+    assert r["ok"] is None
+
+
+def test_viet_lai_ngoai_khung_hoi_lai_mot_lan():
+    tra = iter(["THUMB: 頭脳 恋遠", "THUMB: 賢い人ほど 恋に落ちない"])
+    kh = []
+
+    def goi(loi_nhac, mo_hinh="", khoa="", toi_da_token=0):
+        kh.append((khoa, loi_nhac))
+        return next(tra)
+    assert cong_chu.viet_lai(goi, "x", tieu_de="t", khoa="vl") == "賢い人ほど 恋に落ちない"
+    assert kh[0][0] != kh[1][0] and "has 4 characters" in kh[1][1]
 
 
 # ── 3) ảnh: hai lượt đọc, đạt/trượt ──────────────────────────────────────────
@@ -504,3 +579,16 @@ def test_goi_cho_dang_bia_sai_chu_thay_bang_bia_ve_bang_ma(tmp_path):
     anh = cong_chu.anh_goi(goi)
     assert os.path.basename(anh) == "CHON-thumb_090.jpg" and cong_chu.kiem_dau(anh, DUNG) == ""
     assert os.path.isfile(os.path.join(goi, "_bi-loai", "CHON-thumb_001.jpg")), "bìa sai chữ cũ dời đi, không xoá"
+
+
+def test_tep_bia_co_tim_ca_jpg_cua_bia_lo_va_chon_tep_moi_hon(tmp_path):
+    # 18/10/2026 — bìa lô xuất thumb_00N.jpg; cổng chữ chỉ tìm .png nên không bao giờ thử hạng nhì/ba
+    d = str(tmp_path)
+    assert auto_khau._tep_bia_co(d, 2).endswith("thumb_002.png")  # noqa: SLF001 — chưa có tệp: đường vẽ cũ
+    jpg = _anh(os.path.join(d, "thumb_002.jpg"))
+    assert auto_khau._tep_bia_co(d, 2) == jpg  # noqa: SLF001
+    png = _anh(os.path.join(d, "thumb_002.png"))
+    os.utime(png, (1, 1))
+    assert auto_khau._tep_bia_co(d, 2) == jpg, "lô bìa lô (jpg) mới hơn png của lô cũ"  # noqa: SLF001
+    os.utime(jpg, (0, 0))
+    assert auto_khau._tep_bia_co(d, 2) == png  # noqa: SLF001

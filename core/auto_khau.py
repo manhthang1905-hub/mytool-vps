@@ -9606,6 +9606,22 @@ def _tep_bia(thu_muc: str, so: int) -> str:
     return os.path.join(thu_muc, "thumb_{0:03d}.png".format(so))
 
 
+def _tep_bia_co(thu_muc: str, so: int) -> str:
+    """Tệp ứng viên ĐANG CÓ của tấm `so` (đọc): `thumb_N.png` (mô hình vẽ / bìa theo khuôn) hoặc `thumb_N.jpg` (bìa lô,
+    bìa dự phòng) — có cả hai (lô bìa lô vẽ sau lô cũ cùng thư mục) thì tệp MỚI hơn. 18/10/2026 — TL2-T7-0031: bìa lô xuất
+    `thumb_00N.jpg`, cổng chữ chỉ tìm `.png` nên KHÔNG BAO GIỜ thử hạng nhì/ba mà nhảy thẳng sang bìa dự phòng."""
+    png = _tep_bia(thu_muc, so)
+    jpg = png[:-4] + ".jpg"
+    if not os.path.isfile(jpg):
+        return png
+    if not os.path.isfile(png):
+        return jpg
+    try:
+        return jpg if os.path.getmtime(jpg) >= os.path.getmtime(png) else png
+    except OSError:
+        return png
+
+
 def _chuan_bi_bia(bc: BoiCanh, luot: LuotChay):
     """Dọn sẵn mọi thứ để tạo ảnh bìa. Trả về `(thư mục, mục, thiếu, lời nhắc,
     tiêu đề, chữ bìa)`.
@@ -10190,7 +10206,9 @@ def _soat_chu_luu(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu: str, tieu_de: 
     # 16/10/2026: chỉ dùng lại kết quả của luật CHẶT (`cong_chu.soat_chat`: + kanji ngoài tiêu đề/kịch bản phải được
     # xác nhận) — kết quả luật cũ soát lại.
     # 16/10/2026 (PHIEN_SOAT 3): + không chép chữ bìa đối thủ + đúng chủ đề video — kết quả luật cũ soát lại.
-    if isinstance(cu, dict) and cu.get("ok") is not None and int(cu.get("phien") or 0) >= cong_chu.PHIEN_SOAT:
+    # 18/10/2026 (PHIEN_SOAT 4): xác nhận kanji bằng phiếu độc lập — chỉ kết quả TRƯỢT luật cũ soát lại (bác oan).
+    if isinstance(cu, dict) and cu.get("ok") is not None and int(cu.get("phien") or 0) >= (
+            getattr(cong_chu, "PHIEN_SOAT_DAT", cong_chu.PHIEN_SOAT) if cu.get("ok") is True else cong_chu.PHIEN_SOAT):
         return cu
     kq = cong_chu.soat_chat(
         _goi_soat(bc), chu, tieu_de=tieu_de, ngu_canh=_doc_chu(os.path.join(luot.thu_muc, "1-kich-ban.txt"))[:2500],
@@ -10547,7 +10565,7 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
     khac: List[Tuple[int, str, Dict[str, Any]]] = []
     for u in uv:
         so = int(u.get("so") or 0)
-        tep = _tep_bia(thu_muc, so)
+        tep = _tep_bia_co(thu_muc, so)
         if so == so_chon or not os.path.isfile(tep):
             continue
         b = do_bia.cham_tep(tep)
@@ -10682,7 +10700,7 @@ def _loai_tam_giao(bc: BoiCanh, thu_muc: str, so: int, tep: str, ly_do: str) -> 
         if int(u.get("so") or 0) == so:
             u["loai"] = ("cổng chữ bìa: " + ly_do)[:300]
     con = sorted([u for u in uv if not u.get("loai") and str(u.get("so")) not in bi_loai
-                  and os.path.isfile(_tep_bia(thu_muc, int(u.get("so") or 0)))],
+                  and os.path.isfile(_tep_bia_co(thu_muc, int(u.get("so") or 0)))],
                  key=lambda u: (-(u.get("tong_diem") or 0), int(u.get("so") or 0)))
     c = du.get("chon") if isinstance(du.get("chon"), dict) else {}
     if not con:
@@ -10694,7 +10712,7 @@ def _loai_tam_giao(bc: BoiCanh, thu_muc: str, so: int, tep: str, ly_do: str) -> 
     k = con[0]
     so_moi = int(k.get("so") or 0)
     dich = os.path.join(thu_muc, "CHON-thumb_{0:03d}.jpg".format(so_moi))
-    if not _cb._xuat_jpg(_tep_bia(thu_muc, so_moi), dich):  # noqa: SLF001
+    if not _cb._xuat_jpg(_tep_bia_co(thu_muc, so_moi), dich):  # noqa: SLF001
         return ""
     c.pop("chu_ve", None)
     c.pop("doc_duoc_sua", None)
@@ -10752,6 +10770,11 @@ def _cong_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_
     so = int(m_so.group(1)) if m_so else -1
     kh = _muc_ke_hoach(thu_muc, so)
     chu_mong = str((c.get("chu_ve") if chon and c.get("so") == so else "") or kh.get("chu_du_kien") or chu_bia or "")
+    # 18/10/2026 — TL2-T7-0031: chữ dự kiến của bìa lô là các dòng/đoạn màu NỐI LIỀN (「年金暮らし足りないのはお金じゃない」)
+    # — biên tập viên đọc thành một câu, "sửa" thêm 「で」 → tấm đầu bị loại oan. Cùng chữ (bỏ khoảng) với chữ bìa thì soát
+    # và đóng dấu bằng CHỮ BÌA có chỗ xuống dòng (khớp ảnh vẫn tuyệt đối: so sau khi bỏ khoảng trắng).
+    if chu_bia and chu_mong and soat_bia.chuan_hoa(chu_mong) == soat_bia.chuan_hoa(chu_bia):
+        chu_mong = " ".join(str(chu_bia).split())
     tieu_de = tieu_de or _doc_tieu_de(_doc_chu(os.path.join(luot.thu_muc, "1-tieu-de.txt")))[0]
     ly: List[str] = []
 
@@ -10859,7 +10882,7 @@ def _dau_du_phong(bc: BoiCanh, luot: LuotChay, thu_muc: str, so_chon: int, chu_b
                      and u.get("so") is not None and int(u["so"]) != so_chon and u.get("tong_diem") is not None],
                     key=lambda u: -float(u.get("tong_diem") or 0))[:toi_da]
         for u in uv:
-            tep = _tep_bia(thu_muc, int(u["so"]))
+            tep = _tep_bia_co(thu_muc, int(u["so"]))
             if not os.path.isfile(tep):
                 continue
             mong = str(_muc_ke_hoach(thu_muc, int(u["so"])).get("chu_du_kien") or chu_bia or "")
