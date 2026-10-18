@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.215.2** — 2026-10-19 — `vps-jp1` — fix(mo-kenh): kenh moi dung tu kenh da tra kho khong chep dau tra_kho/thay_boi
 - **2.215.1** — 2026-10-19 — `vps-jp1` — feat(kenh): tra kenh ve kho (core/tra_kho.py - dung khong xoa, lay lai duoc) + ky nang bo kenh tra kho
 - **2.215.0** — 2026-10-19 — `vps-jp1` — feat: bia theo dung bo cuc chu cua bia thang (dien tich/so dong/co dong chinh do tren bia that, kiem bo cuc cung, giam khao so bia thang tren to dien thoai, nen dam) + tu kiem/bat thuong/soat san pham hang tuan noi vao gac tong + ky nang D…
 - **2.214.2** — 2026-10-19 — `vps-jp1` — feat(mo-kenh): tu dang nhap Gmail tu kho khi mo kenh (core/dang_nhap_gmail; chua xac minh danh tinh thi khong tu tin)
