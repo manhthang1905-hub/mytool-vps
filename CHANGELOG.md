@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.213.8** — 2026-10-19 — `vps-jp1` — fix(cong-chu): het loai oan chu dung (xac nhan cho phep tu dong nghia, 2/3 phieu doc lap) + thu hang 2/3 truoc du phong (.jpg) + soat chu bia khong cach
 - **2.213.7** — 2026-10-18 — `vps-jp1` — fix(chat-luong): sua dinh am that - muc tieu TP ha theo phan dang vuot + gioi han dinh o 192kHz truoc AAC (TL5-0013 sau sua van -0.5 dBTP bi chan; thu that: -0.5 -> -1.9 dBTP)
 - **2.213.6** — 2026-10-18 — `vps-jp1` — fix(su-co): 'khong lay duoc loi thoai' la NOI_DUNG (nguon hong), khong phai MAT_MANG - truoc day thu lai vo han (TL1-0032 hong 243 lan/2 ngay), gio bo luot de chon nguon khac
 - **2.213.5** — 2026-10-17 — `vps-jp1` — fix(nao): phien nao chay bang vi ShopAPI khi chu chon vi (Claude Code tro ve khoa ShopAPI, khong cham thue bao Max)
