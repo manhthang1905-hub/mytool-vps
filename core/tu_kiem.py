@@ -579,8 +579,37 @@ def kiem_nhip(K: BoiCanh) -> List[Dict[str, Any]]:
     return ra
 
 
+def kiem_duong_max(K: BoiCanh) -> List[Dict[str, Any]]:
+    """Cài đặt chọn ví (`viet_chu_bang: "vi"`, chủ 17/10: Max hết token) mà sổ Claude Max (`workspace/viet-max/
+    so-dung.jsonl`) còn có lượt MỚI HƠN lần đổi Cài đặt → còn một đường gọi Max sót (13–17/10: 81 lần "Claude Max hỏng")."""
+    p_cai = os.path.join(K.goc, "workspace", "cai-dat.json")
+    cai = _json(p_cai) or {}
+    if str(cai.get("viet_chu_bang") or "").strip().lower() != "vi":
+        return []
+    moc = _dt.datetime.fromtimestamp(os.path.getmtime(p_cai)) if os.path.isfile(p_cai) else K.bay
+    moi = []
+    try:
+        with io.open(os.path.join(K.goc, "workspace", "viet-max", "so-dung.jsonl"), encoding="utf-8") as tep:
+            dong = tep.readlines()[-300:]
+    except OSError:
+        dong = []
+    for d in dong:
+        try:
+            x = json.loads(d)
+        except ValueError:
+            continue
+        t = _gio(x.get("luc")) if isinstance(x, dict) else None
+        if t and t > moc + _dt.timedelta(minutes=5):
+            moi.append(str(x.get("viec") or "?"))
+    return [_muc("nao", "", "max:{0:%Y-%m-%d}".format(K.bay), "không còn đường gọi Claude Max khi Cài đặt chọn ví", K.bay,
+                 HONG if moi else DAT, ("{0} lượt Max sau khi chọn ví: {1}".format(len(moi), ", ".join(
+                     dict.fromkeys(moi))[:200]) if moi else "không lượt Max nào từ {0:%d/%m %H:%M}".format(moc)),
+                 can_lam="báo người quản trị tool: còn mã gọi Max không qua viet_max.duong_viet_chu")]
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
-        ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai))
+        ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
+        ("max", kiem_duong_max))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────
@@ -632,6 +661,8 @@ def _thu_lai_dsp(K: BoiCanh, m: Dict[str, Any]) -> Tuple[bool, str]:
 
 def _sinh(K: BoiCanh, lenh: List[str], ten: str) -> Tuple[bool, str]:
     from . import van_hanh  # noqa: PLC0415
+    if not (os.path.isfile(os.path.join(K.goc, "van_hanh.py")) and os.path.isdir(os.path.join(K.goc, "core"))):
+        return False, "gốc không phải thư mục tool (không sinh tiến trình)"
     pid = van_hanh._sinh_tach(lenh, K.goc, os.path.join(_thu_muc(K.goc), ten + ".log"))  # noqa: SLF001
     return bool(pid), "đã chạy lại ({0}, PID {1})".format(ten, pid)
 
@@ -846,17 +877,21 @@ def nhip(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None, tai
 # ── cho bảng điều khiển ────────────────────────────────────────────────────────
 
 def bao_cao_moi(goc: str, bay: Optional[_dt.datetime] = None) -> Dict[str, Any]:
-    bay = bay or _dt.datetime.now()
-    for i in range(2):
-        du = _json(_thu_muc(goc), (bay.date() - _dt.timedelta(days=i)).isoformat() + ".json")
+    """Báo cáo ngày MỚI NHẤT có trên đĩa (không muộn hơn `bay` nếu truyền) — không phụ thuộc đồng hồ máy."""
+    import glob as _glob  # noqa: PLC0415
+    ten = sorted(os.path.basename(p) for p in _glob.glob(os.path.join(_thu_muc(goc), "????-??-??.json")))
+    if bay is not None:
+        ten = [t for t in ten if t[:10] <= bay.date().isoformat()]
+    for t in reversed(ten[-3:]):
+        du = _json(_thu_muc(goc), t)
         if isinstance(du, dict):
             return du
     return {}
 
 
-def o_truc_quan(goc: str) -> Dict[str, Any]:
-    """Ô «Tự kiểm» của 8790: {dat, tu_sua, thu_lai, mo, dong, luc, mo_ds}."""
-    du = bao_cao_moi(goc)
+def o_truc_quan(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Ô «Tự kiểm» của 8790: {dat, tu_sua, thu_lai, mo, dong, luc, mo_ds} của báo cáo mới nhất."""
+    du = bao_cao_moi(goc, bay_gio)
     tt = du.get("tom_tat") or {}
     return {"dat": tt.get(DAT, 0), "tu_sua": tt.get(TU_SUA, 0), "thu_lai": tt.get(THU_LAI, 0), "mo": tt.get(MO, 0),
             "luc": str(du.get("luc") or "")[:16].replace("T", " "), "dong": du.get("dong") or "",

@@ -43,7 +43,7 @@ TEN_TAC_VU = "ShopAPI-KyNang"
 #: Skill → bộ phận của não (`core.nao_bo_phan.BO_PHAN`) để não học tỉ lệ thành công từng skill.
 BO_PHAN = {"S02": "dieu-phoi", "S03": "bia", "S04": "ban-giao", "S05": "bia", "D09": "dang-video", "K20": "dang-video",
            "D10": "kich-ban", "D11": "bia", "D12": "suc-khoe-may", "D13": "bia", "D14": "chi-so-studio",
-           "D15": "tieu-de"}
+           "D15": "tieu-de", "D16": "chi-so-studio", "D17": "anh-clip", "S06": "bia"}
 NHAN = {"se_chay": "sẽ chạy", "nen_chay": "nên chạy — chờ chủ", "cho_nhip": "đã chạy, chờ nhịp", "tam_dung": "tạm dừng",
         "cong_tac_tat": "công tắc chung tắt", "tat_kenh": "tắt ở kênh này", "khong": "chưa cần", "xong": "xong",
         "hong": "hỏng", "hoan": "hoãn", "bo_qua": "để lượt sau"}
@@ -254,7 +254,7 @@ def _chay_mot(goc: str, x: Dict[str, Any], chay_lenh: ChayLenh, so: List[Dict[st
     k = kn.theo_ma(x["ma"])
     t0 = time.time()
     try:
-        ma, duoi = chay_lenh(x["lenh"], goc, (HAN_NANG_PHUT if k.nang else HAN_NHE_PHUT) * 60.0)
+        ma, duoi = chay_lenh(x["lenh"], goc, (k.han_phut or (HAN_NANG_PHUT if k.nang else HAN_NHE_PHUT)) * 60.0)
     except Exception as loi:  # noqa: BLE001
         ma, duoi = -1, "không chạy được: {0}".format(str(loi)[:200])
     if ma in MA_HOAN:
@@ -282,8 +282,19 @@ def _chay_mot(goc: str, x: Dict[str, Any], chay_lenh: ChayLenh, so: List[Dict[st
             pass
 
 
-def _thu_tu(x: Dict[str, Any]) -> Tuple[bool, int, str]:
-    return x["nang"], (UU_TIEN_NANG.index(x["ma"]) if x["ma"] in UU_TIEN_NANG else len(UU_TIEN_NANG)), x["kenh"]
+def _thu_tu(x: Dict[str, Any], doi: Optional[set] = None) -> Tuple[bool, bool, int, str]:
+    """Nhẹ trước nặng; trong việc nặng: việc ĐÓI SUẤT (`core.loi_lap_lai` — bị "để lượt sau" liên tục > 6 giờ, sổ
+    `workspace/tu-kiem/uu-tien.json`) lên đầu, rồi theo `UU_TIEN_NANG`."""
+    return (x["nang"], "{0}|{1}".format(x["ma"], x["kenh"] or "") not in (doi or set()),
+            (UU_TIEN_NANG.index(x["ma"]) if x["ma"] in UU_TIEN_NANG else len(UU_TIEN_NANG)), x["kenh"])
+
+
+def _viec_doi(goc: str) -> set:
+    try:
+        from core import loi_lap_lai  # noqa: PLC0415
+        return set((loi_lap_lai.doc_uu_tien(goc).get("viec") or {}).keys())
+    except Exception:  # noqa: BLE001
+        return set()
 
 
 def _dong(x: Dict[str, Any], goc: str) -> str:
@@ -311,10 +322,15 @@ def tu_kich_hoat(goc: str, *, thu: bool = False, chay_lenh: Optional[ChayLenh] =
         return ds
     chay_lenh = chay_lenh or _chay_that
     da_nang = False
-    for x in sorted(ds, key=_thu_tu):
+    doi = _viec_doi(goc)
+    mot_kenh_da: set = set()
+    for x in sorted(ds, key=lambda x: _thu_tu(x, doi)):
         if x["quyet"] == "se_chay":
+            k_ = kn.theo_ma(x["ma"])
             if phut_cam(kn._gio()):  # noqa: SLF001
                 x.update(quyet="bo_qua", ly_do="phút :55–:05 — để lượt sau")
+            elif getattr(k_, "mot_kenh", False) and x["ma"] in mot_kenh_da:
+                x.update(quyet="bo_qua", ly_do="lượt này đã chạy skill này cho một kênh — kênh này lượt sau")
             elif x["nang"] and da_nang:
                 x.update(quyet="bo_qua", ly_do="lượt này đã có một việc nặng — để lượt sau")
             elif x["nang"]:
@@ -323,6 +339,8 @@ def tu_kich_hoat(goc: str, *, thu: bool = False, chay_lenh: Optional[ChayLenh] =
                 if ban:
                     x.update(quyet="bo_qua", ly_do="khoá máy bận — để lượt sau, không ép ({0})".format(ban))
         if x["quyet"] == "se_chay":
+            if getattr(kn.theo_ma(x["ma"]), "mot_kenh", False):
+                mot_kenh_da.add(x["ma"])
             _chay_mot(goc, x, chay_lenh, so)
         elif x["quyet"] not in ("khong", "cho_nhip"):
             _ghi_neu_doi(goc, x, so, kn._gio())  # noqa: SLF001

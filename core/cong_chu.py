@@ -766,9 +766,31 @@ def _tang_tron(chu: str) -> List[Dict[str, Any]]:
     return ra + ([{"vi_tri": "duoi", "phan_mau": [{"chu": b, "mau": "#FFD400"}]}] if b else [])
 
 
-def ve_bia_ma(nen: str, chu: str, dich: str, *, goc: str = "", ngon_ngu: str = "ja") -> Dict[str, Any]:
+#: Bìa dự phòng: hộp các dòng chữ được chạm tối đa ngần này phần MẶT nhân vật (= `bia_lo.CHE_DAU_TOI_DA`).
+CHE_MAT_DU_PHONG = 0.02
+
+
+def che_mat(nen: str, bao_cao: Dict[str, Any], *, mau_dau: Any = None) -> float:
+    """Phần MẶT nhân vật (đầu bỏ 25% đỉnh — `bia_lo.tim_dau`, đầu trắng/đầu màu của kênh) bị hộp các dòng chữ trong
+    báo cáo bộ vẽ che (0..1). Không đo được → 0."""
+    try:
+        from PIL import Image  # noqa: PLC0415
+        from . import bia_lo  # noqa: PLC0415
+        with Image.open(nen) as im:
+            anh = im.convert("RGB").resize((1280, 720))
+        dau = bia_lo.tim_dau(anh, mau_dau, noi=True)
+        hop = [d["hop"] for d in bao_cao.get("dong") or [] if d.get("hop")]
+        mat = [[d[0], d[1] + bia_lo.DINH_DAU_TRAN * (d[3] - d[1]), d[2], d[3]] for d in dau]
+        return max([bia_lo._phan_giao(m, hop) for m in mat] or [0.0])  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def ve_bia_ma(nen: str, chu: str, dich: str, *, goc: str = "", ngon_ngu: str = "ja", mau_dau: Any = None
+              ) -> Dict[str, Any]:
     """Vẽ CHỮ ĐÃ SOÁT bằng mã lên nền sạch `nen` → `dich` (jpg 1280×720) + báo cáo đo. Chỉ nhận bản ĐẠT độ đọc được
-    và bố cục không hỏng (không khung trước, khung gọn sau). Trả `{tep, bao_cao}` hoặc `{loi}`."""
+    và bố cục không hỏng (không khung trước, khung gọn sau), và (18/10/2026 — TL2-T7-0031: chữ xanh đen viền trắng đè
+    ngang MẶT nhân vật) chữ không che mặt nhân vật (`che_mat` ≤ `CHE_MAT_DU_PHONG`). Trả `{tep, bao_cao}` hoặc `{loi}`."""
     from . import bia_theo_khuon as btk, chon_bia, do_bia  # noqa: PLC0415
     tang = _tang_tron(chu)
     ly = bao_dam_ma("".join(btk.chu_cua_tang(t) for t in tang), chu, goc=goc, ngon_ngu=ngon_ngu)
@@ -781,12 +803,14 @@ def ve_bia_ma(nen: str, chu: str, dich: str, *, goc: str = "", ngon_ngu: str = "
         if not btk.ve_chu_len_anh(nen, png, btk.bo_tri_chu("khuon", tang), goc=goc, ngon_ngu=ngon_ngu, bao_cao=bc,
                                   cho_khung=cho_khung):
             return {"loi": "không vẽ được chữ (thiếu phông / nền hỏng)"}
-        if bc.get("dat") is True and do_bia.bo_cuc_dat(bc):
+        if bc.get("dat") is True and do_bia.bo_cuc_dat(bc) and che_mat(nen, bc, mau_dau=mau_dau) <= CHE_MAT_DU_PHONG:
             break
     else:
         _xoa(png)
         _xoa(do_bia.duong_bao_cao(png))
-        return {"loi": "bản vẽ chữ không đạt độ đọc được: " + do_bia.tom_tat(bc)[:160]}
+        che = che_mat(nen, bc, mau_dau=mau_dau)
+        return {"loi": ("chữ che mặt nhân vật ({0:.0%})".format(che) if che > CHE_MAT_DU_PHONG else
+                        "bản vẽ chữ không đạt độ đọc được: " + do_bia.tom_tat(bc)[:160])}
     chon_bia._xuat_jpg(png, dich)  # noqa: SLF001
     _xoa(png)
     _xoa(do_bia.duong_bao_cao(png))
@@ -825,18 +849,75 @@ def tim_nen_sach(thu_muc_thumb: str) -> List[str]:
     return ra
 
 
+def _ve_kieu_kenh(thu_muc_thumb: str, nen: str, chu: str, dich: str, *, goc: str = "", kenh: str = "",
+                  ngon_ngu: str = "ja") -> Dict[str, Any]:
+    """Bìa dự phòng ĐÚNG KIỂU bìa thắng của kênh (18/10/2026): lượt có lô bìa chữ trần (`_lo/xep-hang.json` có
+    `chu_tang`, chữ trùng chữ đã soát) → vẽ lại đúng các dòng của lô bằng bộ dựng của bìa lô (`bia_lo.dung_bia`: màu,
+    viền, bố cục, mục tiêu bố cục bìa thắng, né MẶT nhân vật + cổng bố cục + cổng đọc được). `{}` = lượt không có lô
+    như thế (đi đường vẽ chung); `{loi}` = có lô mà nền này không ra bìa đạt."""
+    xh = _doc_json(os.path.join(thu_muc_thumb, "_lo", "xep-hang.json"))
+    tang = xh.get("chu_tang")
+    if not (kenh and isinstance(tang, list) and tang and xh.get("kieu_chu") == "tran"):
+        return {}
+    from . import bia_lo, bia_theo_khuon as btk, chon_bia, do_bia  # noqa: PLC0415
+    if not khop("".join(btk.chu_cua_tang(t) for t in tang if isinstance(t, dict)), chu):
+        return {}
+    try:
+        hs = bia_lo.ho_so_kieu(goc, kenh, log=lambda s: None, mau=[m for m in xh.get("mau") or [] if m])
+    except Exception as loi:  # noqa: BLE001
+        return {"loi": "không đọc được kiểu bìa của kênh: {0}".format(str(loi)[:80])}
+    if hs.get("kieu") != "tran":
+        return {}
+    if xh.get("muc_tieu"):
+        hs["muc_tieu"] = xh["muc_tieu"]
+    if xh.get("bo_cuc") in ("trai", "phai", "dai"):
+        hs["bo_cuc"] = xh["bo_cuc"]
+    nhap = os.path.join(thu_muc_thumb, "_du-phong")
+    os.makedirs(nhap, exist_ok=True)
+    ten = os.path.splitext(os.path.basename(dich))[0]
+    nen2 = os.path.join(nhap, ten + "-nen.png")
+    try:
+        from PIL import Image  # noqa: PLC0415
+        with Image.open(nen) as im:
+            im.convert("RGB").resize((1280, 720)).save(nen2, format="PNG")
+    except (OSError, ValueError) as loi:
+        return {"loi": "không mở được nền: {0}".format(str(loi)[:80])}
+    uv = bia_lo.dung_bia({"ma": ten, "nen": nen2, "y": 0, "bien": 0}, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs)
+    if uv.get("loai") or not os.path.isfile(str(uv.get("tep") or "")):
+        return {"loi": "kiểu bìa thắng của kênh: " + str(uv.get("loai") or "không vẽ được")[:160]}
+    if not chon_bia._xuat_jpg(uv["tep"], dich):  # noqa: SLF001
+        return {"loi": "không xuất được jpg"}
+    bc = do_bia.doc_bao_cao(uv["tep"]) or {}
+    do_bia.ghi_bao_cao(dich, {k: v for k, v in bc.items() if k not in ("tep", "van_tay", "luc")})
+    return {"tep": dich, "bao_cao": bc, "kieu": "kenh"}
+
+
 def bia_ma_du_phong(goi: Optional[Callable[..., str]], thu_muc_thumb: str, chu: str, *, goc: str = "",
                     kenh: str = "", ma_goi: str = "", ngon_ngu: str = "ja", khoa: str = "bia-ma",
                     toi_da: int = SO_NEN_DU_PHONG, so_dau: int = 90, log: Callable[[str], None] = lambda s: None
                     ) -> Dict[str, Any]:
     """Không còn tấm nào có dấu: vẽ CHỮ ĐÃ SOÁT bằng mã lên ≤ `toi_da` nền sạch tốt nhất → `thumb_<so_dau+i>.jpg`, mỗi
     tấm đọc lại hai lượt (`xac_minh`) — tấm đầu đạt được trả `{tep, so, nen}`; `{}` khi không nền nào ra bìa đạt
-    (`ok` None trong kết quả khi AI hỏng — nơi gọi giữ, thử lại)."""
+    (`ok` None trong kết quả khi AI hỏng — nơi gọi giữ, thử lại).
+
+    18/10/2026 — chủ: "không bao giờ giao đồ kém". Lượt có lô bìa chữ trần → vẽ ĐÚNG KIỂU bìa thắng của kênh
+    (`_ve_kieu_kenh`); không nền nào ra bìa đạt kiểu kênh thì KHÔNG lùi về kiểu vẽ chung (nơi gọi làm LÔ MỚI). Đường vẽ
+    chung (lượt không có lô như thế) cũng phải không che mặt nhân vật (`ve_bia_ma`)."""
     chua = False
+    mau_dau = None
+    try:
+        from . import bia_lo  # noqa: PLC0415
+        from .kenh import duong_kenh  # noqa: PLC0415
+        nv = os.path.join(duong_kenh(goc, kenh), "nv", "nv1.png") if (goc and kenh) else ""
+        mau_dau = bia_lo.mau_dau_nv(nv) if nv and os.path.isfile(nv) else None
+    except Exception:  # noqa: BLE001
+        mau_dau = None
     for i, nen in enumerate(tim_nen_sach(thu_muc_thumb)[:max(1, int(toi_da))]):
         so = so_dau + i
         dich = os.path.join(thu_muc_thumb, "thumb_{0:03d}.jpg".format(so))
-        v = ve_bia_ma(nen, chu, dich, goc=goc, ngon_ngu=ngon_ngu)
+        v = _ve_kieu_kenh(thu_muc_thumb, nen, chu, dich, goc=goc, kenh=kenh, ngon_ngu=ngon_ngu)
+        if not v:
+            v = ve_bia_ma(nen, chu, dich, goc=goc, ngon_ngu=ngon_ngu, mau_dau=mau_dau)
         if v.get("loi"):
             log("  (bìa dự phòng chữ vẽ bằng mã trên {0}: {1})".format(os.path.basename(nen), v["loi"][:120]))
             continue

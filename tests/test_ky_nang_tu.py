@@ -212,12 +212,33 @@ def test_thu_chi_in_khong_chay_khong_ghi(tmp_path, monkeypatch):
 
 def test_danh_muc_that_khai_du(tmp_path):
     co = [k for k in kn.DANH_MUC if k.dieu_kien is not None]
-    assert {k.ma for k in co} == {"S02", "S03", "S04", "S05", "D09", "K20", "D10", "D11", "D12", "D13", "D14", "D15"}
+    assert {k.ma for k in co} == {"S02", "S03", "S04", "S05", "D09", "K20", "D10", "D11", "D12", "D13", "D14", "D15",
+                               "D16", "D17", "S06"}
     for k in co:
         assert k.ma in knt.BO_PHAN
         assert (k.chay is not None) == k.tu_ap, k.ma
     assert not kn.theo_ma("D10").tu_ap and not kn.theo_ma("D11").tu_ap
     assert {k.ma for k in co if k.nang} == set(knt.UU_TIEN_NANG)
+    assert all(k.han_phut >= 40 for k in co if k.ma in ("D16", "D17", "S06"))
+
+
+def test_skill_mot_kenh_moi_luot(tmp_path, monkeypatch):
+    """D16/D17/S06: việc nhẹ mà dài (nhiều lượt AI) — mỗi lượt chỉ MỘT kênh, kênh khác lượt sau."""
+    goc = _goc(tmp_path, kenh=("KA", "KB", "KC"))
+    k, _t = _skill("X09")
+    k.mot_kenh = True
+    _danh_muc(monkeypatch, (k, _t))
+    c = Chay()
+    ds = knt.tu_kich_hoat(goc, chay_lenh=c, in_ra=lambda s: None)
+    assert len(c.goi) == 1
+    assert sorted(x["quyet"] for x in ds) == ["bo_qua", "bo_qua", "hong"] or len([x for x in ds if x["quyet"] == "bo_qua"]) == 2
+
+
+def test_viec_doi_suat_len_dau_suat_nang():
+    a = {"ma": "D13", "kenh": "TL1", "nang": True}
+    b = {"ma": "S03", "kenh": "TL2", "nang": True}
+    assert sorted([a, b], key=lambda x: knt._thu_tu(x))[0] is b
+    assert sorted([a, b], key=lambda x: knt._thu_tu(x, {"D13|TL1"}))[0] is a
     assert "ShopAPI-KyNang" in knt.lenh_lich("<MyTool>", py="<pythonw.exe>") and "/ST 00:35" in knt.lenh_lich("<g>", py="p")
 
 

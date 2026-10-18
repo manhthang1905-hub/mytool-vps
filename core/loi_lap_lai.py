@@ -453,6 +453,8 @@ def viec_doi_lau(so: Sequence[Dict[str, Any]], bay: _dt.datetime, gio: float = G
         dau = None
         for x in ds:
             q = x.get("quyet")
+            if q == "bo_qua" and "một kênh" in str(x.get("ly_do") or ""):
+                continue                  # skill một-kênh-mỗi-lượt chờ tới lượt kênh — không phải đói suất máy
             if q in ("bo_qua", "hoan"):
                 dau = dau or str(x.get("luc") or "")
             else:                     # chạy thật (xong/hỏng), hết điều kiện, tạm dừng, tắt… = không còn đói suất

@@ -1635,6 +1635,23 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — skill tự kích hoạt hỏng không làm hỏng khối việc
         pass
 
+    # 19) Tự kiểm (17/10/2026, `core/tu_kiem.py`): MỘT dòng "Máy đang tự làm" (đạt · đã tự sửa · đang thử lại · còn
+    # mở) + chỉ những việc CHỈ người làm được (xác minh điện thoại, …) vào "Việc của bạn".
+    try:
+        from . import tu_kiem as _tk  # noqa: PLC0415
+
+        o = _tk.o_truc_quan(goc)
+        if may_tu_lam is not None and o.get("dong"):
+            may_tu_lam.append({"khoa": "may:tu-kiem", "kenh": "", "chu": o["dong"] + (
+                " — còn mở: " + "; ".join(o.get("mo_ds") or []) if o.get("mo_ds") else "")})
+        for v in _tk.viec_nguoi(goc):
+            if v["khoa"] in da_xong:
+                continue
+            ra.append(dict(_viec(v["khoa"], CANH_BAO, kenh=v.get("kenh", ""), chu=v["chu"], goi_y=v.get("goi_y", ""),
+                                 nut=[("Đã xử lý", "danh_dau_xong", {"khoa": v["khoa"]})], xong_tay=True), loai_viec="nguoi"))
+    except Exception:  # noqa: BLE001 — tự kiểm hỏng không làm hỏng khối việc
+        pass
+
     # Cổng cuối: MỘT bộ phân loại cho mọi mục — việc máy không bao giờ nằm ở "Việc của bạn".
     nguoi = []
     co_viec_kieu = may_tu_lam is not None and any(str(x.get("khoa")).startswith("may:studio_") for x in may_tu_lam)

@@ -212,7 +212,7 @@ def test_doc_cham_json_va_thu_hang():
         {"so": 9, "noi_dung": 5, "to_mo": 5, "ro_120": 5, "cam_xuc": 5, "phong_cach": 5}]}  # ngoài nhóm
     kq = bia_lo.doc_cham_1(du, 3)
     assert set(kq) == {1, 2} and kq[1]["loi"] == [] and kq[2]["loi"] == ["stray text"]
-    assert kq[1]["tong"] == 79.0 and kq[2]["diem"]["noi_dung"] == 10 and kq[2]["diem"]["to_mo"] == 1
+    assert kq[1]["tong"] == 78.8 and kq[2]["diem"]["noi_dung"] == 10 and kq[2]["diem"]["to_mo"] == 1
     assert bia_lo.doc_cham_2({"xep_hang": [3, "1", 3, 7, "x", 2]}, 3) == [3, 1, 2]
     assert bia_lo.doc_cham_2("hỏng", 3) == []
 
@@ -237,7 +237,7 @@ def _goi_gia(diem=None, xep=None, chu_nen=None):
         if "CONCEPT DIRECTOR" in loi_nhac:
             return json.dumps({"chu": [], "y_tuong": [_y(i) for i in range(1, 9)]})
         if "strict art director" in loi_nhac:
-            n = len(kw["anh"]) - 2
+            n = int(loi_nhac.split("numbered 1 to ", 1)[1].split(" ", 1)[0])
             return json.dumps({"ung_vien": [dict({"so": i + 1, "noi_dung": 6, "to_mo": 6, "ro_120": 6, "cam_xuc": 6,
                                                   "phong_cach": 6, "loi": [], "ly_do": "ok"},
                                                  **((diem or {}).get(i + 1) or {})) for i in range(n)]})
@@ -245,7 +245,7 @@ def _goi_gia(diem=None, xep=None, chu_nen=None):
             ma = kw.get("khoa", "").split("doc-nen:")[-1].split(":")[0]
             return json.dumps({"dong": [(chu_nen or {}).get(ma, "")] if (chu_nen or {}).get(ma) else [],
                                "chu_thua": [], "ky_tu_hong": False, "vet_xoa": False})
-        if "sheet of" in loi_nhac:
+        if "Rank ALL" in loi_nhac:
             return json.dumps({"xep_hang": xep or [], "ly_do": {"2": "tò mò nhất"}})
         return "{}"
     goi.lan = lan
@@ -276,9 +276,9 @@ def test_cham_hai_vong_loai_chu_la_va_xep_hang(tmp_path):
     assert "face covered" in by["y03-1"]["loai"] and "LOAN" in by["y02-1"]["loai"]
     assert by["y07-1"].get("tong") is None, "tấm lọc cứng đã loại không tốn lượt chấm"
     v1 = [x for x in goi.lan if x[0].startswith("You are the strict")]
-    assert len(v1) == 1 and v1[0][2] == 2 + 6, "một nhóm 6 tấm + 2 bìa thắng"
-    v2 = [x for x in goi.lan if x[0].startswith("The first")]
-    assert len(v2) == 1 and v2[0][2] == 3, "vòng 2: 2 bìa thắng + MỘT tờ cạnh nhau"
+    assert len(v1) == 1 and v1[0][2] == 2 + 6 + 1, "một nhóm 6 tấm + 2 bìa thắng + MỘT tờ cỡ điện thoại"
+    v2 = [x for x in goi.lan if x[0].startswith("The image is a phone-feed")]
+    assert len(v2) == 1 and v2[0][2] == 1, "vòng 2: MỘT tờ cỡ điện thoại (hàng bìa thắng + ứng viên)"
     con = [u["ma"] for u in xh if not u.get("loai")]
     # sau loại: y01 (85), y05, y04, y06, y07 → vòng 2 đưa số 3 (y04) lên đầu, rồi 1 (y01), 2 (y05)
     assert con[:3] == ["y04-1", "y01-1", "y05-1"], con
@@ -348,7 +348,8 @@ def test_chay_ca_lo_dung_lai_va_xuat_goi(tmp_path):
     assert diem == sorted(diem, reverse=True) and len(set(diem)) == 3, "điểm giảm đúng theo hạng chung cuộc"
     assert do_bia.cham_tep(os.path.join(tm, "CHON-thumb_001.jpg"))["dat"] is True
     kh = btk.doc_ke_hoach(tm)
-    assert kh["muc"][0]["chu_du_kien"] == "同じ車に長く乗る人のほとんどが" and kh["muc"][0]["chu_tang"]
+    # 18/10/2026: chữ theo DÒNG (cách một khoảng) — cổng chữ soát đúng chỗ xuống dòng, không phải chuỗi nối liền
+    assert kh["muc"][0]["chu_du_kien"] == "同じ車に長く 乗る人の ほとんどが" and kh["muc"][0]["chu_tang"]
     assert all(os.path.isfile(os.path.join(tm, "znen-thumb_00{0}.png".format(i))) for i in (1, 2, 3))
     b2 = ho_so_video._sao_luu_bia_2(goc, "KH", "KH-0001", os.path.join(tm, "CHON-thumb_001.jpg"))  # noqa: SLF001
     assert b2["tep"] == "thumb_002.jpg" and b2["bia_3"]["tep"] == "thumb_003.jpg"
@@ -665,7 +666,8 @@ def test_thu_muc_mau_kenh_yaml_thu_hang_cache_va_ghi_de(tmp_path):
     tm = os.path.abspath(tm)
     assert hs["kieu"] == "tran" and hs["bo_cuc"] == "dai" and hs["thu_muc_mau"] == tm
     assert hs["bia_mau"] == [os.path.join(tm, t) for t in ("2.jpg", "1.jpg")], "theo thứ hạng của thang.json"
-    assert len(lan) == 1 and len(lan[0]["anh"]) == 3 and "TA-MOT" in hs["mau"] and "warm room" in hs["nen"]
+    lan_mau = [k for k in lan if str(k.get("khoa")).startswith("bia-lo-mau")]
+    assert len(lan_mau) == 1 and len(lan_mau[0]["anh"]) == 3 and "TA-MOT" in hs["mau"] and "warm room" in hs["nen"]
     assert os.path.isfile(os.path.join(tm, bia_lo.TEP_MAU_THANG)), "cache nằm trong thư mục mẫu"
     assert not os.path.isfile(bia_lo.duong_mau_thang(goc, "KH")), "không ghi cache vào nghien-cuu/ của kênh"
     assert hs["bang_chung"] == " (7k-35k impressions)"
@@ -673,8 +675,9 @@ def test_thu_muc_mau_kenh_yaml_thu_hang_cache_va_ghi_de(tmp_path):
     assert bia_lo.mau_cua_kenh(goc, "KH", [tm]) == hs["bia_mau"], "--mau DIR cũng đi đường thư mục"
     assert bia_lo.thu_muc_mau(str(tmp_path / "goc-khac"), "KX", [os.path.join(tm, "1.jpg")]) == tm, \
         "chay() nhận danh sách TỆP của thư mục mẫu (có thang.json) → vẫn là thư mục ấy (không rơi về cache kênh)"
+    n_lan = len(lan)
     bia_lo.ho_so_kieu(goc, "KH", goi=goi, log=lambda s: None)
-    assert len(lan) == 1, "thư mục không đổi → không tả lại"
+    assert len(lan) == n_lan, "thư mục không đổi → không tả lại, không đo lại bố cục"
     with io.open(yaml, "a", encoding="utf-8") as f:
         f.write('bia_lo_kieu: "hop"\n')
     assert bia_lo.ho_so_kieu(goc, "KH", log=lambda s: None)["kieu"] == "hop"
@@ -686,3 +689,252 @@ def test_bo_cuc_tran_hai_dai_ngang_tren_duoi():
     assert bia_lo.bo_cuc_tran(kc) == "dai", "chữ hai dải ngang dù nhân vật lệch trái"
     assert bia_lo.bo_cuc_tran(dict(kc, vi_tri_chu="Left side stacked vertically")) == "phai"
     assert bia_lo.bo_cuc_tran(dict(kc, vi_tri_chu="")) == "phai"
+
+
+
+# ── 18/10/2026: BỐ CỤC CHỮ của bìa thắng → mục tiêu cứng + cổng bố cục + dự phòng đúng kiểu + giám khảo so bìa thắng ──
+
+#: Mục tiêu giả kiểu bìa thắng "khối chữ trái 4–5 dòng, từ khoá đỏ cực to, nhân vật phải".
+MT_KHOI = {"so_dong": 4, "so_dong_min": 3, "so_dong_max": 5, "dt_dong_pct": 34.0, "cao_chinh_pct": 28.0,
+           "ti_le_chinh": 1.35, "khe_max": 0.0, "ky_tu_dong": 5.0, "rong_khoi": 0.6, "ben_nv": "phai",
+           "mau_chinh": "red", "vien": "very_thick", "tu_khoa_do": True}
+
+
+def test_do_bo_cuc_gop_dong_nhieu_mau_va_tong_hop_co_trong_so():
+    du = {"dong": [{"chu": "あいうえお", "x0": 0.02, "x1": 0.40, "y0": 0.05, "y1": 0.20, "mau": "white"},
+                   {"chu": "かき", "x0": 0.02, "x1": 0.30, "y0": 0.22, "y1": 0.50, "mau": "red", "tu_khoa": True},
+                   {"chu": "くけ", "x0": 0.31, "x1": 0.55, "y0": 0.23, "y1": 0.49, "mau": "yellow"},   # cùng hàng
+                   {"chu": "こさし", "x0": 0.02, "x1": 0.45, "y0": 0.52, "y1": 0.68, "mau": "white"},
+                   {"chu": "hỏng", "x0": 300, "x1": 900, "y0": 0.7, "y1": 0.8}],                    # px → bỏ
+          "nhan_vat": {"x0": 0.65, "x1": 0.95, "y0": 0.1, "y1": 0.95, "mat": [0.7, 0.1, 0.85, 0.3]}, "vien": "thick"}
+    d = bia_lo.doc_do_bo_cuc(du)
+    assert d["so_dong"] == 3 and [x["chu"] for x in d["dong"]] == ["あいうえお", "かきくけ", "こさし"], \
+        "dòng nhiều màu cùng hàng là MỘT dòng"
+    assert d["mau_chinh"] == "red" and d["tu_khoa_do"] and d["ben_nv"] == "phai" and d["vien"] == "thick"
+    assert d["cao_chinh_pct"] == 28.0 and d["khe_max"] <= 0.03 and d["khoi"][2] == 0.55
+    assert 25 < d["dt_dong_pct"] < 30
+    assert bia_lo.doc_do_bo_cuc({"dong": []}) is None and bia_lo.doc_do_bo_cuc("x") is None
+    mt = bia_lo.tong_hop_bo_cuc([(d, 9000.0), (dict(d, so_dong=5, dt_dong_pct=50.0, ben_nv="giua"), 1000.0)])
+    assert mt["so_dong"] == 3 and mt["dt_dong_pct"] == d["dt_dong_pct"] and mt["ben_nv"] == "phai", "trọng số lượt bấm"
+    assert (mt["so_dong_min"], mt["so_dong_max"]) == (3, 5) and mt["tu_khoa_do"]
+
+
+def test_tinh_hop_dong_do_lai_be_ngang_tren_diem_anh():
+    im = Image.new("RGB", (1280, 720), (238, 220, 196))
+    d = ImageDraw.Draw(im)
+    for i in range(5):  # 5 "chữ" trắng viền đen dày ở x 0,05–0,40, y 0,10–0,30
+        x = 64 + i * 90
+        d.rectangle([x, 72, x + 70, 216], fill=(255, 255, 255), outline=(0, 0, 0), width=10)
+    d.ellipse([1000, 60, 1160, 220], fill=(252, 252, 252), outline=(0, 0, 0), width=8)  # đầu nhân vật trắng viền đen
+    hop = bia_lo.tinh_hop_dong(im, [[0.04, 0.09, 0.95, 0.31]], tranh=[[0.78, 0.08, 0.91, 0.31]])
+    x0, y0, x1, y1 = hop[0]
+    assert abs(x0 - 0.05) < 0.02 and abs(x1 - 0.40) < 0.02, hop
+    assert bia_lo.tinh_hop_dong(Image.new("RGB", (1280, 720), (90, 90, 90)), [[0.1, 0.1, 0.5, 0.3]]) == \
+        [[0.1, 0.1, 0.5, 0.3]], "không đo được → giữ hộp AI"
+
+
+def test_kiem_bo_cuc_va_so_dong_muc():
+    tot = {"so_dong": 4, "dt_dong_pct": 33.0, "cao_chinh_pct": 27.0, "khe_max": 0.01}
+    assert bia_lo.kiem_bo_cuc(tot, MT_KHOI) == []
+    be = dict(tot, dt_dong_pct=18.0, cao_chinh_pct=14.0)
+    ly = bia_lo.kiem_bo_cuc(be, MT_KHOI)
+    assert len(ly) == 2 and "chữ chiếm 18%" in ly[0] and "dòng chính" in ly[1]
+    assert bia_lo.kiem_bo_cuc(dict(tot, khe_max=0.3), MT_KHOI)[0].startswith("khối chữ hở giữa")
+    assert bia_lo.kiem_bo_cuc(dict(tot, khe_max=0.3), MT_KHOI, cot=False) == [], "kiểu dải: hở giữa là thiết kế"
+    assert bia_lo.kiem_bo_cuc(be, {}) == [], "không có mục tiêu → không chặn"
+    assert bia_lo.so_dong_muc("朝の散歩で 足りないのは時間じゃない", MT_KHOI) == 4
+    assert bia_lo.so_dong_muc("短い言葉", MT_KHOI) == 3 and bia_lo.so_dong_muc("x", {}) == 0
+
+
+def test_doc_chu_bia_tran_theo_bia_thang_tu_khoa_do_cuc_to_mot_khoi():
+    hs = dict(_hs_tran("trai"), muc_tieu=MT_KHOI)
+    t = bia_lo.doc_chu_bia_tran("朝の散歩で 足りないのは時間じゃない", hs,
+                                cach_ai=["朝の散歩で|[足りないのは]|<時間>じゃ{ない}", "朝の散歩で|足りないのは|<時間>じゃ{ない}"])
+    assert [btk.chu_cua_tang(x) for x in t] == ["朝の散歩で", "足りないのは", "時間", "じゃない"], \
+        "ít dòng hơn mục tiêu → tách từ khoá đỏ thành dòng riêng"
+    to = [x for x in t if x.get("to")]
+    assert len(to) == 1 and btk.chu_cua_tang(to[0]) == "時間" and to[0]["phan_mau"][0]["mau"] == "#FF0000", \
+        "dòng cực to là dòng mang từ khoá ĐỎ (không phải 「足りないのは」)"
+    assert to[0]["co_toi_da_pct"] == 29.4 and all(x["co_toi_da_pct"] == 22.8 for x in t if not x.get("to"))
+    assert all(x["vi_tri"] == "tren" and x["khoi"] and x["vien_px_pct"] == bia_lo.VIEN_THEO_DO["very_thick"]
+               for x in t), "MỘT khối dòng xếp từ trên, viền theo bìa thắng"
+    assert "".join(btk.chu_cua_tang(x) for x in t) == "朝の散歩で足りないのは時間じゃない"
+    cu = bia_lo.doc_chu_bia_tran("朝の散歩で 足りないのは時間じゃない", _hs_tran("trai"),
+                                 cach_ai=["朝の散歩で|[足りないのは]|<時間>じゃ{ない}"])
+    assert len(cu) == 3 and not any(x.get("khoi") for x in cu), "không có mục tiêu → luật cũ y nguyên"
+
+
+def test_dung_bia_tran_theo_muc_tieu_mot_khoi_va_loai_chu_be(tmp_path, monkeypatch):
+    _can_font()
+    hs = dict(_hs_tran("trai"), muc_tieu=MT_KHOI)
+    tang = bia_lo.doc_chu_bia_tran("朝の散歩で 足りないのは時間じゃない", hs,
+                                   cach_ai=["朝の散歩で|[足りないのは]|<時間>じゃ{ない}"])
+    goi_ve = []
+    that = btk.ve_chu_len_anh
+
+    def spy(*a, **k):
+        goi_ve.append(k)
+        return that(*a, **k)
+    monkeypatch.setattr(btk, "ve_chu_len_anh", spy)
+    uv = {"ma": "y01-1", "nen": _nen_tran(str(tmp_path / "y01-1-nen.png"))}
+    bia_lo._chuan_nen(uv["nen"])  # noqa: SLF001
+    bia_lo.dung_bia(uv, tang, ho_so=hs)
+    assert uv["loai"] == "", uv
+    assert goi_ve[0]["doc_khoi"] == 0.5 and goi_ve[0]["dien_tich_muc"] == (0.92 * 34.0, 1.15 * 34.0)
+    do = uv["bo_cuc_do"]
+    assert do["so_dong"] == 4 and do["khe_max"] <= bia_lo.KHE_DONG_TOI_DA and uv["che_dau"] <= bia_lo.CHE_DAU_TOI_DA
+    assert do["dt_dong_pct"] >= bia_lo.HE_SO_DT_TOI_THIEU * 34.0
+    # mục tiêu bìa thắng không với tới (chữ phải phủ 95% khung) → LOẠI, không giao tấm chữ bé
+    uv2 = {"ma": "y01-2", "nen": _nen_tran(str(tmp_path / "y01-2-nen.png"))}
+    bia_lo._chuan_nen(uv2["nen"])  # noqa: SLF001
+    bia_lo.dung_bia(uv2, tang, ho_so=dict(hs, muc_tieu=dict(MT_KHOI, dt_dong_pct=95.0)))
+    assert uv2["loai"].startswith("bố cục chữ kém bìa thắng"), uv2["loai"]
+
+
+def test_giam_khao_bam_nhu_thang_diem_yeu_nen_nhat_va_to_dien_thoai(tmp_path):
+    du = {"ung_vien": [
+        {"so": 1, "bam_nhu_thang": 9, "noi_dung": 8, "to_mo": 9, "ro_120": 8, "cam_xuc": 7, "phong_cach": 8, "yeu": []},
+        {"so": 2, "bam_nhu_thang": 9, "noi_dung": 8, "to_mo": 9, "ro_120": 8, "cam_xuc": 7, "phong_cach": 8,
+         "yeu": ["pale background", "Small text", "none"]}]}
+    kq = bia_lo.doc_cham_1(du, 2)
+    assert kq[1]["tong"] == 83.9 and kq[2]["tong"] == 71.9 and kq[2]["yeu"] == ["pale background", "small text"]
+    tm = str(tmp_path)
+    thang = []
+    for i, m in enumerate([(220, 60, 20), (200, 40, 160), (30, 140, 220)]):
+        t = os.path.join(tm, "w{0}.jpg".format(i))
+        im = Image.new("RGB", (1280, 720), m)
+        ImageDraw.Draw(im).rectangle([0, 0, 600, 360], fill=(10, 10, 10))
+        im.save(t)
+        thang.append(t)
+    nhat = os.path.join(tm, "nhat.jpg")
+    Image.new("RGB", (1280, 720), (236, 228, 220)).save(nhat)
+    assert bia_lo.soi_yeu(nhat, thang) == ["pale background"] and bia_lo.soi_yeu(thang[0], thang) == []
+    ds = _ung_vien(tmp_path, 4)
+    to = bia_lo.to_dien_thoai(thang, ds, os.path.join(tm, "dt.jpg"))
+    o, le = bia_lo.O_DIEN_THOAI, 10
+    assert Image.open(to).size == (3 * o[0] + 4 * le, 3 * (o[1] + le) + le + 8), "hàng bìa thắng + 2 hàng ứng viên"
+
+
+def test_bo_cuc_thang_do_mot_lan_cache_va_dat_tay(tmp_path):
+    tm = str(tmp_path / "thang")
+    os.makedirs(tm)
+    for i in (1, 2):
+        _anh(os.path.join(tm, "{0}.jpg".format(i)), (200, 120 + 20 * i, 80))
+    with io.open(os.path.join(tm, bia_lo.TEP_DS_THANG), "w", encoding="utf-8") as f:
+        json.dump({"bia": [{"tep": "1.jpg", "imp": 100000, "ctr": 7.0}, {"tep": "2.jpg", "imp": 20000, "ctr": 5.0}]}, f)
+    lan = []
+
+    def goi(loi_nhac, **kw):
+        lan.append(kw.get("khoa"))
+        return json.dumps({"dong": [{"chu": "あいう", "x0": 0.02, "x1": 0.5, "y0": 0.1, "y1": 0.3, "mau": "white"},
+                                    {"chu": "かき", "x0": 0.02, "x1": 0.4, "y0": 0.3, "y1": 0.6, "mau": "red"}],
+                           "nhan_vat": {"x0": 0.6, "x1": 0.95, "y0": 0.1, "y1": 0.9, "mat": [0.65, 0.1, 0.8, 0.3]},
+                           "vien": "very_thick"})
+    mt = bia_lo.bo_cuc_thang(str(tmp_path), "KH", tm, goi=goi, log=lambda s: None, bo="trai")
+    assert len(lan) == 2 and mt["so_dong"] == 2 and mt["ben_nv"] == "phai" and mt["theo_bo"] == "trai"
+    assert mt["mau_chinh"] == "red" and mt["vien"] == "very_thick" and mt["nguon"] == "do"
+    assert bia_lo.bo_cuc_thang(str(tmp_path), "KH", tm, goi=goi, log=lambda s: None, bo="trai") == mt and len(lan) == 2
+    assert bia_lo.bo_cuc_thang(str(tmp_path), "KH", tm, log=lambda s: None, bo="dai")["theo_bo"] == "", \
+        "không bìa thắng cùng bố cục → mọi bìa"
+    with io.open(os.path.join(tm, bia_lo.TEP_BO_CUC_TAY), "w", encoding="utf-8") as f:
+        json.dump({"so_dong": 5, "dt_dong_pct": 45}, f)
+    assert bia_lo.bo_cuc_thang(str(tmp_path), "KH", tm, goi=goi)["nguon"] == "tay" and len(lan) == 2
+
+
+def _doc_dung(chu):
+    def goi(loi_nhac, **kw):
+        if loi_nhac.startswith("Read the text printed"):
+            return json.dumps({"dong": [chu], "chu_thua": [], "ky_tu_hong": False, "vet_xoa": False},
+                              ensure_ascii=False)
+        return "{}"
+    return goi
+
+
+def test_du_phong_dung_kieu_kenh_khong_che_mat_hoac_lam_lo_moi(tmp_path):
+    """TL2-T7-0031 (18/10): bìa dự phòng vẽ chữ xanh đen viền trắng giữa khung ĐÈ MẶT nhân vật. Giờ: lượt có lô chữ trần →
+    vẽ lại đúng các dòng + kiểu + bố cục bìa thắng của kênh, né mặt; không nền nào đạt → {} (lô mới), KHÔNG lùi kiểu
+    vẽ chung."""
+    from core import cong_chu
+    _can_font()
+    goc = _goc_tran(tmp_path)
+    chu = "朝の散歩で 足りないのは時間じゃない"
+    hs = dict(_hs_tran("trai"), muc_tieu=MT_KHOI)
+    tang = bia_lo.doc_chu_bia_tran(chu, hs, cach_ai=["朝の散歩で|[足りないのは]|<時間>じゃ{ない}"])
+    tm = str(tmp_path / "7-thumbnail")
+    os.makedirs(os.path.join(tm, "_lo"))
+    nen = _nen_tran(os.path.join(tm, "znen-thumb_001.png"))
+    bia_lo._chuan_nen(nen)  # noqa: SLF001
+    bia_lo._ghi_json(os.path.join(tm, "_lo", "xep-hang.json"), {  # noqa: SLF001
+        "kieu_chu": "tran", "bo_cuc": "trai", "chu_tang": tang, "muc_tieu": MT_KHOI, "mau": [], "ung_vien": []})
+    kq = cong_chu.bia_ma_du_phong(_doc_dung(chu.replace(" ", "")), tm, chu, goc=goc, kenh="KH")
+    assert kq.get("tep", "").endswith("thumb_090.jpg") and cong_chu.kiem_dau(kq["tep"], chu) == "", kq
+    bc = do_bia.doc_bao_cao(kq["tep"])
+    dau = bia_lo.tim_dau(Image.open(nen).convert("RGB"), None, noi=True)
+    assert dau and max(bia_lo._phan_giao(d, [x["hop"] for x in bc["dong"]]) for d in dau) <= 0.05, \
+        "chữ không đè đầu nhân vật"  # noqa: SLF001
+    assert len(bc["dong"]) == 4 and all(x["hop"][2] <= 0.67 * 1280 for x in bc["dong"]), "khối chữ trái như bìa thắng"
+    # nhân vật ĐỨNG ở cột chữ: mọi cách đặt đều đè mặt → không ra bìa (nơi gọi làm lô mới), không lùi kiểu chung
+    tm2 = str(tmp_path / "b" / "7-thumbnail")
+    os.makedirs(os.path.join(tm2, "_lo"))
+    nen2 = _nen_tran(os.path.join(tm2, "znen-thumb_001.png"), x_dau=0.12)
+    bia_lo._chuan_nen(nen2)  # noqa: SLF001
+    bia_lo._ghi_json(os.path.join(tm2, "_lo", "xep-hang.json"), {  # noqa: SLF001
+        "kieu_chu": "tran", "bo_cuc": "trai", "chu_tang": tang, "muc_tieu": MT_KHOI, "mau": [], "ung_vien": []})
+    assert cong_chu.bia_ma_du_phong(_doc_dung(chu.replace(" ", "")), tm2, chu, goc=goc, kenh="KH") == {}
+    assert not os.path.isfile(os.path.join(tm2, "thumb_090.jpg"))
+
+
+def test_bia_ma_chung_khong_che_mat_nhan_vat(tmp_path):
+    from core import cong_chu
+    _can_font()
+    im = Image.new("RGB", (1280, 720), (238, 220, 196))
+    d = ImageDraw.Draw(im)
+    d.ellipse([560, 20, 720, 180], fill=(250, 250, 250), outline=(10, 10, 10), width=8)   # đầu ở GIỮA dải chữ trên
+    d.rounded_rectangle([590, 180, 690, 700], radius=30, fill=(40, 50, 80), outline=(10, 10, 10), width=8)
+    nen = str(tmp_path / "nen.png")
+    im.save(nen)
+    v = cong_chu.ve_bia_ma(nen, "朝の散歩で 足りないのは時間じゃない", str(tmp_path / "x.jpg"))
+    assert "che mặt" in v.get("loi", ""), v
+
+
+
+def test_dong_do_mot_doan_tach_tu_khoa_va_chon_cach_chia_gan_bia_thang():
+    _can_font()
+    hs = dict(_hs_tran("trai"), muc_tieu=MT_KHOI)
+    # cả dòng một đoạn ĐỎ 「時間じゃない」 → 「時間」 đỏ cực to + 「じゃない」 trắng (như 「悠々自適に」 của bìa thắng)
+    t = bia_lo.doc_chu_bia_tran("朝の散歩で 足りないのは時間じゃない", hs, cach_ai=["朝の散歩で|[足りないのは]|<時間じゃない>"])
+    assert [btk.chu_cua_tang(x) for x in t] == ["朝の散歩で", "足りないのは", "時間", "じゃない"]
+    assert [bool(x.get("to")) for x in t] == [False, False, True, False]
+    assert t[3]["phan_mau"][0]["mau"] == "#FFFFFF" and t[2]["phan_mau"][0]["mau"] == "#FF0000"
+    # nhiều cách chia: chọn cách vẽ THỬ ra chữ to nhất so mục tiêu (5 dòng vụn → chữ bé — TL2-T7-0029)
+    vun = "一瞬で|<眠気が>|消える|<たった>|{一つ}の習慣"
+    gon = "一瞬で眠気が|[<消える>]|たった一つの習慣"
+    t2 = bia_lo.doc_chu_bia_tran("一瞬で眠気が消える たった一つの習慣", hs, cach_ai=[vun, gon])
+    d_vun = bia_lo._diem_thu(bia_lo._bo_tri_tran(bia_lo.doc_danh_dau_tran(vun), hs, 6, "trai"), hs, 4, "trai")  # noqa: SLF001
+    d_chon = bia_lo._diem_thu(t2, hs, 4, "trai")  # noqa: SLF001
+    assert d_chon >= d_vun and "".join(btk.chu_cua_tang(x) for x in t2) == "一瞬で眠気が消えるたった一つの習慣"
+
+
+def test_mau_do_vang_do_tren_bia_thang():
+    im = Image.new("RGB", (1280, 720), (30, 30, 30))
+    d = ImageDraw.Draw(im)
+    d.rectangle([20, 20, 500, 200], fill=(250, 4, 2))
+    d.rectangle([20, 300, 500, 450], fill=(252, 250, 12))
+    ra = bia_lo.mau_do_mau(im, [{"mau": "red", "hop": [0.0, 0.0, 0.45, 0.3]},
+                                {"mau": "yellow", "hop": [0.0, 0.4, 0.45, 0.65]}])
+    assert ra == {"mau_do": "#FA0402", "mau_vang": "#FCFA0C"}
+    assert bia_lo.mau_do_mau(im, [{"mau": "white", "hop": [0, 0, 1, 1]}]) == {}
+
+
+def test_kieu_dai_theo_bia_thang_dong_duoi_cuc_to_va_bo_khoang_trang():
+    _can_font()
+    mt = dict(MT_KHOI, so_dong=2, so_dong_min=2, so_dong_max=2, dt_dong_pct=34.0, cao_chinh_pct=24.0, ky_tu_dong=8.0,
+              ben_nv="giua", tu_khoa_do=True)
+    hs = dict(_hs_tran("dai"), muc_tieu=mt)
+    t = bia_lo.doc_chu_bia_tran("賢い人ほど 夜に眠らない", hs, cach_ai=["[<賢い>人ほど]|夜に眠らない"])
+    assert [btk.chu_cua_tang(x) for x in t] == ["賢い人ほど", "夜に眠らない"]
+    assert [bool(x.get("to")) for x in t] == [False, True], "kiểu dải: vế dưới (trả lời) là dòng cực to như bìa thắng"
+    assert [x["vi_tri"] for x in t] == ["tren", "duoi"] and not any(x.get("khoi") for x in t)
+    t2 = bia_lo.doc_chu_bia_tran("人が少ない駅に 自分が来ると混みだす人は", hs,
+                                 cach_ai=["人が少ない駅に|自分が {来ると} 混みだす人は"])
+    assert all(" " not in p["chu"] for x in t2 for p in x["phan_mau"]), "không vẽ khoảng trắng AI chèn giữa chữ Nhật"

@@ -166,8 +166,8 @@ class AiPhieu:
 
 _DUNG_XN = {"xac_nhan": [{"muc": "賢", "loai": "dung"}], "chu_sua": ""}
 _BAC_OAN = {"xac_nhan": [{"muc": "賢", "loai": "khong_trong_kich_ban", "dung": False,
-                          "ly_do": "タイトルに出現しない"}], "chu_sua": "頭がいい人ほど 恋に落ちない"}
-_BAC_THAT = {"xac_nhan": [{"muc": "腎", "loai": "giong_hinh", "dung_la": "賢"}], "chu_sua": "賢い人ほど 恋に落ちない"}
+                          "ly_do": "タイトルに出現しない"}], "chu_sua": "頭がいい人ほど 夜に眠らない"}
+_BAC_THAT = {"xac_nhan": [{"muc": "腎", "loai": "giong_hinh", "dung_la": "賢"}], "chu_sua": "賢い人ほど 夜に眠らない"}
 
 
 def test_doc_xac_nhan_chi_loai_loi_chu_moi_la_sai():
@@ -184,40 +184,40 @@ def test_doc_xac_nhan_chi_loai_loi_chu_moi_la_sai():
 def test_xac_nhan_kanji_mot_phieu_bac_oan_thi_phieu_khac_phan_xu_cho_qua():
     # TL3 18/10: 「賢」 không có trong tiêu đề/kịch bản (kịch bản viết 頭がいい) — một phiếu bác oan, hai phiếu kia: đúng
     ai = AiPhieu([_BAC_OAN, _DUNG_XN, _DUNG_XN])
-    r = cong_chu.soat_chat(ai, "賢い人ほど 恋に落ちない", tieu_de="頭がいい人ほど恋に落ちない理由", thang=("a", "b", "c"))
-    assert r["ok"] is True and r["chu"] == "賢い人ほど 恋に落ちない" and not r.get("sua")
+    r = cong_chu.soat_chat(ai, "賢い人ほど 夜に眠らない", tieu_de="頭がいい人ほど夜に眠らない理由", thang=("a", "b", "c"))
+    assert r["ok"] is True and r["chu"] == "賢い人ほど 夜に眠らない" and not r.get("sua")
     assert len(ai.goi) == 3 and len(set(ai.goi)) == 3, "ba phiếu, ba khoá khác nhau"
     # phiếu 1 đúng → không cần phiếu 2
     ai = AiPhieu([_DUNG_XN])
-    assert cong_chu.soat_chat(ai, "賢い人ほど 恋に落ちない", tieu_de="人ほど恋に落ちない", thang=("a",))["ok"] is True and len(ai.goi) == 1
+    assert cong_chu.soat_chat(ai, "賢い人ほど 夜に眠らない", tieu_de="人ほど夜に眠らない", thang=("a",))["ok"] is True and len(ai.goi) == 1
 
 
 def test_xac_nhan_kanji_loi_that_hai_phieu_cung_bac_van_chan():
     ai = AiPhieu([_BAC_THAT, _BAC_THAT, {"xac_nhan": [{"muc": "賢", "loai": "dung"}]}])
-    r = cong_chu.soat_chat(ai, "腎い人ほど 恋に落ちない", tieu_de="頭がいい人ほど恋に落ちない理由", thang=("a", "b"))
+    r = cong_chu.soat_chat(ai, "腎い人ほど 夜に眠らない", tieu_de="頭がいい人ほど夜に眠らない理由", thang=("a", "b"))
     # bác → bản sửa 「賢い人ほど…」 soát lại (賢 ngoài nguồn → phiếu 3 xác nhận đúng) → đạt bằng bản SỬA, không bao giờ bản sai
-    assert r["ok"] is True and r["sua"] and r["chu"] == "賢い人ほど 恋に落ちない"
+    assert r["ok"] is True and r["sua"] and r["chu"] == "賢い人ほど 夜に眠らない"
     assert any(x["sai"] == "腎" and x["dung"] == "賢" for x in r["loi"])
     ai = AiPhieu([_BAC_THAT, _BAC_THAT, _BAC_THAT, _BAC_THAT])
-    r = cong_chu.soat_chat(ai, "腎い人ほど 恋に落ちない", tieu_de="x", thang=("a", "b"))
-    assert r["ok"] is False or r["chu"] != "腎い人ほど 恋に落ちない"
+    r = cong_chu.soat_chat(ai, "腎い人ほど 夜に眠らない", tieu_de="x", thang=("a", "b"))
+    assert r["ok"] is False or r["chu"] != "腎い人ほど 夜に眠らない"
 
 
 def test_xac_nhan_kanji_ai_hong_la_chua_soat_khong_bao_gio_dat():
-    r = cong_chu.soat_chat(AiPhieu([_BAC_OAN, None]), "賢い人ほど 恋に落ちない", tieu_de="x", thang=("a", "b"))
+    r = cong_chu.soat_chat(AiPhieu([_BAC_OAN, None]), "賢い人ほど 夜に眠らない", tieu_de="x", thang=("a", "b"))
     assert r["ok"] is None
-    r = cong_chu.soat_chat(AiPhieu([None]), "賢い人ほど 恋に落ちない", tieu_de="x", thang=("a",))
+    r = cong_chu.soat_chat(AiPhieu([None]), "賢い人ほど 夜に眠らない", tieu_de="x", thang=("a",))
     assert r["ok"] is None
 
 
 def test_viet_lai_ngoai_khung_hoi_lai_mot_lan():
-    tra = iter(["THUMB: 頭脳 恋遠", "THUMB: 賢い人ほど 恋に落ちない"])
+    tra = iter(["THUMB: 頭脳 恋遠", "THUMB: 賢い人ほど 夜に眠らない"])
     kh = []
 
     def goi(loi_nhac, mo_hinh="", khoa="", toi_da_token=0):
         kh.append((khoa, loi_nhac))
         return next(tra)
-    assert cong_chu.viet_lai(goi, "x", tieu_de="t", khoa="vl") == "賢い人ほど 恋に落ちない"
+    assert cong_chu.viet_lai(goi, "x", tieu_de="t", khoa="vl") == "賢い人ほど 夜に眠らない"
     assert kh[0][0] != kh[1][0] and "has 4 characters" in kh[1][1]
 
 
@@ -653,10 +653,43 @@ def test_dau_goi_cli_giu_la_ma_hoan(tmp_path, monkeypatch):
     assert cong_chu.main(["dau-goi", "--kenh", k, "--goc", g]) == 0
 
 
-
 def test_goi_da_don_khong_con_cho_dang(tmp_path):
     g, k, ma, goi = _goi_cho(tmp_path)
     assert [x["ma"] for x in cong_chu.goi_cho_dang(g, k)] == [ma]
     with open(os.path.join(goi, "da-don.json"), "w", encoding="utf-8") as f:
         json.dump({"ma_goi": ma, "ly_do": "DONE: gói Bỏ", "xoa": ["8-video.mp4", "thumb_001.png"]}, f)
     assert cong_chu.goi_cho_dang(g, k) == [], "gói đã dọn (Bỏ / đã lên YouTube) không còn chờ đăng"
+
+
+# ── 18/10/2026: dòng NHIỀU MÀU đọc là MỘT dòng; cổng cuối soát chữ bìa CÓ chỗ xuống dòng ──────────────────────────────
+
+
+def test_dong_nhieu_mau_doc_tach_doan_van_la_mot_dong():
+    mong = "朝の散歩で 足りないのは時間じゃない"
+    # người đọc tách từng đoạn màu 「時間」「じゃ」「ない」 thành mục riêng → vẫn khớp tuyệt đối (bỏ khoảng trắng/xuống dòng)
+    assert cong_chu.xet_doc({"chu": "朝の散歩で 足りないのは 時間 じゃ ない"}, mong) == []
+    assert cong_chu.xet_doc({"chu": "朝の散歩で\n足りないのは\n時間\nじゃ\nない"}, mong) == []
+    assert cong_chu.xet_doc({"chu": "朝の散歩で 足りないのは 時間 じゃ"}, mong), "thiếu đoạn vẫn trượt"
+    assert cong_chu.xet_doc({"chu": "朝の散歩で 足りないのは 時間 じゃ ない ない"}, mong), "lặp đoạn vẫn trượt"
+
+
+def test_cong_cuoi_soat_chu_bia_co_cho_xuong_dong_khong_soat_chuoi_noi_lien(tmp_path, monkeypatch):
+    """TL2-T7-0031: chữ dự kiến của bìa lô là các dòng/đoạn màu NỐI LIỀN → biên tập viên "sửa" thêm 「で」 → tấm đầu bị
+    loại oan. Cùng chữ (bỏ khoảng) với chữ bìa → soát + đóng dấu bằng CHỮ BÌA có chỗ xuống dòng."""
+    from core import bia_theo_khuon as btk
+    chu = "朝の散歩で 足りないのは時間じゃない"
+    luot, tm = _luot(tmp_path, chu=chu)
+    _bo_bia(tm)
+    btk.ghi_ke_hoach(tm, {"che_do": "bia_lo", "muc": [{"so": s, "chu_du_kien": chu.replace(" ", "")} for s in _MAU]})
+    soat, doc = [], []
+    monkeypatch.setattr(auto_khau, "_soat_chu_luu", lambda bc, l, t, c, td: soat.append(c) or {"ok": True, "chu": c})
+    monkeypatch.setattr(auto_khau, "_xac_minh_chu_so",
+                        lambda bc, l, t, tep, c: doc.append(c) or {"dat": True, "ly_do": []})
+    monkeypatch.setattr(auto_khau, "_dau_du_phong", lambda *a, **k: None)
+    r = auto_khau._cong_chu_bia(_bc(str(tmp_path), AiGia(), []), luot, tm, chu, TIEU_DE)  # noqa: SLF001
+    assert r["dat"] is True and soat == [chu] and doc == [chu], (soat, doc)
+    # chữ dự kiến KHÁC chữ bìa (bìa rút gọn) → giữ chữ dự kiến
+    soat.clear()
+    btk.ghi_ke_hoach(tm, {"che_do": "bia_lo", "muc": [{"so": s, "chu_du_kien": "朝の散歩で 時間じゃない"} for s in _MAU]})
+    auto_khau._cong_chu_bia(_bc(str(tmp_path), AiGia(), []), luot, tm, chu, TIEU_DE)  # noqa: SLF001
+    assert soat == ["朝の散歩で 時間じゃない"]

@@ -1610,7 +1610,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                    khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
                    bao_cao: Optional[Dict[str, Any]] = None, cho_khung: bool = True,
                    tranh_them: Sequence[Sequence[float]] = (), ep_co: float = 1.0, doc: float = 0.5,
-                   kieu_phong: str = "", uu_tien_kieu: Sequence[str] = (), nhan_toi_da: int = 1) -> bool:
+                   kieu_phong: str = "", uu_tien_kieu: Sequence[str] = (), nhan_toi_da: int = 1,
+                   dien_tich_muc: Optional[Sequence[float]] = None, doc_khoi: Optional[float] = None) -> bool:
     """Vẽ các tầng chữ lên ảnh nền `nen` → `dich` (PNG). Mỗi tầng:
     `{vi_tri: tren|duoi, phan_mau:[{chu, mau}], co_pct, chinh, vung, can, khoi_nen}`.
 
@@ -1646,7 +1647,11 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     ấy % khung (thứ bậc: một dòng cực to, các dòng khác vừa), tầng `mot_dong` không tự xuống dòng (cách chia đã
     quyết); `ep_co` thu mọi dòng sau khi cân diện tích (né đầu nhân vật); `kieu_phong="hop"` dùng phông rất đậm
     `FONT_HOP`; `uu_tien_kieu`/`nhan_toi_da` chuyển cho `do_bia.chon_kieu_khoi` (giữ đúng kiểu chữ khuôn — trắng viền
-    đen, đỏ/vàng từ khoá). Mặc định: y như cũ."""
+    đen, đỏ/vàng từ khoá). Mặc định: y như cũ.
+
+    18/10/2026 (`bia_lo` — bố cục chữ của bìa THẮNG): `dien_tich_muc` (% khung, (thấp, cao)) thay mục tiêu diện tích chữ
+    mặc định — số đo bìa thắng của kênh; `doc_khoi` (0..1): các dòng xếp từ trên thành MỘT khối, khối đặt ở vị trí dọc
+    này trong vùng chữ (0,5 = giữa) — cột chữ của bìa thắng là một khối liền, không hở giữa."""
     from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps  # noqa: PLC0415
 
     ds_tang = [t for t in chu_tang if isinstance(t, dict)]
@@ -1740,6 +1745,8 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     # Vùng chữ riêng (vẽ lại đúng chỗ chữ cũ): mục tiêu diện tích theo VÙNG, chữ phủ kín vùng hơn.
     dt_muc = DIEN_TICH_CHU_PCT if not khung_chu else tuple(
         x * (kx1 - kx0) * (ky1 - ky0) for x in (60.0, 85.0))
+    if dien_tich_muc:
+        dt_muc = (float(dien_tich_muc[0]), float(dien_tich_muc[1]))
 
     # 2) Cân diện tích chữ về 40–55% mà không đè nhau / không tràn bề ngang.
     for _ in range(30):
@@ -1785,6 +1792,17 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
             y_duoi = g["day"]
             hinh.append(g)
     hinh.sort(key=lambda g: g["top"])
+    if doc_khoi is not None and hinh and not ds_duoi:
+        # MỘT khối dòng xếp từ trên: dời cả khối tới vị trí dọc `doc_khoi` của phần trống trong vùng chữ.
+        dau, cuoi = min(g["top"] for g in hinh), max(g["top"] + g["h"] for g in hinh)
+        tu, toi = zy0 + int(H * 0.03), zy1 - int(H * 0.045)
+        lech = tu + max(0.0, (toi - tu) - (cuoi - dau)) * max(0.0, min(1.0, float(doc_khoi))) - dau
+        for g in hinh:
+            g["y"] += lech
+            g["top"] += lech
+            g["day"] += lech
+            g["hop"] = (g["hop"][0], g["hop"][1] + lech, g["hop"][2], g["hop"][3] + lech)
+            g["hop_khung"] = (g["hop_khung"][0], g["hop_khung"][1] + lech, g["hop_khung"][2], g["hop_khung"][3] + lech)
 
     # 4) Kiểu chữ THEO NỀN đo được (do_bia), rồi vẽ: khung/dải nền → bóng → viền → chữ.
     from . import do_bia  # noqa: PLC0415

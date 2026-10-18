@@ -221,7 +221,13 @@ def chup() -> Dict[str, Any]:
     moc = (_dt.datetime.now() - _dt.timedelta(hours=24)).strftime("%Y-%m-%d %H:%M")
     loi = [x for x in _duoi(os.path.join(GOC, "workspace", "loi-chay-max.md"), 200)
            if x.startswith("- [") and "**nhac**" not in x and x[3:19] >= moc][-5:]
+    try:   # 17/10/2026 — ô «Tự kiểm» (`core.tu_kiem`, gác tổng 15'): đạt · máy đã tự sửa · đang thử lại · còn mở
+        from . import tu_kiem  # noqa: PLC0415
+        tk = tu_kiem.o_truc_quan(GOC)
+    except Exception:  # noqa: BLE001
+        tk = {}
     return {
+        "tu_kiem": tk,
         "luc": time.strftime("%Y-%m-%d %H:%M:%S"),
         "may": {"ram": _ram_gb(), "o_trong_gb": round(o.free / 2 ** 30, 1), "o_tong_gb": round(o.total / 2 ** 30, 1),
                 "agent_song": tuoi_nhip is not None and tuoi_nhip < 300, "nhip_giay": round(tuoi_nhip or -1),

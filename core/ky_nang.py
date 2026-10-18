@@ -52,6 +52,8 @@ class KyNang:
     tu_ap: bool = False
     nang: bool = False
     toan_may: bool = False
+    han_phut: float = 0.0          # hạn giờ riêng (0 = mặc định của ky_nang_tu: nặng 60', nhẹ 15')
+    mot_kenh: bool = False         # việc nhẹ mà dài (nhiều lượt AI): mỗi lượt tự kích hoạt chỉ MỘT kênh — không dồn 8 kênh
 
 
 # ── tiện ích đọc đĩa (thuần, hỏng → None) ──────────────────────────────────────
@@ -903,6 +905,67 @@ def d_danh_sach_phat(goc, kenh):
     return (False, chan) if chan else (True, ly)
 
 
+# D16 · Phát hiện tụt · D17 · Soát sản phẩm tuần · S06 · Sửa bìa sai chữ đang chạy (17/10/2026) ───────────────
+
+def _bao_cao_bat_thuong(goc, kenh) -> dict:
+    return _json(goc, "workspace", "tu-kiem", "bat-thuong", kenh + ".json") or {}
+
+
+def k_bat_thuong(goc, kenh):
+    d = _bao_cao_bat_thuong(goc, kenh)
+    if not d:
+        return THIEU, "chưa phát hiện tụt lần nào"
+    p = d.get("phat_hien") or {}
+    if p.get("tut"):
+        return LOI, "tụt {0} từ {1}: {2}".format(", ".join(p["tut"]), d.get("tut_tu") or "?", "; ".join(d.get("gay") or [])[:90])
+    return DAT, "lúc {0}: {1}".format(str(d.get("luc"))[:16], "không tụt" if p.get("du") else p.get("ly_do", "")[:80])
+
+
+def d_bat_thuong(goc, kenh):
+    if _dang_o_may_khac(goc, kenh):
+        return False, "kênh làm ở máy khác"
+    t = _tuoi_gio(os.path.join(goc, "workspace", "tu-kiem", "bat-thuong", kenh + ".json"))
+    return (True, "chưa phát hiện tụt lần nào") if t is None else         ((t >= 20, "lần phát hiện cuối {0:.0f} giờ trước".format(t)))
+
+
+def k_soat_tuan(goc, kenh):
+    from core import soat_san_pham as ss  # noqa: PLC0415
+    ls = ss.doc_lich_su(goc, kenh)
+    if not ls:
+        return THIEU, "chưa soát sản phẩm lần nào"
+    x = ls[-1]
+    return (LOI if x.get("anh_xau") or (x.get("bia") or {}).get("sai") else DAT), "soát {0}: ảnh {1} · bìa sai {2} · chép {3}".format(
+        str(x.get("luc"))[:10], (x.get("anh") or {}).get("dat_ca"), len((x.get("bia") or {}).get("sai") or []),
+        (x.get("doc_dao") or {}).get("ti_le_chep"))
+
+
+def d_soat_tuan(goc, kenh):
+    if _dang_o_may_khac(goc, kenh):
+        return False, "kênh làm ở máy khác"
+    from core import soat_san_pham as ss  # noqa: PLC0415
+    return ss.can_chay(goc, kenh, _gio())
+
+
+def _viec_sua_bia(goc, kenh) -> list:
+    from core import bat_thuong  # noqa: PLC0415
+    return bat_thuong.viec_sua_bia(goc, kenh)
+
+
+def k_sua_bia(goc, kenh):
+    ds = _viec_sua_bia(goc, kenh)
+    return (CHO, "{0} bìa đang chạy sai chữ chờ sửa".format(len(ds))) if ds else (DAT, "không có bìa sai chữ chờ sửa")
+
+
+def d_sua_bia(goc, kenh):
+    ds = _viec_sua_bia(goc, kenh)
+    return (True, "{0} bìa sai chữ chờ sửa ({1})".format(len(ds), ds[0].get("ma"))) if ds else (False, "không có")
+
+
+def c_sua_bia(goc, kenh):
+    ds = _viec_sua_bia(goc, kenh)
+    return _py("-m", "core.bat_thuong", "sua-bia", "--kenh", kenh, "--vid", str(ds[0].get("vid") if ds else ""))
+
+
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
 
 DANH_MUC: List[KyNang] = [
@@ -1019,6 +1082,25 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.cong_chu dau-goi --kenh K", k_dau_bia, ["D02"],
            dieu_kien=d_dau_bia, chay=lambda goc, kenh: _py("-m", "core.cong_chu", "dau-goi", "--kenh", kenh), nhip_gio=1,
            tu_ap=True),
+    # TỰ KIỂM – TỰ SỬA – TỰ HOÀN THIỆN (17/10/2026; gác tổng chạy `core.tu_kiem` mỗi 15 phút)
+    KyNang("D16", "Phát hiện tụt + tự chẩn đoán", "dinh_ky",
+           "Mỗi ngày: hiển thị @72h / CTR / AVD / trang chủ / đăng ký mỗi 1k của video đã qua 96 giờ so nền của CHÍNH "
+           "kênh (thước chung). Tụt → soát chữ bìa đang chạy, lệch kiểu bìa, lệch đề tài, lỗi sản xuất → tự xếp sửa bìa "
+           "sai chữ (S06), A/B cho video yếu, ghi não.", "python -X utf8 -m core.bat_thuong kenh --kenh K",
+           k_bat_thuong, ["D01"], dieu_kien=d_bat_thuong,
+           chay=lambda goc, kenh: _py("-m", "core.bat_thuong", "kenh", "--kenh", kenh), nhip_gio=20, tu_ap=True,
+           han_phut=40, mot_kenh=True),
+    KyNang("D17", "Soát sản phẩm tuần", "dinh_ky",
+           "Mỗi tuần: chữ bìa đang chạy, 20 ảnh cảnh qua giám khảo, độ độc đáo kịch bản (kể cả xuyên ngôn ngữ); tỉ lệ "
+           "ảnh xấu đi → vòng cải tiến lời nhắc đo trước/sau, chỉ áp vào prompt/7-canh.md khi qua thanh (có sao lưu).",
+           "python -X utf8 -m core.soat_san_pham tuan --kenh K", k_soat_tuan, ["D02"], dieu_kien=d_soat_tuan,
+           chay=lambda goc, kenh: _py("-m", "core.soat_san_pham", "tuan", "--kenh", kenh), nhip_gio=24 * 6, tu_ap=True,
+           han_phut=60, mot_kenh=True),
+    KyNang("S06", "Sửa bìa sai chữ đang chạy", "sua_chua",
+           "Kích hoạt: hàng `workspace/tu-kiem/viec-sua-bia.json` (D16/D17 thấy bìa ĐANG CHẠY sai chữ) → soát chữ bìa → "
+           "bìa lô chữ vẽ bằng mã → đọc lại hai lượt + dấu cổng chữ → xếp đổi bìa (máy DOM), tự kiểm đọc lại i.ytimg.com.",
+           "python -X utf8 -m core.bat_thuong sua-bia --kenh K", k_sua_bia, ["D16"], dieu_kien=d_sua_bia,
+           chay=c_sua_bia, nhip_gio=1, tu_ap=True, han_phut=40, mot_kenh=True),
 ]
 
 

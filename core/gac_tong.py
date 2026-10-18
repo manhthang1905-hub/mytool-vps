@@ -2137,6 +2137,16 @@ def _mot_luot(goc: str, thu: bool) -> int:
         hanh_dong_tu_sua += tu_xu_ly_viec_may(goc, anh, ghi_dia=not thu)
     except Exception:  # noqa: BLE001 — tự xử hỏng không được làm sập gác tổng
         pass
+    # TỰ KIỂM (17/10/2026, `core/tu_kiem.py`): sổ tay tự sửa (`core.loi_lap_lai`) → kiểm kết quả mọi việc máy tự làm từ
+    # nguồn thật (oEmbed / i.ytimg.com / trang danh sách phát công khai / sổ bộ chạy) → thử lại qua đúng bộ chạy → phân
+    # loại → MỘT báo động gộp mỗi ngày. Không mở Chrome. `--thu`: chỉ đọc. try riêng — hỏng không làm sập gác tổng.
+    dong_tu_kiem = ""
+    try:
+        from core import tu_kiem  # noqa: PLC0415
+
+        dong_tu_kiem = tu_kiem.nhip(goc, thu=thu)["dong"]
+    except Exception as loi_tk:  # noqa: BLE001
+        dong_tu_kiem = "Tự kiểm: lỗi ({0})".format(str(loi_tk)[:200])
 
     print(ban_tin_ngay(goc, anh, ds_su_co, so_du_vnd=so_du_vnd,
                        so_ngay_license_con_lai=ngay_license))
@@ -2151,6 +2161,9 @@ def _mot_luot(goc: str, thu: bool) -> int:
         print("Tự sửa{0}:".format(" (--thu: SẼ làm, chưa làm thật)" if thu else ""))
         for h in hanh_dong_tu_sua:
             print("  - {0}".format(h["chuyen_gi"]))
+    if dong_tu_kiem:
+        print("")
+        print(dong_tu_kiem)
     if tom_tat_gd:
         print("")
         print("Giám đốc kênh: {0}".format(tom_tat_gd))

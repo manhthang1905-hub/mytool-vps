@@ -165,7 +165,37 @@ def test_nhip_mot_luot_bao_gop_mot_lan_moi_ngay(tmp_path, monkeypatch):
     assert len(goi) == 1
     assert os.path.isfile(os.path.join(goc, "workspace", "tu-kiem", "2026-10-17.json"))
     assert "Tự kiểm" in kq["dong"]
-    assert tk.o_truc_quan(goc)["luc"].startswith("2026-10-17")
+    assert tk.o_truc_quan(goc)["luc"].startswith("2026-10-17")                    # mới nhất trên đĩa, không theo đồng hồ
+    assert tk.o_truc_quan(goc, BAY)["luc"].startswith("2026-10-17") and tk.o_truc_quan(goc, BAY.replace(day=16)) ["dat"] == 0
+
+
+def test_bang_dieu_khien_mot_dong_may_va_viec_nguoi(tmp_path):
+    from core import bang_dieu_khien as bdk
+    goc = str(tmp_path)
+    m = {"loai": "ghim", "kenh": "TL5-T7", "khoa": "ghim:x", "viec": "bình luận ghim", "tt": tk.CHO, "nguoi": True,
+         "bang_chung": "kênh chờ xác minh điện thoại", "can_lam": "youtube.com/verify — xác minh số điện thoại kênh TL5-T7"}
+    _ghi(os.path.join(goc, "workspace", "tu-kiem", "2026-10-17.json"),
+         {"luc": "2026-10-17T12:00:00", "tom_tat": {"dat": 5, "tu_sua": 1, "mo": 0, "thu_lai": 0}, "dong": "Tự kiểm 17/10",
+          "muc": [m], "nguoi": [m]})
+    may = []
+    viec = bdk.viec_cua_ban(goc, anh={"kenh": []}, may_tu_lam=may)
+    assert any(x["khoa"] == "may:tu-kiem" and "Tự kiểm 17/10" in x["chu"] for x in may)
+    assert [v for v in viec if v["khoa"].startswith("tu-kiem:TL5-T7")]
+
+
+def test_kiem_duong_max(tmp_path):
+    goc = str(tmp_path)
+    _ghi(os.path.join(goc, "workspace", "cai-dat.json"), {"viet_chu_bang": "vi"})
+    p = os.path.join(goc, "workspace", "viet-max", "so-dung.jsonl")
+    os.makedirs(os.path.dirname(p))
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"luc": "2020-01-01 00:00:00", "viec": "cu"}) + "\n")
+    K = tk.BoiCanh(goc, bay=BAY, tai=_mang({}), kenh_ds=[], so={})
+    assert tk.kiem_duong_max(K)[0]["tt"] == tk.DAT
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"luc": "2099-01-01 00:00:00", "viec": "nao-bo-phan-ngu:bia"}) + "\n")
+    m = tk.kiem_duong_max(K)[0]
+    assert m["tt"] == tk.HONG and "nao-bo-phan-ngu" in m["bang_chung"]
 
 
 def test_van_tay_lech():

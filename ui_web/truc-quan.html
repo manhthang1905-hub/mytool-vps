@@ -273,10 +273,12 @@ function taiNguyen() {
   const m = DU.may || {}, ram = m.ram || {}, kenh = DU.kenh || [];
   const coVideo = kenh.filter(k => k.video_mai && k.video_mai.co).length, hen = kenh.filter(k => k.video_mai && k.video_mai.da_hen).length;
   const pRam = ram.tong ? 1 - ram.trong / ram.tong : 0, pO = m.o_tong_gb ? 1 - m.o_trong_gb / m.o_tong_gb : 0;
-  const vh = DU.van_hanh || {}, vhHong = (vh.hong || []).map(h => h.ten).join(", ");
+  const vh = DU.van_hanh || {}, vhHong = (vh.hong || []).map(h => h.ten).join(", "), tk = DU.tu_kiem || {};
   const o = [
     ["Vận hành", "shield", !vh.tong ? "canh" : vh.song >= vh.tong ? "tot" : "hong", vh.tong ? `${vh.song}/${vh.tong} chạy` : "Chưa canh",
      vhHong ? `chưa chạy: ${vhHong}` : (vh.khoi_dong || "lịch ShopAPI-VanHanh chưa chạy")],
+    ["Tự kiểm", "check", !tk.luc ? "canh" : tk.mo ? "hong" : tk.thu_lai ? "canh" : "tot", tk.luc ? `${tk.dat} đạt · ${tk.mo} mở` : "Chưa chạy",
+     tk.luc ? (tk.mo ? `còn mở: ${(tk.mo_ds || []).join(" · ")}` : `${tk.tu_sua} máy đã tự sửa · ${tk.thu_lai} đang thử lại · ${tk.luc}`) : "gác tổng chưa chạy tự kiểm"],
     ["Agent", "pulse", m.agent_song ? "tot" : "hong", m.agent_song ? "Đang sống" : "IM LẶNG", m.nhip_giay >= 0 ? `nhịp tim ${m.nhip_giay}s trước` : "không thấy nhịp tim"],
     ["Bộ não", "brain", (DU.nao || {}).phien_hom_nay ? "tot" : "canh", (DU.nao || {}).phien_hom_nay ? "Đã chạy" : "Chờ phiên", (DU.nao || {}).phien_hom_nay ? "phiên hôm nay xong" : "phiên sáng chưa chạy"],
     ["Máy đăng", "upload", m.dang_dang ? "canh" : "tot", m.dang_dang ? "Đang đăng" : "Rảnh", m.dang_dang ? "đang tải video lên" : "sẵn sàng"],
