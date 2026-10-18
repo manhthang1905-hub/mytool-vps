@@ -377,23 +377,20 @@ def test_cong_cuoi_hai_luot_vench_la_truot_doi_tam(tmp_path):
     assert r.get("doi") and r["tep"] == "CHON-thumb_001.jpg"
 
 
-def test_cong_cuoi_het_tam_dung_chu_thi_bia_ve_bang_ma(tmp_path):
+def test_cong_cuoi_het_tam_dung_chu_thi_ve_lo_moi_khong_du_phong_chung(tmp_path):
+    """19/10/2026: bìa dự phòng chữ-vẽ-bằng-mã kiểu chung ĐÃ TẮT (bỏ qua khuôn kênh, lên sóng thật xấu) — hết tấm
+    có chữ đúng thì HetBiaDat (vẽ lô mới theo khuôn kênh), không bao giờ ra CHON-thumb_09N."""
     _can_font()
     luot, tm = _luot(tmp_path)
     _bo_bia(tm)
     _nen_sach(os.path.join(tm, "znen-thumb_002.png"))
-    # mọi tấm của mô hình ảnh in sai kanji; bìa vẽ bằng mã (nền tối) đọc đúng
     ai = AiGia(theo_mau={_MAU[1]: SAI, _MAU[2]: SAI, _MAU[3]: SAI, (60, 40, 30): DUNG, (120, 100, 90): DUNG})
     bc = _bc(str(tmp_path), ai, [])
-    tep = ""
-    for _ in range(6):
-        r = auto_khau._cong_chu_bia(bc, luot, tm, DUNG, TIEU_DE)  # noqa: SLF001
-        if r.get("dat"):
-            tep = r["tep"]
-            break
-    assert tep.startswith("CHON-thumb_09"), tep
-    assert cong_chu.kiem_dau(os.path.join(tm, tep), DUNG) == ""
-    assert chon_bia.doc_chon_bia(tm)["chon"]["kieu"] == "bia_ma"
+    with pytest.raises(auto_khau.HetBiaDat):
+        for _ in range(6):
+            r = auto_khau._cong_chu_bia(bc, luot, tm, DUNG, TIEU_DE)  # noqa: SLF001
+            assert not str(r.get("tep") or "").startswith("CHON-thumb_09"), r
+    assert not [f for f in os.listdir(tm) if f.startswith("CHON-thumb_09")]
 
 
 def test_cong_cuoi_ai_hong_la_giu_khong_phai_dat(tmp_path):

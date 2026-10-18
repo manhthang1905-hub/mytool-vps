@@ -10898,10 +10898,9 @@ def _cong_chu_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str, tieu_
         bc.ghi("  ảnh bìa — cổng chữ: loại tấm {0} ({1}) → thử tấm kế.".format(so, ly_do[:160]))
         return {"dat": False, "doi": True, "tep_cu": os.path.basename(tep), "ly_do": ly_do}
     moi = _loai_tam_giao(bc, thu_muc, so, tep, ly_do)
-    if not moi:
-        # 16/10/2026: hết tấm có chữ đúng → bìa dự phòng CHỮ VẼ BẰNG MÃ (chữ đã soát) trên nền sạch tốt nhất, cũng
-        # phải qua hai lượt đọc mới được dấu. AI hỏng → giữ, thử lại; không nền nào ra bìa đạt → lô mới.
-        moi = _bia_ma_du_phong(bc, luot, thu_muc, chu_bia, ly_do)
+    # 19/10/2026 — TẮT bìa dự phòng chữ-vẽ-bằng-mã-kiểu-chung (16/10): nó bỏ qua khuôn/não của kênh (TL4 hộp đỏ → ra
+    # chữ trần xanh đen, TL2 chữ đè mặt nhân vật) và đã lên sóng thật. Chủ: "kênh đang ok mà thumb video vừa đăng
+    # khác hoàn toàn các video đã win". Hết tấm có chữ đúng → HetBiaDat (vẽ lô mới theo khuôn kênh / giữ), KHÔNG dự phòng.
     if not moi:
         raise HetBiaDat("mọi tấm bìa hợp lệ đều hỏng ở cổng chữ — tấm cuối: {0}".format(ly_do))
     return {"dat": False, "doi": True, "tep_cu": os.path.basename(tep), "tep": moi, "ly_do": ly_do}
