@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.214.2** — 2026-10-19 — `vps-jp1` — feat(mo-kenh): tu dang nhap Gmail tu kho khi mo kenh (core/dang_nhap_gmail; chua xac minh danh tinh thi khong tu tin)
 - **2.214.1** — 2026-10-19 — `vps-jp1` — fix(bia): TAT bia du phong chu-ve-bang-ma kieu chung (bo qua khuon/nao kenh: TL4 ra chu tran xanh den thay hop do, TL2 chu de mat) - het tam dat thi ve lo moi theo khuon kenh
 - **2.214.0** — 2026-10-19 — `vps-jp1` — fix: sua goc loi lap 13-19/10 - clip ket 'can nguoi xem' mo lai vong cuu sau 3-6h; tu chua DOM bo do phan tu vang theo trang thai + trang sua dang A/B; hang sua dem doi >36h thi S03 nhat; S05 dong dau goi cu theo chu that tren anh, doc loi…
 - **2.213.8** — 2026-10-19 — `vps-jp1` — fix(cong-chu): het loai oan chu dung (xac nhan cho phep tu dong nghia, 2/3 phieu doc lap) + thu hang 2/3 truoc du phong (.jpg) + soat chu bia khong cach
