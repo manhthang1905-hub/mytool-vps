@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.213.6** — 2026-10-18 — `vps-jp1` — fix(su-co): 'khong lay duoc loi thoai' la NOI_DUNG (nguon hong), khong phai MAT_MANG - truoc day thu lai vo han (TL1-0032 hong 243 lan/2 ngay), gio bo luot de chon nguon khac
 - **2.213.5** — 2026-10-17 — `vps-jp1` — fix(nao): phien nao chay bang vi ShopAPI khi chu chon vi (Claude Code tro ve khoa ShopAPI, khong cham thue bao Max)
 - **2.213.4** — 2026-10-17 — `vps-jp1` — fix(nao): chu chon vi ShopAPI thi phien nao (Claude Code/thue bao Max) khong chay ke ca khi lich bat lai
 - **2.213.3** — 2026-10-17 — `vps-jp1` — fix(nao-bo-phan): chu chon viet bang vi (viet_chu_bang=vi) thi giac ngu nao cung di vi ShopAPI, khong goi Claude Max
