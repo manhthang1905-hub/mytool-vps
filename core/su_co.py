@@ -373,6 +373,10 @@ def phan_loai(loi: BaseException) -> str:
     ma_code = str(getattr(loi, "code", "") or "").strip().lower()
     if ma_code in _MA_CODE:
         return _MA_CODE[ma_code]
+    # 18/10/2026: TL1-0032 hỏng 243 lần / 2 ngày vì "không lấy được lời thoại … chặn địa chỉ MẠNG" bị dò nhầm thành
+    # MAT_MANG (thử lại vô hạn, miễn trần phục hồi) — đây là NGUỒN không lấy được, phải bỏ lượt để chọn nguồn khác.
+    if "không lấy được lời thoại" in chu:
+        return NOI_DUNG
     for loai, dau_hieu in _BANG:
         if any(d.lower() in chu for d in dau_hieu):
             return loai
