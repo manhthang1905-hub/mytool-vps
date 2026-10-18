@@ -702,9 +702,15 @@ def diem(loi: Sequence[Dict[str, str]], da_sua: Sequence[str] = ()) -> int:
 # ── SỬA ──────────────────────────────────────────────────────────────────────
 
 def sua_am(ffmpeg: str, video: str, am: Dict[str, Any], ng: Dict[str, float]) -> bool:
-    """Loudnorm hai lượt (số đo lượt 1 lấy từ chính lượt loudnorm print_format=json), hình chép nguyên."""
+    """Loudnorm hai lượt (số đo lượt 1 lấy từ chính lượt loudnorm print_format=json), hình chép nguyên.
+
+    18/10/2026 (TL5-0013 bị chặn: sau sửa vẫn −0,5 dBTP): loudnorm TP=−1,5 chưa đủ — nén AAC đẩy đỉnh liên mẫu lên.
+    Nên: (1) mục tiêu đỉnh hạ thêm đúng phần đang vượt trần (lần sửa sau chặt hơn lần trước), (2) thêm bộ giới hạn
+    đỉnh ở 192 kHz (đỉnh thật ≈ đỉnh mẫu khi lấy mẫu gấp 4) trước khi nén AAC."""
+    vuot = max(0.0, float(am.get("tp") or ng["tp_tran"]) - ng["tp_tran"])
+    tp = round(ng["tp_muc_tieu"] - vuot - 0.3, 2)
     _o, tho, ma = _chay(ffmpeg, ["-i", video, "-vn", "-af", "loudnorm=I={0}:TP={1}:LRA=11:print_format=json".format(
-        ng["lufs_muc_tieu"], ng["tp_muc_tieu"]), "-f", "null", "-"], timeout=600)
+        ng["lufs_muc_tieu"], tp), "-f", "null", "-"], timeout=600)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", tho, re.S)
     if ma != 0 or not m:
         return False
@@ -713,8 +719,10 @@ def sua_am(ffmpeg: str, video: str, am: Dict[str, Any], ng: Dict[str, float]) ->
     except ValueError:
         return False
     loc = ("loudnorm=I={0}:TP={1}:LRA=11:measured_I={2}:measured_TP={3}:measured_LRA={4}:measured_thresh={5}:"
-           "offset={6}:linear=true").format(ng["lufs_muc_tieu"], ng["tp_muc_tieu"], s["input_i"], s["input_tp"],
+           "offset={6}:linear=true").format(ng["lufs_muc_tieu"], tp, s["input_i"], s["input_tp"],
                                              s["input_lra"], s["input_thresh"], s["target_offset"])
+    loc += (",aresample=192000,alimiter=limit={0:.4f}:attack=1:release=50:level=disabled,aresample=48000"
+            .format(10 ** ((tp - 0.2) / 20.0)))
     goc, duoi = os.path.splitext(video)
     tam = goc + ".cl" + duoi
     _o, _e, ma = _chay(ffmpeg, ["-y", "-i", video, "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-af", loc,
