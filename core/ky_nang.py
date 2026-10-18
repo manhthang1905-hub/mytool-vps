@@ -1127,8 +1127,10 @@ def _cac_kenh(goc: str) -> List[str]:
     """Kênh máy này THẬT SỰ quản lý (khai trong vm/cai-dat-tool.json) — bỏ thư mục khuôn mẫu (vd TL4-T7-v2)."""
     d = _json(_vm(goc, "cai-dat-tool.json")) or {}
     ds = sorted((d.get("kenh") or {}).keys())
-    return ds or sorted(x for x in os.listdir(os.path.join(goc, "CHANNEL"))
-                        if os.path.isfile(os.path.join(goc, "CHANNEL", x, "kenh.yaml")))
+    ds = ds or sorted(x for x in os.listdir(os.path.join(goc, "CHANNEL"))
+                      if os.path.isfile(os.path.join(goc, "CHANNEL", x, "kenh.yaml")))
+    # 19/10: kênh đã TRẢ KHO (core/tra_kho.py) không còn kỹ năng nào chạy/báo
+    return [k for k in ds if not str(_kenh_yaml(goc, k).get("tra_kho") or "").strip()]
 
 
 def _tu_kich_hoat_chu(k: KyNang) -> str:
