@@ -956,6 +956,33 @@ def doc_so_thiet_lap(ma: str, goc: str = GOC) -> Dict[str, Any]:
     return du if isinstance(du, dict) else {}
 
 
+def _thu_dang_nhap_gmail(goc: str, ma: str, d: Dict[str, Any], exe: str, bay_gio: Optional[_dt.datetime],
+                         log: Callable[[str], None]) -> Tuple[Optional[bool], str]:
+    """Kho có tài khoản kênh → tự đăng nhập Gmail vào hồ sơ Chrome kênh (`core/dang_nhap_gmail`). Lỗi thì KHÔNG thử lại
+    trong 6 giờ (Google soi lượt gõ sai/CAPTCHA lặp). Không có tài khoản thì bỏ qua, không ghi gì."""
+    from .dang_nhap_gmail import dang_nhap_kenh  # noqa: PLC0415
+    bay = _bay_gio(bay_gio)
+    try:
+        cu = _dt.datetime.strptime(str(d.get("dang_nhap_luc") or ""), "%Y-%m-%d %H:%M")
+        if d.get("dang_nhap_ket") != "ok" and (bay - cu).total_seconds() < 6 * 3600:
+            return False, "chờ thử đăng nhập lại (lỗi trước: {0})".format(d.get("dang_nhap_ket"))
+    except ValueError:
+        pass
+    try:
+        kq = dang_nhap_kenh(goc, ma, ghi=log)
+    except Exception as e:  # noqa: BLE001 — không để một lỗi đăng nhập làm gác tổng chết
+        kq = {"ket_qua": "hong", "ly_do": "tự đăng nhập lỗi: {0}".format(type(e).__name__)}
+    ket = str(kq.get("ket_qua") or "hong")
+    if ket == "thieu_tai_khoan":
+        return None, ""
+    d["dang_nhap_luc"] = bay.strftime("%Y-%m-%d %H:%M")
+    d["dang_nhap_ket"] = ket
+    _nhat_ky(goc, "đăng nhập Gmail {0}: {1} {2}".format(ma, ket, kq.get("ly_do", "")))
+    if ket == "ok":
+        return chrome_da_dang_nhap(exe)
+    return False, "tự đăng nhập: {0} — {1}".format(ket, kq.get("ly_do") or "")
+
+
 def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tuple[Optional[bool], str]]] = None,
               them_vao_vm: Optional[Callable[..., Any]] = None, doc_so: Optional[Callable[[str], Dict[str, Any]]] = None,
               ep: bool = False, log: Callable[[str], None] = print, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
@@ -980,6 +1007,10 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
             return {"trang_thai": d["trang_thai"], "ly_do": d["loi"]}
         d["trang_thai"] = "cho_chrome"
         ok, ly = (kiem_dang_nhap or chrome_da_dang_nhap)(exe)
+        if not ok and not ep and kiem_dang_nhap is None:
+            ok2, ly2 = _thu_dang_nhap_gmail(goc, ma, d, exe, bay_gio, log)
+            if ly2 or ok2:
+                ok, ly = ok2, (ly2 or ly)
         if not ok and not ep:
             d["loi"] = ly or "chưa đăng nhập"
             luu_trang_thai(goc, st)
