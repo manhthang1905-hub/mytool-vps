@@ -983,6 +983,18 @@ def doc_hang_sua(duong: str = None) -> list:
     return [x for x in ((du or {}).get("viec") or []) if isinstance(x, dict)] if isinstance(du, dict) else []
 
 
+def video_dang_thang_vm(goc_tool: str, kenh: str, ma_goi: str) -> str:
+    """`core.do_bia.video_dang_thang` từ phía máy DOM ('' = được sửa). Không nạp được → '' (không chặn việc sửa)."""
+    goc_tool = goc_tool or os.path.dirname(GOC)
+    try:
+        if goc_tool not in sys.path:
+            sys.path.append(goc_tool)
+        from core import do_bia  # noqa: PLC0415
+        return do_bia.video_dang_thang(goc_tool, kenh, ma_goi) if ma_goi else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def hang_sua_kenh(hang: list, kenh: str, hom_nay: str = "", toi_da: int = SUA_TOI_DA_DEM,
                   toi_da_loi: int = SUA_TOI_DA_LOI) -> list:
     """Hàm THUẦN: việc sửa của `kenh` còn phải làm (chờ, hoặc hỏng chưa quá `toi_da_loi` lần và chưa thử
@@ -2623,9 +2635,18 @@ class MayDangDom:
             if not self.con_han(240):
                 self.nk("sửa video: gần hết hạn phiên — dừng, việc còn lại để đêm sau")
                 break
-            kq = self.sua_video_mot("{0}/{1}".format(self.kenh, v.get("ma_goi") or ""), str(v["video_id"]),
-                                    tieu_de=v.get("tieu_de") or None, anh=v.get("anh") or None,
-                                    tieu_de_cu=v.get("tieu_de_cu") or None)
+            # 19/10/2026: lệnh xếp từ lâu (TL6-0004: xếp 12/10 lúc CTR 2,5%, chạy 19/10 khi đã 4,5%) — lúc LÀM phải xét
+            # lại: video giờ đang THẮNG thì bỏ lệnh (trừ lệnh trả lại bìa/tiêu đề cũ).
+            thang = "" if (str(v.get("buoc") or "").startswith("quay_lui")
+                           or str(v.get("id") or "").startswith("khoi-phuc")) else video_dang_thang_vm(
+                getattr(self, "goc_tool", None), self.kenh, v.get("ma_goi") or "")
+            if thang:
+                self.nk("sửa video {0}/{1} BỎ — video đang THẮNG: {2}".format(v.get("ma_goi"), v["video_id"], thang))
+                kq = {"ket": "khong-the", "ly_do": "video đang THẮNG lúc làm — bỏ lệnh: " + thang}
+            else:
+                kq = self.sua_video_mot("{0}/{1}".format(self.kenh, v.get("ma_goi") or ""), str(v["video_id"]),
+                                        tieu_de=v.get("tieu_de") or None, anh=v.get("anh") or None,
+                                        tieu_de_cu=v.get("tieu_de_cu") or None)
             luc = self.bay_gio().strftime("%Y-%m-%d %H:%M:%S")
             truong = {"trang_thai": {"ok": "xong"}.get(kq["ket"], kq["ket"]), "ly_do": kq.get("ly_do") or "",
                       "doc_lai": kq.get("doc_lai") or "", "anh_doi": kq.get("anh_doi"), "thu_ngay": hom_nay,
@@ -3833,7 +3854,14 @@ def kiem_dom(cdp, kenh: str, bo: dict, sau: bool = False, nhat_ky=None,
         if moi:
             tr.mo(may._url("sua", id=moi["video_id"]), han=60)
             for khoa in ("tieu_de", "mo_ta", "playlist_mo", "hien_them"):
-                ghi(khoa, tr.tim(khoa, han=30 if khoa == "tieu_de" else 8), "trang_sua")
+                pt = tr.tim(khoa, han=30 if khoa == "tieu_de" else 8)
+                # 19/10/2026: video đang A/B tiêu đề → Studio thay ô tiêu đề bằng khối thử nghiệm — không phải hỏng.
+                if pt is None and khoa == "tieu_de" and tr.tim("tieu_de_thu_nghiem", han=3):
+                    kq["chi_tiet"][khoa] = {"khop": None, "buoc": "trang_sua",
+                                            "bo_qua": "video đang thử nghiệm A/B tiêu đề — không có ô tiêu đề"}
+                    kq["ghi_chu"].append("trang sửa: video đang A/B tiêu đề, bỏ qua kiểm ô tiêu đề")
+                    continue
+                ghi(khoa, pt, "trang_sua")
             if not tr.co("o_the") and tr.co("hien_them"):
                 try:
                     tr.bam("hien_them", hau_dieu_kien=lambda: tr.co("o_the"), han_hau=10)
