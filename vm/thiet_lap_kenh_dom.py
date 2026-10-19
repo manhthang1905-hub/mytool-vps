@@ -1355,10 +1355,24 @@ class Studio:
         het = time.monotonic() + han
         while time.monotonic() < het:
             if self.co(cho_css):
+                self._don_hop_chao()
                 return
             self.kiem_chan()
             self.ngu(1.0)
         raise LoiMuc("trang {0} không dựng xong ({1})".format(url[-40:], cho_css))
+
+    def _don_hop_chao(self) -> None:
+        """19/10: kênh MỚI mở Studio lần đầu hiện «Chào mừng bạn đến với YouTube Studio» (ytcp-warm-welcome-dialog) che
+        mọi nút — bấm «Tiếp tục» theo `hop_la` như máy đăng. Trang vừa tải xong nên hộp nào đang mở cũng không phải của
+        luồng thiết lập. Hộp hiện trễ vài giây → dò thêm một lần."""
+        for lan in range(2):
+            try:
+                if self.st.don_hop_la():
+                    self.ngu(1.5)
+            except Exception:  # noqa: BLE001 — không dẹp được thì luồng cũ xử lý như trước
+                return
+            if lan == 0:
+                self.ngu(2.0)
 
     def chup(self, nhan: str) -> None:
         try:
