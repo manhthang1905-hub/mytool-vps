@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.216.7** — 2026-10-19 — `vps-jp1` — refactor(nuoi-trang-chu): D18 do tu lan quet trang chu san co (khong mo Chrome), <90% thi nuoi lai, 2 lan dat thi duy tri; khong chan quet khi duoi 90; sua doc nuoi_trang_chu co ghi chu; bo qua kenh tra kho
 - **2.216.6** — 2026-10-19 — `vps-jp1` — fix(thiet-lap-kenh): dep hop Chao mung YouTube Studio cua kenh moi (che nut Cai dat, lan thiet lap dau hong)
 - **2.216.5** — 2026-10-19 — `vps-jp1` — fix(tao-kenh): kiem ten tren bang chuyen kenh truoc va sau khi tao, khong bam tao lai (chong trung kenh)
 - **2.216.4** — 2026-10-19 — `vps-jp1` — fix(bia): KHONG doi bia video dang THANG (CTR >= trung vi kenh + du hien thi) o cong chung xep_doi_bia - S06 da thay nham bia TL2-0020 CTR 9.7%, da tra lai; tra lai bia cu (khoi_phuc) van duoc
