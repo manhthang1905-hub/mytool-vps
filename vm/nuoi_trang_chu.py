@@ -9,7 +9,11 @@ thủ cùng ngách như người thật (tắt tiếng, xem 35–85% thời lư�
 
 DUY TRÌ (19/10/2026, chủ: "quét trang chủ các kênh hiện tại không đạt 90% đúng chủ đề — cần 1 tuần 1 lần hoặc kênh
 nào <90 thì cần logic để nó đúng chủ đề"). Trạng thái MÁY ở `<kênh>.duy-tri.json` (KHÔNG ghi kenh.yaml nữa):
-  duy_tri   đo-không-xem mỗi 7 ngày (`--do`, skill D18, khe máy + khoá Chrome kênh); lần đo cuối dưới mục tiêu → 3 ngày.
+  duy_tri   ĐO TỪ LẦN QUÉT SẴN CÓ (19/10, chủ: "mỗi kênh là có lịch quét trang chủ — dựa vào số liệu cũ để biết có chạy
+            không là được"): lượt quét ngày của máy ảo đã ghi mọi ô trang chủ vào `nghien-cuu/trang-chu.csv`; có lần quét
+            CỦA KÊNH mới hơn lần đo trước → phân loại ~30 ô đầu (`--tu-quet`, skill D18 nhẹ, KHÔNG mở Chrome). Quá 3 ngày
+            không có lần quét mới = lịch quét hỏng → báo MỘT lần ở Tự kiểm, không mở Chrome bù. `--do` (đo bằng Chrome)
+            chỉ còn là lệnh tay.
   nuoi_lai  lần đo có % chủ đề < 90% HOẶC % ngách tụt (< 0,6 × tốt nhất 90 ngày của CHÍNH kênh, < 30%, hụt ≥ 10 điểm)
             → phiên nuôi thường (agent, cùng giới hạn) nghiêng về NGÁCH HẸP (bài biên tập viên chọn, nguồn video thắng
             của kênh, nguồn anh em cùng tệp), đo sau mỗi phiên. 2 lần đạt liền (cách ≥ 3 giờ) + % ngách khoẻ → về duy_tri.
@@ -36,8 +40,9 @@ CAPTCHA/đăng xuất thì DỪNG, ghi `can_nguoi`, không thử lại. KHÔNG t
 luận/chia sẻ.
 
 Chạy: `python vm/nuoi_trang_chu.py --kenh TL5-T7 [--so-video 15] [--thu]`
+      `python vm/nuoi_trang_chu.py --kenh TL5-T7 --tu-quet`  ĐO TỪ LẦN QUÉT SẴN CÓ (skill D18; không Chrome, có LLM)
 (`--thu` = không mở Chrome, chỉ chọn video + kiểm giới hạn + in kế hoạch).
-      `python vm/nuoi_trang_chu.py --kenh TL5-T7 --do [--on-dinh]`  CHỈ ĐO (không xem, không bấm gì); `--on-dinh` phân
+      `python vm/nuoi_trang_chu.py --kenh TL5-T7 --do [--on-dinh]`  (TAY) mở Chrome CHỈ ĐO (không xem, không bấm); `--on-dinh` phân
       loại lại ô lần 1 không cache để đo độ ổn định của thước LLM.
 Agent gọi mỗi ~10 phút (`agent.chay_nuoi_trang_chu`), mỗi kênh một tiến trình con.
 
@@ -106,8 +111,9 @@ MA_HOAN, MA_CAN_NGUOI, MA_KHONG_CAN = 10, 20, 30
 
 # ── DUY TRÌ (19/10/2026) ────────────────────────────────────────────────────
 DUY_TRI_PCT_CHU_DE = 90.0                # đo duy trì: % chủ đề DƯỚI ngần này → tự nuôi lại
-NGAY_DO_DUY_TRI = 7                      # đo lại mỗi tuần
-NGAY_DO_DUOI_MUC = 3                     # lần đo cuối dưới mục tiêu / đang nuôi lại → đo lại sau 3 ngày
+NGAY_QUET_CU = 3                         # quá 3 ngày không có lần quét trang chủ mới của kênh = lịch quét hỏng → Tự kiểm
+PHUT_GOP_QUET = 10                       # các "Lúc quét" cách nhau ≤ 10' là MỘT lần quét (2–3 lượt tải, lệch phút)
+VI_TRI_KIEM_DAY, DAY_QUET_CUA_KENH = 30, 0.8   # lần quét CỦA KÊNH: ≥ 80% vị trí 1–30 có mặt (dòng gộp nhóm thưa)
 NGAY_NGACH_TOT = 90                      # "tốt nhất gần đây" của % ngách = max các lần đo trong 90 ngày
 HE_SO_NGACH_TUT, NGACH_SAN_PCT, NGACH_HUT_TOI_THIEU = 0.6, 30.0, 10.0   # tụt: < 0,6×tốt nhất VÀ < 30% VÀ hụt ≥ 10 điểm
 HE_SO_NGACH_KHOE = 0.75                  # khoẻ lại: ≥ 30% hoặc ≥ 0,75×tốt nhất (trễ so với ngưỡng tụt)
@@ -119,7 +125,7 @@ NGHI_CHAM_PHUT = (60, 120)
 TOI_DA_VIDEO_NGAY_CHAM = 20
 TI_LE_NGACH_NUOI_LAI = 0.85
 DU_KIEN_DO_PHUT = 8
-NHAN_CHE_DO = {"duy_tri": "duy trì (đo hằng tuần)", "nuoi_lai": "đang tự nuôi lại", "nuoi_dau": "đang nuôi lần đầu"}
+NHAN_CHE_DO = {"duy_tri": "duy trì (đo theo lần quét trang chủ)", "nuoi_lai": "đang tự nuôi lại", "nuoi_dau": "đang nuôi lần đầu"}
 
 NHAN_HOP_LE = ("dung_ngach", "dung_chu_de", "lac_de")
 CHU_KHONG_QUAN_TAM = ("^(興味なし|興味がない|Not interested|No me interesa|Không quan tâm|"
@@ -265,7 +271,7 @@ def ghi_lan_do(so: dict, ket: dict, luc: str, nguon: str = "phien") -> dict:
     muc = {"luc": luc, "n": ket["n"], "pct_chu_de": ket["pct_chu_de"], "pct_ngach": ket["pct_ngach"],
            "dem": ket["dem"], "dat": dat_tieu_chi(ket["pct_chu_de"], ket["pct_ngach"], ket["n"]),
            "vi_du_lac_de": list(ket.get("vi_du_lac_de") or [])[:6], "nguon": nguon}
-    for k in ("doc", "chenh_chu_de", "trung_o", "bo_qua", "hl", "on_dinh"):
+    for k in ("doc", "chenh_chu_de", "trung_o", "bo_qua", "hl", "on_dinh", "quet"):
         if ket.get(k) not in (None, "", [], {}):
             muc[k] = ket[k]
     so.setdefault("lan_do", []).append(muc)
@@ -440,35 +446,6 @@ def can_bao_dong(dt: dict, luc: float, ct: str = "bat") -> str:
     return ""
 
 
-def den_han_do(so: dict, dt: dict, luc: float, ct: str, kiem_dom_luc: float = 0.0) -> tuple:
-    """(cần đo-không-xem bây giờ?, lý do) — lịch tuần, 3 ngày khi lần trước dưới mục tiêu / đang nuôi lại. Thuần."""
-    if ct == "khong_co":
-        return False, "không có kenh.yaml"
-    if ct == "tat_han":
-        return False, "chủ tắt hẳn (duy_tri_trang_chu: false)"
-    so, dt = so or {}, dt or {}
-    if so.get("trang_thai") == "can_nguoi":
-        moc = float(so.get("can_nguoi_luc") or 0)
-        if kiem_dom_luc and kiem_dom_luc > moc:
-            return True, "Chrome kênh đã kiểm lại đạt sau lần cần người — đo lại"
-        return False, "chờ người: " + str(so.get("ly_do") or "")[:100]
-    che = che_do_hien(so, dt, ct)
-    if che == "nuoi_dau":
-        return False, "đang nuôi lần đầu (phiên nuôi tự đo)"
-    hl = lan_do_hop_le(so.get("lan_do"))
-    if not hl:
-        return True, "chưa đo trang chủ lần nào"
-    cuoi = hl[-1]
-    duoi = che == "nuoi_lai" or not danh_gia_do(cuoi, hl[:-1], _luc_so(cuoi.get("luc")) or luc)["dat"]
-    han = NGAY_DO_DUOI_MUC if duoi else NGAY_DO_DUY_TRI
-    tuoi = luc - _luc_so(cuoi.get("luc"))
-    if tuoi >= han * 86400:
-        return True, "lần đo cuối {0:.0f} ngày trước (nhịp {1} ngày{2})".format(tuoi / 86400, han,
-                                                                             ", lần trước dưới mục tiêu" if duoi else "")
-    return False, "đo lại sau {0} (nhịp {1} ngày)".format(
-        time.strftime("%d/%m %H:%M", time.localtime(_luc_so(cuoi.get("luc")) + han * 86400)), han)
-
-
 def gop_hai_lan(o1: list, nl1: dict, o2: list, nl2: dict) -> dict:
     """Gộp 2 lần đọc trang chủ (nạp lại giữa hai lần): % gộp trên các ô KHÁC NHAU + % từng lần, độ chênh, tỉ lệ ô trùng."""
     def mot(o, nl):
@@ -515,6 +492,137 @@ def loc_o_do(o: list) -> tuple:
     return ra, bo
 
 
+# ═══════════════════════════ ĐO TỪ LẦN QUÉT SẴN CÓ (19/10/2026, không Chrome) ══
+# Chủ 19/10: "mỗi kênh là có lịch quét trang chủ — thì dựa vào số liệu cũ để biết có chạy không là được". Lượt quét ngày
+# của máy ảo (`agent.quet_trang_chu` → trạm `nhan_trang_chu`) đã ghi MỌI ô trang chủ vào `nghien-cuu/trang-chu.csv`; mở
+# Chrome chỉ để đo lại là thừa. Hai bẫy của tệp này (đo trên dữ liệu thật 19/10):
+#  1. `nhom_kenh.dong_bo_doi_thu` GỘP dòng trang chủ của CẢ NHÓM vào tệp từng kênh (giữ nguyên "Lúc quét" gốc) → một mốc
+#     giờ trong tệp có thể là lần quét của kênh ANH EM. Lần quét CỦA KÊNH ghi đủ vị trí 1, 2, 3…; dòng gộp chỉ là phần mã
+#     video kênh này chưa có → vị trí thưa (≤ 42% vị trí 1–40; lần quét của kênh = 100%).
+#  2. Cột "Bị loại" là phán quyết LIÊN QUAN của mắt cào ("không đúng tiếng", "từ loại trừ", "không tâm lý (AI)") — đúng
+#     thứ cần đo. Bỏ các dòng ấy là thổi phồng % chủ đề. Chỉ bỏ: Shorts, ô trên KỆ (kệ Shorts / tin tức / hội viên — không
+#     phải lưới đề xuất riêng của kênh), ô quảng cáo / Mix nếu tệp có cột "Loại", mã hỏng, ô chưa có tiêu đề, ô trùng.
+def duong_trang_chu(kenh: str, goc: str = GOC_TOOL) -> str:
+    return os.path.join(_thu_muc_nc(kenh, goc) or os.path.join(goc, "CHANNEL", kenh, "nghien-cuu"), "trang-chu.csv")
+
+
+def cac_lan_quet(dong: list) -> list:
+    """[(lúc bắt đầu "YYYY-MM-DD HH:MM", [dòng])] cũ → mới: các mốc "Lúc quét" cách nhau ≤ PHUT_GOP_QUET là MỘT lần quét."""
+    theo = {}
+    for x in dong or []:
+        t = str(x.get("Lúc quét") or "").strip()[:16]
+        if _luc_so(t):
+            theo.setdefault(t, []).append(x)
+    ra = []
+    for t in sorted(theo):
+        if ra and _luc_so(t) - _luc_so(ra[-1][2]) <= PHUT_GOP_QUET * 60:
+            ra[-1][1].extend(theo[t])
+            ra[-1][2] = t
+        else:
+            ra.append([t, list(theo[t]), t])
+    return [(a, b) for a, b, _c in ra]
+
+
+def _vi_tri(x: dict) -> int:
+    try:
+        return int(str(x.get("Vị trí") or "").strip())
+    except ValueError:
+        return 0
+
+
+def la_quet_cua_kenh(dong: list) -> bool:
+    """Lần quét do CHÍNH kênh ghi (đủ vị trí đầu), không phải dòng gộp từ kênh anh em."""
+    co = {_vi_tri(x) for x in dong or []}
+    return len(co & set(range(1, VI_TRI_KIEM_DAY + 1))) >= DAY_QUET_CUA_KENH * VI_TRI_KIEM_DAY
+
+
+def ly_do_bo_o(x: dict) -> str:
+    """"" = ô vào thước; còn lại = loại ô bị bỏ (short | quang_cao | mix | ke | ma_hong | khong_ten)."""
+    if str(x.get("Short") or "").strip() or str(x.get("Bị loại") or "").strip().lower() == "short":
+        return "short"
+    loai = str(x.get("Loại") or "").strip().lower()
+    if loai in ("quang_cao", "mix"):
+        return loai
+    if str(x.get("Kệ") or "").strip():
+        return "ke"
+    if not re.fullmatch(r"[\w-]{11}", str(x.get("Mã video") or "").strip()):
+        return "ma_hong"
+    if not str(x.get("Tiêu đề") or "").strip():
+        return "khong_ten"
+    return ""
+
+
+def quet_moi_nhat(kenh: str, goc: str = GOC_TOOL, dong: list = None) -> dict:
+    """Lần quét CỦA KÊNH mới nhất trong trang-chu.csv: {luc, o (≤ SO_O_DO ô hợp lệ đầu theo vị trí), tong, bo}; {} nếu chưa
+    có. Chỉ đọc đĩa."""
+    dong = _doc_csv(duong_trang_chu(kenh, goc)) if dong is None else dong
+    for luc, ds in reversed(cac_lan_quet(dong)):
+        if not la_quet_cua_kenh(ds):
+            continue
+        o, bo, thay = [], {}, set()
+        for x in sorted(ds, key=_vi_tri):
+            if len(o) >= SO_O_DO:
+                break
+            vid = str(x.get("Mã video") or "").strip()
+            l = ly_do_bo_o(x) or ("trung" if vid in thay else "")
+            if l:
+                bo[l] = bo.get(l, 0) + 1
+                continue
+            thay.add(vid)
+            o.append({"id": vid, "tieu_de": str(x.get("Tiêu đề") or "").strip(), "kenh": str(x.get("Kênh") or "").strip(),
+                      "loai": "video", "vi_tri": _vi_tri(x)})
+        return {"luc": luc, "o": o, "tong": len(ds), "bo": bo}
+    return {}
+
+
+def quet_bi_chan(kenh: str, goc: str = GOC_TOOL, so: dict = None) -> str:
+    """Lý do máy ảo CỐ Ý không cào trang chủ kênh này (bản sao luật `vm/agent.py: trang_chu_tin_cay`: chỉ cào khi kenh.yaml
+    `trang_chu_tin_cay: true` hoặc lần đo cuối KHÔNG từ lần quét > 90%) — khi ấy "không có lần quét mới" là do cổng, KHÔNG phải lịch hỏng;
+    phiên nuôi tự đo, đo đạt thì cổng tự mở lại. "" = máy ảo được cào."""
+    d = duong_kenh_yaml(kenh, goc)
+    try:
+        with open(d, "r", encoding="utf-8") as tep:
+            if d and re.search(r"(?m)^trang_chu_tin_cay:\s*true\s*$", tep.read()):
+                return ""
+    except OSError:
+        pass
+    lan = [x for x in (so if so is not None else doc_so(kenh)).get("lan_do") or []
+           if isinstance(x, dict) and x.get("nguon") != "quet"]      # lần đo từ chính lần quét không đóng cổng (agent)
+    if not lan:
+        return "máy ảo tạm không cào trang chủ (chưa có lần đo phiên nuôi nào) — phiên nuôi tự đo"
+    pct = float(lan[-1].get("pct_chu_de") or 0)
+    return "" if pct > DAT_PCT_CHU_DE else "máy ảo tạm không cào trang chủ (lần đo phiên nuôi cuối {0:.0f}% ≤ {1:.0f}%) — phiên nuôi tự đo".format(
+        pct, DAT_PCT_CHU_DE)
+
+
+def kiem_quet(kenh: str, goc: str = GOC_TOOL, dt: dict = None, luc: float = None, thu_muc: str = None) -> dict:
+    """RẺ, chỉ đọc (điều kiện skill D18 + Tự kiểm): {luc_quet, da_do, moi (có lần quét chưa đo), cu (quá NGAY_QUET_CU ngày
+    không có lần quét mới — lịch quét hỏng), ngay, ly_do}. Tệp không đổi (mtime) so với lần đo trước → khỏi đọc lại."""
+    luc = time.time() if luc is None else luc
+    dt = doc_duy_tri(kenh, thu_muc) if dt is None else dt
+    try:
+        mt = os.path.getmtime(duong_trang_chu(kenh, goc))
+    except OSError:
+        mt = 0.0
+    if mt and dt.get("quet_mtime") == mt and dt.get("luc_quet_moi"):
+        lq = str(dt["luc_quet_moi"])
+    else:
+        lq = (quet_moi_nhat(kenh, goc) or {}).get("luc", "") if mt else ""
+    da = str(dt.get("luc_quet_do") or "")
+    ngay = round((luc - _luc_so(lq)) / 86400.0, 1) if lq else None
+    cu = ngay is not None and ngay > NGAY_QUET_CU
+    moi = bool(lq) and lq > da and not cu              # lần quét cũ quá (vd tệp chép từ kênh gốc lúc tạo kênh) không phải trang chủ hiện tại
+    if not lq:
+        ly = "chưa có lần quét trang chủ nào của kênh ({0})".format("chưa có trang-chu.csv" if not mt else "chỉ có dòng gộp nhóm")
+    elif moi:
+        ly = "lần quét trang chủ {0} chưa đo{1}".format(lq, " (đo trước: {0})".format(da) if da else "")
+    else:
+        ly = "đã đo lần quét {0} — chờ lần quét kế".format(lq)
+    if cu:
+        ly += " · lịch quét hỏng: {0:.0f} ngày không có lần quét mới".format(ngay)
+    return {"luc_quet": lq, "da_do": da, "moi": moi, "cu": cu, "ngay": ngay, "mtime": mt, "ly_do": ly}
+
+
 # ═══════════════════════════ DỮ LIỆU KÊNH / ĐỐI THỦ ══════════════════════════
 def _doc_csv(duong: str) -> list:
     try:
@@ -549,7 +657,22 @@ def doc_kenh_yaml(kenh: str, goc: str = GOC_TOOL) -> dict:
             "ngon_ngu": _yaml_chu(nd, "ngon_ngu").split("#")[0].strip().strip('"').strip("'"),
             "nuoi_tho": _yaml_chu(nd, "nuoi_trang_chu").split("#")[0].strip().lower(),
             "duy_tri": _yaml_chu(nd, "duy_tri_trang_chu").split("#")[0].strip().lower(),
-            "bat": _yaml_chu(nd, "nuoi_trang_chu").lower() == "true"}
+            "tu_chay": _yaml_chu(nd, "tu_chay").split("#")[0].strip().lower(),
+            "tra_kho": _yaml_chu(nd, "tra_kho").split("#")[0].strip().strip('"').strip("'"),
+            "thay_boi": _yaml_chu(nd, "thay_boi").split("#")[0].strip().strip('"').strip("'"),
+            # 19/10: `nuoi_trang_chu: true   # ghi chú` của chủ từng bị đọc thành TẮT (so cả phần chú thích)
+            "bat": _yaml_chu(nd, "nuoi_trang_chu").split("#")[0].strip().lower() == "true"}
+
+
+def bo_qua_kenh(kenh: str, goc: str = GOC_TOOL) -> str:
+    """Lý do bỏ HẲN kênh khỏi duy trì trang chủ (skill D18, Tự kiểm, máy tự nuôi lại) — theo DỮ LIỆU, không mã kênh cứng:
+    kênh đã TRẢ KHO (`tra_kho:` do `core/tra_kho.py` ghi) hoặc chủ để `tu_chay: false`. "" = không bỏ."""
+    cfg = doc_kenh_yaml(kenh, goc)
+    if cfg.get("tra_kho"):
+        return "kênh đã trả kho {0}{1}".format(cfg["tra_kho"], " (thay bởi {0})".format(cfg["thay_boi"]) if cfg.get("thay_boi") else "")
+    if cfg.get("tu_chay") == "false":
+        return "kênh không tự chạy (tu_chay: false)"
+    return ""
 
 
 def cong_tac(kenh: str, goc: str = GOC_TOOL, so: dict = None) -> str:
@@ -818,8 +941,9 @@ def cac_kenh_nuoi_lai() -> list:
 
 def tom_tat_duy_tri(kenh: str, goc: str = GOC_TOOL, luc: float = None, thu_muc: str = None) -> dict:
     """Một kênh cho bảng 8790 / Tự kiểm / skill: {che_do, nhan, cong_tac, pct_chu_de, pct_ngach, ngach_tot, luc_do,
-    den_han, ly_do_han, dat, bao_dong, phien_nuoi_lai, ngay_nuoi_lai, can_nguoi, tt, cau}. Chỉ đọc đĩa.
-    tt: dat | thu_lai (máy đang nuôi lại) | cho (chờ đo / chưa đo) | nguoi (cần chủ: đăng nhập, hoặc chủ đang tắt nuôi)."""
+    den_han (có lần quét chưa đo), ly_do_han, luc_quet, quet_cu, ngay_quet, bo_qua, dat, bao_dong, phien_nuoi_lai,
+    ngay_nuoi_lai, can_nguoi, tt, cau}. Chỉ đọc đĩa.
+    tt: dat | thu_lai (máy đang nuôi lại) | cho (chờ đo / chưa đo / lịch quét hỏng) | nguoi (cần chủ) | "" (không áp)."""
     luc = time.time() if luc is None else luc
     thu_muc = thu_muc or os.path.join(goc, "vm", "logs", "nuoi-trang-chu")
     so, dt = doc_so(kenh, thu_muc), doc_duy_tri(kenh, thu_muc)
@@ -828,20 +952,26 @@ def tom_tat_duy_tri(kenh: str, goc: str = GOC_TOOL, luc: float = None, thu_muc: 
     hl = lan_do_hop_le(so.get("lan_do"))
     cuoi = hl[-1] if hl else {}
     dg = danh_gia_do(cuoi, hl[:-1], _luc_so(cuoi.get("luc")) or luc) if cuoi else {}
-    han, ly_han = den_han_do(so, dt, luc, ct)
+    q = kiem_quet(kenh, goc, dt, luc)
+    chan = quet_bi_chan(kenh, goc, so) if q["cu"] else ""
+    if chan:                                            # không có lần quét mới vì CỔNG tin cậy, không phải lịch hỏng
+        q = dict(q, ly_do=q["ly_do"].split(" · lịch quét hỏng")[0] + " · " + chan)
+    bo = bo_qua_kenh(kenh, goc)
     ngay_nl = (luc - float(dt.get("tu_luc") or luc)) / 86400.0 if che == "nuoi_lai" else 0.0
     ra = {"kenh": kenh, "che_do": che, "nhan": NHAN_CHE_DO.get(che, che), "cong_tac": ct,
           "pct_chu_de": cuoi.get("pct_chu_de"), "pct_ngach": cuoi.get("pct_ngach"), "ngach_tot": dg.get("ngach_tot"),
-          "luc_do": cuoi.get("luc") or "", "den_han": han, "ly_do_han": ly_han, "dat": dg.get("dat"),
+          "luc_do": cuoi.get("luc") or "", "den_han": q["moi"], "ly_do_han": q["ly_do"], "luc_quet": q["luc_quet"],
+          "quet_cu": q["cu"], "ngay_quet": q["ngay"], "quet_chan": chan,
+          "bo_qua": bo, "dat": dg.get("dat"),
           "ly_do": dg.get("ly_do") or "", "bao_dong": dt.get("bao_dong") or "", "phien_nuoi_lai": int(dt.get("phien_nuoi_lai") or 0),
           "ngay_nuoi_lai": round(ngay_nl, 1), "can_nguoi": so.get("trang_thai") == "can_nguoi",
           "vi_du_lac_de": list(cuoi.get("vi_du_lac_de") or [])[:3], "cham": bool(dt.get("cham"))}
-    if ct in ("khong_co", "tat_han"):
-        ra.update(tt="", cau="chủ tắt hẳn duy trì trang chủ" if ct == "tat_han" else "")
+    if bo or ct in ("khong_co", "tat_han"):
+        ra.update(tt="", cau=bo or ("chủ tắt hẳn duy trì trang chủ" if ct == "tat_han" else ""))
     elif ra["can_nguoi"]:
         ra.update(tt="nguoi", cau="cần người: " + str(so.get("ly_do") or "")[:120])
     elif not cuoi:
-        ra.update(tt="cho", cau="chưa đo trang chủ lần nào — " + ly_han)
+        ra.update(tt="cho", cau="chưa đo trang chủ lần nào — " + q["ly_do"])
     elif che == "nuoi_lai" and not duoc_nuoi_lai(ct):
         ra.update(tt="nguoi", cau="trang chủ {0:.0f}% chủ đề · {1:.0f}% ngách ({2}) — chủ đang tắt nuôi_trang_chu, máy chỉ đo".format(
             float(cuoi.get("pct_chu_de") or 0), float(cuoi.get("pct_ngach") or 0), dg.get("ly_do")))
@@ -852,11 +982,9 @@ def tom_tat_duy_tri(kenh: str, goc: str = GOC_TOOL, luc: float = None, thu_muc: 
     elif che == "nuoi_dau":
         ra.update(tt="thu_lai", cau="đang nuôi lần đầu: {0:.0f}% chủ đề".format(float(cuoi.get("pct_chu_de") or 0)))
     else:
-        cu = luc - _luc_so(cuoi.get("luc")) > (NGAY_DO_DUY_TRI + 3) * 86400
-        ra.update(tt="cho" if cu else ("dat" if dg.get("dat") else "cho"),
+        ra.update(tt="cho" if q["cu"] or not dg.get("dat") else "dat",
                   cau="trang chủ {0:.0f}% chủ đề · {1:.0f}% ngách lúc {2} — {3}".format(
-                      float(cuoi.get("pct_chu_de") or 0), float(cuoi.get("pct_ngach") or 0), cuoi.get("luc"),
-                      "quá hạn đo lại" if cu else ly_han))
+                      float(cuoi.get("pct_chu_de") or 0), float(cuoi.get("pct_ngach") or 0), cuoi.get("luc"), q["ly_do"]))
     return ra
 
 
@@ -887,14 +1015,15 @@ def ghi_bao_cao(so: dict) -> None:
             NHAN_CHE_DO.get(dt["che_do"], dt["che_do"]), " (nhịp chậm, đã báo động)" if dt.get("cham") else "",
             dc.get("luc") or "-", dc.get("ly_do") or "-",
             " · nuôi lại {0} phiên".format(dt.get("phien_nuoi_lai") or 0) if dt["che_do"] == "nuoi_lai" else "")]
-    d[0] += ["- Thước duy trì: % chủ đề ≥ {0:.0f}% và % ngách không tụt (< {1}×tốt nhất {2} ngày, < {3:.0f}%); đo lại {4} ngày "
-             "(dưới mục tiêu: {5} ngày); 2 lần đạt liền mới về duy trì".format(
-                 DUY_TRI_PCT_CHU_DE, HE_SO_NGACH_TUT, NGAY_NGACH_TOT, NGACH_SAN_PCT, NGAY_DO_DUY_TRI, NGAY_DO_DUOI_MUC),
+    d[0] += ["- Thước duy trì: % chủ đề ≥ {0:.0f}% và % ngách không tụt (< {1}×tốt nhất {2} ngày, < {3:.0f}%); đo theo mỗi "
+             "lần quét trang chủ của kênh (trang-chu.csv, không mở Chrome; quá {4} ngày không có lần quét mới → Tự kiểm báo); "
+             "2 lần đạt liền mới về duy trì".format(
+                 DUY_TRI_PCT_CHU_DE, HE_SO_NGACH_TUT, NGAY_NGACH_TOT, NGACH_SAN_PCT, NGAY_QUET_CU),
              "", "## Các lần đo", "", "| Lúc | Nguồn | Số ô | % chủ đề | % ngách | Chênh 2 lần đọc | Đạt |",
              "|---|---|---|---|---|---|---|"]
     for x in so.get("lan_do", [])[-40:]:
         d[0].append("| {0} | {1} | {2} | {3} | {4} | {5} | {6} |".format(
-            x["luc"], "đo" if x.get("nguon") == "duy_tri" else "phiên", x["n"], x["pct_chu_de"], x["pct_ngach"],
+            x["luc"], {"duy_tri": "đo", "quet": "quét"}.get(x.get("nguon"), "phiên"), x["n"], x["pct_chu_de"], x["pct_ngach"],
             "-" if x.get("chenh_chu_de") is None else x["chenh_chu_de"], "có" if x["dat"] else "chưa"))
     if so.get("lan_do") and so["lan_do"][-1].get("vi_du_lac_de"):
         d[0] += ["", "Ví dụ ô lạc đề ở lần đo cuối:"] + ["- " + t for t in so["lan_do"][-1]["vi_du_lac_de"]]
@@ -1087,6 +1216,10 @@ def kenh_den_luot(luc: float, dang_chay=(), goc: str = GOC_TOOL, ram=None, nang_
             ly[k] = "đang nuôi"
             continue
         so, dt = doc_so(k), doc_duy_tri(k)
+        bo = "" if k in bat else bo_qua_kenh(k, goc)
+        if bo:
+            ly[k] = bo + " — không tự nuôi lại"
+            continue
         if k not in bat and not duoc_nuoi_lai(cong_tac(k, goc, so)):
             ly[k] = "trang chủ dưới mục tiêu nhưng chủ đang tắt nuoi_trang_chu — chỉ đo"
             continue
@@ -1694,12 +1827,13 @@ def sau_lan_do(kenh: str, so: dict, dt: dict, ct: str, ghi, che: str = "") -> tu
     luu_duy_tri(dt)
     cau = {"duoi_muc": "DƯỚI MỤC TIÊU → {0}".format("máy tự nuôi lại" if duoc_nuoi_lai(ct) else
                                                     "chủ đang tắt nuôi_trang_chu: chỉ đo, hỏi chủ"),
-           "ve_duy_tri": "ĐẠT 2 lần liền → về duy trì (đo hằng tuần)", "dat_lan_dau": "đạt lần đầu → duy trì"}.get(sk, "")
+           "ve_duy_tri": "ĐẠT 2 lần liền → về duy trì (đo theo lần quét)", "dat_lan_dau": "đạt lần đầu → duy trì"}.get(sk, "")
     ghi("duy trì {0}: {1} · {2}{3}".format(kenh, NHAN_CHE_DO.get(dt["che_do"], dt["che_do"]),
                                           (dt.get("do_cuoi") or {}).get("ly_do") or muc.get("pct_chu_de"),
                                           (" — " + cau) if cau else ""))
     ghi_nao(kenh, "chon" if sk else "do", "trang chủ {0}% chủ đề · {1}% ngách ({2}){3}".format(
-        muc.get("pct_chu_de"), muc.get("pct_ngach"), "đo duy trì" if muc.get("nguon") == "duy_tri" else "trong phiên nuôi",
+        muc.get("pct_chu_de"), muc.get("pct_ngach"), {"duy_tri": "đo duy trì", "quet": "từ lần quét trang chủ"}.get(
+            muc.get("nguon"), "trong phiên nuôi"),
         (" → " + cau) if cau else ""), {"pct_chu_de": muc.get("pct_chu_de"), "pct_ngach": muc.get("pct_ngach"), "n": muc.get("n"),
                                          "che_do": dt["che_do"], "chenh": muc.get("chenh_chu_de")},
         khoa="trang-chu|{0}|do|{1}|{2}".format(kenh, muc.get("luc"), muc.get("nguon")))
@@ -1901,8 +2035,8 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         phien["ket_qua"] = "bị ngắt (nhường việc đăng/khe nang)" if bi_ngat else "xong"
         if xong():
             # 19/10: KHÔNG ghi kenh.yaml nữa (công tắc của chủ) — máy chuyển sang DUY TRÌ ở `<kênh>.duy-tri.json`
-            ghi("*** ĐẠT: {0} — chuyển DUY TRÌ (đo lại mỗi {1} ngày, dưới {2:.0f}% thì tự nuôi lại) ***".format(
-                st["dt"].get("ly_do") or so.get("ly_do"), NGAY_DO_DUY_TRI, DUY_TRI_PCT_CHU_DE))
+            ghi("*** ĐẠT: {0} — chuyển DUY TRÌ (đo theo mỗi lần quét trang chủ, dưới {1:.0f}% thì tự nuôi lại) ***".format(
+                st["dt"].get("ly_do") or so.get("ly_do"), DUY_TRI_PCT_CHU_DE))
     except CanNguoi as c:
         if so.get("trang_thai") != "can_nguoi":
             so["trang_thai_truoc"] = so.get("trang_thai") or "dang_nuoi"
@@ -1938,7 +2072,7 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
 
 
 def chay_do(kenh: str, ghi, bo_qua_khung: bool = False, on_dinh: bool = False, rng=None) -> int:
-    """ĐO-KHÔNG-XEM (duy trì, skill D18): bảo vệ như máy DOM (khung cấm 02–07 + :55–:05, van IPv4, máy đăng dở, việc
+    """ĐO-KHÔNG-XEM bằng Chrome — CHỈ còn là lệnh TAY `--do` (19/10: skill D18 đo từ lần quét sẵn có, `do_tu_quet`): bảo vệ như máy DOM (khung cấm 02–07 + :55–:05, van IPv4, máy đăng dở, việc
     đăng chờ / phiên sắp tới, Chrome kênh đang mở → hoãn) → khoá máy `.khoa-may` (khe nặng, nhường) + khoá Chrome kênh →
     mở Chrome kênh (máy này mở, cuối phiên đóng) → trả giao diện `hl` đúng ngôn ngữ kênh → đọc trang chủ 2 lần (nạp lại)
     → phân loại theo NGHĨA (thước cũ) → ghi lần đo + sổ duy trì. KHÔNG xem video, KHÔNG bấm gì (kể cả Không quan tâm),
@@ -2075,6 +2209,90 @@ def chay_do(kenh: str, ghi, bo_qua_khung: bool = False, on_dinh: bool = False, r
     return ma
 
 
+def do_tu_quet(kenh: str, ghi, goi=None, goc: str = GOC_TOOL, luc: float = None) -> int:
+    """ĐO TỪ LẦN QUÉT SẴN CÓ (skill D18, 19/10/2026): lần quét CỦA KÊNH mới nhất trong `nghien-cuu/trang-chu.csv` chưa đo →
+    ~30 ô hợp lệ đầu → phân loại theo NGHĨA bằng thước đã bầu (`phan_loai_bau`, cache theo mã video ở sổ nuôi — ô lặp lại
+    không tốn gì) → ghi lần đo (`nguon: quet`) + sổ duy trì (`sau_lan_do`: dưới mục tiêu → nuoi_lai, 2 lần quét đạt liền →
+    duy_tri, 7 ngày → báo động). KHÔNG mở Chrome, không DOM, không quét thêm.
+    Mã: 0 đã đo (hoặc lần quét quá ít ô — ghi nhận, không tính) · 10 hoãn (phiên nuôi đang giữ sổ) · 30 không cần · 1 LLM lỗi."""
+    bo = bo_qua_kenh(kenh, goc)
+    so = doc_so(kenh)
+    ct = cong_tac(kenh, goc, so)
+    if bo or ct in ("khong_co", "tat_han"):
+        ghi("bỏ qua đo từ lần quét: {0}".format(bo or ("không có kenh.yaml" if ct == "khong_co" else
+                                                     "chủ tắt hẳn (duy_tri_trang_chu: false)")))
+        return MA_KHONG_CAN
+    dt = doc_duy_tri(kenh)
+    try:
+        mt = os.path.getmtime(duong_trang_chu(kenh, goc))
+    except OSError:
+        mt = 0.0
+    q = quet_moi_nhat(kenh, goc) if mt else {}
+    if not q:
+        ghi("đo từ lần quét: chưa có lần quét trang chủ nào của kênh {0}".format(kenh))
+        return MA_KHONG_CAN
+    dt.update(quet_mtime=mt, luc_quet_moi=q["luc"])
+    if q["luc"] <= str(dt.get("luc_quet_do") or ""):
+        luu_duy_tri(dt)
+        ghi("đo từ lần quét: lần quét {0} đã đo — chờ lần quét kế".format(q["luc"]))
+        return MA_KHONG_CAN
+    if (time.time() if luc is None else luc) - _luc_so(q["luc"]) > NGAY_QUET_CU * 86400:
+        luu_duy_tri(dt)
+        ghi("đo từ lần quét: lần quét mới nhất {0} cũ quá {1} ngày — không đo (lịch quét hỏng: Tự kiểm báo)".format(
+            q["luc"], NGAY_QUET_CU))
+        return MA_KHONG_CAN
+    o = q["o"]
+    if len(o) < TOI_THIEU_O_DO:
+        dt.update(luc_quet_do=q["luc"], quet_cuoi={"luc": q["luc"], "n": len(o), "bo": q["bo"], "khong_tinh": True})
+        luu_duy_tri(dt)
+        ghi("ĐO KHÔNG TÍNH: lần quét {0} chỉ {1} ô hợp lệ (cần ≥ {2}) · bỏ {3}".format(q["luc"], len(o), TOI_THIEU_O_DO, q["bo"]))
+        return 0
+    if kenh in cac_kenh_dang_nuoi():
+        ghi("hoãn đo từ lần quét: kênh {0} đang có phiên nuôi (phiên giữ sổ)".format(kenh))
+        return MA_HOAN
+    global NGON_NGU_KENH
+    ngon_cu, NGON_NGU_KENH = NGON_NGU_KENH, str(doc_kenh_yaml(kenh, goc).get("ngon_ngu") or "ja").strip().lower()
+    cache = dict(so.get("cache") or {})                 # LLM chạy NGOÀI khoá kênh; khoá chỉ giữ lúc ghi sổ (mili giây)
+    moi = sum(1 for x in o if cache.get(x["id"]) not in NHAN_HOP_LE)
+    try:
+        nl, od = phan_loai_bau(goi or tao_llm(), mo_ta_ngach(kenh, goc), o, cache)
+    finally:
+        NGON_NGU_KENH = ngon_cu
+    ket = phan_tram([nl[x["id"]] for x in o if x["id"] in nl])
+    ket.update(vi_du_lac_de=["{0} — {1}".format(x["kenh"][:25], x["tieu_de"][:60]) for x in o if nl.get(x["id"]) == "lac_de"],
+               bo_qua=q["bo"], quet={"luc": q["luc"], "o_lan_quet": q["tong"], "o_moi_phan_loai": moi})
+    if od.get("n"):
+        ket["on_dinh"] = {"n": od["n"], "khop": od["khop"], "lech": od["lech"][:10]}
+    if not giu_khoa(kenh):
+        ghi("hoãn đo từ lần quét: kênh {0} vừa có tiến trình khác giữ khoá (phiên nuôi)".format(kenh))
+        return MA_HOAN
+    try:
+        so = doc_so(kenh)                                   # đọc lại trong khoá rồi mới ghi
+        so.setdefault("cache", {}).update({k: v for k, v in cache.items() if k not in so["cache"]})
+        if ket["n"] < TOI_THIEU_O_DO:
+            luu_so(so)                                      # giữ phần cache đã phân loại được
+            ghi("ĐO LỖI: LLM chỉ phân loại được {0}/{1} ô của lần quét {2} — lượt sau thử lại".format(ket["n"], len(o), q["luc"]))
+            return 1
+        dt = dict(doc_duy_tri(kenh), quet_mtime=mt, luc_quet_moi=q["luc"])
+        che = che_do_hien(so, dt, ct)
+        if so.get("trang_thai") == "can_nguoi" and _luc_so(q["luc"]) > float(so.get("can_nguoi_luc") or 0):
+            so["trang_thai"] = so.pop("trang_thai_truoc", "") or ("dat" if so.get("dat_luc") else "dang_nuoi")
+            so["ly_do"] = "hết cần người: lần quét trang chủ {0} đọc được (Chrome kênh đã chạy lại)".format(q["luc"])
+        ghi_lan_do(so, ket, q["luc"], nguon="quet")
+        luu_so(so)
+        dt.update(luc_quet_do=q["luc"], quet_cuoi={"luc": q["luc"], "n": ket["n"], "pct_chu_de": ket["pct_chu_de"],
+                                                    "pct_ngach": ket["pct_ngach"], "bo": q["bo"], "o_moi": moi})
+        luu_duy_tri(dt)
+        ghi("ĐO (từ lần quét {0}): {1} ô · chủ đề {2}% · ngách {3}% · {4} ô mới phân loại (còn lại từ cache) · bỏ {5}".format(
+            q["luc"], ket["n"], ket["pct_chu_de"], ket["pct_ngach"], moi, q["bo"] or "0"))
+        for t in ket["vi_du_lac_de"][:5]:
+            ghi("   lạc đề: " + t)
+        sau_lan_do(kenh, so, dt, ct, ghi, che=che)
+        return 0
+    finally:
+        nha_khoa(kenh)
+
+
 def che_thu(kenh: str, so_video: int, ghi) -> int:
     """`--thu`: không mở Chrome, không ghi sổ — chỉ kiểm giới hạn + in kế hoạch chọn video."""
     rng, hom_nay, luc = random.Random(), date.today(), time.time()
@@ -2099,15 +2317,18 @@ def main(argv=None) -> int:
     ap.add_argument("--kenh", required=True)
     ap.add_argument("--so-video", type=int, default=TOI_DA_VIDEO_PHIEN)
     ap.add_argument("--thu", action="store_true", help="không mở Chrome, chỉ in kế hoạch")
-    ap.add_argument("--do", action="store_true", help="CHỈ ĐO trang chủ (duy trì): không xem, không bấm gì")
+    ap.add_argument("--tu-quet", action="store_true", help="ĐO TỪ LẦN QUÉT SẴN CÓ (skill D18): không Chrome, có LLM")
+    ap.add_argument("--do", action="store_true", help="(tay) mở Chrome CHỈ ĐO trang chủ: không xem, không bấm gì")
     ap.add_argument("--on-dinh", action="store_true", help="(--do) phân loại lại không cache để đo độ ổn định thước LLM")
     ap.add_argument("--bo-qua-khung", action="store_true", help="(dev, --do) bỏ khung cấm 02–07 + phút :55–:05")
     a = ap.parse_args(argv)
     ghi = _nhat_ky(a.kenh)
-    cfg = doc_kenh_yaml(a.kenh)
+    cfg = doc_kenh_yaml(a.kenh, GOC_TOOL)
     if not cfg:
         ghi("không thấy kenh.yaml của {0}".format(a.kenh))
         return 1
+    if a.tu_quet:
+        return do_tu_quet(a.kenh, ghi, goc=GOC_TOOL)
     if a.do:
         return chay_do(a.kenh, ghi, bo_qua_khung=a.bo_qua_khung, on_dinh=a.on_dinh)
     so = doc_so(a.kenh)

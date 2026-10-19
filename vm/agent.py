@@ -2603,6 +2603,9 @@ def trang_chu_tin_cay(kenh: str) -> Tuple[bool, str]:
             lan = (json.load(tep) or {}).get("lan_do") or []
     except (OSError, ValueError):
         lan = []
+    # 19/10/2026: lần đo TỪ CHÍNH LẦN QUÉT này (skill D18, `nguon: quet`) không được đóng cổng quét — đóng thì không còn lần
+    # quét mới để đo, duy trì trang chủ đứng hình. Cổng chỉ theo lần đo của phiên nuôi / đo tay.
+    lan = [x for x in lan if isinstance(x, dict) and x.get("nguon") != "quet"]
     if not lan:
         return False, "trang chủ chưa đo độ đúng chủ đề (nuôi trang chủ chưa đo)"
     pct = float(lan[-1].get("pct_chu_de") or 0)

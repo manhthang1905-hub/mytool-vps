@@ -948,8 +948,11 @@ def d_soat_tuan(goc, kenh):
 
 # D18 · Duy trì trang chủ đúng chủ đề (19/10/2026) ─────────────────────────────────────────────────────────────
 # Chủ: "quét trang chủ các kênh hiện tại không đạt 90% đúng chủ đề — cần 1 tuần 1 lần hoặc kênh nào <90 thì cần logic để
-# nó đúng chủ đề". Bộ chạy `vm/nuoi_trang_chu.py --do` (CHỈ ĐO); dưới mục tiêu thì máy tự bật nuôi lại trong sổ máy
-# `vm/logs/nuoi-trang-chu/<K>.duy-tri.json` và phiên nuôi của agent (`agent.chay_nuoi_trang_chu`) làm phần xem.
+# nó đúng chủ đề". 19/10 (bản 2): "mỗi kênh là có lịch quét trang chủ — thì dựa vào số liệu cũ để biết có chạy không là
+# được — đơn giản và hiệu quả" → D18 NHẸ: điều kiện = có lần quét CỦA KÊNH trong `nghien-cuu/trang-chu.csv` mới hơn lần đo
+# trước (đọc tệp, rẻ); chạy = `vm/nuoi_trang_chu.py --tu-quet` (LLM phân loại ~30 ô, cache theo mã video, KHÔNG Chrome).
+# Dưới mục tiêu thì máy tự bật nuôi lại trong sổ máy `vm/logs/nuoi-trang-chu/<K>.duy-tri.json` và phiên nuôi của agent
+# (`agent.chay_nuoi_trang_chu`) làm phần xem. `--do` (mở Chrome đo) chỉ còn là lệnh tay.
 
 def _duy_tri_tt(goc, kenh) -> dict:
     return _nap_vm("nuoi_trang_chu").tom_tat_duy_tri(kenh, goc, _gio().timestamp())
@@ -957,7 +960,7 @@ def _duy_tri_tt(goc, kenh) -> dict:
 
 def k_duy_tri_trang_chu(goc, kenh):
     t = _duy_tri_tt(goc, kenh)
-    if t["cong_tac"] in ("khong_co", "tat_han"):
+    if t.get("bo_qua") or t["cong_tac"] in ("khong_co", "tat_han"):
         return KHONG, t["cau"] or "không áp"
     return {"dat": DAT, "thu_lai": CHO, "cho": CHO, "nguoi": LOI}.get(t["tt"], THIEU), t["cau"][:150]
 
@@ -966,19 +969,15 @@ def d_duy_tri_trang_chu(goc, kenh):
     if _dang_o_may_khac(goc, kenh):
         return False, "kênh làm ở máy khác"
     n = _nap_vm("nuoi_trang_chu")
+    bo = n.bo_qua_kenh(kenh, goc)
+    if bo:
+        return False, bo
     thu = _vm(goc, "logs", "nuoi-trang-chu")
-    so = n.doc_so(kenh, thu)
-    ct = n.cong_tac(kenh, goc, so)
-    kd = _json(_vm(goc, "logs", "kiem-dom", kenh + ".json")) or {}
-    kd_luc = 0.0
-    if kd.get("ok"):
-        t = _doc_luc(kd.get("ngay"))
-        kd_luc = t.timestamp() if t else 0.0
-    dung, ly = n.den_han_do(so, n.doc_duy_tri(kenh, thu), _gio().timestamp(), ct, kd_luc)
-    if not dung:
-        return False, ly
-    chan = _studio_may_chan(goc, kenh)
-    return (False, chan) if chan else (True, ly)
+    ct = n.cong_tac(kenh, goc, n.doc_so(kenh, thu))
+    if ct in ("khong_co", "tat_han"):
+        return False, "không có kenh.yaml" if ct == "khong_co" else "chủ tắt hẳn (duy_tri_trang_chu: false)"
+    q = n.kiem_quet(kenh, goc, n.doc_duy_tri(kenh, thu), _gio().timestamp())
+    return bool(q["moi"]), q["ly_do"]
 
 
 def _viec_sua_bia(goc, kenh) -> list:
@@ -1126,15 +1125,17 @@ DANH_MUC: List[KyNang] = [
                                                                    "--kenh", kenh),
            nhip_gio=NHIP_DSP_GIO, tu_ap=True, nang=True),
     KyNang("D18", "Duy trì trang chủ đúng chủ đề", "dinh_ky",
-           "Mỗi 7 ngày (lần trước dưới mục tiêu / đang nuôi lại: 3 ngày): mở Chrome kênh, CHỈ ĐỌC trang chủ 2 lần (~30 ô, bỏ "
-           "quảng cáo / Mix; Shorts không tính), phân loại theo NGHĨA (đúng ngách / đúng chủ đề / lạc đề). Chủ đề < 90% hoặc "
-           "% ngách tụt (< 0,6 × tốt nhất 90 ngày, < 30%) → máy tự nuôi lại (sổ máy duy-tri.json, không đụng kenh.yaml) với "
-           "nguồn ngách hẹp, đo sau mỗi phiên; 2 lần đạt liền → về duy trì; 7 ngày + 8 phiên vẫn dưới → báo động một lần, nuôi "
-           "chậm. kenh.yaml nuoi_trang_chu: false do chủ đặt → chỉ đo, hỏi chủ; duy_tri_trang_chu: false → tắt hẳn.",
-           "python vm/nuoi_trang_chu.py --kenh K --do", k_duy_tri_trang_chu, ["K17"],
+           "Mỗi lần quét trang chủ CỦA KÊNH (lịch quét ngày của máy ảo → nghien-cuu/trang-chu.csv; bỏ dòng gộp từ kênh anh "
+           "em) mới hơn lần đo trước: lấy ~30 ô đầu (bỏ Shorts / kệ / quảng cáo / Mix; ô mắt cào đánh 'Bị loại' vẫn tính), "
+           "phân loại theo NGHĨA (đúng ngách / đúng chủ đề / lạc đề; cache theo mã video). KHÔNG mở Chrome. Chủ đề < 90% "
+           "hoặc % ngách tụt (< 0,6 × tốt nhất 90 ngày, < 30%) → máy tự nuôi lại (sổ máy duy-tri.json, không đụng kenh.yaml) "
+           "với nguồn ngách hẹp; 2 lần đạt liền → về duy trì; 7 ngày + 8 phiên vẫn dưới → báo động một lần, nuôi chậm. Quá 3 "
+           "ngày không có lần quét mới → Tự kiểm báo một lần (lịch quét hỏng). Kênh trả kho / tu_chay: false → bỏ. "
+           "kenh.yaml nuoi_trang_chu: false do chủ đặt → chỉ đo, hỏi chủ; duy_tri_trang_chu: false → tắt hẳn.",
+           "python vm/nuoi_trang_chu.py --kenh K --tu-quet", k_duy_tri_trang_chu, ["K17"],
            dieu_kien=d_duy_tri_trang_chu, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "nuoi_trang_chu.py"), "--kenh",
-                                                                       kenh, "--do"),
-           nhip_gio=12, tu_ap=True, nang=True, han_phut=20, mot_kenh=True),
+                                                                       kenh, "--tu-quet"),
+           nhip_gio=1, tu_ap=True, han_phut=10, mot_kenh=True),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
     KyNang("S02", "Khám cấu hình kênh", "sua_chua",

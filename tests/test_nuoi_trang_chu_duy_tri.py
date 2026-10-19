@@ -54,9 +54,9 @@ def test_cong_tac_chu_la_cong_tac_tong(tmp_path):
     assert n.cong_tac("D", g, {}) == "tat_han"
     assert n.cong_tac("Z", g, {}) == "khong_co"
     assert n.duoc_nuoi_lai("bat") and n.duoc_nuoi_lai("may_tat") and not n.duoc_nuoi_lai("chu_tat")
-    # chủ tắt: vẫn ĐO (chỉ đọc) nhưng không tự nuôi; tắt hẳn: không đo
-    assert n.den_han_do({}, {}, luc(12), "chu_tat")[0] is True
-    assert n.den_han_do({}, {}, luc(12), "tat_han") == (False, "chủ tắt hẳn (duy_tri_trang_chu: false)")
+    # 19/10: `true   # ghi chú` của chủ vẫn là BẬT (bản trước so cả phần chú thích → đọc thành tắt)
+    _kenh(g, "E", "nuoi_trang_chu: true   # 19/10: chu cho tu nuoi lai\n")
+    assert n.cong_tac("E", g, {}) == "bat" and "E" in n.cac_kenh_bat(g)
 
 
 def test_khong_ghi_kenh_yaml_nua(tmp_path, monkeypatch):
@@ -70,30 +70,6 @@ def test_khong_ghi_kenh_yaml_nua(tmp_path, monkeypatch):
     dt, sk = n.sau_lan_do("K", so, n.duy_tri_moi("K"), "bat", lambda s: None, che="nuoi_dau")
     assert sk == "dat_lan_dau" and dt["che_do"] == "duy_tri"
     assert n.doc_duy_tri("K")["che_do"] == "duy_tri"
-
-
-# ── lịch đo: tuần / 3 ngày ──────────────────────────────────────────────────
-def test_lich_do_hang_tuan_va_3_ngay_khi_duoi_muc():
-    t0 = luc(12, ngay=1)
-    so = {"trang_thai": "dat", "lan_do": [muc(t0, 96.7, 40)]}
-    assert n.den_han_do(so, {}, t0 + 6.9 * 86400, "may_tat")[0] is False
-    assert n.den_han_do(so, {}, t0 + 7 * 86400, "may_tat")[0] is True
-    so_duoi = {"trang_thai": "dat", "lan_do": [muc(t0, 83.3, 40)]}
-    assert n.den_han_do(so_duoi, {}, t0 + 2.9 * 86400, "may_tat")[0] is False
-    dung, ly = n.den_han_do(so_duoi, {}, t0 + 3 * 86400, "may_tat")
-    assert dung and "3 ngày" in ly
-    # đang nuôi lại → 3 ngày dù lần cuối đạt; đang nuôi lần đầu (chủ bật, chưa đạt) → phiên tự đo
-    assert n.den_han_do(so, {"che_do": "nuoi_lai"}, t0 + 3 * 86400, "may_tat")[0] is True
-    assert n.den_han_do({"trang_thai": "dang_nuoi", "lan_do": []}, {}, t0, "bat")[0] is False
-    assert n.den_han_do({"trang_thai": "dat", "lan_do": []}, {}, t0, "bat") == (True, "chưa đo trang chủ lần nào")
-    # lần đo ít ô không tính
-    assert n.den_han_do({"trang_thai": "dat", "lan_do": [muc(t0, 99, 50, nn=5)]}, {}, t0 + 3600, "bat")[0] is True
-
-
-def test_can_nguoi_cho_chrome_kiem_lai():
-    so = {"trang_thai": "can_nguoi", "ly_do": "captcha", "can_nguoi_luc": luc(10), "lan_do": []}
-    assert n.den_han_do(so, {}, luc(12), "bat")[0] is False
-    assert n.den_han_do(so, {}, luc(12), "bat", kiem_dom_luc=luc(11))[0] is True     # người đã đăng nhập lại, kiểm DOM đạt
 
 
 # ── luật % ngách ────────────────────────────────────────────────────────────
@@ -420,23 +396,3 @@ def test_tom_tat_va_o_tu_kiem(tmp_path):
     # skill D18
     from core import ky_nang as kn
     assert kn.k_duy_tri_trang_chu(g, "A")[0] == kn.DAT and kn.k_duy_tri_trang_chu(g, "C")[0] == kn.LOI
-
-
-def test_skill_d18_dieu_kien_va_khung(tmp_path, monkeypatch):
-    from core import ky_nang as kn
-    g = str(tmp_path)
-    (tmp_path / "vm" / "logs" / "kiem-dom").mkdir(parents=True)
-    (tmp_path / "vm" / "logs" / "kiem-dom" / "A.json").write_text(json.dumps({"ok": True, "ngay": "2026-10-18 07:00:00"}),
-                                                                   encoding="utf-8")
-    _kenh(g, "A", "nuoi_trang_chu: false\n")
-    monkeypatch.setattr(kn, "_gio", lambda: _dt.datetime(2026, 10, 19, 10, 0))
-    dung, ly = kn.d_duy_tri_trang_chu(g, "A")
-    assert dung and "chưa đo" in ly
-    monkeypatch.setattr(kn, "_gio", lambda: _dt.datetime(2026, 10, 19, 3, 0))
-    assert kn.d_duy_tri_trang_chu(g, "A") == (False, "khung cấm 02–07 của thiết lập kênh")
-    monkeypatch.setattr(kn, "_gio", lambda: _dt.datetime(2026, 10, 19, 10, 0))
-    (tmp_path / "vm" / "logs" / "dang-dodang.json").write_text("{}")
-    assert kn.d_duy_tri_trang_chu(g, "A")[0] is False
-    k = kn.theo_ma("D18")
-    assert k.nang and k.tu_ap and k.mot_kenh and k.lenh.endswith("--do")
-    assert k.chay(g, "A")[-3:] == ["--kenh", "A", "--do"]

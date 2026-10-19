@@ -630,8 +630,18 @@ def kiem_trang_chu(K: BoiCanh) -> List[Dict[str, Any]]:
                                                if t["can_nguoi"] else
                                                "quyết: bật nuoi_trang_chu: true trong kenh.yaml kênh {0} để máy tự nuôi lại "
                                                "trang chủ (hiện chỉ đo)".format(kenh))}
-        ra.append(_muc("trang_chu", kenh, "trang_chu:" + kenh, "trang chủ ≥ 90% đúng chủ đề (đo hằng tuần)", K.bay, tt,
-                       t["cau"], **them))
+        ra.append(_muc("trang_chu", kenh, "trang_chu:" + kenh, "trang chủ ≥ 90% đúng chủ đề (đo theo lần quét trang chủ)",
+                       K.bay, tt, t["cau"], **them))
+        if t.get("quet_cu") and not t.get("quet_chan"):
+            # 19/10: D18 đo từ lần quét SẴN CÓ — quá 3 ngày không có lần quét mới = lịch quét trang chủ của kênh hỏng. Báo
+            # MỘT lần (ngày đầu thấy: HỎNG → báo động gộp; ngày sau cùng lần quét cũ ấy: CHỜ), không mở Chrome bù.
+            khoa = "trang_chu_quet:{0}:{1}".format(kenh, t.get("luc_quet") or "")
+            dau = str(K.cu(khoa).get("lan_dau_hong") or "")[:10]
+            ra.append(_muc("trang_chu", kenh, khoa, "lịch quét trang chủ còn chạy (có lần quét ≤ 3 ngày)", K.bay,
+                           HONG if not dau or dau == K.bay.date().isoformat() else CHO,
+                           "lịch quét trang chủ hỏng: lần quét cuối {0} ({1:.0f} ngày trước){2}".format(
+                               t.get("luc_quet"), float(t.get("ngay_quet") or 0),
+                               " — đã báo {0}".format(dau) if dau and dau != K.bay.date().isoformat() else "")))
     return ra
 
 

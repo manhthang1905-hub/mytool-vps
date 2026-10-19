@@ -36,8 +36,8 @@ LUAT = (
 SO_CHAY = ("workspace", "ky-nang", "so-chay.jsonl")
 HONG_LIEN_TOI_DA, GIO_TAM_DUNG = 3, 24
 HAN_NANG_PHUT, HAN_NHE_PHUT = 60, 15
-UU_TIEN_NANG = ("S03", "S04", "D09", "K20", "D15", "D14", "D13", "D18")   # việc nặng gấp trước: bìa sắp lên sóng, bàn giao
-#                         kẹt, thương hiệu; việc máy Studio (sức khoẻ trước thử nghiệm bìa); đo trang chủ tuần (D18) sau cùng
+UU_TIEN_NANG = ("S03", "S04", "D09", "K20", "D15", "D14", "D13")   # việc nặng gấp trước: bìa sắp lên sóng, bàn giao
+#                         kẹt, thương hiệu; việc máy Studio (sức khoẻ trước thử nghiệm bìa). D18 (19/10) hết nặng: đo từ lần quét
 MA_XONG, MA_HOAN = (0, 30), (10, 4)
 TEN_TAC_VU = "ShopAPI-KyNang"
 #: Skill → bộ phận của não (`core.nao_bo_phan.BO_PHAN`) để não học tỉ lệ thành công từng skill.
