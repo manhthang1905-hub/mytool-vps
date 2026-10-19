@@ -103,6 +103,10 @@ MUC = (
      "giờ đăng, bàn giao lượt kẹt cấu hình, hình mờ/trang chủ kênh, gom não bộ phận… — đủ điều kiện thì tự chạy, mỗi "
      "lượt tối đa một việc nặng, khoá máy bận thì để lượt sau; hỏng 3 lần liền thì tạm dừng 24 giờ và báo bạn. "
      "Tắt: máy chỉ báo “nên chạy”, không tự chạy gì. Tắt riêng một kênh: kenh.yaml → ky_nang_tat: [mã skill]."),
+    ("kiem_vang_giu", "Kiểm vàng bìa trượt thì giữ bìa mới",
+     "Tắt (mặc định): khi máy vẽ thử bìa sau mỗi lần đổi mã/lời nhắc mà bìa mới kém bìa thắng của kênh, máy chỉ báo "
+     "kèm tờ so (workspace/chan-doan, workspace/kiem-vang) — video vẫn giao. Bật: kênh trượt bị giữ bìa mới tới khi "
+     "kiểm lại đạt. Từng kênh: kenh.yaml → kiem_vang_giu: true/false."),
     ("bao_su_co", "Hiện thông báo khi tool gặp lỗi",
      "Tắt thì lỗi vẫn được ghi lại đầy đủ vào workspace/su-co.log, chỉ là "
      "không hiện lên màn hình. Hợp khi bạn để tool chạy qua đêm."),

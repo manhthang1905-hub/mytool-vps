@@ -206,9 +206,9 @@ def k_nuoi(goc, kenh):
     d = _json(_vm(goc, "logs", "nuoi-trang-chu", kenh + ".json")) or {}
     bat = _yaml(goc, kenh, "nuoi_trang_chu").lower() == "true"
     if _yaml(goc, kenh, "trang_chu_tin_cay").lower() == "true" and not bat:
-        return KHONG, "trang chủ đã tin cậy (trang_chu_tin_cay) — không cần nuôi"
+        return KHONG, "trang chủ đã tin cậy (trang_chu_tin_cay) — không cần nuôi; giữ chủ đề: D18"
     if d.get("trang_thai") == "dat":
-        return DAT, str(d.get("ly_do") or "đạt")[:80]
+        return DAT, (str(d.get("ly_do") or "đạt")[:60] + " · giữ chủ đề: D18")
     if bat:
         return CHO, "đang nuôi: " + str(d.get("ly_do") or "")[:70]
     return THIEU, "chưa nuôi (tắt)"
@@ -946,6 +946,41 @@ def d_soat_tuan(goc, kenh):
     return ss.can_chay(goc, kenh, _gio())
 
 
+# D18 · Duy trì trang chủ đúng chủ đề (19/10/2026) ─────────────────────────────────────────────────────────────
+# Chủ: "quét trang chủ các kênh hiện tại không đạt 90% đúng chủ đề — cần 1 tuần 1 lần hoặc kênh nào <90 thì cần logic để
+# nó đúng chủ đề". Bộ chạy `vm/nuoi_trang_chu.py --do` (CHỈ ĐO); dưới mục tiêu thì máy tự bật nuôi lại trong sổ máy
+# `vm/logs/nuoi-trang-chu/<K>.duy-tri.json` và phiên nuôi của agent (`agent.chay_nuoi_trang_chu`) làm phần xem.
+
+def _duy_tri_tt(goc, kenh) -> dict:
+    return _nap_vm("nuoi_trang_chu").tom_tat_duy_tri(kenh, goc, _gio().timestamp())
+
+
+def k_duy_tri_trang_chu(goc, kenh):
+    t = _duy_tri_tt(goc, kenh)
+    if t["cong_tac"] in ("khong_co", "tat_han"):
+        return KHONG, t["cau"] or "không áp"
+    return {"dat": DAT, "thu_lai": CHO, "cho": CHO, "nguoi": LOI}.get(t["tt"], THIEU), t["cau"][:150]
+
+
+def d_duy_tri_trang_chu(goc, kenh):
+    if _dang_o_may_khac(goc, kenh):
+        return False, "kênh làm ở máy khác"
+    n = _nap_vm("nuoi_trang_chu")
+    thu = _vm(goc, "logs", "nuoi-trang-chu")
+    so = n.doc_so(kenh, thu)
+    ct = n.cong_tac(kenh, goc, so)
+    kd = _json(_vm(goc, "logs", "kiem-dom", kenh + ".json")) or {}
+    kd_luc = 0.0
+    if kd.get("ok"):
+        t = _doc_luc(kd.get("ngay"))
+        kd_luc = t.timestamp() if t else 0.0
+    dung, ly = n.den_han_do(so, n.doc_duy_tri(kenh, thu), _gio().timestamp(), ct, kd_luc)
+    if not dung:
+        return False, ly
+    chan = _studio_may_chan(goc, kenh)
+    return (False, chan) if chan else (True, ly)
+
+
 def _viec_sua_bia(goc, kenh) -> list:
     from core import bat_thuong  # noqa: PLC0415
     return bat_thuong.viec_sua_bia(goc, kenh)
@@ -964,6 +999,28 @@ def d_sua_bia(goc, kenh):
 def c_sua_bia(goc, kenh):
     ds = _viec_sua_bia(goc, kenh)
     return _py("-m", "core.bat_thuong", "sua-bia", "--kenh", kenh, "--vid", str(ds[0].get("vid") if ds else ""))
+
+
+# D19 · Kiểm vàng bìa (19/10/2026) — `core/bia_lo.py` mục 6 ─────────────────────────────────────────────────────
+
+def k_kiem_vang(goc, kenh):
+    from core import bia_lo  # noqa: PLC0415
+    if kenh not in bia_lo.kenh_san_xuat(goc):
+        return KHONG, "kênh chưa có lượt sản xuất"
+    m = bia_lo.doc_vang(goc).get(kenh) or {}
+    if not m:
+        return THIEU, "chưa kiểm vàng bìa lần nào"
+    if m.get("dat") is False:
+        return LOI, "kiểm vàng {0} TRƯỢT — {1}: {2}".format(
+            str(m.get("luc"))[:16], "bìa mới đang GIỮ" if bia_lo.giu_theo_vang(goc, kenh) else "chỉ cảnh báo",
+            "; ".join(m.get("ly_do") or [])[:90])
+    dung, ly = bia_lo.can_kiem_vang(goc, kenh)
+    return (CHO if dung else DAT), ly
+
+
+def d_kiem_vang(goc, kenh):
+    from core import bia_lo  # noqa: PLC0415
+    return bia_lo.can_kiem_vang(goc, kenh)
 
 
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
@@ -1056,6 +1113,16 @@ DANH_MUC: List[KyNang] = [
            dieu_kien=d_danh_sach_phat, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "danh_sach_phat_dom.py"),
                                                                    "--kenh", kenh),
            nhip_gio=NHIP_DSP_GIO, tu_ap=True, nang=True),
+    KyNang("D18", "Duy trì trang chủ đúng chủ đề", "dinh_ky",
+           "Mỗi 7 ngày (lần trước dưới mục tiêu / đang nuôi lại: 3 ngày): mở Chrome kênh, CHỈ ĐỌC trang chủ 2 lần (~30 ô, bỏ "
+           "quảng cáo / Mix; Shorts không tính), phân loại theo NGHĨA (đúng ngách / đúng chủ đề / lạc đề). Chủ đề < 90% hoặc "
+           "% ngách tụt (< 0,6 × tốt nhất 90 ngày, < 30%) → máy tự nuôi lại (sổ máy duy-tri.json, không đụng kenh.yaml) với "
+           "nguồn ngách hẹp, đo sau mỗi phiên; 2 lần đạt liền → về duy trì; 7 ngày + 8 phiên vẫn dưới → báo động một lần, nuôi "
+           "chậm. kenh.yaml nuoi_trang_chu: false do chủ đặt → chỉ đo, hỏi chủ; duy_tri_trang_chu: false → tắt hẳn.",
+           "python vm/nuoi_trang_chu.py --kenh K --do", k_duy_tri_trang_chu, ["K17"],
+           dieu_kien=d_duy_tri_trang_chu, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "nuoi_trang_chu.py"), "--kenh",
+                                                                       kenh, "--do"),
+           nhip_gio=12, tu_ap=True, nang=True, han_phut=20, mot_kenh=True),
     # SỬA CHỮA — khi hỏng
     KyNang("S01", "Trả ngôn ngữ giao diện", "sua_chua", "Máy DOM tạm vi chưa trả (chết giữa chừng) → lần chạy sau tự trả.", "tự (ngon_ngu_tam.tra)", k_hl_tam, []),
     KyNang("S02", "Khám cấu hình kênh", "sua_chua",
@@ -1101,6 +1168,15 @@ DANH_MUC: List[KyNang] = [
            "bìa lô chữ vẽ bằng mã → đọc lại hai lượt + dấu cổng chữ → xếp đổi bìa (máy DOM), tự kiểm đọc lại i.ytimg.com.",
            "python -X utf8 -m core.bat_thuong sua-bia --kenh K", k_sua_bia, ["D16"], dieu_kien=d_sua_bia,
            chay=c_sua_bia, nhip_gio=1, tu_ap=True, han_phut=40, mot_kenh=True),
+    KyNang("D19", "Kiểm vàng bìa", "dinh_ky",
+           "Kích hoạt: vân tay mã bìa (bia_lo/cong_chu/do_bia/chon_bia/bia_theo_khuon + phần ảnh bìa của auto_khau), "
+           "style.yaml, prompt/8-thumbnail.md, khoá bia_* của kenh.yaml hoặc thư mục bìa thắng ĐỔI (hay lần trước trượt "
+           "> 24 giờ) → vẽ MỘT lô thật bằng mã hiện tại cho lượt mới nhất → tờ so bìa thắng | 3 bìa đang chạy | top-3 "
+           "mới → cùng giám khảo chấm (kèm một bìa thắng giấu để hiệu chỉnh sàn) + sàn màu/bố cục/nhân vật. Trượt → bìa "
+           "mới của kênh bị GIỮ + báo.",
+           "python -X utf8 -m core.bia_lo --kiem-vang --kenh K", k_kiem_vang, ["D02"], dieu_kien=d_kiem_vang,
+           chay=lambda goc, kenh: _py("-m", "core.bia_lo", "--kiem-vang", "--kenh", kenh), nhip_gio=1, tu_ap=True,
+           han_phut=90, mot_kenh=True),
 ]
 
 

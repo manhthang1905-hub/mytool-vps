@@ -171,12 +171,16 @@ opposite thing, a before/after, a doorway onto another scene...),
 the clue, the contrast, the place) — do not describe {vung_trong} or the layout, that is handled separately,
   "mat": the character's big, readable facial expression,
   "tu_the": its pose.
-Rules: concrete and recognisable at 120 px wide — one main clue object, drawn big, no clutter; {luat_canh}; NOTHING \
+Rules: {luat_nv} Concrete and recognisable at 120 px wide — one main clue object, drawn big, no clutter; \
+{luat_canh}; NOTHING \
 in the picture may carry writing — no letters, numbers, price tags, signs, labels, receipts, contracts, documents, \
 books with titles, screens with content, banknotes or medals: pick objects recognisable by SHAPE (coins, piggy bank, \
 glowing brain, keys, cup, car, plain shopping bags...). Never put the hook text or any word into "canh".
 Return JSON only: {{"chu": ["...", "..."], "y_tuong": [{{"y": "...", "manh_moi": "...", "doi_lap": "...", "canh": \
 "...", "mat": "...", "tu_the": "..."}}]}}"""
+
+#: Đổi lời nhắc đạo diễn → đổi số này (ý tưởng cũ trên đĩa được viết lại). 2 = luật nhân vật kênh (19/10/2026).
+PHIEN_BAN_DAO_DIEN = 2
 
 _SUA_DAO_DIEN = ("\n\nYour previous answer gave only {0} usable concepts (each needs non-empty English y, manh_moi, "
                  "canh, mat; no Japanese words in canh). Return the same JSON with {1} good concepts.")
@@ -217,7 +221,7 @@ _VUNG_TRONG_TRAN = {"trai": "the empty left half", "phai": "the empty right half
                     "dai": "the empty top and bottom bands"}
 
 LOI_NHAC_CHAM_1 = """You are the strict art director of a Japanese psychology YouTube channel. The first {k} images \
-are this channel's REAL winning thumbnails{bang_chung} — they are the bar. The next {n} images are \
+are this channel's REAL winning thumbnails{bang_chung} — they are the bar.{nv_cau} The next {n} images are \
 thumbnail candidates for a NEW video, numbered 1 to {n} in the order shown. The LAST image is a phone-feed sheet: the \
 top row repeats the winners (labelled W1, W2…), below them the same candidates at the size a viewer sees them in the \
 YouTube home feed, each numbered at its top-left corner.
@@ -242,10 +246,19 @@ character just standing next to an object — with no real curiosity hook).
 "loi": hard defects you can SEE, else []: "stray text" (any letters, numbers, symbols or price tags in the picture \
 outside {ngoai_chu}), "deformed character", "face covered", "panel split" (a visible seam or dividing line — the \
 picture looks like two panels), "photo people".
+"nv": is the MAIN character exactly the channel's own character (as in {nv_ref})? "same" | "different" (another \
+person, or the figure redesigned: other age, hair, wrinkles, other face or clothes) | "none" (no main character).
+"nguoi_khac": the OTHER people in the picture: "none" | "faded" (faded faceless silhouettes or a blurred faceless \
+crowd, as in the winners) | "faces" (other people drawn with detailed faces) | "photo".
 Be comparative and strict: an average candidate is 5-6.
 Return JSON only: {{"ung_vien": [{{"so": 1, "bam_nhu_thang": 0, "noi_dung": 0, "to_mo": 0, "ro_120": 0, "cam_xuc": 0, \
-"phong_cach": 0, "yeu": [], "loi": [], "ly_do": "one short line IN VIETNAMESE: what works and what is missing"}}]}} — \
-one item per candidate."""
+"phong_cach": 0, "nv": "same", "nguoi_khac": "none", "yeu": [], "loi": [], "ly_do": "one short line IN VIETNAMESE: \
+what works and what is missing"}}]}} — one item per candidate."""
+#: Câu nói ảnh NHÂN VẬT tham chiếu trong lời nhắc chấm vòng 1 (ảnh đứng ngay sau các bìa thắng).
+NV_CAU_CHAM = (" Image {so} is the channel's CHARACTER REFERENCE (only the figure): the main character of every "
+               "thumbnail must be exactly this figure.")
+#: Đổi lời nhắc / ảnh gửi giám khảo → đổi số này (vào khoá lượt chấm: cùng khoá khác nội dung = cổng trả 409).
+PHIEN_BAN_CHAM = 2
 
 LOI_NHAC_CHAM_2 = """The image is a phone-feed sheet for a Japanese psychology YouTube channel: the top row shows its \
 REAL winning thumbnails (labelled W1, W2…), below them {n} thumbnail candidates for a new video, each numbered at its \
@@ -264,6 +277,31 @@ YEU_TRU = {"pale background": 6.0, "small text": 6.0, "weak clue": 6.0}
 NHAT_BAO_HOA, NHAT_TUONG_PHAN = 0.72, 0.75
 #: Tờ cỡ điện thoại của giám khảo: mỗi ô (px) — ~ bề ngang một bìa trong bảng tin YouTube trên điện thoại.
 O_DIEN_THOAI = (360, 202)
+
+# ── SÀN CHẤT LƯỢNG trước khi giao (19/10/2026) ──
+# Chủ soi TL4-T7-0005 (lên sóng 18/10): qua lô nhưng NHẠT (đơn sắc hồng đào bạc màu — 0/111 tấm lô TL4 đạt màu bìa
+# thắng) và nhân vật LỆCH kênh (ông già hói có mặt + đứa trẻ thay nhân vật đầu tròn trắng). Ba sàn cứng, đo trên CHÍNH
+# bìa thắng của kênh: màu (bão hoà / tương phản / dải sáng ≥ phân vị `SAN_PHAN_VI` bìa thắng), nhân vật (máy: bộ dò
+# đầu bắt được đầu nhân vật kênh khi nó bắt được trên nv1.png + bìa thắng; giám khảo: đúng nhân vật kênh, người phụ chỉ
+# là bóng mờ không mặt), điểm "bấm nhiều như bìa thắng" ≥ sàn hiệu chỉnh (`san_bam`). Không tấm nào qua → lô mới
+# (dây chuyền, tối đa `SO_LO_SAN_THEM`), vẫn không qua → giữ + báo (thà không đăng).
+#: 19/10/2026 (chủ): phân vị 10, đạt khi ≥ 2/3 số đo — phân vị 25 cả 3 số đo loại 70–100% lô TL3/TL5/TL6.
+SAN_PHAN_VI = 10.0
+#: Sàn điểm `bam_nhu_thang` (1–10) khi chưa hiệu chỉnh; kiểm vàng hiệu chỉnh = điểm giám khảo cho MỘT bìa thắng giấu
+#: giữa các ứng viên − `SAN_BAM_DUOI`, kẹp `SAN_BAM_KEP` (`<thư mục bìa thắng>/san-bam.json`).
+# Kiểm vàng thật 19/10: bìa thắng giấu bị chấm 2–3 trong lô (giám khảo trừ vì nó không nói đúng video MỚI) — thước
+#: lệch thấp, nên sàn không bao giờ dưới 7 ("gần ngang bìa thắng"; 5 = kém hẳn).
+SAN_BAM_MAC_DINH, SAN_BAM_DUOI, SAN_BAM_KEP = 7.0, 1.0, (7.0, 8.0)
+TEP_SAN_BAM = "san-bam.json"
+#: Bộ dò đầu dùng làm sàn nhân vật khi bắt được đầu trên nv1.png và trên ≥ ngần này phần bìa thắng.
+TI_LE_DAU_BAT = 0.75
+#: Lô bìa mới tối đa khi tấm tốt nhất dưới sàn (luật chủ: "lô mới tới 2 lần, vẫn không thì giữ + báo").
+SO_LO_SAN_THEM = 2
+_TEN_DO_MAU = {"bao_hoa": "bão hoà", "tuong_phan": "tương phản", "dai_sang": "dải sáng"}
+#: Câu khoá nhân vật cho đạo diễn + mô hình ảnh (19/10/2026 — lô TL4-0005: đạo diễn viết "an elderly man", "grandson").
+LUAT_NHAN_VAT = ("The channel's character is the ONE main figure of EVERY concept — never recast it as another person "
+                 "(an old man, a parent, a child, a couple, a woman…), never change its age or how it looks; other people "
+                 "appear only as faded, faceless silhouettes in the background.")
 
 _RE_CJK = re.compile(r"[぀-ヿ㐀-鿿＀-￯]")
 _RE_CHU_LA = re.compile(r"[0-9A-Za-z$%¥€£぀-ヿ㐀-鿿]")
@@ -435,9 +473,16 @@ def _do_sang_tb(duong: str) -> Optional[float]:
 TEP_DS_THANG = "thang.json"
 
 
+def ten_thu_muc_thang(kenh: str) -> str:
+    """Thư mục bìa thắng theo NẾP khi `kenh.yaml` chưa khai `bia_lo_mau` (19/10/2026): `workspace/bia-<mã>/thang`,
+    mã = tên kênh chữ thường bỏ đuôi "-T<n>" (TL4-T7 → bia-tl4, TL4-T7-K2 → bia-tl4-k2)."""
+    return os.path.join("workspace", "bia-" + re.sub(r"-t\d+(?=-|$)", "", str(kenh or "").lower()), "thang")
+
+
 def thu_muc_mau(goc: str, kenh: str, mau: Sequence[str] = ()) -> str:
     """Thư mục bìa thắng THẬT do chủ chọn (16/10/2026): thư mục trong `mau` (CLI `--mau DIR`) > `kenh.yaml: bia_lo_mau`
-    (đường tương đối theo gốc tool). '' khi không có."""
+    (đường tương đối theo gốc tool) > thư mục theo nếp `ten_thu_muc_thang` (19/10/2026 — có ảnh mới tính). '' khi
+    không có."""
     for m in mau or ():
         if m and os.path.isdir(m):
             return os.path.abspath(m)
@@ -450,7 +495,10 @@ def thu_muc_mau(goc: str, kenh: str, mau: Sequence[str] = ()) -> str:
     except Exception:  # noqa: BLE001
         d = ""
     d = os.path.join(goc, d) if d and not os.path.isabs(d) else d
-    return os.path.abspath(d) if d and os.path.isdir(d) else ""
+    if d and os.path.isdir(d):
+        return os.path.abspath(d)
+    nep = os.path.join(goc, ten_thu_muc_thang(kenh))
+    return os.path.abspath(nep) if goc and os.path.isdir(nep) and bia_thu_muc(nep) else ""
 
 
 def bia_thu_muc(thu_muc: str, toi_da: int = SO_BIA_THANG) -> List[Dict[str, Any]]:
@@ -616,7 +664,9 @@ def mau_thang(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None, *, go
 
 TEP_BO_CUC_THANG = "bo-cuc-thang.json"
 TEP_BO_CUC_TAY = "bo-cuc.json"
-PHIEN_BAN_BO_CUC = 5
+#: 6 (19/10/2026): + dải/khối nền sau dòng chữ (`dai`), mật độ nét chữ dòng chính (`mat_do_chu`). 7: đo lại khi hỏng.
+PHIEN_BAN_BO_CUC = 7
+LAN_DO_BO_CUC = 3
 SO_BIA_DO = 4
 #: Tấm bị loại khi diện tích các dòng chữ < ngần này × mục tiêu, hoặc dòng chính thấp hơn ngần này × mục tiêu.
 HE_SO_DT_TOI_THIEU, HE_SO_CAO_TOI_THIEU = 0.7, 0.7
@@ -631,11 +681,13 @@ layout precisely. All coordinates are fractions of the frame: x from 0 (left edg
 to 1 (bottom).
 "dong": one item per VISUAL text line, top to bottom — "chu" (the line exactly as written), "x0","x1","y0","y1" (the \
 box around that line's letters INCLUDING their outline), "mau" (the colour of most of its letters: white | red | \
-yellow | black | other), "tu_khoa" (true for the line(s) carrying the main keyword — the biggest or red/yellow one).
+yellow | black | other), "tu_khoa" (true for the line(s) carrying the main keyword — the biggest or red/yellow one), \
+"nen" (a solid or brush-stroke BAND / box painted behind that line's letters: none | red | black | yellow | white | \
+other).
 "nhan_vat": the main character's box (head and body that are visible) "x0","x1","y0","y1", and "mat": its head box \
 [x0, y0, x1, y1].
 "vien": the letters' outline: none | thin | thick | very_thick.
-Return JSON only: {{"dong": [{{"chu": "", "x0": 0, "x1": 0, "y0": 0, "y1": 0, "mau": "white", "tu_khoa": false}}], \
+Return JSON only: {{"dong": [{{"chu": "", "x0": 0, "x1": 0, "y0": 0, "y1": 0, "mau": "white", "tu_khoa": false, "nen": "none"}}], \
 "nhan_vat": {{"x0": 0, "x1": 0, "y0": 0, "y1": 0, "mat": [0, 0, 0, 0]}}, "vien": "thick"}}"""
 
 
@@ -766,6 +818,48 @@ def mau_do_mau(anh, dong: Sequence[Dict[str, Any]]) -> Dict[str, str]:
     return ra
 
 
+def _mat_na_chu(a):
+    """Điểm ảnh MÀU CHỮ của ngách (trắng tinh / đỏ tươi / vàng tươi) trên mảng rgb int16."""
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    return (a.min(axis=2) >= 225) | ((r >= 170) & (g <= 90) & (b <= 90)) | ((r >= 200) & (g >= 170) & (b <= 100))
+
+
+def mau_dai_do(anh, hop: Sequence[float], ten: str = "red") -> str:
+    """Màu DẢI/KHỐI NỀN sau một dòng chữ (19/10/2026 — bìa thắng TL2: dải cọ đỏ SẪM ~#C21214 sau 「悠々自適に」 chữ đỏ
+    TƯƠI): AI đo bố cục nói dòng có dải và màu gì (`ten`: red | black | yellow | white | other); điểm ảnh XÁC NHẬN —
+    trong hộp dòng, điểm cùng loại màu ấy mà KHÔNG phải màu chữ chiếm ≥ 15% (đen: 45%) → trung vị của chúng. '' = không xác
+    nhận được (không vẽ dải theo lời AI suông)."""
+    import numpy as np  # noqa: PLC0415
+    W, H = 640, 360
+    a = np.asarray(anh.convert("RGB").resize((W, H))).astype(np.int16)
+    x0, y0, x1, y1 = int(hop[0] * W), int(hop[1] * H), int(hop[2] * W), int(hop[3] * H)
+    o = a[y0:y1, x0:x1].reshape(-1, 3)
+    if len(o) < 60:
+        return ""
+    r, g, b = o[:, 0], o[:, 1], o[:, 2]
+    mx, mn = o.max(axis=1), o.min(axis=1)
+    chu = (mn >= 225) | ((r >= 230) & (g <= 60) & (b <= 60)) | ((r >= 200) & (g >= 170) & (b <= 100) & (mx - mn > 120))
+    loai = {"red": (r >= 110) & (r < 235) & (r - g >= 70) & (r - b >= 70),
+            "black": mx <= 70,
+            "yellow": (r >= 170) & (g >= 140) & (b <= 90) & (mx - mn > 90),
+            "white": mn >= 200}.get(str(ten or "").lower())
+    if loai is None:
+        return ""
+    m = loai & ~chu
+    if float(m.mean()) < (0.45 if str(ten).lower() == "black" else 0.15):  # viền đen dày đã chiếm ~1/4 hộp
+        return ""
+    return "#{0:02X}{1:02X}{2:02X}".format(*(int(v) for v in np.median(o[m], axis=0)))
+
+
+def mat_do_chu(anh, hop: Sequence[float]) -> Optional[float]:
+    """Phần hộp dòng (đo sát nét) là điểm MÀU CHỮ — nét chữ đậm/mảnh (bìa thắng dùng gothic rất đậm)."""
+    import numpy as np  # noqa: PLC0415
+    W, H = 640, 360
+    a = np.asarray(anh.convert("RGB").resize((W, H))).astype(np.int16)
+    o = a[int(hop[1] * H):int(hop[3] * H), int(hop[0] * W):int(hop[2] * W)]
+    return round(float(_mat_na_chu(o).mean()), 3) if o.size >= 60 else None
+
+
 def doc_do_bo_cuc(du: Any, anh: Any = None) -> Optional[Dict[str, Any]]:
     """JSON lượt đo MỘT bìa thắng → số đo (`do_hop_dong` + `mau_chinh`, `vien`, `ky_tu_dong`, `dong`). Hộp hỏng (ngoài
     0..1, ngược, dòng < 2% hay > 60% khung) bỏ; không còn dòng nào → None. `anh` (PIL) có thì hộp AI được đo lại trên
@@ -780,8 +874,10 @@ def doc_do_bo_cuc(du: Any, anh: Any = None) -> Optional[Dict[str, Any]]:
         if None in h or h[2] <= h[0] or not 0.02 <= h[3] - h[1] <= 0.6:
             continue
         mau = str(x.get("mau") or "").strip().lower()
+        nen = str(x.get("nen") or "").strip().lower()
         dong.append({"chu": " ".join(str(x.get("chu") or "").split())[:40], "hop": h,
-                     "mau": mau if mau in _MAU_DO else "other", "tu_khoa": x.get("tu_khoa") is True})
+                     "mau": mau if mau in _MAU_DO else "other", "tu_khoa": x.get("tu_khoa") is True,
+                     "nen_ai": "" if nen in ("", "none", "no", "false") else nen[:12]})
     if not dong:
         return None
     # Một dòng NHIỀU MÀU (「低IQの人」+「の思考の癖」 cùng hàng) AI hay tách thành hai mục → gộp các mục chồng nhau theo
@@ -798,7 +894,8 @@ def doc_do_bo_cuc(du: Any, anh: Any = None) -> Optional[Dict[str, Any]]:
                 gop[-1] = {"chu": trai["chu"] + phai["chu"], "hop": [min(p[0], h[0]), min(p[1], h[1]),
                                                                      max(p[2], h[2]), max(p[3], h[3])],
                            "mau": gop[-1]["mau"] if rong_p >= rong_h else d["mau"],
-                           "tu_khoa": gop[-1]["tu_khoa"] or d["tu_khoa"]}
+                           "tu_khoa": gop[-1]["tu_khoa"] or d["tu_khoa"],
+                           "nen_ai": gop[-1].get("nen_ai") or d.get("nen_ai") or ""}
                 continue
         gop.append(d)
     dong = gop
@@ -821,6 +918,16 @@ def doc_do_bo_cuc(du: Any, anh: Any = None) -> Optional[Dict[str, Any]]:
     ra["vien"] = v if v in VIEN_THEO_DO or v == "none" else "thick"
     if anh is not None:
         ra.update(mau_do_mau(anh, dong))
+        # 19/10/2026 — DẢI nền sau dòng từ khoá (AI thấy + điểm ảnh xác nhận) và độ đậm nét dòng chính
+        try:
+            for d in dong:
+                d["dai"] = mau_dai_do(anh, d.get("hop_ai") or d["hop"], d["nen_ai"]) if d.get("nen_ai") else ""
+            k = [i for i, d in enumerate(dong) if d["dai"] and (i == ra["i_chinh"] or d["tu_khoa"] or d["mau"] == "red")]
+            ra["dai_tu_khoa"] = dong[k[0]]["dai"] if k else ""
+            ra["dai_ca"] = sum(1 for d in dong if d["dai"])
+            ra["mat_do_chu"] = mat_do_chu(anh, dong[ra["i_chinh"]]["hop"])
+        except Exception:  # noqa: BLE001 — đo điểm ảnh hỏng: không có dải/độ đậm
+            pass
     dai = sorted(len(re.sub(r"\s+", "", d["chu"])) for d in dong if d["chu"])
     ra["ky_tu_dong"] = dai[len(dai) // 2] if dai else 0
     ra["dong"] = dong
@@ -847,7 +954,11 @@ def tong_hop_bo_cuc(ds: Sequence[Tuple[Dict[str, Any], float]]) -> Dict[str, Any
     if not ds:
         return {}
     mt: Dict[str, Any] = {}
-    for k in ("so_dong", "dt_dong_pct", "cao_chinh_pct", "ti_le_chinh", "khe_max", "ky_tu_dong"):
+    # 19/10/2026: DẢI nền sau dòng từ khoá — khi bìa thắng mang ≥ nửa trọng số có dải: màu dải của bìa nặng ký nhất
+    co_dai = sorted(((w, d["dai_tu_khoa"]) for d, w in ds if d.get("dai_tu_khoa")), reverse=True)
+    if co_dai and sum(w for w, _m in co_dai) * 2 >= sum(w for _d, w in ds):
+        mt["dai_tu_khoa"] = co_dai[0][1]
+    for k in ("so_dong", "dt_dong_pct", "cao_chinh_pct", "ti_le_chinh", "khe_max", "ky_tu_dong", "mat_do_chu"):
         v = _trung_vi_trong_so([(d.get(k), w) for d, w in ds if isinstance(d.get(k), (int, float))])
         if v is not None:
             mt[k] = round(v, 2) if k != "so_dong" else int(v)
@@ -909,23 +1020,33 @@ def bo_cuc_thang(goc: str, kenh: str, thu_muc: str, *, goi: Optional[Callable[..
         return tu_cache(cu, "do-cu") if isinstance(cu, dict) and cu.get("bia") else {}
     chi_tiet, tra_loi = [], 0
     for b in bia:
-        try:
-            if dem is not None:
-                dem["llm"] = dem.get("llm", 0) + 1
-            from PIL import Image  # noqa: PLC0415
-            tho = _json(goi(LOI_NHAC_DO_BO_CUC, khoa="bia-lo-bo-cuc:{0}:{1}".format(kenh, _bam(
-                b["tep"], os.path.getsize(b["tep"]))), toi_da_token=2500, mo_hinh=MO_HINH_CHAM,
-                anh=[_url_anh(b["tep"], 1280)]))
-            tra_loi += 1 if isinstance(tho, dict) else 0
-            with Image.open(b["tep"]) as im:
-                d = doc_do_bo_cuc(tho, im.convert("RGB"))
-        except Exception as loi:  # noqa: BLE001 — một bìa đo hỏng: bỏ bìa đó
-            log("  (bìa lô: đo bố cục {0} hỏng: {1})".format(os.path.basename(b["tep"]), str(loi)[:120]))
-            continue
+        d, tho = None, None
+        # 19/10/2026: bìa thắng nặng ký nhất (TL2 177k) từng rơi khỏi số đo vì MỘT câu trả lời đọc hỏng → mục tiêu
+        # lấy từ bìa yếu (chữ 27% thay 51%). Đo hỏng thì đo lại tới `LAN_DO_BO_CUC` lần (khoá mới mỗi lần).
+        for lan in range(LAN_DO_BO_CUC):
+            try:
+                if dem is not None:
+                    dem["llm"] = dem.get("llm", 0) + 1
+                from PIL import Image  # noqa: PLC0415
+                tho = _json(goi(LOI_NHAC_DO_BO_CUC, khoa="bia-lo-bo-cuc{2}:{0}:{1}".format(kenh, _bam(
+                    b["tep"], os.path.getsize(b["tep"])), "-v{0}{1}".format(PHIEN_BAN_BO_CUC, ":l{0}".format(lan)
+                                                                         if lan else "")),
+                    toi_da_token=2500, mo_hinh=MO_HINH_CHAM, anh=[_url_anh(b["tep"], 1280)]))
+                tra_loi += 1 if isinstance(tho, dict) else 0
+                with Image.open(b["tep"]) as im:
+                    d = doc_do_bo_cuc(tho, im.convert("RGB"))
+            except Exception as loi:  # noqa: BLE001 — một lần đo hỏng: đo lại
+                log("  (bìa lô: đo bố cục {0} hỏng: {1})".format(os.path.basename(b["tep"]), str(loi)[:120]))
+                d = None
+            if d:
+                break
+            log("  (bìa lô: đo bố cục {0} không ra số đo — đo lại {1}/{2})".format(
+                os.path.basename(b["tep"]), lan + 1, LAN_DO_BO_CUC))
         if d:
             chi_tiet.append(dict({k: v for k, v in d.items() if k != "dong"}, tep=os.path.basename(b["tep"]), tho=tho,
                                  trong_so=round(float(b.get("imp") or 0) * float(b.get("ctr") or 0) / 100.0, 1),
-                                 dong=[{"chu": x["chu"], "hop": x["hop"], "mau": x["mau"]} for x in d["dong"]]))
+                                 dong=[{"chu": x["chu"], "hop": x["hop"], "mau": x["mau"], "dai": x.get("dai") or ""}
+                                       for x in d["dong"]]))
     if not chi_tiet:
         if tra_loi:  # AI trả lời mà không đo được bìa nào: ghi lại để mỗi lô không đo lại (thư mục đổi thì đo lại)
             _ghi_json(duong, {"khoa": khoa, "bia": [], "khong_do_duoc": True, "phien_ban": PHIEN_BAN_BO_CUC,
@@ -937,6 +1058,22 @@ def bo_cuc_thang(goc: str, kenh: str, thu_muc: str, *, goi: Optional[Callable[..
     log("  bìa lô: bố cục chữ bìa thắng — {0} dòng, chữ {1}% khung, dòng chính {2}% cao, nhân vật {3}".format(
         mt.get("so_dong"), mt.get("dt_dong_pct"), mt.get("cao_chinh_pct"), mt.get("ben_nv") or "?"))
     return mt
+
+
+def muc_tieu_theo_chu(mt: Dict[str, Any], chu: str) -> Dict[str, Any]:
+    """Mục tiêu bố cục cho chữ bìa CỤ THỂ (19/10/2026 — kiểm vàng TL2: chữ bìa 11 ký tự, bìa thắng ~25 ký tự → 28/28 tấm
+    bị cổng bố cục loại vì không thể phủ 70% diện tích chữ bìa thắng): tỉ lệ r = số ký tự / (ký tự mỗi dòng × số dòng
+    của bìa thắng); r < 1 → diện tích mục tiêu × √r và chữ to lên `he_co` = min(1,4, 1/√r) lần. Dòng chính vẫn phải
+    ≥ 70% dòng chính bìa thắng (cổng không đổi)."""
+    if not mt or not mt.get("dt_dong_pct"):
+        return mt
+    n = len(btk._chuan(chu_tron(chu)))  # noqa: SLF001
+    n_thang = float(mt.get("ky_tu_dong") or 5) * float(mt.get("so_dong") or 3)
+    r = n / max(1.0, n_thang)
+    if not n or r >= 1.0:
+        return dict(mt, n_chu=n, n_thang=round(n_thang, 1))
+    return dict(mt, dt_goc=mt["dt_dong_pct"], dt_dong_pct=round(float(mt["dt_dong_pct"]) * r ** 0.5, 1),
+                he_co=round(min(1.4, 1.0 / r ** 0.5), 2), n_chu=n, n_thang=round(n_thang, 1))
 
 
 def kiem_bo_cuc(do: Dict[str, Any], mt: Dict[str, Any], *, cot: bool = True) -> List[str]:
@@ -983,7 +1120,8 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
     kieu = kieu_chu(kc)
     if str(cai.get("bia_lo_kieu") or "").strip() in ("hop", "tran"):
         kieu = str(cai["bia_lo_kieu"]).strip()
-    hs: Dict[str, Any] = {"kieu": kieu, "khuon_video": str(khuon.get("video_id") or "")}
+    # `san_nv` (19/10/2026): lời nhắc ảnh có câu khoá nhân vật kênh + màu đậm (hồ sơ dựng tay của bài kiểm cũ: không)
+    hs: Dict[str, Any] = {"kieu": kieu, "khuon_video": str(khuon.get("video_id") or ""), "san_nv": True}
     if kieu == "hop":
         hs["kc"] = kc if btk.kieu_hop(kc) else KHUON_HOP_MAC_DINH
         hs["bo_cuc"] = btk._ben_chu_hop(hs["kc"])  # noqa: SLF001
@@ -992,7 +1130,10 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         hs["kc"], hs["uu_tien"] = kc, _uu_tien_vien(kc)
         hs["bo_cuc"] = bo_ep if bo_ep in ("dai", "trai", "phai") else bo_cuc_tran(kc)
         hs["mau_nen"], hs["mau_do"], hs["mau_vang"] = mau_tran(kc)
-    tm = thu_muc_mau(goc, kenh, mau) if kieu == "tran" else ""
+    # 19/10/2026: thư mục bìa thắng dùng cho MỌI kiểu chữ — lô TL4-0005 (kiểu hộp) lấy ảnh tham chiếu từ khuôn cũ, nền
+    # nhạt theo `NEN_HOP_MAC_DINH`, không so với bìa thắng thật của kênh.
+    tm = thu_muc_mau(goc, kenh, mau)
+    hs["thu_muc_mau"] = tm
     from .kenh import duong_kenh  # noqa: PLC0415
     nv = os.path.join(duong_kenh(goc, kenh), "nv", "nv1.png")
     hs["nv"] = nv if os.path.isfile(nv) else ""
@@ -1003,6 +1144,22 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
     except Exception as loi:  # noqa: BLE001
         log("  (bìa lô: mẫu bìa thắng của kênh hỏng: {0})".format(str(loi)[:160]))
         mt = {}
+    co_tang = any(isinstance(t, dict) for t in ((kc.get("chu") or {}).get("tang") or []))
+    phieu = [str(b.get("kieu_chu") or "") for b in mt.get("bia") or []]
+    if (tm and not co_tang and str(cai.get("bia_lo_kieu") or "").strip() not in ("hop", "tran") and kieu == "hop"
+            and phieu.count("tran") * 2 > len(phieu)):
+        # 19/10/2026: kênh chưa có khuôn + chưa khai `bia_lo_kieu` — kiểu chữ theo PHIẾU các bìa thắng trong thư mục
+        # (mẫu tả: "bare"/"box"), bên chữ theo bên nhân vật ĐO trên bìa thắng — không lùi khuôn hộp mặc định.
+        kieu = hs["kieu"] = "tran"
+        bo_ep = str(cai.get("bia_lo_bo_cuc") or "").strip()
+        if bo_ep not in ("dai", "trai", "phai"):
+            try:
+                bo_ep = {"phai": "trai", "trai": "phai", "giua": "dai"}.get(str(bo_cuc_thang(
+                    goc, kenh, tm, goi=goi, log=log, dem=dem).get("ben_nv") or ""), "trai")
+            except Exception:  # noqa: BLE001
+                bo_ep = "trai"
+        hs.update(kc=kc, uu_tien=_uu_tien_vien(kc), bo_cuc=bo_ep, nguon_kieu="phieu-bia-thang")
+        hs["mau_nen"], hs["mau_do"], hs["mau_vang"] = mau_tran(kc)
     if mt.get("mau"):
         hs.update(mau=mt["mau"], nguon_mau="kenh" if mt.get("moi") else "kenh-cu", hinh_them=mt.get("hinh") or "")
     elif kieu == "hop":
@@ -1012,15 +1169,15 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         hs.update(mau="- 「{0}」: {1}".format("|".join(str(t.get("noi_dung") or "") for t in tang if isinstance(t, dict)),
                                               kc.get("diem_hut_mat") or kc.get("bo_cuc") or ""),
                   nguon_mau="khuon", hinh_them="")
-    if kieu == "tran" and tm:
+    if tm:
         # Thư mục chủ chọn: ảnh tham chiếu + mẫu so = các bìa ĐẦU BẢNG của thư mục (thứ hạng của chủ), mọi kiểu chữ —
         # chữ do mã vẽ; ảnh mẫu dạy nét vẽ / cảnh / nhân vật.
-        hs["nen"] = "; ".join(x for x in (mt.get("nen") or "", nen_tu_khuon(kc)) if x)
+        hs["nen"] = "; ".join(x for x in (mt.get("nen") or "", nen_tu_khuon(kc) if kieu == "tran" else "") if x)
         hs["bia_mau"] = [b["tep"] for b in bia_thu_muc(tm)][:SO_MAU_TRAN]
-        hs["thu_muc_mau"] = tm
         hs["bia_so"] = [b["tep"] for b in bia_thu_muc(tm)][:SO_BIA_SO]
         imp = [float(b["imp"]) for b in (mt.get("bia") or bia_thu_muc(tm)) if isinstance(b.get("imp"), (int, float))]
         hs["bang_chung"] = " ({0}-{1} impressions)".format(_k(min(imp)), _k(max(imp))) if imp else ""
+    if kieu == "tran" and tm:
         # 18/10/2026: BỐ CỤC CHỮ của bìa thắng (số dòng, diện tích, dòng chính, bên nhân vật) → mục tiêu cứng bộ vẽ.
         try:
             hs["muc_tieu"] = bo_cuc_thang(goc, kenh, tm, goi=goi, log=log, dem=dem, bo=hs["bo_cuc"])
@@ -1079,6 +1236,11 @@ def loi_theo_kieu(ho_so: Optional[Dict[str, Any]]) -> Dict[str, str]:
     hs = ho_so or {}
     ra = dict(LOI_DAO_DIEN_HOP)
     if hs.get("kieu") != "tran":
+        # 19/10/2026: kiểu hộp của kênh KHÁC TL4 (TL4-K2 mượn khuôn hộp TL4) — nhân vật + bằng chứng của chính kênh
+        if hs.get("nhan_vat"):
+            ra["nhan_vat_cau"] = "the channel's own character ({0})".format(hs["nhan_vat"])
+        if hs.get("bang_chung"):
+            ra["bang_chung"] = hs["bang_chung"]
         return ra
     bo = hs.get("bo_cuc") if hs.get("bo_cuc") in _CHO_CHU_TRAN else "dai"
     ten_do, ten_vang = (btk._ten_mau(m).split(" #")[0] for m in (hs.get("mau_do"), hs.get("mau_vang")))  # noqa: SLF001
@@ -1092,7 +1254,9 @@ def loi_theo_kieu(ho_so: Optional[Dict[str, Any]]) -> Dict[str, str]:
         bo_cuc_ta = (" The winners stack {0} lines in ONE solid block that fills about {1:.0f}% of the frame; the "
                      "keyword line is about {2:.0f}% of the frame height, clearly bigger than the others{3}.").format(
             so_dong, float(mt.get("dt_dong_pct") or 40), float(mt.get("cao_chinh_pct") or 25),
-            ", painted RED" if mt.get("tu_khoa_do") else "")
+            ", painted RED" if mt.get("tu_khoa_do") else "") + (
+            " The keyword line sits on a {0} brush-stroke band.".format(btk._ten_mau(mt["dai_tu_khoa"]).split(" #")[0])  # noqa: SLF001
+            if mt.get("dai_tu_khoa") else "")
     ra.update(
         bang_chung=hs.get("bang_chung") or "",
         hinh="huge BARE lettering with a thick black outline — white, the keyword painted {0} or {1}, no boxes — "
@@ -1122,7 +1286,7 @@ def dao_dien(goi: Callable[..., str], *, tieu_de: str, chu_bia: str, kich_ban: s
     lk = loi_theo_kieu(ho_so)
     loi_nhac = LOI_NHAC_DAO_DIEN.format(mau=(ho_so or {}).get("mau") or MAU_THANG, tieu_de=tieu_de, chu_bia=chu_bia,
                                         so_y=so_y, muc_luc=" / ".join(str(m) for m in muc_luc)[:900] or "(none)",
-                                        kich_ban=str(kich_ban or "")[:4000] or "(none)",
+                                        kich_ban=str(kich_ban or "")[:4000] or "(none)", luat_nv=LUAT_NHAN_VAT,
                                         **{k: lk[k] for k in ("bang_chung", "hinh", "vi_tri_nv", "nhan_vat_cau",
                                                               "hinh_them", "o_hook", "vung_trong", "luat_danh_dau",
                                                               "luat_canh")})
@@ -1221,7 +1385,12 @@ def _tach_tu_khoa_do(tang: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         k = next((j for j, p in enumerate(pm) if p.get("vai") == "do"), None)
         if k is not None and len(pm) == 1 and len(btk._chuan(pm[0]["chu"])) >= 4:  # noqa: SLF001
             # cả dòng một đoạn ĐỎ (「お金じゃない」): từ khoá = tiền tố tới hết cụm Hán/Katakana đầu (「お金」), phần sau trắng
-            m = re.match(r"^([぀-ゟ]{0,2}[一-鿿々〆ァ-ヿ0-9０-９]+)(.{2,})$", pm[0]["chu"])
+            # phần sau phải mở đầu bằng trợ từ/trợ động từ (「お金」+「じゃない」) — không cắt giữa từ: kiểm vàng 19/10
+            # tách 「引き受けない」 thành 「引」+「き受けない」
+            m = re.match(r"^([぀-ゟ]{0,2}[一-鿿々〆ァ-ヿ0-9０-９]+)((?:じゃ|では|は|が|を|に|で|の|も|と|より|ほど|こそ|"
+                         r"って|だ|です|な)(?:.+)?)$", pm[0]["chu"])
+            if m and (len(m.group(2)) < 2 or len(m.group(1)) < 2):
+                m = None
             if m:
                 return tang[:i] + [{"phan_mau": [{"chu": m.group(1), "vai": "do"}], "to": True},
                                    {"phan_mau": [{"chu": m.group(2), "vai": "nen"}]}] + tang[i + 1:]
@@ -1244,6 +1413,65 @@ def _tach_tu_khoa_do(tang: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def doc_chu_bia_tran(chu: str, ho_so: Dict[str, Any], *, cach_ai: Sequence[str] = ()) -> List[Dict[str, Any]]:
+    """`_doc_chu_bia_tran` + 19/10/2026: độ ĐẬM nét theo bìa thắng (`_chon_dam` — mục tiêu `mat_do_chu` đo trên bìa
+    thắng của kênh)."""
+    tang = _doc_chu_bia_tran(chu, ho_so, cach_ai=cach_ai)
+    mt = ho_so.get("muc_tieu") or {}
+    if mt.get("mat_do_chu"):
+        dp = _chon_dam(tang, ho_so)
+        if dp:
+            tang = [dict(t, dam_pct=dp) for t in tang]
+    return tang
+
+
+#: Các mức "đậm giả" thử (× cỡ chữ) — mặc định của bộ vẽ là 0,022.
+DAM_THU = (0.022, 0.032, 0.042, 0.052)
+
+
+def _ve_thu(t2: List[Dict[str, Any]], ho_so: Dict[str, Any], bo: str, bc: Dict[str, Any]):
+    """Vẽ THỬ các tầng trên khung trơn (cột đầu tiên của `cach_bo_cuc_tran`) → ảnh PIL (None khi hỏng); `bc` = báo cáo."""
+    import tempfile  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+    mt = ho_so.get("muc_tieu") or {}
+    rong = cach_bo_cuc_tran(bo, mt)[0][0]
+    khung = None if bo == "dai" else ((0.0, 0.0, rong, 1.0) if bo == "trai" else (1.0 - rong, 0.0, 1.0, 1.0))
+    dt = float(mt.get("dt_dong_pct") or 0)
+    with tempfile.TemporaryDirectory() as tm:
+        dich = os.path.join(tm, "thu.png")
+        ok = btk.ve_chu_len_anh("", dich, t2, anh_nen=Image.new("RGB", (1280, 720), (150, 120, 90)), bao_cao=bc,
+                                khung_chu=khung, cho_khung=False, uu_tien_kieu=ho_so.get("uu_tien") or UU_TIEN_VIEN_DEN,
+                                nhan_toi_da=2, dien_tich_muc=(0.92 * dt, 1.15 * dt) if dt else None,
+                                doc_khoi=0.5 if any(t.get("khoi") for t in t2) else None)
+        if not ok:
+            return None
+        with Image.open(dich) as im:
+            return im.convert("RGB")
+
+
+def _chon_dam(tang: List[Dict[str, Any]], ho_so: Dict[str, Any]) -> float:
+    """Mức "đậm giả" nhỏ nhất trong `DAM_THU` cho nét dòng chính đạt ≥ 95% mật độ nét bìa thắng (`mat_do_chu`, đo
+    CÙNG cách: hộp đo sát nét `tinh_hop_dong` + `mat_do_chu`) — không đạt thì mức lớn nhất. 0 = không đo được."""
+    mt = ho_so.get("muc_tieu") or {}
+    muc = float(mt.get("mat_do_chu") or 0)
+    bo = ho_so.get("bo_cuc") if ho_so.get("bo_cuc") in ("trai", "phai", "dai") else "dai"
+    i = next((k for k, t in enumerate(tang) if t.get("to")), 0)
+    for dp in DAM_THU:
+        bc: Dict[str, Any] = {}
+        try:
+            im = _ve_thu([dict(t, dam_pct=dp) for t in tang], ho_so, bo, bc)
+            dong = [d for d in bc.get("dong") or [] if d.get("hop")]
+            if im is None or len(dong) != len(tang):
+                return 0.0
+            h = [v / s for v, s in zip(sorted(dong, key=lambda d: d["hop"][1])[i]["hop"], (1280, 720, 1280, 720))]
+            md = mat_do_chu(im, tinh_hop_dong(im, [h])[0])
+        except Exception:  # noqa: BLE001
+            return 0.0
+        if md is not None and md >= 0.95 * muc:
+            return dp
+    return DAM_THU[-1]
+
+
+def _doc_chu_bia_tran(chu: str, ho_so: Dict[str, Any], *, cach_ai: Sequence[str] = ()) -> List[Dict[str, Any]]:
     """Chữ bìa → tầng chữ TRẦN đã bố trí cho `bia_theo_khuon.ve_chu_len_anh` theo khuôn chữ trần của kênh.
 
     Cách chia: `chu` có dấu (cú pháp hộp "a|*b" hoặc trần "a|[<b>]") > cách chia AI giữ TRỌN chữ bìa > chia máy
@@ -1294,7 +1522,13 @@ def doc_chu_bia_tran(chu: str, ho_so: Dict[str, Any], *, cach_ai: Sequence[str] 
                         khoa not in [k for k, _v in ung]:
                     ung.append((khoa, v))
         cac_bo = [(_bo_tri_tran([dict(t) for t in v], ho_so, to_toi_da, bo), v) for _k, v in ung]
-        diem = [(_diem_thu(t2, ho_so, n_muc, bo), i) for i, (t2, _v) in enumerate(cac_bo)]
+        # 19/10/2026 (kiểm vàng TL2): cách chia của MÁY tô đỏ dòng cực to bất kể từ khoá — cách giữ dấu màu từ khoá
+        # của AI (đạo diễn đọc nghĩa) được ưu tiên khi cùng qua / cùng trượt cổng bố cục.
+        diem = []
+        for i, (t2, v) in enumerate(cac_bo):
+            d = _diem_thu(t2, ho_so, n_muc, bo)
+            mau_ai = int(any(p.get("vai") in ("do", "vang") for t in v for p in t.get("phan_mau") or []))
+            diem.append(((d[0], mau_ai, d[1]), i))
         return cac_bo[max(diem)[1]][0]
     if n_muc and hop_le:
         tang = nguoi or min(hop_le, key=lambda t: (abs(len(t) - n_muc), dai_to(t) > to_toi_da, hop_le.index(t)))
@@ -1310,20 +1544,10 @@ def doc_chu_bia_tran(chu: str, ho_so: Dict[str, Any], *, cach_ai: Sequence[str] 
 def _diem_thu(t2: List[Dict[str, Any]], ho_so: Dict[str, Any], n_muc: int, bo: str) -> Tuple[float, ...]:
     """Điểm MỘT cách chia đã bố trí: vẽ thử trên khung trơn (cột đầu tiên của `cach_bo_cuc_tran`, mục tiêu diện tích
     bìa thắng) → (qua cổng bố cục?, diện tích/mục tiêu + dòng chính/mục tiêu − 0,1 × lệch số dòng). Vẽ hỏng → thấp."""
-    import tempfile  # noqa: PLC0415
-    from PIL import Image  # noqa: PLC0415
     mt = ho_so.get("muc_tieu") or {}
-    rong = cach_bo_cuc_tran(bo, mt)[0][0]
-    khung = None if bo == "dai" else ((0.0, 0.0, rong, 1.0) if bo == "trai" else (1.0 - rong, 0.0, 1.0, 1.0))
     dt = float(mt.get("dt_dong_pct") or 0)
-    with tempfile.TemporaryDirectory() as tm:
-        dich = os.path.join(tm, "thu.png")
-        bc: Dict[str, Any] = {}
-        ok = btk.ve_chu_len_anh("", dich, t2, anh_nen=Image.new("RGB", (1280, 720), (150, 120, 90)), bao_cao=bc,
-                                khung_chu=khung, cho_khung=False, uu_tien_kieu=ho_so.get("uu_tien") or UU_TIEN_VIEN_DEN,
-                                nhan_toi_da=2, dien_tich_muc=(0.92 * dt, 1.15 * dt) if dt else None,
-                                doc_khoi=0.5 if any(t.get("khoi") for t in t2) else None)
-    if not ok:
+    bc: Dict[str, Any] = {}
+    if _ve_thu(t2, ho_so, bo, bc) is None:
         return (0, -9.0)
     do = do_hop_dong([d["hop"] for d in bc.get("dong") or [] if d.get("hop")], W=1280, H=720)
     qua = not kiem_bo_cuc(do, mt, cot=bo != "dai")
@@ -1358,8 +1582,10 @@ def _bo_tri_tran(tang: List[Dict[str, Any]], ho_so: Dict[str, Any], to_toi_da: i
         _to_mau_may(tang)
     mau = {"nen": ho_so.get("mau_nen") or "#FFFFFF", "do": ho_so.get("mau_do") or MAU_DO_MAC_DINH,
            "vang": ho_so.get("mau_vang") or MAU_VANG_MAC_DINH}
-    cao_chinh = float(mt.get("cao_chinh_pct") or 0)
-    co_vua = (max(12.0, min(24.0, 1.1 * cao_chinh / max(1.0, float(mt.get("ti_le_chinh") or 1.3))))
+    # 19/10/2026: chữ bìa NGẮN hơn chữ bìa thắng → chữ to hơn theo `he_co` (`muc_tieu_theo_chu`)
+    he = float(mt.get("he_co") or 1.0)
+    cao_chinh = min(btk.DONG_TOI_DA_PCT / 1.05, float(mt.get("cao_chinh_pct") or 0) * he)
+    co_vua = (max(12.0, min(24.0 * he, 1.1 * cao_chinh / max(1.0, float(mt.get("ti_le_chinh") or 1.3))))
               if cao_chinh else TRAN_CO_VUA_PCT)
     vien = VIEN_THEO_DO.get(str(mt.get("vien") or "")) if mt else None
     khoi = bool(mt) and bo != "dai"
@@ -1384,6 +1610,9 @@ def _bo_tri_tran(tang: List[Dict[str, Any]], ho_so: Dict[str, Any], to_toi_da: i
             t2["vien_px_pct"] = vien
         if khoi:
             t2["khoi"] = True
+        # 19/10/2026: bìa thắng có DẢI nền sau dòng từ khoá (TL2: dải cọ đỏ sẫm) → dòng cực to / dòng mang màu đỏ
+        if mt.get("dai_tu_khoa") and (t.get("to") or _co_mau(t, "do")):
+            t2["dai"] = mt["dai_tu_khoa"]
         ra.append(t2)
     return ra
 
@@ -1440,12 +1669,27 @@ def loi_nhac_nen_tran(y: Dict[str, str], ho_so: Dict[str, Any]) -> str:
 def loi_nhac_anh(y: Dict[str, str], kc: Dict[str, Any], nen: str = "", ho_so: Optional[Dict[str, Any]] = None) -> str:
     """Ý tưởng → lời nhắc ảnh NỀN (không chữ) theo `btk.loi_nhac_hop_chu` (nét bìa thắng, nhân vật kênh, phía chữ
     trống), cảnh = `canh` + manh mối vẽ to rõ + đối lập. Kênh kiểu chữ TRẦN (`ho_so`) → `loi_nhac_nen_tran`."""
-    if (ho_so or {}).get("kieu") == "tran":
-        return loi_nhac_nen_tran(y, ho_so or {}) + " " + LIEN_MACH
+    hs = ho_so or {}
+    dan = (" " + str(hs["dan"]).strip()) if hs.get("dan") else ""  # lời dặn lô làm lại (lô trước dưới sàn vì gì)
+    if hs.get("kieu") == "tran":
+        return loi_nhac_nen_tran(y, hs) + " " + LIEN_MACH + (" " + MAU_DAM + " " + NV_ANH if hs.get("san_nv") else "") \
+            + dan
+    if not hs.get("san_nv"):  # đường cũ (bài kiểm / hồ sơ cũ): đúng nguyên văn
+        return btk.loi_nhac_hop_chu(kc, bien_the={"canh": _canh_day_du(y), "net_mat": y.get("mat", ""),
+                                                  "tu_the": y.get("tu_the", "")}, nen=nen) + " " + LIEN_MACH + dan
+    # 19/10/2026 — kiểu hộp: nhân vật CỦA kênh (style.yaml), nền theo bìa thắng thật + màu đậm như bìa thắng
     return btk.loi_nhac_hop_chu(kc, bien_the={"canh": _canh_day_du(y), "net_mat": y.get("mat", ""),
-                                              "tu_the": y.get("tu_the", "")}, nen=nen) + " " + LIEN_MACH
+                                              "tu_the": y.get("tu_the", "")}, nen=nen,
+                                nhan_vat=str(hs.get("nhan_vat") or "")) + " " + MAU_DAM + " " + LIEN_MACH + " " + \
+        NV_ANH + dan
 
 
+#: 19/10/2026 — ảnh nền: nhân vật đúng kênh + màu đậm như bìa thắng (TL4-0005 nhạt, nhân vật lệch).
+NV_ANH = ("The main character is ALWAYS exactly the figure of the character reference image — never a different "
+          "person, never older or younger, no hair, wrinkles or clothes it does not have; nobody else has a detailed "
+          "face.")
+MAU_DAM = ("Colours are rich and saturated and the light has strong contrast with deep shadows and bright highlights, "
+           "like the winners — never pale, washed-out, faded, greyish or a single pastel tint.")
 #: 14/10/2026 (lô thật TL4-T7-0001: giám khảo loại 8/20 nền vì "panel split" — nửa trái là một tấm phẳng có mép dọc).
 LIEN_MACH = ("The background is ONE continuous scene across the whole width: the empty part is simply the same wall, "
              "floor and light continuing, softly out of focus — never a separate flat panel, block of colour or "
@@ -1647,12 +1891,40 @@ def dung_bia(uv: Dict[str, Any], tang: Sequence[Dict[str, Any]], *, goc: str = "
     return uv
 
 
+def ve_dai_len(anh, tang: Sequence[Dict[str, Any]], dong: Sequence[Dict[str, Any]]):
+    """Nền + DẢI CỌ (hình bình hành nghiêng, mép phải răng cưa nhẹ) sau các dòng có `dai` (màu hex) — khớp dòng báo cáo
+    bộ vẽ theo chữ. Trả ảnh mới (None khi không dòng nào có dải). Dải phủ hộp dòng, lấn trái/phải theo cỡ chữ."""
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+    can = {btk.chu_cua_tang(t)[:24]: t["dai"] for t in tang if t.get("dai")}
+    if not can:
+        return None
+    lop = Image.new("RGBA", anh.size, (0, 0, 0, 0))
+    v = ImageDraw.Draw(lop)
+    co = False
+    for d in dong:
+        mau = can.get(str(d.get("ten") or ""))
+        if not mau or not d.get("hop"):
+            continue
+        x0, y0, x1, y1 = [float(x) for x in d["hop"]]
+        h = y1 - y0
+        x0, x1, y0, y1 = x0 - 0.10 * h, x1 + 0.25 * h, y0 + 0.08 * h, y1 - 0.02 * h
+        lech = 0.12 * h  # nghiêng như vết cọ
+        rang = [(x1 + lech * (1 - k / 6.0) + (0.06 * h if k % 2 else -0.04 * h), y0 + (y1 - y0) * k / 6.0)
+                for k in range(7)]
+        v.polygon([(x0 + lech, y0)] + rang + [(x0, y1)], fill=btk._mau_rgb(mau) + (238,))  # noqa: SLF001
+        co = True
+    if not co:
+        return None
+    return Image.alpha_composite(anh.convert("RGBA"), lop).convert("RGB")
+
+
 def cach_bo_cuc_tran(bo: str, mt: Optional[Dict[str, Any]] = None) -> Tuple[Tuple[Any, ...], ...]:
     """Các cách đặt chữ trần thử lần lượt. Có mục tiêu bìa thắng (kiểu cột): cột rộng như khối chữ bìa thắng (kẹp
     0,52–0,66) trước, rồi hẹp dần — chữ né đầu nhân vật bằng cách THU CỘT, không thu cả bìa trước."""
     if bo == "dai" or not mt or not mt.get("rong_khoi"):
         return CACH_BO_CUC_TRAN["dai" if bo == "dai" else "cot"]
-    r0 = max(0.52, min(0.66, float(mt["rong_khoi"])))
+    # 19/10/2026: bề cột = bề khối chữ ĐO trên bìa thắng (TL2: ~2/3 khung) — chỉ kẹp chống số đo lạc
+    r0 = max(0.45, min(0.75, float(mt["rong_khoi"])))
     rong = sorted({round(r0, 2)} | {r for r, _e, _t in CACH_BO_CUC_TRAN["cot"] if r < r0}, reverse=True)
     return tuple((r, 1.0, 0) for r in rong) + ((0.48, 0.9, 0), (0.44, 0.85, 0))
 
@@ -1699,14 +1971,31 @@ def _dung_bia_tran(uv: Dict[str, Any], tang: Sequence[Dict[str, Any]], ho_so: Di
             t_ve = [dict(t, co_toi_da_pct=min(float(t.get("co_toi_da_pct") or 99), tran_tren))
                     if t.get("vi_tri") == "tren" else t for t in t_ve]
         bc: Dict[str, Any] = {}
-        # Phông của chính bộ vẽ chữ trần (gothic rất đậm như bìa thắng); phông bo tròn Black của kiểu hộp làm tắc nét
-        # chữ Hán nhiều nét (「標」) khi viền đen dày — lô thật TL3 14/10.
-        if not btk.ve_chu_len_anh(uv["nen"], png, t_ve, goc=goc, ngon_ngu=ngon_ngu, anh_nen=anh, bao_cao=bc,
-                                  khung_chu=khung, cho_khung=False, ep_co=ep,
-                                  uu_tien_kieu=ho_so.get("uu_tien") or UU_TIEN_VIEN_DEN, nhan_toi_da=2,
-                                  dien_tich_muc=dt_muc, doc_khoi=khoi):
+
+        def ve(nen_ve, dich_ve: str) -> bool:
+            # Phông của chính bộ vẽ chữ trần (gothic rất đậm như bìa thắng); phông bo tròn Black của kiểu hộp làm tắc
+            # nét chữ Hán nhiều nét (「標」) khi viền đen dày — lô thật TL3 14/10.
+            return btk.ve_chu_len_anh(uv["nen"], dich_ve, t_ve, goc=goc, ngon_ngu=ngon_ngu, anh_nen=nen_ve,
+                                      bao_cao=bc, khung_chu=khung, cho_khung=False, ep_co=ep,
+                                      uu_tien_kieu=ho_so.get("uu_tien") or UU_TIEN_VIEN_DEN, nhan_toi_da=2,
+                                      dien_tich_muc=dt_muc, doc_khoi=khoi)
+        # 19/10/2026 — DẢI nền sau dòng từ khoá (đo trên bìa thắng): bố cục chữ không phụ thuộc nền → lượt NHÁP (tệp
+        # riêng) lấy hộp các dòng, vẽ dải đúng hộp lên nền, rồi vẽ chữ trên nền có dải (đo độ đọc được trên nền ấy).
+        co_dai = any(t.get("dai") for t in t_ve)
+        nhap = png[:-4] + ".nhap.png"
+        if not ve(anh, nhap if co_dai else png):
             uv["loai"] = "không vẽ được chữ (thiếu phông?)"
             return uv
+        if co_dai:
+            for t in (nhap, nhap[:-4] + ".do-bia.json"):
+                try:
+                    os.remove(t)
+                except OSError:
+                    pass
+            dai = ve_dai_len(anh, t_ve, bc.get("dong") or [])
+            if not ve(dai if dai is not None else anh, png):
+                uv["loai"] = "không vẽ được chữ (thiếu phông?)"
+                return uv
         hop = [d["hop"] for d in bc.get("dong") or [] if d.get("hop")]
         che_dau = max([_phan_giao(m, hop) for m in mat] or [0.0])
         che_mm = do_bia.phan_chu_the_bi_che(chu_the, hop, W, H)
@@ -1779,7 +2068,24 @@ def doc_cham_1(du: Any, n: int) -> Dict[int, Dict[str, Any]]:
         tru = sum(YEU_TRU.get(e, 0.0) for e in set(yeu))
         ra[so] = {"diem": diem, "tong": round(max(0.0, 10 * sum(TRONG_SO[k] * v for k, v in diem.items()) / ts - tru), 1),
                   "loi": loi, "yeu": yeu, "ly_do": str(x.get("ly_do") or "")[:240]}
+        # 19/10/2026 — sàn nhân vật: giám khảo so nhân vật chính với ảnh nhân vật kênh; người phụ chỉ là bóng mờ
+        for k in ("nv", "nguoi_khac"):
+            v = str(x.get(k) or "").strip().lower()
+            if v:
+                ra[so][k] = v[:20]
     return ra
+
+
+def lech_nhan_vat(u: Dict[str, Any]) -> str:
+    """Lý do SÀN NHÂN VẬT (giám khảo) — '' = đạt / giám khảo không nói: nhân vật chính khác nhân vật kênh hoặc vắng,
+    người phụ có mặt chi tiết / ảnh chụp."""
+    nv, khac = str(u.get("nv") or ""), str(u.get("nguoi_khac") or "")
+    ly = []
+    if nv in ("different", "none"):
+        ly.append("nhân vật chính " + ("không phải nhân vật kênh" if nv == "different" else "vắng mặt"))
+    if khac in ("faces", "photo"):
+        ly.append("người phụ " + ("có mặt chi tiết" if khac == "faces" else "là ảnh chụp") + " (bìa thắng: bóng mờ)")
+    return "; ".join(ly)
 
 
 def doc_cham_2(du: Any, n: int) -> List[int]:
@@ -1821,6 +2127,129 @@ def soi_yeu(tep: str, thang: Sequence[str]) -> List[str]:
     return ["pale background"] if (b < NHAT_BAO_HOA * bh or t < NHAT_TUONG_PHAN * tp) else []
 
 
+# ── 4b) Sàn chất lượng (19/10/2026) ──────────────────────────────────────────
+
+
+def do_mau(tep: Any) -> Dict[str, float]:
+    """Số đo màu của ảnh thu 160×90: `bao_hoa` (bão hoà TB 0..1), `tuong_phan` (độ lệch chuẩn độ sáng), `dai_sang`
+    (phân vị 95 − phân vị 5 độ sáng). Bìa nhạt đơn sắc (TL4-0005: 0,31 / 0,19 / 0,62) thấp cả ba."""
+    import numpy as np  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+    im = tep if hasattr(tep, "size") else Image.open(tep)
+    nho = im.convert("RGB").resize((160, 90), Image.BOX)
+    bh = np.asarray(nho.convert("HSV")).astype(np.float64)[..., 1] / 255.0
+    sang = np.asarray(nho.convert("L")).astype(np.float64) / 255.0
+    return {"bao_hoa": round(float(bh.mean()), 4), "tuong_phan": round(float(sang.std()), 4),
+            "dai_sang": round(float(np.percentile(sang, 95) - np.percentile(sang, 5)), 4)}
+
+
+def san_mau(thang: Sequence[str]) -> Dict[str, Any]:
+    """SÀN MÀU của kênh trên các bìa thắng (≥ 2 bìa; ít hơn → {}): phân vị `SAN_PHAN_VI` từng số đo `do_mau` + `toi_thieu`
+    (nhỏ nhất của bìa thắng từng số đo — ngưỡng NHẠT HẲN)."""
+    import numpy as np  # noqa: PLC0415
+    do = []
+    for t in thang or ():
+        try:
+            if t and os.path.isfile(t):
+                do.append(do_mau(t))
+        except (OSError, ValueError):
+            continue
+    if len(do) < 2:
+        return {}
+    ra: Dict[str, Any] = {k: round(float(np.percentile([d[k] for d in do], SAN_PHAN_VI)), 4) for k in _TEN_DO_MAU}
+    ra["toi_thieu"] = {k: round(min(d[k] for d in do), 4) for k in _TEN_DO_MAU}
+    return ra
+
+
+def kiem_mau(tep: Any, san: Dict[str, Any]) -> List[str]:
+    """Lý do bìa dưới SÀN MÀU ([] = đạt / không có sàn). 19/10/2026 (chủ: sàn lệch không được chặn sản xuất): ĐẠT khi
+    ≥ 2/3 số đo ≥ phân vị `SAN_PHAN_VI` bìa thắng."""
+    if not san:
+        return []
+    try:
+        d = do_mau(tep)
+    except (OSError, ValueError):
+        return ["không đo được màu"]
+    duoi = ["{0} {1:.2f} < {2:.2f}".format(_TEN_DO_MAU[k], d[k], float(san[k])) for k in _TEN_DO_MAU
+            if k in san and d[k] < float(san[k])]
+    return duoi if len(duoi) >= 2 else []
+
+
+def nhat_han(tep: Any, san: Dict[str, Any]) -> List[str]:
+    """Lý do bìa NHẠT HẲN — cả 3 số đo dưới bìa thắng nhạt nhất (TL4-0005: 0,31/0,19/0,62 < 0,31/0,22/0,63) → luôn
+    loại, kể cả khi lô phải chọn tấm dưới sàn. [] = không."""
+    mn = (san or {}).get("toi_thieu") or {}
+    if len(mn) < 3:
+        return []
+    try:
+        d = do_mau(tep)
+    except (OSError, ValueError):
+        return []
+    ly = ["{0} {1:.2f} < {2:.2f}".format(_TEN_DO_MAU[k], d[k], float(mn[k])) for k in _TEN_DO_MAU if d[k] < float(mn[k])]
+    return ly if len(ly) == 3 else []
+
+
+def dau_dung_duoc(nv: str, thang: Sequence[str], mau_dau: Any = None, *, noi: bool = False) -> bool:
+    """Bộ dò đầu (`tim_dau`) dùng làm SÀN NHÂN VẬT cho kênh khi nó bắt được đầu trên nv1.png VÀ trên ≥
+    `TI_LE_DAU_BAT` bìa thắng — nhân vật người có tóc (TL5, TL6-K2) không bắt được thì chỉ còn giám khảo xét."""
+    from PIL import Image  # noqa: PLC0415
+    try:
+        if not nv or not os.path.isfile(nv) or not tim_dau(Image.open(nv).convert("RGB"), mau_dau, noi=noi):
+            return False
+        cac = [t for t in thang if t and os.path.isfile(t)]
+        if len(cac) < 2:
+            return False
+        co = sum(1 for t in cac if tim_dau(Image.open(t).convert("RGB"), mau_dau, noi=noi))
+    except (OSError, ValueError):
+        return False
+    return co >= TI_LE_DAU_BAT * len(cac)
+
+
+def san_bam(thu_muc: str) -> Tuple[float, str]:
+    """(sàn điểm `bam_nhu_thang`, nguồn): `<thư mục bìa thắng>/san-bam.json` do kiểm vàng hiệu chỉnh, không có →
+    `SAN_BAM_MAC_DINH`."""
+    du = _doc_json(os.path.join(thu_muc, TEP_SAN_BAM)) if thu_muc else None
+    try:
+        return max(SAN_BAM_KEP[0], min(SAN_BAM_KEP[1], float((du or {})["san"]))), "hieu-chinh"
+    except (KeyError, TypeError, ValueError):
+        return SAN_BAM_MAC_DINH, "mac-dinh"
+
+
+def hieu_chinh_san_bam(thu_muc: str, diem_thang: float, *, kenh: str = "") -> float:
+    """Ghi một điểm giám khảo cho bìa thắng GIẤU (kiểm vàng) → sàn = trung vị các lần − `SAN_BAM_DUOI`, kẹp
+    `SAN_BAM_KEP`. Trả sàn mới."""
+    du = _doc_json(os.path.join(thu_muc, TEP_SAN_BAM)) or {}
+    ls = [float(x) for x in (du.get("diem_thang") or []) if isinstance(x, (int, float))][-9:] + [float(diem_thang)]
+    import statistics  # noqa: PLC0415
+    tv = float(statistics.median(ls))
+    san = max(SAN_BAM_KEP[0], min(SAN_BAM_KEP[1], tv - SAN_BAM_DUOI))
+    _ghi_json(os.path.join(thu_muc, TEP_SAN_BAM), {"san": san, "diem_thang": ls, "kenh": kenh,
+                                                   "luc": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                                   "cach": "trung vị điểm bìa thắng giấu − {0}".format(SAN_BAM_DUOI)})
+    return san
+
+
+def kiem_san(u: Dict[str, Any], san: Dict[str, Any]) -> List[str]:
+    """Lý do tấm đã chấm dưới SÀN ĐIỂM (`bam_nhu_thang` < sàn, hoặc giám khảo không chấm mục ấy) — [] = đạt."""
+    b = (u.get("diem") or {}).get("bam_nhu_thang")
+    if b is None:
+        return ["giám khảo không chấm «bấm như bìa thắng»"]
+    ly = [u["mau_duoi"]] if u.get("mau_duoi") else []
+    s, nguon = san_cua(u, san)
+    if float(b) < s:
+        ly.append("bấm như bìa thắng {0:.0f} < sàn {1:.0f} ({2})".format(float(b), s, nguon))
+    return ly
+
+
+def san_cua(u: Dict[str, Any], san: Dict[str, Any]) -> Tuple[float, str]:
+    """(sàn `bam_nhu_thang` của tấm, nguồn): điểm bìa thắng GIẤU trong cùng nhóm chấm − `SAN_BAM_DUOI` (kẹp
+    `SAN_BAM_KEP`) khi có; không thì sàn hiệu chỉnh của kênh / mặc định."""
+    if isinstance(u.get("bam_giau"), (int, float)):
+        return (max(SAN_BAM_KEP[0], min(SAN_BAM_KEP[1], float(u["bam_giau"]) - SAN_BAM_DUOI)),
+                "bìa thắng giấu cùng nhóm {0:.0f}".format(float(u["bam_giau"])))
+    return float(san.get("bam") or SAN_BAM_MAC_DINH), str(san.get("nguon_bam") or "mac-dinh")
+
+
 def to_dien_thoai(thang: Sequence[str], ds: Sequence[Dict[str, Any]], dich: str, *, cot: int = 3) -> str:
     """Tờ CỠ ĐIỆN THOẠI cho giám khảo: hàng đầu là bìa thắng (nhãn W1, W2…), dưới là ứng viên đánh số 1..n — mỗi ô
     `O_DIEN_THOAI` (cỡ một bìa trong bảng tin YouTube trên điện thoại)."""
@@ -1856,7 +2285,8 @@ def to_dien_thoai(thang: Sequence[str], ds: Sequence[Dict[str, Any]], dich: str,
 
 def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str], tieu_de: str, chu_bia: str,
          mo_dau: str = "", thu_muc: str = "", khoa: str = "bia-lo", log: Callable[[str], None] = print,
-         dem: Optional[Dict[str, int]] = None, ho_so: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+         dem: Optional[Dict[str, int]] = None, ho_so: Optional[Dict[str, Any]] = None,
+         giau: str = "") -> List[Dict[str, Any]]:
     """Chấm các ứng viên QUA lọc cứng → danh sách xếp hạng (tốt nhất trước; tấm loại/chưa chấm ở cuối).
 
     Vòng 1: nhóm ≤ `NHOM_CHAM` (xen kẽ ý để mỗi nhóm có nhiều ý), mỗi nhóm một lượt: bìa thắng + từng tấm + TỜ CỠ ĐIỆN
@@ -1865,7 +2295,11 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
     của kênh) trừ như nhau. Đọc mù nền sạch ≤ `TRAN_DOC_CHU` tấm điểm cao nhất (`soat_bia.doc_anh`): có chữ/số → loại.
     Vòng 2: ≤ `SO_VONG_2` tấm trên MỘT tờ cỡ điện thoại có hàng bìa thắng → thứ hạng. Trần lượt chấm `TRAN_GOI_CHAM`.
     `mau` = bìa thắng thật CỦA kênh; `ho_so.bia_so` (≤ `SO_BIA_SO` bìa đầu bảng thư mục bìa thắng) có thì dùng cho
-    tờ điện thoại; `ho_so` (`ho_so_kieu`) đổi lời tả kiểu chữ/nhân vật theo kênh."""
+    tờ điện thoại; `ho_so` (`ho_so_kieu`) đổi lời tả kiểu chữ/nhân vật theo kênh.
+
+    19/10/2026 — `giau` (bìa thắng THẬT không nằm trong mẫu/hàng so): chen vào MỌI nhóm vòng 1 như một ứng viên — điểm
+    `bam_nhu_thang` giám khảo cho nó trong CÙNG nhóm (`u["bam_giau"]`) là thước sàn của các tấm nhóm ấy (`kiem_san`).
+    Kiểm vàng thật 19/10: cùng tấm TL1 được 5 ở lô, 8 ở lượt đối chiếu — điểm giám khảo chỉ so được trong một lượt."""
     from . import soat_bia  # noqa: PLC0415
     import tempfile  # noqa: PLC0415
     dem = dem if dem is not None else {}
@@ -1874,7 +2308,12 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
     lk = loi_theo_kieu(ho_so)
     tt = {"tieu_de": tieu_de, "chu_bia": chu_bia, "mo_dau": " ".join(str(mo_dau or "").split())[:700] or "(none)",
           "bang_chung": lk["bang_chung"]}
-    tt1 = dict(tt, **{k: lk[k] for k in ("o_chu", "chu_ten", "ngoai_chu", "phong_cach_ta")})
+    # 19/10/2026 — ảnh nhân vật kênh (nv1.png) ngay sau bìa thắng: giám khảo xét SÀN NHÂN VẬT (`lech_nhan_vat`).
+    nv = str((ho_so or {}).get("nv") or "")
+    nv_url = [_url_anh(nv, cat=False)] if nv and os.path.isfile(nv) else []
+    tt1 = dict(tt, nv_cau=NV_CAU_CHAM.format(so=len(mau_url) + 1) if nv_url else "",
+               nv_ref="the character reference image" if nv_url else "the winners",
+               **{k: lk[k] for k in ("o_chu", "chu_ten", "ngoai_chu", "phong_cach_ta")})
     qua = sorted([u for u in ds if not u.get("loai")], key=lambda u: (u["bien"], u["y"]))
     nhom = [qua[i:i + NHOM_CHAM] for i in range(0, len(qua), NHOM_CHAM)][:max(1, TRAN_GOI_CHAM - 1)]
     khoa_dem = threading.Lock()
@@ -1885,19 +2324,31 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
             dem["llm"] = dem.get("llm", 0) + 1
         return goi(loi_nhac, **kw)
 
+    co_giau = bool(giau) and os.path.isfile(giau)
+
     def vong_1(i_g) -> None:
-        i, g = i_g
+        i, g0 = i_g
+        g = list(g0)
+        vi_giau = min(2, len(g)) if co_giau else -1  # bìa thắng giấu đứng GIỮA nhóm (không đầu/cuối)
+        if co_giau:
+            g.insert(vi_giau, {"ma": "giau", "tep": giau, "nen": giau})
         try:
             to = to_dien_thoai(thang, g, os.path.join(tm, "_vong-1-{0}.jpg".format(i + 1)))
             tho = goi_dem(LOI_NHAC_CHAM_1.format(k=len(mau_url), n=len(g), **tt1), khoa="{0}:cham1:{1}".format(
-                khoa, _bam(*[u["ma"] for u in g], "dt")), toi_da_token=3000, mo_hinh=MO_HINH_CHAM,
-                anh=mau_url + [_url_anh(u["tep"]) for u in g] + [_url_anh(to, 1100, cat=False)])
+                khoa, _bam(*[u["ma"] for u in g], "dt", PHIEN_BAN_CHAM, os.path.basename(giau or ""))),
+                toi_da_token=7000, mo_hinh=MO_HINH_CHAM,  # 7 tấm × lý do tiếng Việt: 3000 bị cắt
+                anh=mau_url + nv_url + [_url_anh(u["tep"]) for u in g] + [_url_anh(to, 1100, cat=False)])
             kq = doc_cham_1(_json(tho), len(g))
         except Exception as loi:  # noqa: BLE001 — nhóm hỏng: các tấm ấy chưa có điểm
             log("  (bìa lô: chấm nhóm {0} hỏng: {1})".format(i + 1, str(loi)[:160]))
             return
+        bam_giau = ((kq.get(vi_giau + 1) or {}).get("diem") or {}).get("bam_nhu_thang") if co_giau else None
         for so, k in kq.items():
+            if so - 1 == vi_giau:
+                continue
             u = g[so - 1]
+            if bam_giau is not None:
+                u["bam_giau"] = bam_giau
             u.update(k)
             may = [e for e in soi_yeu(u["tep"], thang) if e not in u["yeu"]]
             if may:
@@ -1905,6 +2356,8 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
                 u["tong"] = round(max(0.0, u["tong"] - sum(YEU_TRU.get(e, 0.0) for e in may)), 1)
             if k["loi"]:
                 u["loai"] = "giám khảo thấy lỗi: " + ", ".join(k["loi"])
+            elif lech_nhan_vat(u):
+                u["loai"] = "nhân vật lệch kênh: " + lech_nhan_vat(u)
     with ThreadPoolExecutor(max_workers=SONG_SONG_CHAM) as ex:
         list(ex.map(vong_1, enumerate(nhom)))
 
@@ -2017,8 +2470,10 @@ def mau_cua_kenh(goc: str, kenh: str, mau: Sequence[str] = (), ho_so: Optional[D
     cac = list(mau)
     hs = ho_so if ho_so is not None else (ho_so_kieu(goc, kenh, log=lambda s: None, mau=cac) if not cac or any(
         os.path.isdir(c) for c in cac) else {})
-    # Chữ trần: bìa khuôn + bìa cùng kiểu; có thư mục bìa thắng chủ chọn (16/10/2026) thì các bìa đầu bảng của nó.
-    if hs.get("kieu") == "tran" and hs.get("bia_mau") and (not cac or hs.get("thu_muc_mau")):
+    # Chữ trần: bìa khuôn + bìa cùng kiểu; có thư mục bìa thắng chủ chọn (16/10/2026) thì các bìa đầu bảng của nó —
+    # 19/10/2026: cả kiểu hộp (TL4: lô lấy ảnh tham chiếu của khuôn cũ, không phải bìa thắng thật).
+    if hs.get("bia_mau") and (hs.get("kieu") == "tran" or hs.get("thu_muc_mau")) and (
+            not cac or hs.get("thu_muc_mau")):
         return [t for t in hs["bia_mau"] if os.path.isfile(t)]
     if not cac:
         try:
@@ -2045,12 +2500,18 @@ def mau_cua_kenh(goc: str, kenh: str, mau: Sequence[str] = (), ho_so: Optional[D
 
 def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y: int = SO_Y_MAC_DINH,
          moi_y: int = MOI_Y_MAC_DINH, goi: Callable[..., str], ve: Callable[..., List[str]],
-         mau: Sequence[str] = (), log: Callable[[str], None] = print, ngon_ngu: str = "ja", khoa: str = ""
-         ) -> Dict[str, Any]:
+         mau: Sequence[str] = (), log: Callable[[str], None] = print, ngon_ngu: str = "ja", khoa: str = "",
+         dan: str = "", giau: Optional[str] = None) -> Dict[str, Any]:
     """Cả lô cho MỘT lượt → `<ra>/ung-vien/*.jpg`, `<ra>/xep-hang.json`, `<ra>/to-lien.jpg`, `<ra>/top-N.jpg`. Trả bản
     xếp hạng (`top` = ≤ `SO_TOP` tấm qua mọi lọc, tốt nhất trước). Chạy lại: ý tưởng + nền trên đĩa được dùng lại;
     `xep-hang.json` đúng bộ ứng viên + chữ thì trả luôn (không gọi LLM). `khoa` = tiền tố khoá idempotency (lô bìa
-    làm lại của dây chuyền đổi tiền tố)."""
+    làm lại của dây chuyền đổi tiền tố).
+
+    19/10/2026 — SÀN CHẤT LƯỢNG (`san`): tấm dưới sàn màu bìa thắng / không thấy đầu nhân vật kênh bị loại TRƯỚC giám
+    khảo; giám khảo loại tấm nhân vật lệch kênh; `top` chỉ nhận tấm `bam_nhu_thang` ≥ sàn. Không tấm nào qua mà giám
+    khảo đã chấm → `san_truot` (lý do, dây chuyền làm lô mới / giữ + báo). `dan`: lời dặn lô làm lại (vào lời nhắc ảnh);
+    `giau`: bìa thắng GIẤU khỏi mẫu/tờ so — giám khảo chấm nó TRONG MỖI nhóm như một ứng viên, sàn bấm-như-bìa-thắng
+    của nhóm = điểm của nó − 1 (`san_cua`); None = tự chọn (`bia_giau`: thư mục ≥ 3 bìa thắng), "" = không giấu."""
     t0 = time.time()
     lu = _doc_luot(thu_muc_luot)
     chu = str(chu or lu["chu_bia"]).strip()
@@ -2067,15 +2528,27 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     kc, tran = hs["kc"], hs["kieu"] == "tran"
     log("  bìa lô: kiểu chữ {0} ({1}), mẫu tả: {2}".format(
         "TRẦN" if tran else "HỘP", hs.get("bo_cuc"), hs.get("nguon_mau")))
-    mau = mau_cua_kenh(goc, kenh, mau, ho_so=hs)
+    if giau is None:
+        giau = bia_giau(str(hs.get("thu_muc_mau") or ""))
+    if giau:  # bìa thắng giấu không được làm mẫu / đứng hàng so — nó là một "ứng viên" (thước sàn)
+        for k in ("bia_mau", "bia_so"):
+            hs[k] = [t for t in hs.get(k) or [] if os.path.abspath(t) != os.path.abspath(giau)]
+    if dan:
+        hs["dan"] = str(dan).strip()
+    mau = [t for t in mau_cua_kenh(goc, kenh, mau, ho_so=hs) if not giau or os.path.abspath(t) != os.path.abspath(giau)]
     if not mau:
         raise RuntimeError("bìa lô: không có bìa thắng thật làm mẫu (khuôn kênh / --mau / kenh.yaml bia_lo_mau)")
+    san = san_lo(hs, mau, giau=giau)
+    if tran and hs.get("muc_tieu"):
+        hs["muc_tieu"] = muc_tieu_theo_chu(hs["muc_tieu"], hook)
     khoa = khoa or "bia-lo:{0}:{1}".format(kenh, os.path.basename(os.path.normpath(thu_muc_luot)))
     tep_y = os.path.join(ra, "y-tuong.json")
     yt = _doc_json(tep_y) or {}
     # Kiểu hộp giữ đúng dấu vào cũ (lô đã làm không phải viết lại ý tưởng); chữ trần thêm kiểu + bố cục + mẫu.
+    # 19/10/2026: lời nhắc đạo diễn có luật nhân vật kênh → ý tưởng cũ viết lại (`PHIEN_BAN_DAO_DIEN`).
     dau_vao = _bam(lu["tieu_de"], hook, so_y, *(("tran", hs.get("bo_cuc"), hs.get("mau", "")[:200]) if tran else ()),
-                   *((json.dumps(hs["muc_tieu"], sort_keys=True),) if tran and hs.get("muc_tieu") else ()))
+                   *((json.dumps(hs["muc_tieu"], sort_keys=True),) if tran and hs.get("muc_tieu") else ()),
+                   *(("dd", PHIEN_BAN_DAO_DIEN) if hs.get("san_nv") else ()))
     if not (yt.get("y_tuong") and yt.get("dau_vao") == dau_vao):
         log("  bìa lô: đạo diễn viết {0} ý tưởng…".format(so_y))
         yt = dict(dao_dien(goi_dem, tieu_de=lu["tieu_de"], chu_bia=hook, kich_ban=lu["kich_ban"],
@@ -2095,13 +2568,15 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     loi_chu = cong_chu.bao_dam_ma(chu_ve, hook, goc=goc, ngon_ngu=ngon_ngu, kieu_phong="" if tran else "hop")
     if loi_chu:
         raise cong_chu.ChuKhongKhop("bìa lô: " + loi_chu)
-    nen = "" if tran else str(btk.cau_hinh_kenh(goc, kenh).get("bia_hop_nen") or "")
+    # 19/10/2026: nền kiểu hộp theo bìa thắng THẬT của kênh (`ho_so.nen`), không nền nhạt mặc định
+    nen = "" if tran else str(btk.cau_hinh_kenh(goc, kenh).get("bia_hop_nen") or hs.get("nen") or "")
     uv = sinh_hang_loat(ve, yt["y_tuong"], moi_y, os.path.join(ra, "ung-vien"), kc=kc, nen=nen, khoa=khoa, log=log,
                         dem=dem, ho_so=hs)
     if not uv:
         raise RuntimeError("bìa lô: không vẽ được ảnh nền nào")
     van_tay = _bam(chu_ve, *sorted("{0}:{1}".format(u["ma"], os.path.getsize(u["nen"])) for u in uv),
-                   *(("tran", PHIEN_BAN_VE_TRAN, json.dumps(tang, ensure_ascii=False, sort_keys=True)) if tran else ()))
+                   *(("tran", PHIEN_BAN_VE_TRAN, json.dumps(tang, ensure_ascii=False, sort_keys=True)) if tran else ()),
+                   *(("san", json.dumps(san, sort_keys=True)) if hs.get("san_nv") else ()))
     cu = _doc_json(os.path.join(ra, "xep-hang.json")) or {}
     if cu.get("van_tay") == van_tay and cu.get("top") and all(os.path.isfile(t["tep"]) for t in cu["top"]):
         log("  bìa lô: đã xếp hạng đúng bộ ứng viên này — dùng lại")
@@ -2110,18 +2585,29 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
         dung_bia(u, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs)
         # Chữ do mã vẽ = chữ đã soát (bảo đảm ở trên): cổng chữ trước giám khảo không cần lượt đọc; dấu đóng ở tấm giao.
         u["chu_khop"] = {"ok": True, "cach": "ma", "chu": chu_dong}
-    log("  bìa lô: {0}/{1} tấm qua lọc cứng (đầu nhân vật, manh mối, đọc được)".format(
+        loc_san(u, san)
+    log("  bìa lô: {0}/{1} tấm qua lọc cứng (đầu nhân vật, manh mối, đọc được, sàn màu bìa thắng)".format(
         sum(1 for u in uv if not u["loai"]), len(uv)))
     # Chữ trần: khoá chấm theo vân tay bản vẽ (vẽ lại chữ trên cùng nền → lượt lùi ví ShopAPI không trả lời cũ).
     xh = cham(goi, uv, mau=mau, tieu_de=lu["tieu_de"], chu_bia=chu_ve, mo_dau=lu["kich_ban"][:800], thu_muc=ra,
-              khoa=(khoa + ":" + van_tay[:6]) if tran else khoa, log=log, dem=dem, ho_so=hs)
-    top = [u for u in xh if not u.get("loai") and u.get("tong") is not None][:SO_TOP]
+              khoa=(khoa + ":" + van_tay[:6]) if tran else khoa, log=log, dem=dem, ho_so=hs, giau=giau)
+    da_cham = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
+    for u in da_cham:
+        u["duoi_san"] = kiem_san(u, san)
+    top = [u for u in da_cham if not u["duoi_san"]][:SO_TOP]
+    san_truot = "" if top else ly_do_san_truot(xh, san)
+    # 19/10/2026 (chủ): lô hết lượt mà vẫn dưới sàn → DÙNG tấm bấm-như-bìa-thắng cao nhất (đã qua chữ/nhân vật/lọc
+    # cứng), không giữ — `du_phong` cho dây chuyền.
+    du_phong = sorted(da_cham, key=lambda u: (-float((u.get("diem") or {}).get("bam_nhu_thang") or 0),
+                                              -float(u.get("tong") or 0)))[:SO_TOP] if not top else []
     for i, u in enumerate(top, 1):
         shutil.copy2(u["tep"], os.path.join(ra, "top-{0}.jpg".format(i)))
     ket = {"kenh": kenh, "luot": os.path.basename(os.path.normpath(thu_muc_luot)), "tieu_de": lu["tieu_de"],
            "chu": chu, "chu_ve": chu_ve, "chu_dong": chu_dong, "chu_tang": tang, "mau": mau, "van_tay": van_tay,
            "kieu_chu": hs["kieu"], "bo_cuc": hs.get("bo_cuc"), "nguon_mau": hs.get("nguon_mau"),
-           "muc_tieu": hs.get("muc_tieu") or {},
+           "muc_tieu": hs.get("muc_tieu") or {}, "san": san, "san_truot": san_truot,
+           "du_phong": [dict(u, hang=i) for i, u in enumerate(du_phong, 1)],
+           "thu_muc_mau": hs.get("thu_muc_mau") or "",
            "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "giay": round(time.time() - t0),
            "chi_phi": {"anh_dat_moi": dem["anh"], "vnd_anh_uoc": dem["anh"] * 100, "anh_tong": len(uv),
                        "llm": dem["llm"]},
@@ -2129,9 +2615,88 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
            "top": [dict(u, hang=i) for i, u in enumerate(top, 1)], "ung_vien": xh, "y_tuong": yt["y_tuong"],
            "to_lien": to_lien([u for u in xh if not u.get("loai")][:6] or xh[:6], os.path.join(ra, "to-lien.jpg"))}
     _ghi_json(os.path.join(ra, "xep-hang.json"), ket)
-    log("  bìa lô: xong — {0} ảnh mới, {1} lượt LLM, top: {2}".format(
-        dem["anh"], dem["llm"], ", ".join("{0} {1:.0f}".format(u["ma"], u["tong"]) for u in top) or "(không có)"))
+    log("  bìa lô: xong — {0} ảnh mới, {1} lượt LLM, top: {2}{3}".format(
+        dem["anh"], dem["llm"], ", ".join("{0} {1:.0f}".format(u["ma"], u["tong"]) for u in top) or "(không có)",
+        " — DƯỚI SÀN: " + san_truot if san_truot else ""))
+    ghi_nao_san(goc, kenh, ket)
     return ket
+
+
+# ── Sàn của MỘT lô (19/10/2026) ─────────────────────────────────────────────
+
+
+def san_lo(hs: Dict[str, Any], mau: Sequence[str], *, giau: str = "") -> Dict[str, Any]:
+    """Sàn chất lượng của lô theo bìa thắng của kênh: `mau` (sàn màu trên MỌI bìa trong thư mục bìa thắng, không có
+    thư mục thì bìa mẫu), `bam` + `nguon_bam` (`san_bam`), `dau` (`dau_dung_duoc`). Không ném lỗi."""
+    tm = str(hs.get("thu_muc_mau") or "")
+    thang = [b["tep"] for b in bia_thu_muc(tm, toi_da=99)] if tm else list(mau)
+    bam, nguon = san_bam(tm)
+    try:
+        dau = dau_dung_duoc(str(hs.get("nv") or ""), thang, hs.get("mau_dau"), noi=hs.get("kieu") == "tran")
+    except Exception:  # noqa: BLE001 — bộ dò hỏng: chỉ còn giám khảo xét nhân vật
+        dau = False
+    return {"mau": san_mau(thang), "bam": bam, "nguon_bam": nguon, "dau": bool(dau), "so_bia_thang": len(thang)}
+
+
+def loc_san(u: Dict[str, Any], san: Dict[str, Any]) -> None:
+    """Sàn MÁY trước giám khảo (tấm đã qua lọc cứng): màu dưới sàn bìa thắng → loại; bộ dò đầu dùng được cho kênh mà
+    không thấy đầu nhân vật → loại. Ghi số đo vào `u["mau_do"]`."""
+    if u.get("loai") or not u.get("tep") or not os.path.isfile(u["tep"]):
+        return
+    try:
+        u["mau_do"] = do_mau(u["tep"])
+    except (OSError, ValueError):
+        pass
+    han = nhat_han(u["tep"], san.get("mau") or {})
+    if han:
+        u["loai"] = "màu nhạt hẳn (dưới bìa thắng nhạt nhất cả 3 số đo): " + ", ".join(han)
+        return
+    ly = kiem_mau(u["tep"], san.get("mau") or {})
+    if ly:  # dưới sàn màu: vẫn chấm, không vào top khi còn tấm đạt; lô hết lượt thì vẫn có thể được chọn
+        u["mau_duoi"] = "màu nhạt hơn bìa thắng: " + ", ".join(ly)
+    if san.get("dau"):
+        # kiểm vàng thật 19/10 (TL1: 11/28 tấm đúng nhân vật bị loại oan): bộ dò đầu chỉ GHI, giám khảo quyết
+        u["dau_may"] = bool(u.get("dau"))
+
+
+def ly_do_san_truot(xh: Sequence[Dict[str, Any]], san: Dict[str, Any]) -> str:
+    """Câu tóm tắt vì sao lô không có tấm nào qua sàn ('' khi giám khảo chưa chấm tấm nào — đó là lỗi AI, thử lại)."""
+    da = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
+    mau = sum(1 for u in xh if str(u.get("loai") or "").startswith("màu nhạt") or u.get("mau_duoi"))
+    nv = sum(1 for u in xh if str(u.get("loai") or "").startswith("nhân vật lệch"))
+    if not da and not mau and not nv:
+        return ""
+    phan = []
+    if da:
+        tot = max(da, key=lambda u: float((u.get("diem") or {}).get("bam_nhu_thang") or 0))
+        phan.append("kém bìa thắng — tấm tốt nhất " + "; ".join(kiem_san(tot, san)))
+    if mau:
+        phan.append("{0} tấm màu nhạt hơn bìa thắng".format(mau))
+    if nv:
+        phan.append("{0} tấm nhân vật lệch kênh".format(nv))
+    return "; ".join(phan)
+
+
+def ghi_nao_san(goc: str, kenh: str, ket: Dict[str, Any]) -> None:
+    """Não bộ phận "bia": quyết định chọn bìa kèm sàn (chon) hoặc lô dưới sàn (loi). Không ném lỗi."""
+    try:
+        from . import cong_chu  # noqa: PLC0415
+        ma = "{0}-{1}".format(kenh, ket.get("luot") or "")
+        san = ket.get("san") or {}
+        so = {"san_bam": san.get("bam"), "san_mau": san.get("mau"), "so_qua_loc": ket.get("so_qua_loc"),
+              "anh": (ket.get("chi_phi") or {}).get("anh_tong")}
+        if ket.get("top"):
+            t = ket["top"][0]
+            so.update(bam=(t.get("diem") or {}).get("bam_nhu_thang"), mau=t.get("mau_do"), tong=t.get("tong"))
+            cong_chu.ghi_nao(goc, "chon", kenh=kenh, ma_goi=ma, so=so, khoa="bia-lo-san:{0}".format(ket.get("van_tay")),
+                             noi_dung="bìa lô chọn {0}: bấm như bìa thắng {1} ≥ sàn {2:.0f}, màu ≥ phân vị {3:.0f} bìa "
+                                      "thắng, nhân vật đúng kênh".format(t.get("ma"), so["bam"], float(san.get("bam") or 0),
+                                                                         SAN_PHAN_VI))
+        elif ket.get("san_truot"):
+            cong_chu.ghi_nao(goc, "loi", kenh=kenh, ma_goi=ma, so=so, khoa="bia-lo-san:{0}".format(ket.get("van_tay")),
+                             noi_dung="bìa lô DƯỚI SÀN, không giao: " + str(ket["san_truot"]))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
@@ -2152,7 +2717,8 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
             do_bia.ghi_bao_cao(tep, {k: v for k, v in bc.items() if k not in ("tep", "van_tay", "luc")})
         truoc = min(float(t["tong"]), truoc - 0.1)
         uv.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "tong_diem": round(truoc, 1), "diem": t.get("diem"),
-                   "loai": "", "ly_do": (t.get("ly_do_2") or t.get("ly_do") or "")[:300], "ma_lo": t["ma"]})
+                   "loai": "", "ly_do": (t.get("ly_do_2") or t.get("ly_do") or "")[:300], "ma_lo": t["ma"],
+                   "mau_do": t.get("mau_do"), "nv": t.get("nv"), "nguoi_khac": t.get("nguoi_khac")})
         muc.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "ve_chu": "ma",
                     "chu_tang": t.get("chu_tang") or kq.get("chu_tang"),
                     "chu_du_kien": kq.get("chu_dong") or kq.get("chu_ve", "")})
@@ -2161,10 +2727,358 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
     chon = {"so": 1, "kieu": "bia_lo", "tong_diem": uv[0]["tong_diem"], "chon_boi": "ai", "tep": "CHON-thumb_001.jpg",
             "ly_do": "bìa lô (vẽ {0}, chọn {1}): {2}".format(kq["chi_phi"]["anh_tong"], len(top), uv[0]["ly_do"])[:600],
             "nhom": "khuon", "theo_khuon": True, "tham_do": False, "bia_lo": True}
+    # 19/10/2026 — hồ sơ bìa ghi SÀN đã qua (màu / nhân vật / bấm như bìa thắng) để soát lại sau
+    san = kq.get("san") or {}
+    chon["san"] = {"bam": (top[0].get("diem") or {}).get("bam_nhu_thang"), "san_bam": san.get("bam"),
+                   "nguon_bam": san.get("nguon_bam"), "mau": top[0].get("mau_do"), "san_mau": san.get("mau"),
+                   "nv": top[0].get("nv"), "nguoi_khac": top[0].get("nguoi_khac"), "dau_may": san.get("dau"),
+                   "thu_muc_mau": kq.get("thu_muc_mau") or "", "duoi_san": bool(kq.get("duoi_san")),
+                   "ly_do_duoi_san": (top[0].get("duoi_san") or []) if kq.get("duoi_san") else []}
     chon_bia._ghi_json(chon_bia.duong_tep_chon_bia(thu_muc_thumb), {  # noqa: SLF001
         "chon": chon, "ung_vien": uv, "so_luot_cham": 2, "co_khuon_thang": True, "bia_lo": True})
     btk.ghi_ke_hoach(thu_muc_thumb, {"che_do": "bia_lo", "muc": muc, "kieu_khuon": kq.get("kieu_chu") or "hop"})
     return chon
+
+
+# ── 6) KIỂM VÀNG — hồi quy đầu-cuối sau MỌI thay đổi (19/10/2026) ───────────
+#
+# Chủ: "sao mà mọi thứ tệ vậy". Mỗi mô-đun bìa được thử riêng, không ai đặt bìa SẮP LÊN SÓNG cạnh bìa thắng của kênh.
+# Kiểm vàng: với mã + lời nhắc HIỆN TẠI, vẽ MỘT lô thật / kênh (lượt mới nhất) → tờ so 3 hàng (bìa thắng | 3 bìa đang
+# chạy mới nhất | top-3 mới) → CÙNG giám khảo chấm top-3 mới + bìa đang chạy + MỘT bìa thắng GIẤU (hiệu chỉnh sàn
+# `bam_nhu_thang`) → đạt / trượt từng kênh. Trượt → bìa mới của kênh bị GIỮ (`vang_chan`, dây chuyền không giao) + báo.
+# Đổi mã/lời nhắc/bìa thắng (vân tay `van_tay_vang`) → kỹ năng D19 tự chạy lại; trượt thì thử lại sau `GIO_THU_LAI_VANG`.
+
+TEP_TRANG_THAI_VANG = os.path.join("workspace", "kiem-vang", "trang-thai.json")
+#: Mã bìa được theo dõi (vân tay kiểm vàng) — đường tương đối theo thư mục mã của tool.
+TEP_MA_VANG = ("core/bia_lo.py", "core/cong_chu.py", "core/do_bia.py", "core/chon_bia.py", "core/bia_theo_khuon.py")
+#: Phần ảnh bìa của `core/auto_khau.py` (hàm/lớp cấp cao nhất).
+HAM_KHAU_BIA = ("HetBiaDat", "DuoiSanBia", "_khau_thumbnail", "_mot_lo_bia", "_bia_lo_luot", "_giu_bia",
+                "_cong_doc_duoc_bia", "_cong_chu_bia", "_loai_tam_giao", "_loi_nhac_vong", "_cat_vong_bia",
+                "_so_vong_bia_toi_da")
+GIO_THU_LAI_VANG = 24.0
+_DUOI_ANH = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _khuc_ham(chu: str, ten: str) -> str:
+    """Nguồn MỘT hàm/lớp cấp cao nhất `ten` trong mã `chu` ('' khi không có) — tới định nghĩa cấp cao kế tiếp."""
+    m = re.search(r"^(?:def|class) {0}\b".format(re.escape(ten)), chu, re.M)
+    if not m:
+        return ""
+    sau = re.search(r"^(?:def|class|@)\S*", chu[m.end():], re.M)
+    return chu[m.start():m.end() + (sau.start() if sau else len(chu))]
+
+
+def van_tay_vang(goc: str, kenh: str) -> str:
+    """Vân tay mọi thứ quyết định bìa của kênh: mã bìa (`TEP_MA_VANG` + phần ảnh bìa của auto_khau), `style.yaml`,
+    `prompt/8-thumbnail.md`, các khoá `bia_*` của kenh.yaml, thư mục bìa thắng (ảnh + thang.json + bo-cuc.json; tệp
+    đệm máy tự ghi như mau-bia-thang.json / san-bam.json không tính). RẺ: chỉ đọc đĩa."""
+    h = hashlib.sha1()
+    ma = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def them(nhan: str, du: bytes) -> None:
+        h.update(nhan.encode("utf-8") + b"\0" + du.replace(b"\r\n", b"\n") + b"\0")
+
+    def doc(p: str) -> bytes:
+        try:
+            with open(p, "rb") as tep:
+                return tep.read()
+        except OSError:
+            return b""
+    for t in TEP_MA_VANG:
+        them(t, doc(os.path.join(ma, t)))
+    chu = doc(os.path.join(ma, "core", "auto_khau.py")).decode("utf-8", "replace").replace("\r\n", "\n")
+    for ten in HAM_KHAU_BIA:
+        them("auto_khau:" + ten, _khuc_ham(chu, ten).encode("utf-8"))
+    from .kenh import duong_kenh  # noqa: PLC0415
+    dk = duong_kenh(goc, kenh)
+    them("style", doc(os.path.join(dk, "style.yaml")))
+    them("8-thumbnail", doc(os.path.join(dk, "prompt", "8-thumbnail.md")))
+    them("kenh-bia", "\n".join(d for d in doc(os.path.join(dk, "kenh.yaml")).decode("utf-8", "replace").splitlines()
+                              if d.startswith("bia_")).encode("utf-8"))
+    tm = thu_muc_mau(goc, kenh)
+    them("thu-muc", os.path.basename(tm).encode("utf-8"))
+    if tm:
+        for t in sorted(os.listdir(tm)):
+            if t.lower().endswith(_DUOI_ANH) or t in (TEP_DS_THANG, TEP_BO_CUC_TAY):
+                them("thang:" + t, hashlib.sha1(doc(os.path.join(tm, t))).hexdigest().encode("ascii"))
+    return h.hexdigest()[:16]
+
+
+def doc_vang(goc: str) -> Dict[str, Any]:
+    du = _doc_json(os.path.join(goc, TEP_TRANG_THAI_VANG))
+    return du if isinstance(du, dict) else {}
+
+
+def _ghi_vang(goc: str, kenh: str, muc: Dict[str, Any]) -> None:
+    du = doc_vang(goc)
+    du[kenh] = muc
+    _ghi_json(os.path.join(goc, TEP_TRANG_THAI_VANG), du)
+
+
+def kenh_san_xuat(goc: str) -> List[str]:
+    """Kênh có lượt sản xuất (PROJECTS/AUTO/<kênh>/<lượt>/1-tieu-de.txt có THUMB) và có CHANNEL/<kênh>/kenh.yaml."""
+    ra = []
+    goc_p = os.path.join(goc, "PROJECTS", "AUTO")
+    try:
+        cac = sorted(os.listdir(goc_p))
+    except OSError:
+        return []
+    for k in cac:
+        if os.path.isfile(os.path.join(goc, "CHANNEL", k, "kenh.yaml")) and luot_moi_nhat(goc, k):
+            ra.append(k)
+    return ra
+
+
+def luot_moi_nhat(goc: str, kenh: str) -> str:
+    """Thư mục lượt MỚI NHẤT (mã số lớn nhất) của kênh có chữ bìa (THUMB) — '' khi không có."""
+    p = os.path.join(goc, "PROJECTS", "AUTO", kenh)
+    try:
+        cac = sorted((t for t in os.listdir(p) if t.isdigit()), key=int, reverse=True)
+    except OSError:
+        return ""
+    for t in cac:
+        if _doc_luot(os.path.join(p, t)).get("chu_bia"):
+            return os.path.join(p, t)
+    return ""
+
+
+def can_kiem_vang(goc: str, kenh: str, *, bay_gio: Optional[float] = None) -> Tuple[bool, str]:
+    """(nên chạy kiểm vàng?, lý do) — RẺ, chỉ đọc đĩa: chưa kiểm lần nào / vân tay đổi / lần trước trượt quá
+    `GIO_THU_LAI_VANG` giờ."""
+    if kenh not in kenh_san_xuat(goc):
+        return False, "kênh chưa có lượt sản xuất"
+    m = doc_vang(goc).get(kenh) or {}
+    if not m:
+        return True, "chưa kiểm vàng bìa lần nào"
+    vt = van_tay_vang(goc, kenh)
+    if m.get("van_tay") != vt:
+        return True, "mã / lời nhắc / bìa thắng của bìa đã đổi ({0} → {1})".format(m.get("van_tay"), vt)
+    if m.get("dat") is False:
+        tuoi = ((bay_gio or time.time()) - float(m.get("ts") or 0)) / 3600.0
+        if tuoi >= GIO_THU_LAI_VANG:
+            return True, "lần trước trượt {0:.0f} giờ trước — thử lại".format(tuoi)
+        return False, "lần trước trượt — thử lại sau {0:.0f} giờ".format(GIO_THU_LAI_VANG - tuoi)
+    return False, "đạt {0}".format(str(m.get("luc") or "")[:16])
+
+
+def giu_theo_vang(goc: str, kenh: str) -> bool:
+    """Kiểm vàng TRƯỢT có GIỮ bìa mới của kênh không (19/10/2026 — chủ: sàn lệch không được chặn sản xuất; mặc định
+    CHỈ CẢNH BÁO): `kenh.yaml: kiem_vang_giu` (true/false) thắng; không khai thì `cai-dat.json: kiem_vang_giu`
+    (mặc định False, ô trên trang Cài đặt)."""
+    try:
+        from .kenh import TEP_KENH, doc_yaml, duong_kenh  # noqa: PLC0415
+        v = (doc_yaml(os.path.join(duong_kenh(goc, kenh), TEP_KENH)) or {}).get("kiem_vang_giu")
+        if isinstance(v, bool):
+            return v
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import cai_dat  # noqa: PLC0415
+        return cai_dat.doc(goc).get("kiem_vang_giu") is True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def vang_chan(goc: str, kenh: str) -> str:
+    """Lý do GIỮ bìa mới của kênh ('' = không giữ): lần kiểm vàng xong gần nhất TRƯỢT. Giữ tới khi một lần kiểm vàng
+    sau ĐẠT (đổi mã/lời nhắc/bìa thắng → D19 kiểm lại trong giờ; không đổi gì → thử lại sau 24 giờ)."""
+    m = doc_vang(goc).get(kenh) or {}
+    if m.get("dat") is False and giu_theo_vang(goc, kenh):
+        return "kiểm vàng bìa {0} trượt: {1} (tờ so: {2})".format(str(m.get("luc") or "")[:16],
+                                                                  "; ".join(m.get("ly_do") or [])[:300], m.get("to"))
+    return ""
+
+
+def bia_dang_chay(goc: str, kenh: str, n: int = 3, *, tai: bool = True) -> List[str]:
+    """Bìa THẬT của `n` video đăng mới nhất (chi-so/bang-tom-tat.csv, ảnh i.ytimg.com — `khuon_bia.anh_that`)."""
+    import csv  # noqa: PLC0415
+    from . import khuon_bia  # noqa: PLC0415
+    from .kenh import duong_kenh  # noqa: PLC0415
+    try:
+        with io.open(os.path.join(duong_kenh(goc, kenh), "chi-so", "bang-tom-tat.csv"), encoding="utf-8-sig") as tep:
+            dong = list(csv.DictReader(tep))
+    except OSError:
+        return []
+    dong.sort(key=lambda x: str(x.get("Ngày đăng") or ""), reverse=True)
+    ra: List[str] = []
+    for x in dong:
+        vid = str(x.get("Mã video") or "").strip()
+        if not vid:
+            continue
+        p = khuon_bia.duong_anh_that(goc, kenh, vid)
+        if not os.path.isfile(p) and tai:
+            p = khuon_bia.anh_that(goc, kenh, vid)
+        if p and os.path.isfile(p):
+            ra.append(p)
+        if len(ra) >= n:
+            break
+    return ra
+
+
+def to_vang(hang: Sequence[Tuple[str, Sequence[str], Sequence[str]]], dich: str, *, o=(480, 270)) -> str:
+    """Tờ so kiểm vàng: mỗi hàng (nhãn, [tệp], [chú thích ô]) — bìa thắng | đang chạy | mới."""
+    from PIL import Image, ImageDraw, ImageOps  # noqa: PLC0415
+    cot = max([len(t) for _n, t, _c in hang] + [1])
+    le, cao_nhan, cao_chu = 10, 34, 26
+    to = Image.new("RGB", (cot * o[0] + (cot + 1) * le, len(hang) * (o[1] + cao_nhan + cao_chu + le) + le), (18, 18, 20))
+    ve, f_nhan, f_chu = ImageDraw.Draw(to), _phong(24), _phong(18)
+    y = le
+    for nhan, tep, chu in hang:
+        ve.text((le, y + 4), nhan, font=f_nhan, fill=(255, 230, 90))
+        y += cao_nhan
+        for i, t in enumerate(tep):
+            x = le + i * (o[0] + le)
+            try:
+                with Image.open(t) as im:
+                    to.paste(ImageOps.fit(im.convert("RGB"), o, method=Image.LANCZOS), (x, y))
+            except (OSError, ValueError):
+                continue
+            if i < len(chu) and chu[i]:
+                ve.text((x + 2, y + o[1] + 3), str(chu[i])[:52], font=f_chu, fill=(235, 235, 235))
+        y += o[1] + cao_chu + le
+    os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
+    to.save(dich, format="JPEG", quality=88)
+    return dich
+
+
+def doi_chieu(goi: Callable[..., str], *, hs: Dict[str, Any], mau: Sequence[str], moi: Sequence[str],
+              dang: Sequence[str], giau: str, tieu_de: str, chu_bia: str, mo_dau: str, thu_muc: str,
+              khoa: str) -> Dict[str, Dict[str, Any]]:
+    """CÙNG giám khảo vòng 1 (`LOI_NHAC_CHAM_1`, tờ cỡ điện thoại có hàng bìa thắng) chấm xen kẽ top-3 MỚI, bìa ĐANG
+    CHẠY và bìa thắng GIẤU → {tệp: kết quả `doc_cham_1`}. Hỏng → {}."""
+    ds: List[str] = []
+    for i in range(max(len(moi), len(dang))):
+        ds += ([moi[i]] if i < len(moi) else []) + ([dang[i]] if i < len(dang) else [])
+        if i == 0 and giau:
+            ds.append(giau)
+    uv = [{"ma": "dc{0}".format(i + 1), "tep": t, "nen": t, "y": i, "bien": 1} for i, t in enumerate(ds)]
+    if not uv:
+        return {}
+    lk = loi_theo_kieu(hs)
+    nv = str(hs.get("nv") or "")
+    nv_url = [_url_anh(nv, cat=False)] if nv and os.path.isfile(nv) else []
+    mau_url = [_url_anh(m) for m in list(mau)[:2]]
+    thang = [t for t in (hs.get("bia_so") or list(mau)) if t and os.path.isfile(t)][:SO_BIA_SO]
+    tt = {"tieu_de": tieu_de, "chu_bia": chu_bia, "mo_dau": " ".join(str(mo_dau or "").split())[:700] or "(none)",
+          "bang_chung": lk["bang_chung"], "nv_cau": NV_CAU_CHAM.format(so=len(mau_url) + 1) if nv_url else "",
+          "nv_ref": "the character reference image" if nv_url else "the winners",
+          **{k: lk[k] for k in ("o_chu", "chu_ten", "ngoai_chu", "phong_cach_ta")}}
+    to = to_dien_thoai(thang, uv, os.path.join(thu_muc, "_doi-chieu.jpg"))
+    try:
+        tho = goi(LOI_NHAC_CHAM_1.format(k=len(mau_url), n=len(uv), **tt),
+                  khoa="{0}:doi-chieu:{1}".format(khoa, _bam(*[os.path.getsize(t) for t in ds], PHIEN_BAN_CHAM)),
+                  toi_da_token=8000, mo_hinh=MO_HINH_CHAM,  # 19/10: 3500 cắt mất tấm 4-7
+                  anh=mau_url + nv_url + [_url_anh(u["tep"]) for u in uv] + [_url_anh(to, 1100, cat=False)])
+        kq = doc_cham_1(_json(tho), len(uv))
+    except Exception:  # noqa: BLE001
+        return {}
+    return {uv[so - 1]["tep"]: k for so, k in kq.items()}
+
+
+def kiem_vang(goc: str, kenh: str, *, goi: Callable[..., str], ve: Callable[..., List[str]], ra: str,
+              luot: str = "", log: Callable[[str], None] = print, tai: bool = True) -> Dict[str, Any]:
+    """MỘT lần kiểm vàng cho kênh (xem đầu mục). Ghi `workspace/kiem-vang/trang-thai.json[kenh]` = {dat, ly_do,
+    van_tay, to, diem, san_bam, …}; trượt → báo người. Trả mục đó. Lô hỏng giữa chừng (AI/mạng) → trượt có lý do."""
+    vt = van_tay_vang(goc, kenh)
+    t0 = time.strftime("%Y%m%d-%H%M")
+    thu = os.path.join(ra, kenh)
+    tm = thu_muc_mau(goc, kenh)
+    thang = [b["tep"] for b in bia_thu_muc(tm, toi_da=99)] if tm else []
+    giau = bia_giau(tm)
+    lu = luot if (luot and os.path.isdir(luot)) else luot_moi_nhat(goc, kenh) if not luot else os.path.join(
+        goc, "PROJECTS", "AUTO", kenh, luot)
+    muc: Dict[str, Any] = {"van_tay": vt, "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "ts": time.time(),
+                           "luot": os.path.basename(lu or ""), "thu_muc_mau": tm, "giau": os.path.basename(giau)}
+    ly: List[str] = []
+    kq: Dict[str, Any] = {}
+    if not tm:
+        ly.append("kênh chưa có thư mục bìa thắng ({0})".format(ten_thu_muc_thang(kenh)))
+    elif not lu:
+        ly.append("kênh chưa có lượt nào có chữ bìa")
+    else:
+        try:
+            kq = chay(goc, kenh, thu_muc_luot=lu, ra=os.path.join(thu, "{0}-{1}".format(vt[:8], t0)), goi=goi, ve=ve,
+                      log=log, giau=giau, khoa="kiem-vang:{0}:{1}:{2}:{3}".format(kenh, muc["luot"], vt[:8], t0))
+        except Exception as loi:  # noqa: BLE001 — lô hỏng: kiểm vàng trượt có lý do (không giữ im lặng)
+            ly.append("lô không chạy được: {0}".format(str(loi)[:200]))
+    moi = [t["tep"] for t in kq.get("top") or []]
+    if kq and not moi:
+        ly.append("không tấm nào qua mọi cổng + sàn: " + (kq.get("san_truot") or "lọc cứng loại hết"))
+        # tờ so vẫn cần hàng MỚI: 3 tấm điểm cao nhất (dù dưới sàn) cho người xem
+        moi = [u["tep"] for u in sorted([u for u in kq.get("ung_vien") or [] if u.get("tep") and os.path.isfile(
+            u["tep"])], key=lambda u: -(u.get("tong") or 0))][:SO_TOP]
+    dang = bia_dang_chay(goc, kenh, tai=tai)
+    hs = {}
+    if kq:
+        try:
+            hs = ho_so_kieu(goc, kenh, log=lambda s: None)
+            hs["bia_so"] = [t for t in hs.get("bia_so") or [] if os.path.abspath(t) != os.path.abspath(giau or "-")]
+        except Exception:  # noqa: BLE001
+            hs = {}
+    dc = doi_chieu(goi, hs=hs, mau=[t for t in kq.get("mau") or [] if t != giau], moi=moi, dang=dang, giau=giau,
+                   tieu_de=kq.get("tieu_de") or "", chu_bia=kq.get("chu_ve") or "", mo_dau="",
+                   thu_muc=thu, khoa="kiem-vang:{0}:{1}".format(kenh, vt[:8])) if (kq and moi) else {}
+
+    def bam(t: str) -> Optional[float]:
+        return ((dc.get(t) or {}).get("diem") or {}).get("bam_nhu_thang")
+    san = float((kq.get("san") or {}).get("bam") or SAN_BAM_MAC_DINH)
+    if giau and bam(giau) is not None and tm:
+        san = hieu_chinh_san_bam(tm, float(bam(giau)), kenh=kenh)
+        muc["diem_giau"] = bam(giau)
+    if kq.get("top"):
+        b1 = bam(moi[0])
+        if b1 is None:
+            ly.append("giám khảo đối chiếu không chấm được tấm mới")
+        elif b1 < san:
+            ly.append("tấm mới tốt nhất bấm như bìa thắng {0:.0f} < sàn {1:.0f} (bìa thắng giấu: {2})".format(
+                b1, san, muc.get("diem_giau", "?")))
+        if lech_nhan_vat(dc.get(moi[0]) or {}):
+            ly.append("tấm mới tốt nhất: " + lech_nhan_vat(dc[moi[0]]))
+    muc.update(san_bam=san, diem={"moi": [bam(t) for t in moi], "dang": [bam(t) for t in dang]},
+               mau_moi=(kq.get("top") or [{}])[0].get("mau_do") if kq.get("top") else None,
+               san_mau=(kq.get("san") or {}).get("mau"), lo=os.path.dirname(moi[0]) if moi else "")
+    chu_o = (lambda ds: ["bấm {0}".format(bam(t)) if bam(t) is not None else "" for t in ds])
+    hang = [("BÌA THẮNG (giấu: {0})".format(os.path.basename(giau) or "-"), [t for t in thang if t != giau][:4],
+             [""] * 4),
+            ("ĐANG CHẠY — 3 video mới nhất", dang, chu_o(dang)),
+            ("MỚI — top-3 lô kiểm vàng ({0})".format("ĐẠT" if not ly else "TRƯỢT"), moi, chu_o(moi))]
+    muc["to"] = to_vang(hang, os.path.join(thu, "to-vang-{0}.jpg".format(t0)))
+    muc["dat"], muc["ly_do"] = not ly, ly
+    _ghi_vang(goc, kenh, muc)
+    try:
+        from . import cong_chu  # noqa: PLC0415
+        cong_chu.ghi_nao(goc, "ket_qua" if not ly else "loi", kenh=kenh, khoa="kiem-vang:{0}:{1}".format(kenh, t0),
+                         so={k: muc.get(k) for k in ("diem", "san_bam", "diem_giau", "van_tay")},
+                         noi_dung="kiểm vàng bìa {0}: {1}".format("ĐẠT" if not ly else "TRƯỢT", "; ".join(ly)[:400]))
+    except Exception:  # noqa: BLE001
+        pass
+    giu = giu_theo_vang(goc, kenh)
+    muc["che_do"] = "giu" if giu else "canh_bao"
+    _ghi_vang(goc, kenh, muc)
+    if ly:
+        try:
+            from . import bao_dong  # noqa: PLC0415
+            bao_dong.bao_dong_khan("bia_kiem_vang", "Kiểm vàng bìa kênh {0} TRƯỢT: {1}".format(kenh, "; ".join(ly)[:300]),
+                                   "Xem tờ so {0} (bìa thắng | đang chạy | mới).{1}".format(
+                                       muc["to"], " Bìa mới của kênh đang bị GIỮ tới khi kiểm vàng đạt." if giu else
+                                       " Chế độ chỉ cảnh báo: bìa mới VẪN giao (bật «Kiểm vàng bìa trượt thì giữ bìa» "
+                                       "trong Cài đặt để giữ)."),
+                                   "Video mới của kênh không được giao." if giu else
+                                   "Bìa mới có thể kém bìa thắng của kênh.", goc=goc, kenh=kenh)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            duong = os.path.join(goc, "workspace", "loi-chay-max.md")
+            os.makedirs(os.path.dirname(duong), exist_ok=True)
+            with io.open(duong, "a", encoding="utf-8") as tep:
+                tep.write("- [{0}] **khan** · kênh {1} — Kiểm vàng bìa kênh {1} TRƯỢT: {2} — {4}, tờ so "
+                          "{3}\n".format(time.strftime("%Y-%m-%d %H:%M"), kenh, "; ".join(ly)[:300], muc["to"],
+                                         "bìa mới đang GIỮ" if giu else "chỉ cảnh báo, bìa mới vẫn giao"))
+        except OSError:
+            pass
+    log("  kiểm vàng {0}: {1}{2} — tờ so {3}".format(kenh, "ĐẠT" if not ly else "TRƯỢT",
+                                                    (" (" + "; ".join(ly) + ")") if ly else "", muc["to"]))
+    return muc
 
 
 # ── Dòng lệnh ────────────────────────────────────────────────────────────────
@@ -2214,23 +3128,49 @@ def _ve_that(goc: str, tham_chieu: Sequence[str]) -> Callable[..., List[str]]:
     return ve
 
 
+def bia_giau(tm: str) -> str:
+    """Bìa thắng GIẤU của kiểm vàng: bìa thứ 4 của thư mục (3 bìa đầu giữ cho hàng so), thư mục 3 bìa thì bìa cuối."""
+    thang = [b["tep"] for b in bia_thu_muc(tm, toi_da=99)] if tm else []
+    return thang[3] if len(thang) >= 4 else (thang[-1] if len(thang) >= 3 else "")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse  # noqa: PLC0415
     p = argparse.ArgumentParser(prog="python -X utf8 -m core.bia_lo", description="Bìa lô: vẽ vài chục rồi chọn.")
-    p.add_argument("--kenh", required=True)
-    p.add_argument("--luot", required=True, help="mã lượt (vd 0001) hoặc đường thư mục lượt")
+    p.add_argument("--kenh", default="", help="mã kênh (bắt buộc khi vẽ lô; kiểm vàng: bỏ trống = mọi kênh sản xuất)")
+    p.add_argument("--luot", default="", help="mã lượt (vd 0001) hoặc đường thư mục lượt")
+    p.add_argument("--kiem-vang", action="store_true",
+                   help="KIỂM VÀNG: một lô thật / kênh bằng mã + lời nhắc hiện tại, tờ so bìa thắng | đang chạy | mới, "
+                        "đạt/trượt từng kênh (trượt → giữ bìa mới của kênh + báo)")
     p.add_argument("--so-y", type=int, default=SO_Y_MAC_DINH)
     p.add_argument("--moi-y", type=int, default=MOI_Y_MAC_DINH)
-    p.add_argument("--ra", default="", help="thư mục ra (mặc định workspace/bia-lo/<kênh>-<lượt>)")
+    p.add_argument("--ra", default="", help="thư mục ra (mặc định workspace/bia-lo/<kênh>-<lượt>; kiểm vàng: "
+                                            "workspace/kiem-vang/<ngày>)")
     p.add_argument("--chu", default="", help='chữ bìa, vd "同じ車に長く|*乗る人の|ほとんどが"')
     p.add_argument("--mau", action="append", default=[], help="bìa thắng thật (tệp/thư mục), lặp được")
     p.add_argument("--goc", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     a = p.parse_args(argv)
     goc = os.path.abspath(a.goc)
+    goi = _goi_that(goc, print)
+    if a.kiem_vang:
+        ra = os.path.abspath(a.ra or os.path.join(goc, "workspace", "kiem-vang", time.strftime("%Y-%m-%d")))
+        dat = True
+        for k in ([a.kenh] if a.kenh else kenh_san_xuat(goc)):
+            hs = ho_so_kieu(goc, k, goi=goi)
+            giau = bia_giau(str(hs.get("thu_muc_mau") or ""))
+            mau = [t for t in mau_cua_kenh(goc, k, ho_so=hs) if os.path.abspath(t) != os.path.abspath(giau or "-")]
+            nv = os.path.join(goc, "CHANNEL", k, "nv", "nv1.png")
+            m = kiem_vang(goc, k, goi=goi, ve=_ve_that(goc, mau + ([nv] if os.path.isfile(nv) else [])), ra=ra,
+                          luot=a.luot)
+            dat = dat and bool(m.get("dat"))
+            print("KIỂM VÀNG {0}: {1} — {2} — tờ so {3}".format(k, "ĐẠT" if m.get("dat") else "TRƯỢT",
+                                                               "; ".join(m.get("ly_do") or []) or "ok", m.get("to")))
+        return 0 if dat else 1
+    if not a.kenh or not a.luot:
+        p.error("cần --kenh và --luot (hoặc --kiem-vang)")
     luot = a.luot if os.path.isdir(a.luot) else os.path.join(goc, "PROJECTS", "AUTO", a.kenh, a.luot)
     ma = "{0}-{1}".format(a.kenh, os.path.basename(os.path.normpath(luot)))
     ra = os.path.abspath(a.ra or os.path.join(goc, "workspace", "bia-lo", ma))
-    goi = _goi_that(goc, print)
     # Mẫu tả bìa thắng của kênh dựng TRƯỚC (một lượt AI khi khuôn đổi) để ảnh tham chiếu là bìa thắng cùng kiểu.
     mau = mau_cua_kenh(goc, a.kenh, a.mau, ho_so=ho_so_kieu(goc, a.kenh, goi=goi, mau=a.mau))
     nv = os.path.join(goc, "CHANNEL", a.kenh, "nv", "nv1.png")
@@ -2238,6 +3178,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               goi=goi, ve=_ve_that(goc, mau + ([nv] if os.path.isfile(nv) else [])), mau=mau)
     for t in kq.get("top") or []:
         print("TOP {0}: {1}  {2}/100  {3}".format(t["hang"], t["tep"], t["tong"], t.get("ly_do_2") or t.get("ly_do")))
+    if kq.get("san_truot"):
+        print("DƯỚI SÀN:", kq["san_truot"])
     print("tờ liên:", kq.get("to_lien"), "· chi phí:", json.dumps(kq.get("chi_phi"), ensure_ascii=False))
     return 0 if kq.get("top") else 1
 

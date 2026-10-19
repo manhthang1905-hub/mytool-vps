@@ -607,9 +607,37 @@ def kiem_duong_max(K: BoiCanh) -> List[Dict[str, Any]]:
                  can_lam="báo người quản trị tool: còn mã gọi Max không qua viet_max.duong_viet_chu")]
 
 
+def kiem_trang_chu(K: BoiCanh) -> List[Dict[str, Any]]:
+    """19/10/2026 — trang chủ kênh ≥ 90% đúng chủ đề (sổ duy trì `vm/logs/nuoi-trang-chu/`, skill D18). Đạt = lần đo cuối
+    đạt và còn mới; máy đang tự nuôi lại = đang thử lại (đã báo động thì ghi rõ — không báo gộp mỗi ngày nữa); chủ đang
+    tắt nuôi mà dưới mục tiêu / Chrome cần đăng nhập lại = chờ người (Việc của bạn). Chỉ đọc đĩa."""
+    try:
+        from .ky_nang import _nap_vm  # noqa: PLC0415
+        n = _nap_vm("nuoi_trang_chu")
+    except Exception:  # noqa: BLE001
+        return []
+    ra = []
+    for kenh in K.kenh_ds:
+        if _dang_o_may_khac(K.goc, kenh):
+            continue
+        t = n.tom_tat_duy_tri(kenh, K.goc, K.bay.timestamp())
+        if not t.get("tt"):
+            continue
+        tt = {"dat": DAT, "thu_lai": THU_LAI, "cho": CHO, "nguoi": CHO}[t["tt"]]
+        them = {}
+        if t["tt"] == "nguoi":
+            them = {"nguoi": True, "can_lam": ("đăng nhập lại / giải CAPTCHA trong Chrome kênh {0} (máy không gõ mật khẩu)".format(kenh)
+                                               if t["can_nguoi"] else
+                                               "quyết: bật nuoi_trang_chu: true trong kenh.yaml kênh {0} để máy tự nuôi lại "
+                                               "trang chủ (hiện chỉ đo)".format(kenh))}
+        ra.append(_muc("trang_chu", kenh, "trang_chu:" + kenh, "trang chủ ≥ 90% đúng chủ đề (đo hằng tuần)", K.bay, tt,
+                       t["cau"], **them))
+    return ra
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
-        ("max", kiem_duong_max))
+        ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────

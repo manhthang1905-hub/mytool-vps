@@ -8274,8 +8274,9 @@ def _khau_anh(bc: BoiCanh):
         # Clip làm từ ảnh nào — để khâu clip biết ảnh đã thay mà không phải
         # đoán theo mtime (xem `_bo_clip_cu_hon_anh`).
         so_anh_clip = VanTay(os.path.join(luot.thu_muc, VanTay.TEN_CLIP_ANH))
-        thu_muc_bia, muc_bia, _thieu_bia, ta_bia, tieu_de, chu_bia = \
-            _chuan_bi_bia(bc, luot)
+        # 19/10/2026 — MỘT ĐƯỜNG BÌA: ảnh bìa chỉ do khâu ảnh bìa làm (bìa lô theo bìa thắng thật của kênh,
+        # `_mot_lo_bia`). Khâu ảnh KHÔNG còn bắn các kiểu bìa cũ cùng mẻ ảnh cảnh (mô hình ảnh tự vẽ chữ kiểu chung).
+        thu_muc_bia, muc_bia, ta_bia, tieu_de, chu_bia = os.path.join(luot.thu_muc, "7-thumbnail"), [], {}, "", ""
         giay = _giay_clip(bc)
         so = SoTheoDoi(bc, nhip=bc.nhip_hoi)
 
@@ -10096,6 +10097,11 @@ _DAN_LO_SAU = (
     ("dải tối", "a dark see-through band/box laid over the picture — no panels over the scene or character"),
     ("chữ thừa", "stray extra letters or writing on props — no other text anywhere"),
     ("vết xoá", "smudged patches or ghost text"),
+    # 19/10/2026 — sàn chất lượng của bìa lô
+    ("màu nhạt", "pale, washed-out colours — use rich saturated colours and strong light contrast like the winners"),
+    ("nhân vật lệch", "a different main character or other people with detailed faces — the main figure must be "
+                      "exactly the channel's character, other people only faded faceless silhouettes"),
+    ("kém bìa thắng", "pictures much weaker than the channel's winners — one bolder, more curious idea, drawn bigger"),
 )
 
 
@@ -10390,11 +10396,9 @@ def _soat_chu_bia_luot(bc: BoiCanh, luot: LuotChay) -> Dict[str, Any]:
 
 
 def _khau_thumbnail(bc: BoiCanh):
-    """Làm nốt ảnh bìa dây chuyền ở khâu ảnh chưa kịp ra.
-
-    Ba tấm này đã được bắn cùng mẻ với 114 ảnh cảnh, nên bình thường khâu này
-    chỉ nhìn đĩa rồi đi qua. Vẫn đứng đây cho "Làm lại khâu này" và cho lúc mẻ
-    trước hụt mất một tấm.
+    """Ảnh bìa dây chuyền — 19/10/2026: MỘT ĐƯỜNG cho mọi kênh, bìa lô theo bìa thắng thật của kênh
+    (`_mot_lo_bia` → `_bia_lo_luot`); khâu ảnh không còn bắn bìa kiểu cũ cùng mẻ ảnh cảnh. Lô dưới sàn chất lượng
+    (`DuoiSanBia`) làm lại tối đa `bia_lo.SO_LO_SAN_THEM` lô rồi giữ + báo.
 
     ═══ 12/10/2026 — KHÔNG GIAO BÌA SAI CHỮ / CÓ DẢI TỐI; HỎNG CẢ LÔ THÌ LÀM LÔ MỚI ═══
 
@@ -10420,6 +10424,9 @@ def _khau_thumbnail(bc: BoiCanh):
                 return ket
             except HetBiaDat as loi:
                 vong = int(_doc_vong_bia(thu_muc).get("vong") or 0)
+                if isinstance(loi, DuoiSanBia):  # 19/10/2026: dưới sàn — tối đa 2 lô nữa rồi giữ + báo
+                    from . import bia_lo as _bl  # noqa: PLC0415
+                    toi_da = min(toi_da, _bl.SO_LO_SAN_THEM)
                 if vong >= toi_da:
                     _bao_bia_khong_dat(bc, luot, str(loi), vong + 1)
                     raise RuntimeError(
@@ -10435,9 +10442,17 @@ def _khau_thumbnail(bc: BoiCanh):
 def _mot_lo_bia(bc: BoiCanh, luot: LuotChay, tt: TrangThaiKhau) -> Dict[str, Any]:
     """MỘT lô bìa: sinh các tấm còn thiếu → giám khảo → cổng đọc được → cổng chữ trên ảnh. Không còn tấm nào giao
     được → `HetBiaDat` (khâu bìa làm lô mới). 14/10/2026: `kenh.yaml: bia_lo: true` → lô do `core/bia_lo.py` làm
-    (vẽ vài chục rồi chọn — `_bia_lo_luot`); hai cổng phía sau giữ nguyên."""
-    lo = _bia_lo_luot(bc, luot) if _cai_kenh_yaml(bc).get("bia_lo") is True else None
-    thu_muc, tieu_de, chu_bia, ket, so_tam = lo or _sinh_lo_bia(bc, luot, tt)
+    (vẽ vài chục rồi chọn — `_bia_lo_luot`); hai cổng phía sau giữ nguyên.
+
+    19/10/2026 — MỘT ĐƯỜNG BÌA cho mọi kênh: luôn bìa lô theo bìa thắng THẬT của kênh. Đường cũ nhiều kiểu
+    (`_sinh_lo_bia`: mô hình ảnh tự vẽ chữ theo các kiểu chung, "thăm dò" = kiểu khác hẳn) KHÔNG BAO GIỜ chạy ở lượt
+    thật — TL6/TL4-K2/TL5/TL6-K2 còn đi đường ấy tới 18/10. Kênh chưa có bìa thắng làm mẫu → giữ lượt + báo người
+    (`_giu_bia`), không lùi về đường cũ. Thăm dò (nếu có) là Ý TƯỞNG khác trong bìa lô, cùng khuôn kênh."""
+    lo = _bia_lo_luot(bc, luot)
+    if lo is None:
+        _giu_bia(bc, luot, "kênh chưa có bìa thắng thật làm mẫu (thư mục {0} hoặc kenh.yaml bia_lo_mau)".format(
+            _ten_thu_muc_thang(bc)))
+    thu_muc, tieu_de, chu_bia, ket, so_tam = lo
     # ═══ CỔNG ĐỌC ĐƯỢC (09/10/2026, `core/do_bia.py`) rồi CỔNG CHỮ TRÊN ẢNH (12/10/2026) ═══
     # Chủ dự án: "thumb rất kém — nền và text không tương phản". Bìa đã chọn phải ĐẠT số đo độ đọc
     # được; không đạt thì tự sửa (tấm khác đạt → vẽ lại kiểu thích nghi → rút gọn chữ). Rồi chữ trên ảnh phải
@@ -10450,6 +10465,42 @@ def _mot_lo_bia(bc: BoiCanh, luot: LuotChay, tt: TrangThaiKhau) -> Dict[str, Any
         if not r.get("doi"):
             return ket
     raise HetBiaDat("đổi tấm quá nhiều lần mà vẫn chưa có tấm giao được")
+
+
+class DuoiSanBia(HetBiaDat):
+    """Lô bìa có tấm qua lọc nhưng tấm tốt nhất DƯỚI SÀN chất lượng (màu / nhân vật / bấm như bìa thắng —
+    `bia_lo.san_lo`, 19/10/2026): làm lô mới tối đa `bia_lo.SO_LO_SAN_THEM` lần, vẫn dưới sàn thì giữ + báo."""
+
+
+def _ten_thu_muc_thang(bc: BoiCanh) -> str:
+    try:
+        from . import bia_lo  # noqa: PLC0415
+        return bia_lo.ten_thu_muc_thang(bc.kenh.ma).replace("\\", "/")
+    except Exception:  # noqa: BLE001
+        return "workspace/bia-<kênh>/thang"
+
+
+def _giu_bia(bc: BoiCanh, luot: LuotChay, ly_do: str) -> None:
+    """GIỮ lượt ở khâu ảnh bìa (không bàn giao) + báo người — lỗi không phải của lô (thiếu bìa thắng làm mẫu, kiểm vàng
+    trượt). Luôn ném RuntimeError."""
+    ma = str(getattr(bc.kenh, "ma", "") or getattr(luot, "ma_kenh", "") or "")
+    chuyen = "Ảnh bìa kênh {0} lượt {1} đang GIỮ, video chưa giao: {2}.".format(
+        ma, getattr(luot, "ma_luot", "?"), str(ly_do)[:300])
+    try:
+        from . import bao_dong  # noqa: PLC0415
+        bao_dong.bao_dong_khan("bia_giu", chuyen, "Xem workspace/kiem-vang/ (tờ so bìa) và thư mục bìa thắng của kênh; "
+                               "sửa xong máy tự kiểm lại trong giờ, đạt thì lượt chạy tiếp.",
+                               "Video này chưa được đăng (thà không đăng còn hơn bìa kém).", goc=bc.goc, kenh=ma)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        duong = os.path.join(bc.goc, "workspace", "loi-chay-max.md")
+        os.makedirs(os.path.dirname(duong), exist_ok=True)
+        with open(duong, "a", encoding="utf-8") as tep:
+            tep.write("- [{0}] **khan** · kênh {1} — {2}\n".format(time.strftime("%Y-%m-%d %H:%M"), ma, chuyen))
+    except OSError:
+        pass
+    raise RuntimeError("ảnh bìa: GIỮ — " + str(ly_do)[:400])
 
 
 def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, Dict[str, Any], int]]:
@@ -10467,6 +10518,11 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
     if _chon_cua_nguoi(thu_muc) or (du.get("bia_lo") and tep_chon and os.path.isfile(os.path.join(thu_muc, tep_chon))):
         so = len(du.get("ung_vien") or []) or 1
         return thu_muc, tieu_de, chu_bia, {"so_thumbnail": so, "bia_lo": "đã có"}, so
+    # 19/10/2026 — KIỂM VÀNG (`bia_lo.kiem_vang`, kỹ năng D19): lần kiểm đầu-cuối gần nhất của kênh TRƯỢT → giữ bìa
+    # mới (không vẽ, không giao) + báo, tới khi kiểm vàng đạt lại.
+    chan = bia_lo.vang_chan(bc.goc, bc.kenh.ma) if getattr(bc, "goc", "") else ""
+    if chan:
+        _giu_bia(bc, luot, chan)
     try:  # 14/10/2026: mẫu tả bìa thắng RIÊNG kênh (một lượt AI khi khuôn đổi) trước khi chọn ảnh tham chiếu
         hs = bia_lo.ho_so_kieu(bc.goc, bc.kenh.ma, goi=_goi_soat(bc), log=bc.ghi)
     except Exception as loi:  # noqa: BLE001 — hồ sơ hỏng: chọn mẫu như cũ
@@ -10474,8 +10530,8 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
         hs = None
     mau = bia_lo.mau_cua_kenh(bc.goc, bc.kenh.ma, ho_so=hs)
     if not mau:
-        bc.ghi("  (!) ảnh bìa: bật bia_lo nhưng kênh chưa có bìa thắng thật làm mẫu (khuôn kênh hoặc kenh.yaml "
-               "bia_lo_mau: <thư mục ảnh>) — dùng đường cũ.")
+        bc.ghi("  (!) ảnh bìa: kênh chưa có bìa thắng thật làm mẫu (thư mục {0} hoặc kenh.yaml bia_lo_mau) — GIỮ "
+               "lượt, không dùng đường cũ.".format(_ten_thu_muc_thang(bc)))
         return None
     hop = _HopThemAnh(bc, _hop_bia(bc, luot, ThamChieu(bc)), mau)
 
@@ -10494,15 +10550,35 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
     try:
         kq = bia_lo.chay(bc.goc, bc.kenh.ma, thu_muc_luot=luot.thu_muc, ra=os.path.join(thu_muc, "_lo"),
                          goi=_goi_soat(bc), ve=ve, mau=mau, log=bc.ghi, ngon_ngu=bc.kenh.ngon_ngu or "ja",
-                         khoa="bia-lo:{0}:{1}{2}".format(luot.ma_kenh, luot.ma_luot, _hau_to_khoa_bia(thu_muc, chu_bia)))
+                         khoa="bia-lo:{0}:{1}{2}".format(luot.ma_kenh, luot.ma_luot, _hau_to_khoa_bia(thu_muc, chu_bia)),
+                         dan=_loi_nhac_vong(thu_muc).strip())
     except ChuKhongKhop as loi:  # 16/10/2026: bộ vẽ không bảo đảm in đúng chữ đã soát → lô mới (hết vòng thì báo người)
         raise HetBiaDat(str(loi)) from loi
     if not kq.get("top"):
         if any(not u.get("loai") and u.get("tong") is None for u in kq.get("ung_vien") or []):
             # Giám khảo chưa trả lời (AI lỗi) — KHÔNG bỏ lô đã trả tiền: khâu thử lại, nền + ý tưởng trên đĩa.
             raise RuntimeError("bìa lô: giám khảo chưa chấm được — thử lại sau, chưa giao")
-        raise HetBiaDat("bìa lô: không tấm nào qua lọc cứng + giám khảo ({0} nền)".format(
-            (kq.get("chi_phi") or {}).get("anh_tong")))
+        if kq.get("san_truot"):  # 19/10/2026: dưới SÀN chất lượng — lô mới (tối đa 2)
+            vong = int(_doc_vong_bia(thu_muc).get("vong") or 0)
+            if not kq.get("du_phong") or vong < min(_so_vong_bia_toi_da(bc), bia_lo.SO_LO_SAN_THEM):
+                raise DuoiSanBia("bìa lô dưới sàn chất lượng: " + str(kq["san_truot"])[:400])
+            # Chủ 19/10: sàn lệch không được chặn sản xuất — hết lô thì dùng tấm bấm-như-bìa-thắng cao nhất (đã qua chữ,
+            # nhân vật, lọc cứng); chỉ chữ hỏng / nhân vật lệch mới giữ (chúng không bao giờ vào `du_phong`).
+            bc.ghi("  (!) ảnh bìa: {0} lô vẫn dưới sàn ({1}) — dùng tấm bấm-như-bìa-thắng cao nhất, không giữ.".format(
+                vong + 1, str(kq["san_truot"])[:200]))
+            try:
+                from . import bao_dong  # noqa: PLC0415
+                bao_dong.bao_dong("bia_duoi_san", "Bìa lượt {0} kênh {1}: {2} lô đều dưới sàn chất lượng ({3}) — đã "
+                                  "dùng tấm tốt nhất.".format(luot.ma_luot, bc.kenh.ma, vong + 1,
+                                                               str(kq["san_truot"])[:200]),
+                                  "Xem 7-thumbnail/_lo của lượt; muốn đổi thì đặt tay CHON-thumb_xxx.jpg.",
+                                  goc=bc.goc, kenh=bc.kenh.ma, muc=bao_dong.MUC_NHAC)
+            except Exception:  # noqa: BLE001
+                pass
+            kq = dict(kq, top=kq["du_phong"], duoi_san=True)
+        else:
+            raise HetBiaDat("bìa lô: không tấm nào qua lọc cứng + giám khảo ({0} nền)".format(
+                (kq.get("chi_phi") or {}).get("anh_tong")))
     chon = bia_lo.xuat_goi(kq, thu_muc)
     bc.ghi("  ảnh bìa (bìa lô): " + chon["ly_do"][:240])
     return thu_muc, tieu_de, chu_bia, {"so_thumbnail": len(kq["top"]), "bia_lo": kq.get("chi_phi"),

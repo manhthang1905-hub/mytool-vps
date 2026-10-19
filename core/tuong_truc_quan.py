@@ -218,9 +218,17 @@ def _nuoi(goc: str, kenh: str) -> Dict[str, Any]:
         return {}
     lan = [x for x in (d.get("lan_do") or []) if isinstance(x, dict)]
     cuoi = lan[-1] if lan else {}
-    return {"trang_thai": d.get("trang_thai") or "", "pct_chu_de": cuoi.get("pct_chu_de"), "pct_ngach": cuoi.get("pct_ngach"),
-            "luc": cuoi.get("luc") or "", "so_lan_do": len(lan), "so_phien": len(d.get("phien") or []),
-            "chuoi": [x.get("pct_chu_de") for x in lan[-12:]]}
+    ra = {"trang_thai": d.get("trang_thai") or "", "pct_chu_de": cuoi.get("pct_chu_de"), "pct_ngach": cuoi.get("pct_ngach"),
+          "luc": cuoi.get("luc") or "", "so_lan_do": len(lan), "so_phien": len(d.get("phien") or []),
+          "chuoi": [x.get("pct_chu_de") for x in lan[-12:]]}
+    try:   # 19/10/2026 — duy trì trang chủ (skill D18): chế độ + câu ngắn cho thẻ kênh
+        from core.ky_nang import _nap_vm  # noqa: PLC0415
+        t = _nap_vm("nuoi_trang_chu").tom_tat_duy_tri(kenh, goc)
+        ra["duy_tri"] = {"che_do": t["che_do"], "nhan": t["nhan"], "tt": t["tt"], "cau": t["cau"][:160],
+                         "ly_do_han": t["ly_do_han"][:80], "bao_dong": bool(t["bao_dong"])}
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
 
 
 def binh_luan_hom_nay(goc: str, bay: _dt.datetime) -> Dict[str, Dict[str, int]]:

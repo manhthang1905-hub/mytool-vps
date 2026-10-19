@@ -238,8 +238,8 @@ def _goi_gia(diem=None, xep=None, chu_nen=None):
             return json.dumps({"chu": [], "y_tuong": [_y(i) for i in range(1, 9)]})
         if "strict art director" in loi_nhac:
             n = int(loi_nhac.split("numbered 1 to ", 1)[1].split(" ", 1)[0])
-            return json.dumps({"ung_vien": [dict({"so": i + 1, "noi_dung": 6, "to_mo": 6, "ro_120": 6, "cam_xuc": 6,
-                                                  "phong_cach": 6, "loi": [], "ly_do": "ok"},
+            return json.dumps({"ung_vien": [dict({"so": i + 1, "bam_nhu_thang": 8, "noi_dung": 6, "to_mo": 6,
+                                                  "ro_120": 6, "cam_xuc": 6, "phong_cach": 6, "loi": [], "ly_do": "ok"},
                                                  **((diem or {}).get(i + 1) or {})) for i in range(n)]})
         if "Read the text printed" in loi_nhac:
             ma = kw.get("khoa", "").split("doc-nen:")[-1].split(":")[0]
@@ -582,6 +582,7 @@ def test_chay_tran_dao_dien_va_giam_khao_dung_mau_cua_kenh(tmp_path, monkeypatch
         "bia": [{"video_id": "VIDGIA0001", "tep": tep_k, "imp": 20000, "kieu_chu": "tran", "chu": "x", "ta": "y"},
                 {"video_id": "VIDGIA0002", "tep": b2, "imp": 50000, "kieu_chu": "tran", "chu": "x", "ta": "y"}]})
     luot = os.path.join(goc, "PROJECTS", "AUTO", "KH", "0001")
+    monkeypatch.setattr(bia_lo, "san_mau", lambda thang: {})  # bìa thắng giả tím phẳng — sàn màu có bài riêng
     cap = []
     goc_goi = _goi_gia(xep=[2, 1, 3])
 
@@ -613,26 +614,42 @@ def test_chay_tran_dao_dien_va_giam_khao_dung_mau_cua_kenh(tmp_path, monkeypatch
     assert k2["kieu_khuon"] == "tran" and k2["muc"][0]["chu_tang"][0]["mot_dong"]
 
 
-def test_bia_lo_tat_giu_duong_cu(tmp_path, monkeypatch):
+def test_mot_duong_bia_lo_khong_bao_gio_goi_duong_cu(tmp_path, monkeypatch):
+    """19/10/2026 — MỘT ĐƯỜNG BÌA: mọi kênh (kể cả `bia_lo: false` / không khai) đi bìa lô; đường cũ nhiều kiểu
+    (`_sinh_lo_bia`) không bao giờ được gọi; chưa có bìa thắng làm mẫu → GIỮ lượt + báo, không lùi đường cũ."""
     from core import auto_khau as ak
     goc = _goc_gia(tmp_path)
     da = []
-    monkeypatch.setattr(ak, "_sinh_lo_bia", lambda bc, luot, tt: da.append("cu") or ("d", "t", "c", {}, 3))
+
+    def cu(*a, **k):
+        raise AssertionError("đường bìa cũ bị gọi ở lượt thật")
+    monkeypatch.setattr(ak, "_sinh_lo_bia", cu)
+    monkeypatch.setattr(ak, "_chuan_bi_bia", cu)
     monkeypatch.setattr(ak, "_bia_lo_luot", lambda bc, luot: da.append("lo") or ("d", "t", "c", {}, 3))
     monkeypatch.setattr(ak, "_cong_doc_duoc_bia", lambda *a: {})
     monkeypatch.setattr(ak, "_cong_chu_bia", lambda *a: {"dat": True})
     bc = SimpleNamespace(goc=goc, kenh=SimpleNamespace(ma="KH"))
     tep = os.path.join(duong_kenh(goc, "KH"), TEP_KENH)
-    for them, mong in (("", ["cu"]), ("bia_lo: false\n", ["cu"]), ("bia_lo: true\n", ["lo"])):
+    for them in ("", "bia_lo: false\n", "bia_lo: true\n"):
         with io.open(tep, "w", encoding="utf-8") as f:
             f.write('ma: "KH"\n' + them)
         da.clear()
         assert ak._mot_lo_bia(bc, None, None)["chu_bia_giao"] == {"dat": True}  # noqa: SLF001
-        assert da == mong, (them, da)
+        assert da == ["lo"], (them, da)
     monkeypatch.setattr(ak, "_bia_lo_luot", lambda bc, luot: da.append("lo") or None)  # không có bìa mẫu
-    da.clear()
-    ak._mot_lo_bia(bc, None, None)  # noqa: SLF001
-    assert da == ["lo", "cu"], "bật bia_lo mà chưa có bìa thắng làm mẫu → đường cũ"
+    with pytest.raises(RuntimeError, match="GIỮ"):
+        ak._mot_lo_bia(bc, SimpleNamespace(ma_luot="0001", ma_kenh="KH"), None)  # noqa: SLF001
+    with io.open(os.path.join(goc, "workspace", "loi-chay-max.md"), encoding="utf-8") as f:
+        assert "GIỮ" in f.read(), "giữ lượt phải báo người"
+
+
+def test_khau_anh_khong_ban_bia_kieu_cu():
+    """Khâu ảnh không còn bắn các kiểu bìa cũ cùng mẻ ảnh cảnh (mô hình ảnh tự vẽ chữ kiểu chung)."""
+    import inspect
+    from core import auto_khau as ak
+    nguon = inspect.getsource(ak._khau_anh)  # noqa: SLF001
+    assert "_chuan_bi_bia(" not in nguon and "muc_bia, ta_bia, tieu_de, chu_bia = " in nguon
+    assert "_sinh_lo_bia(" not in inspect.getsource(ak._mot_lo_bia)  # noqa: SLF001
 
 
 # ── 7) Thư mục bìa thắng chủ chọn + ghi đè kiểu/bố cục (16/10/2026) ─────────

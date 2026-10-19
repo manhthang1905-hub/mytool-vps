@@ -214,6 +214,9 @@ MAC_DINH: Dict[str, Any] = {
     # 14/10/2026 — công tắc chung của skill tự kích hoạt (`core/ky_nang_tu.py`, tác vụ ShopAPI-KyNang): bật thì skill
     # `tu_ap` tự chạy khi đủ điều kiện; tắt thì chỉ báo "nên chạy". Mỗi kênh tắt riêng: `kenh.yaml: ky_nang_tat`.
     "ky_nang_tu_kich_hoat": True,
+    # 19/10/2026 — kiểm vàng bìa (`core/bia_lo.py`, skill D19) TRƯỢT thì GIỮ bìa mới của kênh? Mặc định KHÔNG (chủ: sàn
+    # lệch không được chặn sản xuất — chỉ cảnh báo). Từng kênh: `kenh.yaml: kiem_vang_giu: true|false` thắng ô này.
+    "kiem_vang_giu": False,
 }
 
 _KHOA = threading.Lock()

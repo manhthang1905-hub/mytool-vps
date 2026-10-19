@@ -81,7 +81,8 @@
       than.innerHTML = `<div class="tg-cham">
         <div class="the-nho"><h5>${ic("eye")}Nuôi trang chủ</h5><div class="so-to">${n.pct_chu_de != null ? so(n.pct_chu_de, 0) + "%" : "—"}</div><div class="mo nho">đúng chủ đề · mục tiêu > 90%</div>
           <div class="thanh-tien ${n.pct_chu_de >= 90 ? "" : "vang"}" style="margin-top:8px"><b style="width:${MT.kep(n.pct_chu_de || 0, 0, 100)}%"></b></div>
-          <div class="mo rat-nho" style="margin-top:6px">${esc({dat: "đã đạt, đã tắt nuôi", dang_nuoi: "đang nuôi"}[n.trang_thai] || n.trang_thai || "chưa bật")} · ${so(n.so_phien || 0)} phiên · ${so(n.so_lan_do || 0)} lần đo${n.luc ? " · " + esc(n.luc) : ""}</div>
+          <div class="mo rat-nho" style="margin-top:6px">${esc(n.duy_tri ? n.duy_tri.nhan : ({dat: "đã đạt", dang_nuoi: "đang nuôi"}[n.trang_thai] || n.trang_thai || "chưa bật"))} · ${so(n.so_phien || 0)} phiên · ${so(n.so_lan_do || 0)} lần đo${n.luc ? " · " + esc(n.luc) : ""}</div>
+          ${n.duy_tri && n.duy_tri.ly_do_han ? `<div class="mo rat-nho">${esc(n.duy_tri.ly_do_han)}${n.duy_tri.bao_dong ? " · đã báo động" : ""}</div>` : ""}
           ${(n.chuoi || []).filter(x => x != null).length > 1 ? MT.spark(n.chuoi.filter(x => x != null), "var(--ta)") : ""}</div>
         <div class="the-nho"><h5>${ic("message")}Bình luận hôm nay</h5><div class="so-to">${so(b.tra_loi || 0)}</div><div class="mo nho">đã trả lời · bỏ qua ${so(b.bo_qua || 0)} · lỗi ${so(b.loi || 0)} · ${so(b.phien || 0)} phiên</div></div>
         <div class="the-nho"><h5>${ic("brain")}Tín hiệu học</h5>

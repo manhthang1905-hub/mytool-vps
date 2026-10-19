@@ -213,13 +213,13 @@ def test_thu_chi_in_khong_chay_khong_ghi(tmp_path, monkeypatch):
 def test_danh_muc_that_khai_du(tmp_path):
     co = [k for k in kn.DANH_MUC if k.dieu_kien is not None]
     assert {k.ma for k in co} == {"S02", "S03", "S04", "S05", "D09", "K20", "D10", "D11", "D12", "D13", "D14", "D15",
-                               "D16", "D17", "S06"}
+                               "D16", "D17", "S06", "D18", "D19"}
     for k in co:
         assert k.ma in knt.BO_PHAN
         assert (k.chay is not None) == k.tu_ap, k.ma
     assert not kn.theo_ma("D10").tu_ap and not kn.theo_ma("D11").tu_ap
     assert {k.ma for k in co if k.nang} == set(knt.UU_TIEN_NANG)
-    assert all(k.han_phut >= 40 for k in co if k.ma in ("D16", "D17", "S06"))
+    assert all(k.han_phut >= 40 for k in co if k.ma in ("D16", "D17", "S06", "D19"))
 
 
 def test_skill_mot_kenh_moi_luot(tmp_path, monkeypatch):

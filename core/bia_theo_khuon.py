@@ -736,6 +736,9 @@ def loi_nhac_theo_khuon(khuon_chu: Dict[str, Any], *, phong_cach: str, bien_the:
 NEN_HOP_MAC_DINH = ("clean FLAT VECTOR cartoon, soft warm beige / peach / terracotta palette, gentle soft light, simple "
                     "uncluttered background, smooth clean shapes — bright and inviting, NOT dark, NOT gritty, NOT "
                     "photographic")
+#: Câu nhân vật mặc định của lời nhắc nền kiểu hộp (nhân vật TL4) — `loi_nhac_hop_chu(nhan_vat=...)` thay câu này.
+NV_HOP_MAC_DINH = ("The main character is the plain white round-headed figure from the character reference image (the "
+                   "image that shows only that figure): thick black outline, no clothes, no hair, no nose")
 LOI_NHAC_NEN_HOP = (
     "YouTube thumbnail illustration for a Japanese psychology channel, drawn in EXACTLY the same art style as this "
     "channel's real winning thumbnails (the attached reference images that show red text boxes — copy ONLY their art "
@@ -753,7 +756,8 @@ LOI_NHAC_NEN_HOP = (
     "Aspect ratio 16:9.")
 
 
-def loi_nhac_hop_chu(khuon_chu: Dict[str, Any], *, bien_the: Dict[str, str], nen: str = "") -> str:
+def loi_nhac_hop_chu(khuon_chu: Dict[str, Any], *, bien_the: Dict[str, str], nen: str = "",
+                     nhan_vat: str = "") -> str:
     """Lời nhắc ẢNH NỀN (không chữ) cho tấm bìa kiểu HỘP: nét vẽ/bảng màu lấy theo các bìa thắng thật gửi kèm làm
     ảnh tham chiếu, nhân vật của kênh, MỘT cảnh ẩn dụ/tương phản (`bien_the.canh`, LLM viết theo tiêu đề) + nét mặt;
     chừa trống phía cột chữ. Chữ do `ve_chu_len_anh` vẽ (thứ bậc, phông bo tròn, hộp đỏ sẫm)."""
@@ -763,9 +767,14 @@ def loi_nhac_hop_chu(khuon_chu: Dict[str, Any], *, bien_the: Dict[str, str], nen
         "the figure reacting to the video's idea with one simple symbolic prop beside it")
     mat = str(bien_the.get("net_mat") or nv.get("net_mat") or "a strong, clear emotion").strip()
     tu_the = str(bien_the.get("tu_the") or "").strip()
-    return LOI_NHAC_NEN_HOP.format(nen=(nen or NEN_HOP_MAC_DINH).strip(), mat=mat,
-                                   tu_the=(", " + tu_the) if tu_the else "", canh=canh.rstrip("."),
-                                   ben_tranh="right" if trai else "left", ben_chu="left" if trai else "right")
+    ra = LOI_NHAC_NEN_HOP.format(nen=(nen or NEN_HOP_MAC_DINH).strip(), mat=mat,
+                                 tu_the=(", " + tu_the) if tu_the else "", canh=canh.rstrip("."),
+                                 ben_tranh="right" if trai else "left", ben_chu="left" if trai else "right")
+    if nhan_vat.strip():
+        # 19/10/2026 (`bia_lo`): nhân vật CỦA kênh theo style.yaml — kênh mượn khuôn hộp (TL4-K2) có nhân vật riêng
+        ra = ra.replace(NV_HOP_MAC_DINH, "The main character is EXACTLY the figure from the character reference image "
+                        "(the image that shows only that figure): {0}".format(nhan_vat.strip().rstrip(".")))
+    return ra
 
 
 def chon_anh_mau_phong_cach(cac_duong: Sequence[str], toi_da: int = 3, toi_thieu: int = 2) -> List[str]:
@@ -1605,6 +1614,20 @@ def _cho_xuong_dong(s: str) -> int:
     return max(1, int(round(giua)))
 
 
+def _thay_tep(tam: str, dich: str, lan: int = 8) -> None:
+    """`os.replace` có thử lại: Windows khoá tệp ảnh vừa ghi vài trăm ms (trình quét virus / trình xem) — kiểm vàng
+    19/10/2026: "[WinError 5] Access is denied" giết cả lô TL3/TL5 ở lượt vẽ chữ lần hai lên cùng tệp."""
+    import time as _t  # noqa: PLC0415
+    for k in range(lan):
+        try:
+            os.replace(tam, dich)
+            return
+        except PermissionError:
+            if k == lan - 1:
+                raise
+            _t.sleep(0.15 * (k + 1))
+
+
 def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                    goc: str = "", kich_thuoc: Tuple[int, int] = (1280, 720), ngon_ngu: str = "",
                    khung_chu: Optional[Sequence[float]] = None, anh_nen: Any = None,
@@ -1880,7 +1903,7 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
     tam = dich + ".tmp.png"
     ket.save(tam, format="PNG")
-    os.replace(tam, dich)
+    _thay_tep(tam, dich)
 
     # 5) ĐO lại cả bìa trên nền thật (kèm khung) — báo cáo cạnh ảnh + trả cho người gọi.
     try:
@@ -2111,7 +2134,7 @@ def _ve_bia_hop(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *, goc:
     os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
     tam = dich + ".tmp.png"
     ket.save(tam, format="PNG")
-    os.replace(tam, dich)
+    _thay_tep(tam, dich)
     try:
         bc = do_bia.cham_hop(ket, hop_chu)
         cac_hop = [h["hop"] for h in hop_chu]
@@ -2146,7 +2169,8 @@ def _hinh_dong(doan, b, font, vien_cua, rong_dong, hop_dong, y_moc: float, tu_tr
     y = top + vien - tren + c * 0.04
     s = "".join(p["chu"] for p in doan)
     _l, bt, _r2, bd = f.getbbox(s)
-    dam = max(1, int(c * 0.022))
+    # 19/10/2026 (`bia_lo`): độ "đậm giả" theo nét bìa thắng đo được (`dam_pct` của tầng), mặc định như cũ
+    dam = max(1, int(c * float(t.get("dam_pct") or 0.022)))
     hop = (x - vien, top, x + rong - vien, top + h)
     hop_khung = (x - vien - c * 0.12, top, x + rong - vien - c * 0.07 + c * 0.12, top + h)
     if _hop_ro(t) is not None:

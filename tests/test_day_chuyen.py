@@ -436,7 +436,7 @@ class TestDayChuyen:
 
         anh = [t for loai, _n, t in may.tao_luc if loai == "image"]
         clip = [t for loai, _n, t in may.tao_luc if loai == "video"]
-        assert len(anh) == 23, "20 ảnh cảnh + 3 ảnh bìa, cùng một mẻ"
+        assert len(anh) == 20, "20 ảnh cảnh cùng một mẻ (ảnh bìa do khâu bìa lô làm — 19/10/2026)"
         assert max(anh) < min(clip), (
             "tấm ảnh cuối cùng phải được bắn TRƯỚC khi clip đầu tiên ra đời — "
             "nếu không thì lại là chờ theo đợt")
@@ -473,20 +473,17 @@ class TestDayChuyen:
         assert sum(1 for t in clip if t < xong_anh_cham) >= 10, (
             "gần hết clip phải bắn xong trước khi tấm ảnh chậm nhất về")
 
-    def test_anh_bia_lam_cung_me_chu_khong_doi_het_clip(self, tmp_path):
-        """3,3 phút cho đúng 3 tấm — vì chúng là một khâu riêng chạy sau cùng."""
+    def test_khau_anh_khong_ban_bia_kieu_cu(self, tmp_path):
+        """19/10/2026 — MỘT ĐƯỜNG BÌA: ảnh bìa chỉ do khâu ảnh bìa làm (bìa lô theo bìa thắng thật của kênh).
+        Khâu ảnh không còn bắn các kiểu bìa cũ (mô hình ảnh tự vẽ chữ kiểu chung) cùng mẻ ảnh cảnh."""
         may = MayChuGia(tre_anh=0.1, tre_clip=0.5)
         goc = str(tmp_path)
         luot, ket = _chay_khau_anh(goc, may, _canh(6))
 
         bia = os.path.join(luot.thu_muc, "7-thumbnail")
-        assert sorted(os.listdir(bia)) == ["thumb_001.png", "thumb_002.png",
-                                           "thumb_003.png"]
-        assert ket["so_thumbnail"] == 3
-        clip = [t for loai, _n, t in may.tao_luc if loai == "video"]
-        bia_luc = [t for loai, n, t in may.tao_luc
-                   if loai == "image" and "canh" not in n]
-        assert max(bia_luc) < max(clip), "ảnh bìa không được xếp sau clip"
+        assert not os.path.isdir(bia) or not os.listdir(bia)
+        assert ket["so_thumbnail"] == 0
+        assert [n for loai, n, _t in may.tao_luc if loai == "image" and "canh" not in n] == []
 
     def test_ca_ba_khau_deu_ra_du_tep(self, tmp_path):
         may = MayChuGia()
@@ -501,10 +498,8 @@ class TestDayChuyen:
         viec = dung_bo_viec(bc)
         truoc = len(may.tao_luc)
         viec["clip"](luot, luot.tt("clip"))
-        viec["thumbnail"](luot, luot.tt("thumbnail"))
         assert len(may.tao_luc) == truoc, (
-            "khâu clip và khâu ảnh bìa vừa bắn lại thứ đã có — đó là trả tiền "
-            "lần hai cho cùng một cảnh")
+            "khâu clip vừa bắn lại thứ đã có — đó là trả tiền lần hai cho cùng một cảnh")
 
     def test_tep_da_co_tren_dia_thi_khong_ban_lai(self, tmp_path):
         """Luật không được phá: chạy tiếp phải nhặt đúng chỗ đứt."""
@@ -518,8 +513,8 @@ class TestDayChuyen:
         dung_bo_viec(bc)["anh"](luot, luot.tt("anh"))
 
         assert len([1 for loai, _n, _t in may.tao_luc
-                    if loai == "image"]) == 8, "5 ảnh cảnh + 3 ảnh bìa"
-        assert truoc == 13, "8 ảnh + 5 clip"
+                    if loai == "image"]) == 5, "5 ảnh cảnh (ảnh bìa do khâu bìa lô làm — 19/10/2026)"
+        assert truoc == 10, "5 ảnh + 5 clip"
         assert may_hai.tao_luc == [], (
             "lượt hai bắn thêm {0} job cho những tệp đã nằm sẵn trên "
             "đĩa".format(len(may_hai.tao_luc)))
