@@ -141,7 +141,7 @@ class TestChayTaiBoSung:
                                    tai_ke_hoach=lambda ch, k: ke[k], chay_con=cc) is True
         assert goi["con"] == [("may_dang_dom.py", "TL2-T7",
                                ("--mot-lan", "--trong-phien", "--cua-so-gio",
-                                str(int(ag.CUA_SO_TAI_BO_SUNG_NGAY * 24)), "--bien-gio", "2.0",
+                                str(int(ag.CUA_SO_TAI_BO_SUNG_NGAY * 24)), "--bien-gio", "1.0",
                                 "--toi-da-ngay", str(ag.TAI_LEN_TOI_DA_KENH_NGAY)))]
         assert goi["chrome"] and goi["dong"] == ["TL2-T7"] and goi["nha"] == 1
         # chu kỳ 25 phút: nhịp kế KHÔNG chạy lại

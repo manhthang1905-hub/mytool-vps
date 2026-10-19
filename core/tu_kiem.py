@@ -16,7 +16,8 @@ STARTED không, danh sách phát có đủ video không (bộ đọc từng báo
   ghim       video lên sóng 6–72 giờ → `vm/logs/cmt-dom.json` `da-ghim` (kênh chờ xác minh điện thoại = việc người)
   nao        phiên sáng hôm nay, giấc ngủ ≤ 30 giờ, sổ skill có dòng trong 26 giờ
   van_hanh   `workspace/van-hanh/trang-thai.json` tươi ≤ 20 phút và mọi thành phần sống
-  nhip       kênh tự chạy: sau 21:00 phải có video hẹn cho ngày mai; 3 ngày qua ngày nào cũng có video lên sóng
+  nhip       kênh tự chạy: sau 21:00 phải có video hẹn cho ngày mai; 3 ngày qua ngày nào cũng có video lên sóng;
+             mỗi ngày trống một mục `nhip:khe` kèm NGUYÊN NHÂN (xếp lịch muộn / gói bị giữ / tải hỏng / thiếu gói)
 API `ghi_ky_vong(goc, loai, kenh, khoa, viec, han, ...)` cho bộ chạy nào muốn khai thẳng kỳ vọng của mình.
 
 ═══ HỎNG THÌ ═══ (1) thử lại qua ĐÚNG bộ chạy, tối đa `SO_THU_LAI` lần: mở lại mục hàng sửa (máy DOM `--sua-video`),
@@ -571,12 +572,90 @@ def kiem_nhip(K: BoiCanh) -> List[Dict[str, Any]]:
         thieu = [d for d in thieu if d < K.bay.date() or K.bay.hour >= 8]
         nhieu = [d for d in {t.date() for t in ds} if sum(1 for t in ds if t.date() == d) > 1
                  and (K.bay.date() - d).days < 3]
+        khe = _khe_kenh(K.goc, kenh)
+        nn = {d: nguyen_nhan_ngay_trong(K.goc, kenh, d, khe) for d in sorted(thieu)}
         ra.append(_muc("nhip", kenh, "nhip:3ngay:{0}:{1}".format(kenh, K.bay.date()), "1 video/ngày suốt 3 ngày qua",
                        K.bay, HONG if thieu else DAT,
-                       ("ngày không có video lên sóng: " + ", ".join("{0:%d/%m}".format(d) for d in sorted(thieu))
+                       ("ngày không có video lên sóng: " + ", ".join("{0:%d/%m} ({1})".format(d, nn[d]["ten"])
+                                                                     for d in sorted(thieu))
                         if thieu else "đều 1 video/ngày") + ("; ngày dồn ≥ 2 video: " + ", ".join(
                             "{0:%d/%m}".format(d) for d in sorted(nhieu)) if nhieu else "")))
+        # 19/10/2026: mỗi ngày trống (khe đã qua) là MỘT mục kèm NGUYÊN NHÂN — `xep_muon` là lỗi xếp lịch của máy
+        # (video đã sẵn sàng kịp khe mà bị hẹn ngày sau), khác hẳn thiếu gói (sản xuất chậm/kẹt) hay gói bị giữ.
+        for d, x in nn.items():
+            if x["moc_khe"] is not None and x["moc_khe"] + _dt.timedelta(hours=GIO_SAU_LICH) > K.bay:
+                continue
+            ra.append(_muc("nhip", kenh, "nhip:khe:{0}:{1}".format(kenh, d), "khe {0:%d/%m} có video lên sóng".format(d),
+                           x["moc_khe"], HONG, "{0}: {1}".format(x["ten"], x["chu"]), nguyen_nhan=x["loai"]))
     return ra
+
+
+#: Nguyên nhân một ngày không có video (`nguyen_nhan_ngay_trong`).
+TEN_NGUYEN_NHAN = {"xep_muon": "xếp lịch muộn", "giu_goi": "gói bị giữ/kẹt", "tai_hong": "tải lên hỏng",
+                   "thieu_goi": "không có gói kịp giờ"}
+
+
+def _khe_kenh(goc: str, kenh: str) -> List[str]:
+    """Giờ đăng trong ngày của kênh (`nhip_dang`, không thì `gio_dang`) — rỗng nếu không đọc được."""
+    try:
+        from . import xep_lich  # noqa: PLC0415
+        from .ky_nang import _kenh_yaml  # noqa: PLC0415
+        y = _kenh_yaml(goc, kenh)
+        return xep_lich.chuan_hoa_nhip(y.get("nhip_dang")) or xep_lich.chuan_hoa_nhip(y.get("gio_dang"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def nguyen_nhan_ngay_trong(goc: str, kenh: str, ngay: _dt.date, khe: Sequence[str]) -> Dict[str, Any]:
+    """Vì sao ngày `ngay` của kênh không có video lên sóng → {loai, ten, chu, ma, moc_khe}.
+
+    Thứ tự (bằng chứng mạnh trước): `xep_muon` — sổ máy đăng có video TẢI XONG trước khe đầu của ngày ≥ biên tải
+    lên (`xep_lich.BIEN_TAI_TOI_THIEU_PHUT`) mà lại hẹn ngày SAU (ca TL2-T7-0032 19/10/2026); `giu_goi` — dòng kế hoạch
+    "Sẵn sàng" hẹn đúng ngày đó mà chưa lên kênh (cổng bìa giữ, kẹt); `tai_hong` — bản tải ngày đó hỏng/nháp;
+    còn lại `thieu_goi` — không có gói nào sẵn sàng kịp khe (sản xuất chậm/kẹt/bỏ lượt)."""
+    from . import ke_hoach_dang, xep_lich  # noqa: PLC0415
+
+    gio0 = (list(khe) or ["00:00"])[0]
+    moc_khe = _dt.datetime.combine(ngay, _dt.time(int(gio0[:2]), int(gio0[3:])))
+    bien = _dt.timedelta(minutes=xep_lich.BIEN_TAI_TOI_THIEU_PHUT)
+
+    def ra(loai: str, chu: str, ma: str = "") -> Dict[str, Any]:
+        return {"loai": loai, "ten": TEN_NGUYEN_NHAN[loai], "chu": chu, "ma": ma, "moc_khe": moc_khe}
+
+    muon, hong = [], []
+    for k, m in _so_video(goc).items():
+        if not isinstance(m, dict) or not str(k).startswith(kenh + "/"):
+            continue
+        ma = str(k).split("/", 1)[-1]
+        lich = _gio(m.get("lich_dat") or m.get("lich"))
+        if m.get("trang_thai") in xep_lich.TT_SO_CHUA_LEN_KENH:
+            if lich is not None and lich.date() == ngay:
+                hong.append(ma)
+            continue
+        tai = _gio(m.get("tai_xong_luc")) or _gio(m.get("cap_nhat"))
+        if m.get("video_id") and tai and lich and tai <= moc_khe - bien and lich.date() > ngay:
+            muon.append((tai, ma, lich))
+    if muon:
+        tai, ma, lich = min(muon)
+        return ra("xep_muon", "{0} tải xong {1:%d/%m %H:%M} (trước khe {2:%d/%m %H:%M} ≥ {3}') mà hẹn {4:%d/%m %H:%M}"
+                  " — khe bị bỏ trống dù đã có video".format(ma, tai, moc_khe, xep_lich.BIEN_TAI_TOI_THIEU_PHUT, lich),
+                  ma)
+    try:
+        cot, hang = ke_hoach_dang.doc_bang(goc, kenh)
+    except Exception:  # noqa: BLE001
+        cot, hang = [], []
+    for d in (dict(zip(cot, h)) for h in hang):
+        if (str(d.get("Ngày đăng") or "").strip() == ngay.strftime("%d/%m/%Y") and str(d.get("Sẵn sàng") or "").strip()
+                and "ĐÃ ĐĂNG" not in str(d.get("Trạng thái đăng") or "").upper()):
+            gc = str(d.get("Ghi chú") or d.get("Trạng thái đăng") or "").strip()
+            return ra("giu_goi", "{0} hẹn {1} {2} nhưng chưa lên kênh{3}".format(
+                d.get("Mã gói"), d.get("Ngày đăng"), d.get("Giờ đăng"), " — " + gc[:120] if gc else ""),
+                str(d.get("Mã gói") or ""))
+    if hong:
+        return ra("tai_hong", "bản tải ngày {0:%d/%m} chưa lên kênh: {1}".format(ngay, ", ".join(sorted(hong))),
+                  sorted(hong)[0])
+    return ra("thieu_goi", "không có gói nào sẵn sàng trước khe {0:%d/%m %H:%M} (sản xuất chậm/kẹt hoặc bỏ lượt)"
+              .format(moc_khe))
 
 
 def kiem_duong_max(K: BoiCanh) -> List[Dict[str, Any]]:

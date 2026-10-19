@@ -1138,6 +1138,24 @@ def ghi_lich_moi_tool(goc_tool: str, kenh: str, ma: str, video_id: str, lich_s: 
     return da
 
 
+def keo_lich_som_tool(goc_tool: str, kenh: str, ma: str, so: dict, bay_gio: datetime):
+    """19/10/2026 — NGAY TRƯỚC KHI TẢI: còn khe trống SỚM HƠN lịch kế hoạch của gói (≥ bây giờ +
+    `core.xep_lich.BIEN_TAI_TOI_THIEU_PHUT`) thì dời dòng kế hoạch sang khe đó (`xep_lich.keo_lich_som`) và trả
+    `(ngày, giờ)` mới; không thì None. Ca gốc TL2-T7-0032: tải 19/10 01:10 nhưng hẹn 20/10 05:00, ngày 19/10 trống.
+    Kênh không có kenh.yaml ở gốc tool (máy đăng tách rời / bài kiểm) → None. Lỗi → ném (nơi gọi giữ lịch cũ)."""
+    if not os.path.isfile(os.path.join(goc_tool, "CHANNEL", kenh, "kenh.yaml")):
+        return None
+    if goc_tool not in sys.path:
+        sys.path.append(goc_tool)      # thêm CUỐI, không che module vm/
+    from core import xep_lich  # noqa: PLC0415
+    from core.kenh import doc_kenh  # noqa: PLC0415
+    doi = xep_lich.keo_lich_som(goc_tool, kenh, doc_kenh(goc_tool, kenh), ma, bay_gio=bay_gio, so_video_id=so)
+    if not doi:
+        return None
+    ngay, gio = doi[2].split(" ", 1)
+    return ngay, gio
+
+
 def url_anh_cua_goi(goi) -> set:
     """Mọi URL ảnh bìa (ytimg) trong gói `get_creator_videos` của một video — so trước/sau khi đổi bìa."""
     ra = set()
@@ -3545,6 +3563,21 @@ class MayDangDom:
         return kq
 
     # ── một gói ──────────────────────────────────────────────────────────
+    def _keo_lich_som(self, d: dict) -> None:
+        """19/10/2026: gói sắp tải mà còn khe trống sớm hơn lịch của nó (đo ở LÚC TẢI, biên
+        `BIEN_TAI_TOI_THIEU_PHUT` của tool) → dời kế hoạch + `d` sang khe đó. Hỏng → giữ lịch cũ, chỉ ghi."""
+        try:
+            moi = keo_lich_som_tool(self.goc_tool, self.kenh, d["ma"], self.so.doc(), self.bay_gio())
+        except Exception as loi:  # noqa: BLE001 — xét khe sớm hơn hỏng không được chặn lượt đăng
+            self.nk("{0}: chưa xét được khe sớm hơn ({1}) — giữ lịch kế hoạch".format(d["ma"], str(loi)[:160]))
+            return
+        if not moi:
+            return
+        cu = "{0} {1}".format(d.get("ngay") or "", d.get("gio") or "")
+        d["ngay"], d["gio"] = moi
+        self.nk("{0}: KÉO LỊCH SỚM {1} → {2} {3} — khe trống sớm nhất còn kịp, không bỏ trống ngày đăng".format(
+            d["ma"], cu, moi[0], moi[1]))
+
     def dang_mot_goi(self, d: dict, hoan_tat: bool = False) -> dict:
         """Đăng một gói. `hoan_tat` (CLI `--hoan-tat`): chỉ LÀM NỐT bản đã có trên kênh (tiếp nháp /
         hẹn lịch ở trang sửa), bỏ trần tiếp nháp/ngày, KHÔNG BAO GIỜ tải bản mới."""
@@ -3569,6 +3602,8 @@ class MayDangDom:
             self.nk("{0}: GIỮ GÓI, KHÔNG TẢI — bìa chưa qua cổng chữ: {1} (luật 16/10/2026: bìa sai chữ là tối kỵ; "
                     "tool đóng dấu xong thì lượt sau tải)".format(ma, ly_do_bia))
             return {"ket_qua": "loi_du_lieu", "ly_do": "bìa chưa qua cổng chữ: " + ly_do_bia}
+        if not hoan_tat:
+            self._keo_lich_som(d)
         lich, ghi_chu = gio_hen_hieu_luc(d.get("ngay"), d.get("gio"), self.bay_gio())
         if lich is None:
             loi.append(ghi_chu)

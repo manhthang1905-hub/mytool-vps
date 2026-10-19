@@ -217,9 +217,10 @@ def test_xep_lai_goi_lo_lich_chi_goi_chua_tai(tmp_path):
     doi = xep_lich.xep_lai_goi_lo_lich(
         goc, "K1", k, bay_gio=_dt.datetime(2026, 9, 29, 14, 0),
         so_video_id={"K1/SO": {"video_id": "zzz"}}, co_dang_do=False)
-    assert doi == [("LO", "28/09/2026 20:00", "30/09/2026 12:00")]
+    # 19/10/2026: biên bàn giao 90' (không còn 12h) — 14:00 + 1h30 → khe 20:00 cùng ngày còn trống, không bỏ trống
+    assert doi == [("LO", "28/09/2026 20:00", "29/09/2026 20:00")]
     d = {x["Mã gói"]: x for x in _dong(goc, "K1")}
-    assert (d["LO"]["Ngày đăng"], d["LO"]["Giờ đăng"]) == ("30/09/2026", "12:00")
+    assert (d["LO"]["Ngày đăng"], d["LO"]["Giờ đăng"]) == ("29/09/2026", "20:00")
     assert d["DA"]["Ngày đăng"] == "28/09/2026" and d["SO"]["Giờ đăng"] == "09:00"
     assert d["SAT"]["Giờ đăng"] == "13:50"  # mới lỡ 10' — để phiên kênh lo
 
@@ -258,7 +259,7 @@ def test_luot_da_bo_khong_bi_nhan_nuoi_lai(tmp_path):
 # ── tích hợp chay_mot_ngay: bàn giao xếp khe ≥ +12h, trần video/ngày ───────
 
 
-def test_chay_mot_ngay_ban_giao_xep_khe_bien_12h(tmp_path):
+def test_chay_mot_ngay_ban_giao_xep_khe_bien_ban_giao(tmp_path):
     goc = str(tmp_path)
     _ghi_kenh(goc, "K1", ngan_sach_ngay=100_000_000, thu_muc_done="done", tu_duyet=True,
               gio_dang="20:00", nhip_dang=["12:00", "20:00"], voice_id="v1")
@@ -280,8 +281,9 @@ def test_chay_mot_ngay_ban_giao_xep_khe_bien_12h(tmp_path):
         video_da_lam_nhom=lambda g, k: set(), tieu_de_da_lam_nhom=lambda g, k: [],
         dung_viec=lambda bc: {}, chay_auto=_chay_auto_het, ban_giao=ban_giao_gia)
     assert ket["ok"] is True, ket
-    # 16:00 + 12h = 04:00 30/09 → 12:00 30/09 đã có → 20:00 30/09
-    assert goi == [("30/09/2026", "20:00")]
+    # 19/10/2026: biên bàn giao = min(bien_xu_ly_gio 12h, 90') → 16:00 + 1h30 = 17:30 → 20:00 29/09 còn trống
+    # (bản cũ +12h bỏ trống khe này, nhảy sang 20:00 30/09)
+    assert goi == [("29/09/2026", "20:00")]
 
 
 def test_chay_mot_ngay_tran_video_toi_da_ngay(tmp_path):

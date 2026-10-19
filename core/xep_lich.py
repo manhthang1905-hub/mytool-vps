@@ -60,7 +60,8 @@ __all__ = ["BIEN_XU_LY_GIO_MAC_DINH", "KHO_DEM_NGAY_MAC_DINH", "chuan_hoa_nhip",
            "khe_cua_kenh", "che_do_nhieu_khe", "khe_da_dung", "khe_trong_som_nhat",
            "dem_kho_dem", "xep_lai_goi_lo_lich", "tran_video_ngay", "goi_y_khe",
            "SOM_HON_DINH_GIO_MAC_DINH", "chu_ky_ngay", "moc_da_co", "hop_nhip", "diem_goi",
-           "so_video_kho_can"]
+           "so_video_kho_can", "BIEN_TAI_TOI_THIEU_PHUT", "BIEN_BAN_GIAO_PHUT", "bien_ban_giao_gio",
+           "khe_som_hon_khi_tai", "keo_lich_som"]
 
 #: Biên tối thiểu giữa lúc xếp lịch và giờ công khai (giờ). Lộ trình v3 mục 6.
 BIEN_XU_LY_GIO_MAC_DINH = 12.0
@@ -69,6 +70,22 @@ KHO_DEM_NGAY_MAC_DINH = 3
 #: Gói lỡ lịch quá ngần này phút mới bị dời — chừa chỗ cho phiên kênh đang tải
 #: sát giờ (máy đăng tự dời +15' khi giờ đã qua lúc đang dở).
 PHUT_LO_LICH_TOI_THIEU = 30
+
+# ═══ KHÔNG BỎ TRỐNG NGÀY ĐĂNG KHI ĐÃ CÓ VIDEO (19/10/2026) ═══
+# Ca gốc: TL2-T7-0032 bàn giao 19/10 01:04, kenh.yaml `bien_xu_ly_gio: 4` → khe sớm nhất phải ≥ 05:04 nên 19/10 05:00
+# bị bỏ, gói nhận 20/10 05:00; máy đăng tải lên lúc 01:10 (còn gần 4 giờ trước 19/10 05:00) mà vẫn hẹn 20/10 → ngày
+# 19/10 không có video. Biên lớn đo ở lúc BÀN GIAO, không phải lúc TẢI LÊN. Giờ:
+#   * biên thật đo ở lúc tải lên: `BIEN_TAI_TOI_THIEU_PHUT` (Studio cần chừng ấy để xử lý trước giờ công khai);
+#   * bàn giao dùng `bien_ban_giao_gio` = min(`bien_xu_ly_gio`, `BIEN_BAN_GIAO_PHUT`) — biên tải lên + thời gian chờ
+#     máy đăng nhặt gói (`vm/agent.py` tải bổ sung: cửa dưới `BIEN_TAI_BO_SUNG_GIO` = 1 giờ, chu kỳ 25 phút);
+#   * máy đăng, ngay trước khi tải, kéo gói về khe trống SỚM HƠN nếu còn (`keo_lich_som`);
+#   * gói bị giữ/bỏ không giữ khe (`khe_da_dung`).
+#: Biên tối thiểu (phút) giữa lúc TẢI LÊN và giờ công khai.
+BIEN_TAI_TOI_THIEU_PHUT = 45
+#: Biên (phút) lúc BÀN GIAO — trần của `bien_xu_ly_gio` khi xếp lịch gói vừa xong.
+BIEN_BAN_GIAO_PHUT = 90
+#: Trạng thái sổ máy đăng của bản CHƯA lên kênh (nháp / tải dở / hỏng) — không giữ khe, lịch chưa đặt trên YouTube.
+TT_SO_CHUA_LEN_KENH = ("nhap", "dang-tai", "loi-tai", "tai-hong")
 
 #: `goi_y_khe`: đăng SỚM HƠN đỉnh khán giả online chừng này giờ, để đợt quét
 #: trang chủ đầu tiên của YouTube (tới ở GIỜ TUỔI 12–13 sau khi đăng — đo
@@ -159,6 +176,16 @@ def chu_ky_ngay(kenh: Any) -> int:
         return 1
 
 
+def bien_ban_giao_gio(kenh: Any) -> float:
+    """Biên (giờ) khi xếp lịch gói VỪA BÀN GIAO: `bien_xu_ly_gio` của kênh nhưng không quá `BIEN_BAN_GIAO_PHUT`.
+    Biên lớn hơn chỉ đẩy gói đã xong sang ngày sau và bỏ trống khe gần (ca TL2-T7-0032 19/10/2026)."""
+    try:
+        cau = float(getattr(kenh, "bien_xu_ly_gio", BIEN_XU_LY_GIO_MAC_DINH) or BIEN_XU_LY_GIO_MAC_DINH)
+    except (TypeError, ValueError):
+        cau = BIEN_XU_LY_GIO_MAC_DINH
+    return max(0.0, min(cau, BIEN_BAN_GIAO_PHUT / 60.0))
+
+
 def so_video_kho_can(kenh: Any, kho_ngay: int) -> int:
     """Số video kho đệm cần cho `kho_ngay` ngày ở nhịp hiện tại: N ≥ 2 → ⌈ngày ÷ N⌉
     (một khe hợp nhịp mỗi N ngày); N = 1 → ngày × số khe/ngày (như cũ)."""
@@ -204,7 +231,7 @@ def moc_da_co(goc: str, ma_kenh: str, *, so_video_id: Optional[Dict[str, Any]] =
         ma = str(k).split("/", 1)[-1]
         if ma in bo or not m.get("video_id"):
             continue
-        if m.get("trang_thai") in ("nhap", "dang-tai", "loi-tai", "tai-hong"):
+        if m.get("trang_thai") in TT_SO_CHUA_LEN_KENH:
             continue
         chu = str(m.get("lich") or "").strip().split(" ")
         moc = _moc(chu[0], chu[1]) if len(chu) == 2 else None
@@ -290,18 +317,51 @@ def _la_goi_bo(d: Dict[str, str]) -> bool:
     return tt.lower().startswith("bỏ") or "KHÔNG ĐĂNG" in tt.upper()
 
 
-def khe_da_dung(goc: str, ma_kenh: str) -> Set[Tuple[str, str]]:
-    """Mọi cặp (Ngày đăng, Giờ đăng) đã có trong kế hoạch của kênh — BẤT KỂ
-    trạng thái (đã đăng, đang chờ, đăng tay…): một khe đã có video thì không
-    gán thêm video thứ hai vào đó."""
+def _khe_cua_moc(moc: _dt.datetime, khe: Iterable[str]) -> Tuple[str, str]:
+    """Mốc công khai thật → (ngày, khe GẦN NHẤT trong ngày của kênh). Video đã hẹn lệch giờ (máy đăng dời +15'
+    khi tải sát giờ, hay đăng tay) vẫn chiếm khe của ngày đó — không gán video thứ hai cùng khe."""
+    chuoi = moc.strftime("%d/%m/%Y")
+    ds = [g for g in (khe or []) if _gio_hop_le(g)]
+    if not ds:
+        return chuoi, moc.strftime("%H:%M")
+    phut = moc.hour * 60 + moc.minute
+    return chuoi, min(ds, key=lambda g: (abs(int(g[:2]) * 60 + int(g[3:]) - phut), g))
+
+
+def khe_da_dung(goc: str, ma_kenh: str, *, bo_ma: Iterable[str] = (),
+                so_video_id: Optional[Dict[str, Any]] = None,
+                khe: Optional[Iterable[str]] = None) -> Set[Tuple[str, str]]:
+    """Mọi khe (Ngày đăng, Giờ đăng) ĐÃ CÓ video của kênh — không gán thêm video thứ hai vào đó.
+
+    Chiếm khe: dòng kế hoạch có Ngày+Giờ mà đã "Sẵn sàng" hoặc đã có "Trạng thái đăng" (đã đăng, đang chờ, đăng
+    tay…), cộng video đã lên kênh trong sổ máy đăng (`lich_dat`/`lich`, ánh về khe gần nhất của ngày theo `khe`).
+    KHÔNG chiếm (19/10/2026): dòng "Bỏ"/"KHÔNG ĐĂNG" (gói bỏ), dòng chưa/không còn "Sẵn sàng" mà chưa từng đăng (gói
+    bị giữ lại, kẹt QA) — khe đó để video khác dùng, không bỏ trống ngày. `bo_ma`: mã gói không tính (gói đang được
+    xếp lại chính nó)."""
+    bo = set(bo_ma or ())
     cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
     ra: Set[Tuple[str, str]] = set()
     for d in _dong(cot, hang):
+        if d.get("Mã gói", "") in bo:
+            continue
         if _la_goi_bo(d):
             continue      # 04/10: gói "Bỏ" (vd trùng nguồn) không giữ khe — khe đó làm video khác
+        if not d.get("Sẵn sàng") and not d.get("Trạng thái đăng") and not d.get("Video ID"):
+            continue      # 19/10: gói bị giữ / chưa duyệt không giữ khe (cùng luật `moc_da_co`)
         ngay, gio = d.get("Ngày đăng", ""), _gio_hop_le(d.get("Giờ đăng", ""))
         if ngay and gio:
             ra.add((ngay, gio))
+    so = doc_so_video_id(goc) if so_video_id is None else so_video_id
+    khe_ds = list(khe or [])
+    for k, m in (so or {}).items():
+        if not isinstance(m, dict) or not str(k).startswith(ma_kenh + "/"):
+            continue
+        if str(k).split("/", 1)[-1] in bo or not m.get("video_id") or m.get("trang_thai") in TT_SO_CHUA_LEN_KENH:
+            continue
+        chu = str(m.get("lich_dat") or m.get("lich") or "").strip().split(" ")
+        moc = _moc(chu[0], chu[1]) if len(chu) == 2 else None
+        if moc is not None:
+            ra.add(_khe_cua_moc(moc, khe_ds))
     return ra
 
 
@@ -324,7 +384,7 @@ def khe_trong_som_nhat(goc: str, ma_kenh: str, kenh: Any, *,
         bien_gio = float(getattr(kenh, "bien_xu_ly_gio", BIEN_XU_LY_GIO_MAC_DINH)
                          or BIEN_XU_LY_GIO_MAC_DINH)
     som_nhat = bay_gio + _dt.timedelta(hours=max(0.0, float(bien_gio)))
-    dung = khe_da_dung(goc, ma_kenh) if da_dung is None else da_dung
+    dung = khe_da_dung(goc, ma_kenh, khe=khe) if da_dung is None else da_dung
     n = chu_ky_ngay(kenh)
     if n >= 2 and da_co is None:
         da_co = moc_da_co(goc, ma_kenh)
@@ -339,6 +399,65 @@ def khe_trong_som_nhat(goc: str, ma_kenh: str, kenh: Any, *,
                 return chuoi, gio
         ngay = ngay + _dt.timedelta(days=1)
     return "", ""
+
+
+def khe_som_hon_khi_tai(goc: str, ma_kenh: str, kenh: Any, ma_goi: str, ngay: str, gio: str, *,
+                        bay_gio: Optional[_dt.datetime] = None,
+                        so_video_id: Optional[Dict[str, Any]] = None,
+                        bien_phut: float = BIEN_TAI_TOI_THIEU_PHUT) -> Tuple[str, str]:
+    """LÚC TẢI LÊN (19/10/2026): khe trống sớm nhất ≥ bây giờ + `bien_phut` của kênh, không tính chính gói
+    `ma_goi`. Trả khe đó nếu SỚM HƠN lịch hiện tại (`ngay` `gio`) của gói, không thì `("", "")` — chỉ kéo sớm, không
+    bao giờ đẩy muộn. Kênh không tự duyệt (người chọn giờ) → `("", "")`. Nhịp N ≥ 2 ngày vẫn giữ (`hop_nhip`)."""
+    if not getattr(kenh, "tu_duyet", False):
+        return "", ""
+    cu = _moc(ngay, gio)
+    if cu is None:
+        return "", ""
+    so = doc_so_video_id(goc) if so_video_id is None else so_video_id
+    dung = khe_da_dung(goc, ma_kenh, bo_ma=[ma_goi], so_video_id=so, khe=khe_cua_kenh(kenh))
+    da_co = moc_da_co(goc, ma_kenh, so_video_id=so, bo_ma=[ma_goi]) if chu_ky_ngay(kenh) >= 2 else None
+    n, g = khe_trong_som_nhat(goc, ma_kenh, kenh, bay_gio=bay_gio, bien_gio=float(bien_phut) / 60.0,
+                              da_dung=dung, da_co=da_co)
+    moi = _moc(n, g) if n else None
+    if moi is None or moi >= cu:
+        return "", ""
+    return n, g
+
+
+def keo_lich_som(goc: str, ma_kenh: str, kenh: Any, ma_goi: str, *,
+                 bay_gio: Optional[_dt.datetime] = None,
+                 so_video_id: Optional[Dict[str, Any]] = None,
+                 bien_phut: float = BIEN_TAI_TOI_THIEU_PHUT) -> Optional[Tuple[str, str, str]]:
+    """Máy đăng gọi NGAY TRƯỚC KHI TẢI gói `ma_goi`: còn khe trống sớm hơn lịch của gói (≥ bây giờ + `bien_phut`)
+    thì dời dòng kế hoạch sang khe đó (ghi nguyên tử) và trả `(mã, lịch cũ, lịch mới)`; không thì None.
+
+    Chỉ đụng dòng "Sẵn sàng", Trạng thái đăng TRỐNG, không Video ID, và sổ máy đăng chưa có bản đã lên kênh của gói
+    (lịch trên YouTube chưa đặt). Ca gốc: TL2-T7-0032 tải 19/10 01:10 với lịch 20/10 05:00 trong khi 19/10 05:00 trống."""
+    so = doc_so_video_id(goc) if so_video_id is None else so_video_id
+    muc = (so or {}).get("{0}/{1}".format(ma_kenh, ma_goi)) or {}
+    if isinstance(muc, dict) and muc.get("video_id") and muc.get("trang_thai") not in TT_SO_CHUA_LEN_KENH:
+        return None
+    cot, hang = ke_hoach_dang.doc_bang(goc, ma_kenh)
+    if "Mã gói" not in cot or "Ngày đăng" not in cot or "Giờ đăng" not in cot:
+        return None
+    i_ngay, i_gio = cot.index("Ngày đăng"), cot.index("Giờ đăng")
+    for d_tho, d in zip(hang, _dong(cot, hang)):
+        if d.get("Mã gói", "") != ma_goi:
+            continue
+        if not d.get("Sẵn sàng") or d.get("Trạng thái đăng") or d.get("Video ID"):
+            return None
+        ngay_moi, gio_moi = khe_som_hon_khi_tai(goc, ma_kenh, kenh, ma_goi, d.get("Ngày đăng", ""),
+                                                d.get("Giờ đăng", ""), bay_gio=bay_gio, so_video_id=so,
+                                                bien_phut=bien_phut)
+        if not ngay_moi:
+            return None
+        while len(d_tho) <= max(i_ngay, i_gio):
+            d_tho.append("")
+        cu = "{0} {1}".format(d.get("Ngày đăng", ""), d.get("Giờ đăng", ""))
+        d_tho[i_ngay], d_tho[i_gio] = ngay_moi, gio_moi
+        ke_hoach_dang.luu_bang(goc, ma_kenh, hang, cot)
+        return ma_goi, cu, "{0} {1}".format(ngay_moi, gio_moi)
+    return None
 
 
 def _co_video_id(dong: Dict[str, str], ma_kenh: str, so_video_id: Dict[str, Any]) -> bool:
@@ -428,7 +547,7 @@ def xep_lai_goi_lo_lich(goc: str, ma_kenh: str, kenh: Any, *,
         if doi:
             ke_hoach_dang.luu_bang(goc, ma_kenh, hang, cot)
         return doi
-    dung = khe_da_dung(goc, ma_kenh)
+    dung = khe_da_dung(goc, ma_kenh, so_video_id=so, khe=khe_cua_kenh(kenh))
     han = bay_gio - _dt.timedelta(minutes=PHUT_LO_LICH_TOI_THIEU)
     doi: List[Tuple[str, str, str]] = []
     for d_tho, d in zip(hang, _dong(cot, hang)):
@@ -439,7 +558,9 @@ def xep_lai_goi_lo_lich(goc: str, ma_kenh: str, kenh: Any, *,
         moc = _moc(d.get("Ngày đăng", ""), d.get("Giờ đăng", ""))
         if moc is None or moc >= han:
             continue
-        ngay_moi, gio_moi = khe_trong_som_nhat(goc, ma_kenh, kenh, bay_gio=bay_gio, da_dung=dung)
+        # 19/10/2026: gói đã xong chỉ cần biên bàn giao — biên 12h cũ đẩy nó qua mất một khe còn kịp.
+        ngay_moi, gio_moi = khe_trong_som_nhat(goc, ma_kenh, kenh, bay_gio=bay_gio, da_dung=dung,
+                                               bien_gio=bien_ban_giao_gio(kenh))
         if not ngay_moi:
             continue
         while len(d_tho) <= max(i_ngay, i_gio):

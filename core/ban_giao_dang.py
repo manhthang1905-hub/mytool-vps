@@ -660,7 +660,7 @@ def kiem_lai_goi_ket(goc: str, ma_kenh: str, *, kiem=None, toi_da: int = 0) -> L
     o = {t: cot.index(t) for t in ("Mã gói", "Ngày đăng", "Giờ đăng", "Sẵn sàng")}
     o_tt = cot.index("Trạng thái đăng") if "Trạng thái đăng" in cot else -1
     o_gc = cot.index("Ghi chú") if "Ghi chú" in cot else -1
-    dung = xep_lich.khe_da_dung(goc, ma_kenh)
+    dung = xep_lich.khe_da_dung(goc, ma_kenh, khe=xep_lich.khe_cua_kenh(k))
     ra: List[Dict[str, object]] = []
     doi, da_kiem = False, 0
     for ma in ds:
@@ -681,7 +681,9 @@ def kiem_lai_goi_ket(goc: str, ma_kenh: str, *, kiem=None, toi_da: int = 0) -> L
         if not kq.dat:
             ra.append({"ma": ma, "ket_qua": "chua_dat", "loi": list(kq.loi)})
             continue
-        ngay, gio = xep_lich.khe_trong_som_nhat(goc, ma_kenh, k, da_dung=dung)
+        # 19/10/2026: gói đã xong → biên bàn giao (≤ 90'), không để trống khe còn kịp.
+        ngay, gio = xep_lich.khe_trong_som_nhat(goc, ma_kenh, k, da_dung=dung,
+                                                bien_gio=xep_lich.bien_ban_giao_gio(k))
         if not ngay:  # chưa có khe: chưa đổi gì, lần sau thử lại
             ra.append({"ma": ma, "ket_qua": "bo_qua", "loi": ["chưa có khe trống"]})
             continue
@@ -750,7 +752,8 @@ def ban_giao_tay(goc: str, kenh: str, luot: str, ngay_so: str, *, ghi=print,
         return 0
     ngay, gio, ly_do_trong = "", "", ""
     if k.tu_duyet:
-        ngay, gio = xep_lich.khe_trong_som_nhat(goc, kenh, k, bay_gio=bay_gio or _dt.datetime.now())
+        ngay, gio = xep_lich.khe_trong_som_nhat(goc, kenh, k, bay_gio=bay_gio or _dt.datetime.now(),
+                                                bien_gio=xep_lich.bien_ban_giao_gio(k))
         if not ngay:
             ghi("không tìm được khe trống — lượt sau thử lại")
             return 10

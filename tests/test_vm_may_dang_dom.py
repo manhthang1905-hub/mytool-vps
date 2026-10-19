@@ -934,6 +934,24 @@ class TestLuong:
         assert json.loads((moi / "uc.json").read_text(encoding="utf-8")) == {"TL1-T7": UC}
         assert not (moi / "dodang.json").exists()
 
+    def test_keo_lich_som_khi_tai_khong_bo_trong_ngay(self, moi):
+        """19/10/2026 (TL2-T7-0032): gói hẹn 30/09 20:00 mà lúc tải (29/09 09:03) khe 29/09 20:00 còn trống
+        → máy đăng dời kế hoạch + hẹn YouTube vào 29/09 20:00, không để trống ngày."""
+        from core import ke_hoach_dang
+        k, bao = KenhGia(), Bao()
+        m = _may(moi, k, bao)
+        thu = Path(m.goc_tool) / "CHANNEL" / "TL1-T7"
+        thu.mkdir(parents=True)
+        (thu / "kenh.yaml").write_text('ma: "TL1-T7"\ntu_duyet: true\nnhip_dang: ["20:00"]\n', encoding="utf-8")
+        dong = {t: "" for t in ke_hoach_dang.COT}
+        dong.update({"Mã gói": "TL1-T7-0007", "Ngày đăng": "30/09/2026", "Giờ đăng": "20:00", "Sẵn sàng": "x"})
+        ke_hoach_dang.luu_bang(m.goc_tool, "TL1-T7", [[dong[t] for t in ke_hoach_dang.COT]])
+        assert m.chay([_dong()]) == mdd.MA_XONG
+        assert k.video[0]["lich"] == datetime(2026, 9, 29, 20, 0)
+        assert bao.ds[-1][2]["lich"] == "29/09/2026 20:00"
+        cot, hang = ke_hoach_dang.doc_bang(m.goc_tool, "TL1-T7")
+        assert (hang[0][cot.index("Ngày đăng")], hang[0][cot.index("Giờ đăng")]) == ("29/09/2026", "20:00")
+
     def test_the_video_top_48h_cua_kenh(self, moi):
         """Cột Link card rỗng → thẻ trỏ video CÔNG KHAI view 48h cao nhất của
         kênh; loại video đang đăng + video đã hẹn lịch trong sổ."""

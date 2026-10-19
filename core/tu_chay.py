@@ -2177,8 +2177,13 @@ def _tim_gio_trong(goc: str, ma_kenh: str, gio_dang: str, tu_ngay: _dt.date,
     da_dat: set = set()
     if co_cot:
         i_ngay, i_gio = cot.index("Ngày đăng"), cot.index("Giờ đăng")
+        i_tt = cot.index("Trạng thái đăng") if "Trạng thái đăng" in cot else -1
+
+        def _bo(d) -> bool:   # 19/10/2026: gói "Bỏ"/"KHÔNG ĐĂNG" không giữ khe (luật `xep_lich.khe_da_dung`)
+            tt = str(d[i_tt]).strip() if 0 <= i_tt < len(d) else ""
+            return tt.lower().startswith("bỏ") or "KHÔNG ĐĂNG" in tt.upper()
         da_dat = {(str(d[i_ngay]).strip() if i_ngay < len(d) else "",
-                  str(d[i_gio]).strip() if i_gio < len(d) else "") for d in hang}
+                  str(d[i_gio]).strip() if i_gio < len(d) else "") for d in hang if not _bo(d)}
 
     ngay = tu_ngay
     for _i in range(max(1, toi_da_ngay)):
@@ -3156,10 +3161,11 @@ def _chay_mot_ngay_trong_khoa(
         else:
             ngay_dang, gio_dang, ly_do_trong = "", "", ""
             if xep_lich.che_do_nhieu_khe(kenh):
-                # Nhiều khe/ngày (29/09/2026): khe trống sớm nhất ≥ bây giờ +
-                # bien_xu_ly_gio (mặc định 12h) — đủ để máy đăng tải lên trước.
+                # Nhiều khe/ngày (29/09/2026): khe trống sớm nhất ≥ bây giờ + biên bàn giao.
+                # 19/10/2026: biên = min(bien_xu_ly_gio, 90') (`xep_lich.bien_ban_giao_gio`) — biên 4h/12h cũ bỏ
+                # trống khe còn kịp (TL2-T7-0032 xong 01:04 → 20/10, ngày 19/10 không có video).
                 ngay_dang, gio_dang = xep_lich.khe_trong_som_nhat(
-                    goc, ma_kenh, kenh, bay_gio=bay_gio)
+                    goc, ma_kenh, kenh, bay_gio=bay_gio, bien_gio=xep_lich.bien_ban_giao_gio(kenh))
                 if not ngay_dang:
                     ly_do_trong = ("không tìm được khe trống trong 60 ngày tới cho nhịp "
                                    + ", ".join(kenh.nhip_dang) + " — để trống, tự đặt tay.")

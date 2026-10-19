@@ -310,7 +310,8 @@ def test_bao_tri_kenh_xep_lai_va_tra_dong_trang_thai(tmp_path):
     assert any("XẾP LẠI LỊCH" in d for d in nhat)
     cot, hang = ke_hoach_dang.doc_bang(goc, "K1")
     d = dict(zip(cot, hang[0]))
-    assert (d["Ngày đăng"], d["Giờ đăng"]) == ("30/09/2026", "12:00")
+    # 19/10/2026: biên bàn giao 90' (không còn 12h) → khe 20:00 cùng ngày còn trống thì lấy, không bỏ trống
+    assert (d["Ngày đăng"], d["Giờ đăng"]) == ("29/09/2026", "20:00")
 
 
 def test_ghi_so_ngay_luot_noi_them(tmp_path):

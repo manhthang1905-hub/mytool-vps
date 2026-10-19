@@ -2979,15 +2979,18 @@ def chay_quet_ngay(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: floa
 # bàn giao ~23:00, hẹn 20:00 hôm sau) chỉ được tải lên ở phiên HÔM SAU — sát
 # giờ đăng, rủi ro lỡ lịch. Bước này: mỗi ~25 phút, khi máy rảnh (không phiên,
 # khoá máy trống, không ai đang đăng), kênh nào bật `tu_dang` + `cach_dang`
-# ≠ "anh" mà kế hoạch có gói "Sẵn sàng" hẹn trong (bây giờ + 2 giờ, bây giờ + 7
-# ngày] chưa có videoId trong sổ → mở Chrome kênh (đúng `mo_chrome_kenh`), chạy
+# ≠ "anh" mà kế hoạch có gói "Sẵn sàng" hẹn trong (bây giờ + `BIEN_TAI_BO_SUNG_GIO`,
+# bây giờ + `CUA_SO_TAI_BO_SUNG_NGAY`] chưa có videoId trong sổ → mở Chrome kênh (đúng `mo_chrome_kenh`), chạy
 # máy đăng DOM ở chế độ cửa sổ, đóng Chrome êm.
 
 #: Chu kỳ xét tải bổ sung (giây).
 CHU_KY_TAI_BO_SUNG_GIAY = 25 * 60
 #: Gói hẹn SỚM hơn bây giờ + chừng này giờ thì để phiên kênh lo (phiên chạy trước
 #: giờ đăng 60 phút) — không chen tải bổ sung sát giờ.
-BIEN_TAI_BO_SUNG_GIO = 2.0
+#: 19/10/2026: 2.0 → 1.0 — gói bàn giao còn 60–120' trước khe (biên bàn giao tool 90',
+#: `core.xep_lich.BIEN_BAN_GIAO_PHUT`) phải được tải bổ sung; mốc phiên kênh cất MỘT lần/ngày nên gói xong sau lúc
+#: đó không có phiên lo → lỡ khe, bỏ trống ngày. Vẫn ≥ biên tải lên của tool (`BIEN_TAI_TOI_THIEU_PHUT` 45').
+BIEN_TAI_BO_SUNG_GIO = 1.0
 #: Nhìn xa tối đa (ngày). Chủ kênh 01/10: video làm xong là tải + hẹn lịch luôn, không để nằm
 #: chờ trên máy (nhịp thưa 1 video/2 ngày làm lịch xa hơn 7 ngày) → 30 ngày.
 CUA_SO_TAI_BO_SUNG_NGAY = 30
