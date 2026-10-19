@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.216.5** — 2026-10-19 — `vps-jp1` — fix(tao-kenh): kiem ten tren bang chuyen kenh truoc va sau khi tao, khong bam tao lai (chong trung kenh)
 - **2.216.4** — 2026-10-19 — `vps-jp1` — fix(bia): KHONG doi bia video dang THANG (CTR >= trung vi kenh + du hien thi) o cong chung xep_doi_bia - S06 da thay nham bia TL2-0020 CTR 9.7%, da tra lai; tra lai bia cu (khoi_phuc) van duoc
 - **2.216.3** — 2026-10-19 — `vps-jp1` — feat(ky-nang): K00 Kenh thuong hieu moi (doc vm/logs/tao-kenh/<K>.json)
 - **2.216.2** — 2026-10-19 — `vps-jp1` — test(tao-kenh): sua test email (ghep email gia luc chay)
