@@ -1366,6 +1366,13 @@
       ]
     },
     {
+      "chon": "ytcp-warm-welcome-dialog tp-yt-paper-dialog",
+      "dong": [
+        "#dismiss-button"
+      ],
+      "ghi_chu": "19/10/2026: hộp «Chào mừng bạn đến với YouTube Studio» của kênh MỚI — phần tử bọc không có kích thước nên mục trên không thấy; nhắm hộp hiện thật, bấm «Tiếp tục»"
+    },
+    {
       "chon": "tp-yt-paper-dialog[opened]:not(ytcp-uploads-dialog *)",
       "dong": [
         "#close-button",
