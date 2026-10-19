@@ -291,6 +291,19 @@ def _dien_va_bam_tao(page, ten: str, handle: str) -> bool:
         return False
 
 
+def _co_ten_trong_bang_chuyen(page, ten: str, cho: float = 0.0) -> bool:
+    """Tên kênh có trong bảng chuyển kênh (mọi kênh của tài khoản). `cho` = giây chờ trước khi đọc lại."""
+    deadline = time.time() + cho
+    while True:
+        _cho_tai(page, TRANG_CHUYEN_KENH)
+        time.sleep(3)
+        if ten_co_trong_trang(ten, _chu_trang(page)):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(3)
+
+
 def _uc_cua_ten(page, ten: str) -> str:
     """Mã UC của kênh có tên `ten` trên trang tài khoản (liên kết /channel/UC… gần chữ tên)."""
     try:
@@ -351,8 +364,9 @@ def tao(kenh: str, *, goc: str = GOC, thu: bool = False, bo_khung: bool = False,
         if not that:
             return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "không đọc được email tài khoản — không tạo kênh"}
 
-        if ten_co_trong_trang(ten, _chu_trang(page)):
-            ket = {"ket_qua": "da_co", "ly_do": "kênh tên này đã có trên tài khoản", "ten": ten,
+        # Kiểm TRÊN BẢNG CHUYỂN KÊNH (liệt kê đủ mọi kênh; trang tài khoản chỉ hiện một kênh — gây trùng 19/10).
+        if _co_ten_trong_bang_chuyen(page, ten):
+            ket = {"ket_qua": "da_co", "ly_do": "kênh tên này đã có trên tài khoản (bảng chuyển kênh)", "ten": ten,
                    "uc": _uc_cua_ten(page, ten)}
         elif thu:
             ket = {"ket_qua": "chi_doc", "ly_do": "chưa có kênh tên này — chạy lại không --thu để tạo", "ten": ten, "uc": ""}
@@ -372,12 +386,12 @@ def tao(kenh: str, *, goc: str = GOC, thu: bool = False, bo_khung: bool = False,
             if not _dien_va_bam_tao(page, ten, handle):
                 return {**ket, "ket_qua": "hong", "ly_do": "không gõ/bấm được (handle có thể đã có người dùng)"}
             time.sleep(8)
-            _cho_tai(page, TRANG_TAI_KHOAN)
-            if not ten_co_trong_trang(ten, _chu_trang(page)):
-                return {**ket, "ket_qua": "hong", "ly_do": "đã bấm tạo nhưng chưa thấy kênh tên này trên tài khoản — kiểm tay"}
+            # KHÔNG bấm tạo lần nữa dù chưa thấy: lần trước "chưa thấy" nhưng kênh đã được tạo → trùng.
+            if not _co_ten_trong_bang_chuyen(page, ten, cho=20):
+                return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "đã bấm tạo, chưa thấy trong bảng chuyển kênh — KIỂM TAY trước khi thử lại (tránh trùng)"}
             uc = _uc_cua_ten(page, ten)
             if not uc:
-                return {**ket, "ket_qua": "hong", "ly_do": "kênh đã hiện nhưng chưa lấy được mã UC — kiểm tay"}
+                return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "kênh đã hiện nhưng chưa lấy được mã UC — kiểm tay"}
             _cho_tai(page, "https://www.youtube.com/channel/" + uc)
             if not ten_co_trong_trang(ten, (page.title or "") + " " + _chu_trang(page)):
                 return {**ket, "ket_qua": "hong", "ly_do": "trang kênh không khớp tên dự kiến — kiểm tay"}
