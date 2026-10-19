@@ -498,7 +498,13 @@ def thu_muc_mau(goc: str, kenh: str, mau: Sequence[str] = ()) -> str:
     if d and os.path.isdir(d):
         return os.path.abspath(d)
     nep = os.path.join(goc, ten_thu_muc_thang(kenh))
-    return os.path.abspath(nep) if goc and os.path.isdir(nep) and bia_thu_muc(nep) else ""
+    if goc and os.path.isdir(nep) and bia_thu_muc(nep):
+        return os.path.abspath(nep)
+    # 20/10/2026: kênh MỚI (mở bằng `core/mo_kenh`, chưa có video thắng) chưa có thư mục mẫu → khâu bìa GIỮ cả lượt
+    # (TL4-T7-K3 suýt trễ video đầu). Lấy mẫu của KÊNH GỐC ghi trong `workspace/mo-kenh/trang-thai.json` (`kenh_goc`).
+    kg = str(((_doc_json(os.path.join(goc, "workspace", "mo-kenh", "trang-thai.json")) or {}).get("kenh") or {})
+             .get(kenh, {}).get("kenh_goc") or "") if goc else ""
+    return thu_muc_mau(goc, kg) if kg and kg != kenh else ""
 
 
 def bia_thu_muc(thu_muc: str, toi_da: int = SO_BIA_THANG) -> List[Dict[str, Any]]:
