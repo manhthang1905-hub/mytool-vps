@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.216.3** — 2026-10-19 — `vps-jp1` — feat(ky-nang): K00 Kenh thuong hieu moi (doc vm/logs/tao-kenh/<K>.json)
 - **2.216.2** — 2026-10-19 — `vps-jp1` — test(tao-kenh): sua test email (ghep email gia luc chay)
 - **2.216.1** — 2026-10-19 — `vps-jp1` — feat(tao-kenh): tao kenh thuong hieu moi qua hop thoai tren youtube (vm/tao_kenh_thuong_hieu; xac minh email, chon handle, bao YouTube loi)
 - **2.216.0** — 2026-10-19 — `vps-jp1` — feat(bia): MOT duong lam bia cho ca 8 kenh (bia_lo theo bia thang that, bo duong cu) + san chat luong (dung nhan vat, mau 2/3 chi so, bam_nhu_thang co bia thang an lam thuoc) + kiem vang D19 (canh bao, giu bia chi khi bat) + bia dam (dai m…
