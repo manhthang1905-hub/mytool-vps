@@ -1295,7 +1295,18 @@ class Studio:
         pt = self.tim(css, chu, han, cho_tat)
         if not pt:
             raise LoiMuc("không thấy {0}".format(css if isinstance(css, str) else (list(css) or list(chu))[0]))
-        return self.st.bam(pt, hau_dieu_kien=hau_dieu_kien, cho_tat=cho_tat)
+        try:
+            return self.st.bam(pt, hau_dieu_kien=hau_dieu_kien, cho_tat=cho_tat)
+        except Exception as loi:  # noqa: BLE001
+            # 19/10: hộp «Chào mừng đến YouTube Studio» của kênh MỚI hiện TRỄ (sau lúc mở trang) → nút bị nền mờ/hình
+            # minh hoạ che. Dẹp hộp lạ đã biết (`hop_la`) rồi bấm lại MỘT lần; không dẹp được gì thì giữ lỗi cũ.
+            if "bị che" not in str(loi) or not self._don_hop_chao():
+                raise
+            self.ghi("   đã dẹp hộp lạ đang che — bấm lại")
+            pt = self.tim(css, chu, han, cho_tat)
+            if not pt:
+                raise LoiMuc("không thấy {0}".format(css if isinstance(css, str) else (list(css) or list(chu))[0]))
+            return self.st.bam(pt, hau_dieu_kien=hau_dieu_kien, cho_tat=cho_tat)
 
     def co(self, css, chu=(), han: float = 0.0, cho_tat: bool = False) -> bool:
         return self.tim(css, chu, han, cho_tat) is not None
@@ -1361,18 +1372,21 @@ class Studio:
             self.ngu(1.0)
         raise LoiMuc("trang {0} không dựng xong ({1})".format(url[-40:], cho_css))
 
-    def _don_hop_chao(self) -> None:
+    def _don_hop_chao(self) -> int:
         """19/10: kênh MỚI mở Studio lần đầu hiện «Chào mừng bạn đến với YouTube Studio» (ytcp-warm-welcome-dialog) che
-        mọi nút — bấm «Tiếp tục» theo `hop_la` như máy đăng. Trang vừa tải xong nên hộp nào đang mở cũng không phải của
-        luồng thiết lập. Hộp hiện trễ vài giây → dò thêm một lần."""
+        mọi nút — bấm «Tiếp tục» theo `hop_la` như máy đăng. Hộp hiện trễ vài giây → dò thêm một lần. Trả số hộp đã dẹp."""
+        so = 0
         for lan in range(2):
             try:
-                if self.st.don_hop_la():
-                    self.ngu(1.5)
+                n = self.st.don_hop_la()
             except Exception:  # noqa: BLE001 — không dẹp được thì luồng cũ xử lý như trước
-                return
+                return so
+            if n:
+                so += n
+                self.ngu(1.5)
             if lan == 0:
                 self.ngu(2.0)
+        return so
 
     def chup(self, nhan: str) -> None:
         try:
