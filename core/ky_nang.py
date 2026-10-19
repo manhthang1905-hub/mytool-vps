@@ -1023,10 +1023,22 @@ def d_kiem_vang(goc, kenh):
     return bia_lo.can_kiem_vang(goc, kenh)
 
 
+def k_tao_kenh_thuong_hieu(goc, kenh):
+    """Kênh thương hiệu mới đã tạo (vm/logs/tao-kenh/<K>.json, ghi bởi vm/tao_kenh_thuong_hieu.py)."""
+    d = _json(_vm(goc, "logs", "tao-kenh", kenh + ".json"))
+    if not d:
+        return THIEU, "chưa tạo kênh thương hiệu mới"
+    if d.get("ket_qua") == "ok" or d.get("ket_qua") == "da_co":
+        return DAT, "kênh thương hiệu {0} ({1})".format(d.get("uc") or "?", str(d.get("luc") or "")[:16])
+    return LOI, "lần tạo gần nhất: {0} — {1}".format(d.get("ket_qua"), d.get("ly_do") or "")
+
+
 # ── DANH MỤC ───────────────────────────────────────────────────────────────────
 
 DANH_MUC: List[KyNang] = [
     # KHỞI TẠO — một lần mỗi kênh, theo thứ tự chạy
+    KyNang("K00", "Kênh thương hiệu mới", "khoi_tao", "Tạo kênh thương hiệu mới trên youtube.com (thay kênh trả kho hoặc mở rộng) qua hộp thoại Tạo kênh; kiểm tên trên trang kênh.",
+           "python vm/tao_kenh_thuong_hieu.py --kenh K", k_tao_kenh_thuong_hieu, ["K01", "K02"]),
     KyNang("K01", "Chrome kênh đã đăng nhập", "khoi_tao", "Chrome Portable riêng của kênh đã đăng nhập Google/YouTube; đọc lại bằng kiểm DOM (UC kênh).",
            "nguoi: đăng nhập Chrome · rồi python vm/may_dang_dom.py --kenh K --kiem-dom", k_chrome, ["nguoi:dang_nhap_chrome"]),
     KyNang("K02", "Tài khoản kênh (kho bí mật)", "khoi_tao", "Email/mật khẩu/2FA cất mã hoá DPAPI ở bi-mat/ (không lên git).",
