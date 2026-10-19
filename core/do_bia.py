@@ -1813,6 +1813,38 @@ def lam_lai_goi(goc: str, kenh: str, ma: str, *, thu: bool = False, ra: str = ""
     return ra_tt
 
 
+#: Video "đang thắng" (không ai được đổi bìa): CTR ≥ trung vị kênh VÀ hiển thị ≥ ngần này, hoặc CTR ≥ 1,3 × trung vị.
+THANG_HIEN_THI_TOI_THIEU = 3000
+
+
+def video_dang_thang(goc: str, kenh: str, ma: str) -> str:
+    """'' nếu video KHÔNG đang thắng (được đổi bìa); khác → lý do. Đọc `chi-so/bang-tom-tat.csv` của kênh; trung vị
+    CTR tính trên video ≥ 1.000 hiển thị. Không đọc được số → '' (không chặn việc sửa video trượt)."""
+    import csv  # noqa: PLC0415
+    from . import ho_so_video  # noqa: PLC0415
+    try:
+        vid = str((ho_so_video.doc_ho_so(goc, kenh, ma) or {}).get("video_id") or "")
+        with open(os.path.join(goc, "CHANNEL", kenh, "chi-so", "bang-tom-tat.csv"), encoding="utf-8-sig") as f:
+            hang = list(csv.DictReader(f))
+    except Exception:  # noqa: BLE001
+        return ""
+
+    def so(x: Any) -> float:
+        try:
+            return float(str(x or "0").replace("%", "").replace(",", "").strip() or 0)
+        except ValueError:
+            return 0.0
+    ctr = sorted(so(h.get("Tỷ lệ bấm")) for h in hang if so(h.get("Lượt hiển thị")) >= 1000)
+    me = next((h for h in hang if vid and h.get("Mã video") == vid), None)
+    if not me or not ctr:
+        return ""
+    tv = ctr[len(ctr) // 2]
+    c, hien = so(me.get("Tỷ lệ bấm")), so(me.get("Lượt hiển thị"))
+    if (c >= tv and hien >= THANG_HIEN_THI_TOI_THIEU) or (c >= 1.3 * tv and hien >= 1000):
+        return "CTR {0:.2f}% ≥ trung vị kênh {1:.2f}% với {2:.0f} hiển thị".format(c, tv, hien)
+    return ""
+
+
 def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi: Any = print) -> Dict[str, Any]:
     """Xếp MỘT việc đổi bìa cho máy DOM (`vm/logs/hang-sua.json`, cùng khoá với giám đốc kênh) — máy DOM
     làm ở lượt `python vm/may_dang_dom.py --kenh <kênh> --sua-video`. Chỉ nhận bìa ĐẠT `cham_tep`. Ghi
@@ -1824,6 +1856,16 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
     anh = os.path.abspath(anh)
     if not os.path.isfile(anh):
         raise RuntimeError("không có tệp bìa " + anh)
+    # 19/10/2026 — KHÔNG ĐỤNG VIDEO ĐANG THẮNG: S06 (vẽ lại bìa lỗi chữ) thay nhầm bìa TL2-0020 (CTR 9,7%, cao nhất
+    # kênh) vì vài chữ nhỏ trên đạo cụ. Mọi lối đổi bìa đi qua đây → chặn ở đây. Trả lại bìa cũ ("khoi_phuc" trong
+    # `ly_do` hoặc dấu `cach=khoi_phuc_bia_thang`) thì được.
+    if "khoi_phuc" not in (ly_do or "").lower().replace(" ", "_") and \
+            (cong_chu.doc_dau(anh) or {}).get("cach") != "khoi_phuc_bia_thang":
+        thang = video_dang_thang(goc, kenh, ma)
+        if thang:
+            cong_chu.ghi_nao(goc, "loi", kenh=kenh, ma_goi=ma, noi_dung="không đổi bìa video đang thắng: " + thang,
+                             khoa="xep-doi-bia-thang:{0}".format(ma))
+            raise RuntimeError("video đang THẮNG — không đổi bìa: " + thang)
     # 16/10/2026 — CỔNG CHỮ (chủ: "bìa sai chữ là tối kỵ"): chỉ tệp có DẤU cổng chữ đúng sha1 mới được lên YouTube.
     ly_chu = cong_chu.kiem_dau(anh)
     if ly_chu:
