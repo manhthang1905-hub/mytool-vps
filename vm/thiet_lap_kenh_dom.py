@@ -70,6 +70,12 @@ CUA_SO_DOI_TEN_NGAY = 14                  # YouTube: 2 lần đổi tên / handl
 TOI_DA_DOI_TRONG_CUA_SO = 2
 TOI_DA_BIEN_THE_HANDLE = 3
 NGAN_SACH_PHIEN_PHUT = 25
+# 19/10: logo/banner — trang công khai có khi >90s mới đổi ảnh. Chờ giãn nhịp trong phiên; quá thì để lượt SAU kiểm
+# (không đặt lại cùng tệp). Đặt cùng tệp tối đa TOI_DA_DAT_ANH lần tổng (chỉ khi Studio mất ảnh / công khai quá hạn).
+CHO_CONG_KHAI_GIAY = 300.0
+NHIP_CHO_CONG_KHAI = (10.0, 15.0, 20.0, 30.0, 45.0, 60.0)
+HAN_CHO_CONG_KHAI_GIO = 24.0
+TOI_DA_DAT_ANH = 2
 KHUNG_CAM = nuoi.KHUNG_CAM
 CHU_KY_LICH_AGENT_GIAY = 10 * 60
 
@@ -253,7 +259,7 @@ def ngon_ngu_dich_kenh(kenh: str, goc: str = GOC_TOOL) -> Tuple[str, str]:
 def so_moi(kenh: str) -> dict:
     return {"kenh": kenh, "trang_thai": "chua_chay", "ly_do": "", "uc": "", "handle_that": "",
             "muc": {m: {"tt": "chua"} for m in MUC}, "ngay_doi": {"ten": [], "handle": []},
-            "tu_choi": {}, "hash_anh": {}, "truoc": {}, "phien": [], "nghi_den_luc": 0.0}
+            "tu_choi": {}, "hash_anh": {}, "anh_dat": {}, "truoc": {}, "phien": [], "nghi_den_luc": 0.0}
 
 
 def chuan_so(so: dict, kenh: str) -> dict:
@@ -399,12 +405,13 @@ def doc_anh_cong_khai(uc: Any, mo_url=None) -> Dict[str, str]:
     return ra
 
 
-def bang_chung_anh_luu(truoc: Dict[str, str], muc: List[str], doc=None, cho_giay: float = 90.0, ngu=time.sleep) -> Dict[str, Tuple[bool, str]]:
+def bang_chung_anh_luu(truoc: Dict[str, str], muc: List[str], doc=None, cho_giay: float = CHO_CONG_KHAI_GIAY, ngu=time.sleep,
+                       nhip=NHIP_CHO_CONG_KHAI) -> Dict[str, Tuple[bool, str]]:
     """Ảnh logo/banner đã LƯU thật chưa? = URL ảnh trên trang CÔNG KHAI KHÁC lần đọc TRƯỚC khi Xuất bản (không tin khung soạn thảo).
-    Chờ tối đa `cho_giay` (CDN chậm). Trả {mục: (đạt, lý do)}."""
+    Chờ tối đa `cho_giay` (CDN chậm), nhịp giãn dần theo `nhip`. Trả {mục: (đạt, lý do)}."""
     doc = doc or (lambda: {})
     ra: Dict[str, Tuple[bool, str]] = {}
-    het = time.monotonic() + cho_giay
+    da_cho, i = 0.0, 0
     while True:
         sau = doc() or {}
         for m in muc:
@@ -414,13 +421,58 @@ def bang_chung_anh_luu(truoc: Dict[str, str], muc: List[str], doc=None, cho_giay
                 ra[m] = (False, "không có bản đọc trang công khai TRƯỚC khi Xuất bản để so")
             elif sau.get(m) and sau[m] != truoc[m]:
                 ra[m] = (True, "trang công khai đã đổi ảnh")
-        if len(ra) == len(muc) or time.monotonic() >= het:
+        if len(ra) == len(muc) or da_cho >= cho_giay:
             break
-        ngu(10.0)
+        d = min(nhip[min(i, len(nhip) - 1)] if nhip else 10.0, cho_giay - da_cho)
+        ngu(d)
+        da_cho, i = da_cho + d, i + 1
     for m in muc:
         if m not in ra:
             ra[m] = (False, "trang công khai vẫn ảnh CŨ sau {0:.0f}s (Xuất bản chưa lưu ảnh)".format(cho_giay))
     return ra
+
+
+def ghi_anh_dat(so: dict, muc: str, h: str, luc: float, truoc_ck: Optional[Dict[str, str]]) -> None:
+    """Lúc ĐẶT ảnh (Xuất bản không báo lỗi): ghi sha tệp vừa tải + ảnh công khai TRƯỚC khi đặt (None = không đọc được).
+    Đặt lại CÙNG tệp: giữ mốc công khai của lần đầu, tăng `lan`."""
+    cu = so.setdefault("anh_dat", {}).get(muc) or {}
+    cung = bool(h) and cu.get("hash") == h
+    truoc = cu.get("truoc") if cung else (truoc_ck.get(muc, "") if truoc_ck else None)
+    so["anh_dat"][muc] = {"hash": h, "luc": luc, "truoc": truoc, "lan": (int(cu.get("lan", 0)) + 1) if cung else 1}
+
+
+def xet_anh_da_dat(so: dict, muc: str, h: Any, studio_co: Any, cong_khai: Optional[Dict[str, str]], luc: float) -> Tuple[str, str]:
+    """Logo/banner ĐÃ đặt đúng tệp `h` ở lượt trước nhưng chưa xác nhận → ("dat"|"cho"|"dat_lai"|"hong", lý do); ("", "") = sổ không
+    có lần đặt tệp này. Đạt = Studio có ảnh + trang công khai có ảnh (khác ảnh trước khi đặt, nếu biết) + lần đặt cuối đúng tệp (sha).
+    KHÔNG đặt lại cùng tệp chỉ vì công khai chậm: chờ tới HAN_CHO_CONG_KHAI_GIO; đặt cùng tệp tối đa TOI_DA_DAT_ANH lần tổng."""
+    rec = (so.get("anh_dat") or {}).get(muc) or {}
+    if not h or rec.get("hash") != h:
+        return "", ""
+    lan = int(rec.get("lan", 1) or 1)
+    het_luot = lan >= TOI_DA_DAT_ANH
+    if not studio_co:
+        if het_luot:
+            return "hong", "đã đặt tệp này {0} lần mà Studio vẫn không có ảnh — cần người xem".format(lan)
+        return "dat_lai", "Studio không có ảnh dù đã đặt tệp này — đặt lại (lần {0}/{1})".format(lan + 1, TOI_DA_DAT_ANH)
+    if cong_khai is None:
+        return "cho", "chưa đọc được trang công khai — kiểm lại lượt sau (không đặt lại tệp)"
+    pub, truoc = cong_khai.get(muc) or "", rec.get("truoc")
+    if pub and (not truoc or pub != truoc):
+        return "dat", "Studio có ảnh + trang công khai có ảnh + lần đặt cuối đúng tệp này"
+    tuoi = (luc - float(rec.get("luc") or 0)) / 3600.0
+    if tuoi < HAN_CHO_CONG_KHAI_GIO:
+        return "cho", "trang công khai chưa cập nhật ({0:.1f} giờ sau khi đặt) — chờ, không đặt lại tệp".format(max(tuoi, 0.0))
+    if het_luot:
+        return "hong", "đã đặt tệp này {0} lần, quá {1:.0f} giờ trang công khai vẫn không đổi ảnh — cần người xem".format(
+            lan, HAN_CHO_CONG_KHAI_GIO)
+    return "dat_lai", "quá {0:.0f} giờ trang công khai vẫn chưa đổi ảnh — đặt lại 1 lần".format(HAN_CHO_CONG_KHAI_GIO)
+
+
+def can_doc_cong_khai(so: dict, hash_anh: Optional[Dict[str, str]]) -> bool:
+    """Có logo/banner đang chờ xác nhận (sổ đặt đúng tệp hiện tại, mục chưa đạt) → đọc trang công khai trước khi so."""
+    hh = hash_anh or {}
+    return any(hh.get(m) and ((so.get("anh_dat") or {}).get(m) or {}).get("hash") == hh.get(m)
+               and ((so.get("muc") or {}).get(m) or {}).get("tt") != "dat" for m in ("logo", "banner"))
 
 
 def handle_cong_khai(uc: Any) -> str:
@@ -499,10 +551,12 @@ def quyet_dinh(so: dict, luc: float, du_kien_phut: float = 0.0, bo_qua_khung: bo
     return True, ""
 
 
-def khac_biet(hs: dict, ht: dict, so: dict, hash_anh: Optional[Dict[str, str]] = None) -> Dict[str, dict]:
+def khac_biet(hs: dict, ht: dict, so: dict, hash_anh: Optional[Dict[str, str]] = None, luc: Optional[float] = None) -> Dict[str, dict]:
     """So hồ sơ `hs` với hiện trạng Studio `ht`. {mục: {"khac": True/False/None, "hien", "mong", "ghi"}}.
     `khac=None` = chưa đọc được. Chỉ mục KHÁC mới bị sửa. Ảnh: Studio không cho so điểm ảnh → coi là ĐÚNG khi sổ ghi
-    đã đặt đúng tệp này (hash) VÀ Studio đang có ảnh."""
+    đã đặt đúng tệp này (hash) VÀ Studio đang có ảnh. Logo/banner đặt ở lượt trước chưa xác nhận: `xet_anh_da_dat` với
+    `ht["cong_khai"]` → thêm "xac_nhan" (đạt) hoặc "giu" = (tt, lý do): KHÔNG đặt lại, chỉ ghi trạng thái."""
+    luc = time.time() if luc is None else luc
     tl = _tl()
     ra: Dict[str, dict] = {}
     muc_so = so.get("muc") or {}
@@ -535,6 +589,15 @@ def khac_biet(hs: dict, ht: dict, so: dict, hash_anh: Optional[Dict[str, str]] =
             continue
         khop_so = (muc_so.get(m) or {}).get("tt") == "dat" and bool(hash_anh) and \
             (so.get("hash_anh") or {}).get(m) == (hash_anh or {}).get(m)
+        if not (co and khop_so) and m in ("logo", "banner"):
+            x, ly = xet_anh_da_dat(so, m, (hash_anh or {}).get(m), co, ht.get("cong_khai"), luc)
+            if x:
+                mot(m, x == "dat_lai", "có ảnh" if co else "chưa có ảnh", hs.get(m), ly)
+                if x == "dat":
+                    ra[m]["xac_nhan"] = True
+                elif x in ("cho", "hong"):
+                    ra[m]["giu"] = (x, ly)
+                continue
         mot(m, not (co and khop_so), "có ảnh" if co else "chưa có ảnh", hs.get(m),
             "" if khop_so else "chưa có sổ đặt đúng tệp này")
     if "quoc_gia" in ht:
@@ -725,6 +788,9 @@ def kenh_den_luot(luc: float, dang_chay=(), goc: str = GOC_TOOL, ram=None, nang_
     for k in cac_kenh_bat(goc):
         if k in dang:
             ly[k] = "đang thiết lập"
+            continue
+        if (nuoi.doc_kenh_yaml(k, goc) or {}).get("tra_kho"):       # 19/10: trả kho thắng công tắc thiet_lap_kenh
+            ly[k] = "kênh đã trả kho — không thiết lập"
             continue
         so = doc_so(k)
         ok, r = quyet_dinh(so, luc, NGAN_SACH_PHIEN_PHUT)
@@ -1971,6 +2037,9 @@ class Studio:
             luu_so(so)
             for muc, h in anh_moi.items():
                 so["hash_anh"][muc] = h
+                if muc in ("logo", "banner"):                      # sổ lần đặt: công khai chậm thì lượt sau xác nhận
+                    ghi_anh_dat(so, muc, h, time.time(), so["truoc"].get("cong_khai") or None)
+            luu_so(so)
             self.ngu(2.0)
             return kq
         finally:
@@ -2874,7 +2943,9 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
             ghi("   không đọc được nhóm {0}: {1}".format(k, v))
         thu_muc_hs = _tl().thu_muc_thiet_lap(kenh)
         hh = _hash_anh(hs, thu_muc_hs)
-        kh = khac_biet(hs, ht, so, hh)
+        if can_doc_cong_khai(so, hh):
+            ht["cong_khai"] = doc_anh_cong_khai(so.get("uc")) or None
+        kh = khac_biet(hs, ht, so, hh, luc0)
         ghi("so với hồ sơ:")
         in_khac_biet(kh, ghi)
         if thu:
@@ -2887,9 +2958,7 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
         so["truoc"].setdefault("mo_ta", (ht.get("mo_ta") or "")[:300])
         luu_so(so)
         # đúng rồi thì ghi `dat` luôn (không động vào)
-        for m in MUC:
-            if kh[m]["khac"] is False and (so["muc"][m].get("tt") != "dat"):
-                dat_muc(so, m, kh[m]["mong"], luc0, "đã đúng sẵn — không sửa")
+        ghi_ket_qua_so_sanh(so, kh, hh, luc0, ghi)
         _chay_nhom(S, hs, kh, so, ht, luc0, ghi, agent, kenh, khong_luu)
         phien["ket_qua"] = "xong lượt"
     except CanNguoi as c:
@@ -2947,6 +3016,20 @@ def chay_phien(kenh: str, ghi, thu: bool = False, mo_lai: bool = False, khong_lu
             return 0
         return MA_HOAN if so.get("trang_thai") in ("hong", "dang_lam") else 0
     return ma_thoat
+
+
+def ghi_ket_qua_so_sanh(so: dict, kh: Dict[str, dict], hh: Dict[str, str], luc: float, ghi) -> None:
+    """Sau khi so: mục đã đúng → `dat` (ảnh xác nhận qua công khai → ghi luôn hash); ảnh đang chờ công khai → `cho`/`hong`
+    (KHÔNG đặt lại cùng tệp)."""
+    for m in MUC:
+        x = kh.get(m) or {}
+        if x.get("giu"):
+            hong_muc(so, m, x["giu"][1], tt=x["giu"][0])
+            ghi("   {0}: {1} — {2}".format(TEN_MUC[m], x["giu"][0].upper(), x["giu"][1][:140]))
+        elif x.get("khac") is False and (so["muc"][m].get("tt") != "dat"):
+            dat_muc(so, m, x.get("mong"), luc, x.get("ghi") if x.get("xac_nhan") else "đã đúng sẵn — không sửa")
+            if x.get("xac_nhan"):
+                so["hash_anh"][m] = hh.get(m)
 
 
 def _chay_nhom(S: Studio, hs, kh, so, ht, luc0, ghi, agent, kenh, khong_luu) -> None:
@@ -3043,6 +3126,12 @@ def _doc_lai_va_ghi(S: Studio, ten_nhom: str, muc_nhom, hs, kh, kq, so, luc0, gh
         if kh[m]["khac"] is False:
             continue
         if m in chua_luu:
+            if (ht2.get("anh") or {}).get(m) and ((so.get("anh_dat") or {}).get(m) or {}).get("hash") == hh.get(m):
+                # Studio (đã tải lại) có ảnh + sổ ghi vừa đặt đúng tệp này: công khai chậm → CHỜ lượt sau, không đặt lại
+                ly = "trang công khai chưa đổi ảnh ({0}) — lượt sau kiểm lại, không đặt lại tệp".format(chua_luu[m][:80])
+                hong_muc(so, m, ly, tt="cho")
+                ghi("   {0}: CHỜ — {1}".format(TEN_MUC[m], ly[:140]))
+                continue
             hong_muc(so, m, "Xuất bản KHÔNG lưu được ảnh: " + chua_luu[m])
             ghi("   {0}: HỎNG — {1}".format(TEN_MUC[m], chua_luu[m][:140]))
             continue

@@ -266,7 +266,7 @@ def _cac_nhom(goc: str) -> Dict[str, List[str]]:
     for ma in liet_ke_kenh(goc):
         cai = _cai_kenh(goc, ma)
         nhom = str(cai.get("nhom") or "").strip()
-        if not nhom or _bat(cai.get("keo_cheo_tat")):
+        if not nhom or _bat(cai.get("keo_cheo_tat")) or str(cai.get("tra_kho") or "").strip():   # 19/10: trả kho
             continue
         ra.setdefault(nhom, []).append(ma)
     return ra

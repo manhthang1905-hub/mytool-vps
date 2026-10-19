@@ -2797,6 +2797,35 @@ QUET_NGAY_THU_LAI_PHUT = 45
 CHO_QUET_NGAY_GIAY = 25 * 60
 
 
+# ── KÊNH TRẢ KHO (19/10/2026): một cổng chung cho MỌI việc lịch tự mở Chrome kênh ──────────────────────────
+#: Kênh trả kho (`tra_kho:` trong CHANNEL/<k>/kenh.yaml, do `core/tra_kho.py` ghi) vẫn nằm trong `cac_kenh` (cổng
+#: DevTools theo vị trí) nhưng KHÔNG được lịch nào mở Chrome: quét ngày (~30' giữ Chrome), phiên, tải bổ sung, bù MHKT,
+#: sửa video, ghim sớm, giữ Chrome nếp cũ. `chay()` lọc danh sách MỖI nhịp qua `kenh_lich` → `lay-lai` có hiệu lực ngay.
+#: Vị trí GỐC của kênh giữ cho giờ quét ngày so le (`gio_quet_ngay_kenh`): bỏ kênh trả kho không dời giờ kênh khác.
+_VI_TRI_KENH: dict = {}
+
+
+def kenh_tra_kho(kenh: str, goc_tool: str = None) -> str:
+    """Ngày trả kho của kênh ('' = kênh đang chạy / không đọc được)."""
+    goc_tool = goc_tool or os.path.dirname(GOC)
+    try:
+        with open(os.path.join(goc_tool, "CHANNEL", kenh, "kenh.yaml"), "r", encoding="utf-8") as tep:
+            m = re.search(r"(?m)^tra_kho:[ \t]*([^\n#]*)", tep.read())
+    except OSError:
+        return ""
+    return m.group(1).strip().strip('"').strip("'").strip() if m else ""
+
+
+def kenh_lich(cac_kenh: list, goc_tool: str = None) -> list:
+    """Kênh được lịch tự động mở Chrome = `cac_kenh` bỏ kênh trả kho (giữ thứ tự)."""
+    return [k for k in cac_kenh if not kenh_tra_kho(k, goc_tool)]
+
+
+def vi_tri_kenh(kenh: str, mac_dinh: int) -> int:
+    """Vị trí kênh trong `cac_kenh` GỐC (đặt ở `chay()`); không có thì `mac_dinh`."""
+    return _VI_TRI_KENH.get(kenh, mac_dinh)
+
+
 def gio_quet_ngay_kenh(ch: dict, vi_tri: int) -> str:
     """"HH:MM" QUÉT NGÀY của kênh thứ `vi_tri` (0 = đầu) — hàm thuần."""
     goc = _phan_tich_gio(str(ch.get("quet_ngay_gio") or QUET_NGAY_GIO_MAC_DINH)) or \
@@ -2898,7 +2927,7 @@ def chay_quet_ngay(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, bay_gio: floa
     ung_vien = []
     for vi_tri, kenh in enumerate(cac_kenh):
         ch = hieu_luc.get(kenh) or {}
-        gio = gio_quet_ngay_kenh(ch, vi_tri)
+        gio = gio_quet_ngay_kenh(ch, vi_tri_kenh(kenh, vi_tri))
         khoa = "quet_ngay@{0}@{1}".format(kenh, hom_nay)
         muc = tt.get(khoa) if isinstance(tt.get(khoa), dict) else {}
         if quet_ngay_den_han(muc, gio, luc):
@@ -3571,7 +3600,7 @@ def han_bu_mhkt(cau_hinh: dict, hieu_luc: dict, cac_kenh: list, kenh: str, luc: 
         mq = mq if isinstance(mq, dict) else {}
         if _quet_ngay_ket_thuc(mq):
             continue
-        moc_q = _moc_gio_hom_nay(gio_quet_ngay_kenh(chk, vt), luc)
+        moc_q = _moc_gio_hom_nay(gio_quet_ngay_kenh(chk, vi_tri_kenh(k, vt)), luc)
         if moc_q is None:
             continue
         if mq.get("luc"):
@@ -3945,6 +3974,8 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
         cau_hinh["ten_may"] = os.environ.get("COMPUTERNAME", "vm")
     cac_kenh = danh_sach_kenh(cau_hinh) or [cau_hinh.get("kenh") or "kenh"]
     kenh_chinh = cac_kenh[0]
+    _VI_TRI_KENH.clear()
+    _VI_TRI_KENH.update({k: i for i, k in enumerate(cac_kenh)})
     _don_kenh_cu_khoi_cai_dat_tool(cac_kenh)
     if len(cac_kenh) > 1:
         ghi("agent {0} kênh ({1}), máy {2}".format(
@@ -4000,8 +4031,15 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                     "{0} {1}".format(k, gio_quet_ngay_kenh(hieu_luc[k], i))
                     for i, k in enumerate(cac_kenh))))
     hong_lien_tiep = 0
+    bo_lich = None
     while True:
         co_loi = False
+        # Kênh trả kho: không lịch nào mở Chrome (việc TAY từ trạm vẫn nhận). Đọc lại mỗi nhịp.
+        cac_kenh_lich = kenh_lich(cac_kenh)
+        if bo_lich != [k for k in cac_kenh if k not in cac_kenh_lich]:
+            bo_lich = [k for k in cac_kenh if k not in cac_kenh_lich]
+            if bo_lich:
+                ghi("kênh TRẢ KHO — lịch tự động bỏ qua (không quét/phiên/ghim/sửa): {0}".format(", ".join(bo_lich)))
         nhip_tim("bước: hỏi việc từ trạm", ep=True)
         for kenh in cac_kenh:
             try:
@@ -4062,7 +4100,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             vua_chay_phien = False
             try:
                 nhip_tim("bước: hàng đợi phiên", ep=True)
-                vua_chay_phien = chay_hang_doi_phien(cau_hinh, hieu_luc, cac_kenh)
+                vua_chay_phien = chay_hang_doi_phien(cau_hinh, hieu_luc, cac_kenh_lich)
             except Exception as loi:  # noqa: BLE001 — một phiên hỏng, agent sống, mai lại tới lượt
                 ghi("hàng đợi phiên hỏng: {0}".format(loi))
             # Tải lên BỔ SUNG — 04/10/2026: đứng TRƯỚC quét ngày (luật ưu tiên "đăng đúng giờ > quét Studio");
@@ -4071,7 +4109,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             if not vua_chay_phien and not mot_vong:
                 try:
                     nhip_tim("bước: tải bổ sung", ep=True)
-                    vua_tai = chay_tai_bo_sung(cau_hinh, hieu_luc, cac_kenh)
+                    vua_tai = chay_tai_bo_sung(cau_hinh, hieu_luc, cac_kenh_lich)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                     ghi("tải bổ sung hỏng: {0}".format(loi))
                 vua_chay_phien = vua_tai
@@ -4080,21 +4118,21 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             if not vua_chay_phien and not mot_vong:
                 try:
                     nhip_tim("bước: quét ngày", ep=True)
-                    vua_chay_phien = chay_quet_ngay(cau_hinh, hieu_luc, cac_kenh)
+                    vua_chay_phien = chay_quet_ngay(cau_hinh, hieu_luc, cac_kenh_lich)
                 except Exception as loi:  # noqa: BLE001 — bước hỏng, agent sống, lịch tự thử lại
                     ghi("QUÉT NGÀY hỏng: {0}".format(loi))
             # BÙ MHKT video cũ (01/10/2026) — giờ vắng, sau QUÉT NGÀY của kênh.
             if not vua_chay_phien and not mot_vong:
                 try:
                     nhip_tim("bước: bù MHKT", ep=True)
-                    vua_chay_phien = chay_bu_mhkt(cau_hinh, hieu_luc, cac_kenh)
+                    vua_chay_phien = chay_bu_mhkt(cau_hinh, hieu_luc, cac_kenh_lich)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("bù MHKT hỏng: {0}".format(loi))
             # SỬA VIDEO CŨ (01/10/2026, cứu CTR thấp) — cùng khe giờ vắng của bù MHKT.
             if not vua_chay_phien and not mot_vong:
                 try:
                     nhip_tim("bước: sửa video", ep=True)
-                    vua_chay_phien = chay_sua_video(cau_hinh, hieu_luc, cac_kenh)
+                    vua_chay_phien = chay_sua_video(cau_hinh, hieu_luc, cac_kenh_lich)
                 except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống, đêm sau thử lại
                     ghi("sửa video hỏng: {0}".format(loi))
             # (Tải lên bổ sung đã chạy ở đầu nhịp — xem trên.)
@@ -4103,7 +4141,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                 if not vua_tai:
                     try:
                         nhip_tim("bước: ghim sớm", ep=True)
-                        chay_ghim_som(cau_hinh, hieu_luc, cac_kenh)
+                        chay_ghim_som(cau_hinh, hieu_luc, cac_kenh_lich)
                     except Exception as loi:  # noqa: BLE001 — bước phụ hỏng, agent sống
                         ghi("ghim sớm hỏng: {0}".format(loi))
                 try:
@@ -4127,7 +4165,7 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
             # có trạm). Dùng cấu hình HIỆU LỰC — trạm tắt thì giữ thiết lập
             # tool đẩy xuống lần cuối. Mỗi kênh làm riêng — một kênh hỏng
             # không kéo kênh khác. (Nếp CŨ — máy một-kênh hoặc chưa bật phiên.)
-            for kenh in cac_kenh:
+            for kenh in cac_kenh_lich:
                 try:
                     viec_theo_lich(hieu_luc[kenh], la_kenh_dau=(kenh == kenh_chinh))
                 except Exception as loi:  # noqa: BLE001

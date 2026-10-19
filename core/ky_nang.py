@@ -1036,7 +1036,7 @@ def k_tao_kenh_thuong_hieu(goc, kenh):
 
 DANH_MUC: List[KyNang] = [
     # KHỞI TẠO — một lần mỗi kênh, theo thứ tự chạy
-    KyNang("K00", "Kênh thương hiệu mới", "khoi_tao", "Tạo kênh thương hiệu mới trên youtube.com (thay kênh trả kho hoặc mở rộng) qua hộp thoại Tạo kênh; kiểm tên trên trang kênh.",
+    KyNang("K00", "Kênh thương hiệu mới", "khoi_tao", "Tạo kênh thương hiệu mới trên youtube.com (thay kênh trả kho hoặc mở rộng) qua hộp thoại Tạo kênh (đã có kênh trùng tên thì dùng lại, không tạo trùng); chọn kênh mới trong Studio + ghim UC.",
            "python vm/tao_kenh_thuong_hieu.py --kenh K", k_tao_kenh_thuong_hieu, ["K01", "K02"]),
     KyNang("K01", "Chrome kênh đã đăng nhập", "khoi_tao", "Chrome Portable riêng của kênh đã đăng nhập Google/YouTube; đọc lại bằng kiểm DOM (UC kênh).",
            "nguoi: đăng nhập Chrome · rồi python vm/may_dang_dom.py --kenh K --kiem-dom", k_chrome, ["nguoi:dang_nhap_chrome"]),

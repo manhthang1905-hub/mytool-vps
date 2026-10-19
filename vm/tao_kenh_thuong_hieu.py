@@ -6,13 +6,18 @@ Luồng (trong Chrome Portable của chính kênh, hồ sơ `Data\\profile`, đ�
   1. Chặn trước: trong khung cấm (02:00–07:00, 60 phút trước 05:00/20:00) → hoãn; Chrome kênh đang mở → hoãn;
      chưa có tên dự kiến (`workspace/mo-kenh/trang-thai.json: ten_goi_y`) → không làm.
   2. Xác minh TÀI KHOẢN: đọc email trên youtube.com/account; khác email trong kho → DỪNG (`sai_danh_tinh`).
-  3. Đã có kênh tên đó (channel_switcher) → ghi `da_co`, không tạo trùng.
-  4. Tạo: youtube.com/create_channel → điền tên → xác nhận → đọc lại URL `/channel/UC…` và tên trên trang.
-  5. Chọn kênh mới: mở trang kênh mới làm trang cuối rồi đóng Chrome (kênh mới là kênh đang chọn).
-  6. Ghi `vm/logs/tao-kenh/<K>.json` (mã UC, tên, thời điểm). Không ghi kenh-uc.json (việc của tl-17).
+  3. Tên: NFKC + bỏ/thay ký tự YouTube từ chối (19/10: «：» toàn khổ làm hỏng) → `ten` cuối ghi vào sổ.
+  4. ĐỌC DANH SÁCH kênh của tài khoản (channel_switcher: tên + clientCacheKey + signinUrl). Đã có kênh trùng tên (so NFKC)
+     hoặc UC trong sổ → DÙNG LẠI (`da_co`), KHÔNG tạo thêm. Không đọc được danh sách → không tạo.
+     Sổ ghi đã bấm Tạo mà chưa thấy kênh → KHÔNG bấm lại (19/10 thử lại đã đẻ kênh TRÙNG), báo người.
+  5. Tạo: hộp thoại Tạo kênh → gõ tên/handle → bấm (ghi dấu `da_bam_tao` TRƯỚC khi bấm) → đọc lại danh sách: kênh MỚI xuất hiện.
+  6. Chọn kênh mới: mở `signinUrl` (pageid) của mục có clientCacheKey == UC đích; lần tải Studio KẾ TIẾP mới đổi
+     → tải lại Studio đọc UC tới khi = UC đích.
+  7. Ghim UC vào `vm/logs/kenh-uc.json` (như máy đăng ghim lần đầu). Chỉ ghi đè UC cũ khi UC cũ là kênh KHÁC của CÙNG tài khoản.
+  8. Ghi `vm/logs/tao-kenh/<K>.json` (mã UC, tên cuối, thời điểm, đã chọn/ghim chưa).
 
 An toàn: gặp đăng nhập lại / CAPTCHA / xác minh điện thoại → DỪNG, `can_nguoi`, không thử lại trong 6 giờ.
-Mọi kết quả chỉ là mã + lý do ngắn; không in email/mật khẩu/cookie.
+Không bao giờ xoá kênh. Mọi kết quả chỉ là mã + lý do ngắn; không in email/mật khẩu/cookie.
 
 Chạy:  python vm/tao_kenh_thuong_hieu.py --kenh TL5-T7-K2 [--thu]
        --thu : chỉ đọc (email, kênh đã có) — không tạo.
@@ -27,7 +32,8 @@ import os
 import re
 import sys
 import time
-from typing import Any, Callable, Dict, Optional
+import unicodedata
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 GOC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if GOC not in sys.path:  # chạy thẳng `python vm/tao_kenh_thuong_hieu.py` cần thấy gói core/
@@ -98,6 +104,96 @@ def ten_co_trong_trang(ten: str, chu_trang: str) -> bool:
         return False
     gon = lambda s: re.sub(r"\s+", " ", s or "").strip().lower()  # noqa: E731
     return gon(ten) in gon(chu_trang)
+
+
+# 19/10: «：» toàn khổ làm hộp Tạo kênh từ chối. NFKC trước (toàn khổ → thường), rồi thay dấu phân cách hay bị từ chối
+# bằng «・» (tên CJK) / khoảng trắng, bỏ ký tự cấm + ký tự điều khiển/ẩn. YouTube: tên kênh tối đa 50 ký tự.
+KY_TU_THAY = ":;|/\\"
+KY_TU_BO = '<>"@#{}[]'
+DAI_TOI_DA_TEN = 50
+MAU_CJK = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
+
+
+def lam_sach_ten(ten: Any) -> str:
+    """Tên kênh YouTube nhận được: NFKC, thay/bỏ ký tự hay bị từ chối, gọn khoảng trắng, ≤ 50 ký tự ('' nếu rỗng)."""
+    s = unicodedata.normalize("NFKC", str(ten or ""))
+    nga = "・" if MAU_CJK.search(s) else " "
+    ra = []
+    for c in s:
+        if c in KY_TU_THAY:
+            ra.append(nga)
+        elif c in KY_TU_BO or unicodedata.category(c) in ("Cc", "Cf", "Co", "Cs", "Cn"):
+            continue
+        else:
+            ra.append(c)
+    s = re.sub(r"\s+", " ", "".join(ra))
+    s = re.sub(r"\s*・[\s・]*", "・", s)                               # «A ： B» → «A・B», không «・・»
+    return s.strip(" ・-")[:DAI_TOI_DA_TEN].strip(" ・-")
+
+
+def khoa_ten(ten: Any) -> str:
+    """Khoá so tên kênh: đã làm sạch + NFKC + bỏ khoảng trắng + không phân biệt hoa thường."""
+    return re.sub(r"\s+", "", lam_sach_ten(ten)).casefold()
+
+
+def uc_cua_khoa(key: Any) -> str:
+    """clientCacheKey của channel_switcher = UC bỏ tiền tố «UC»."""
+    k = str(key or "").strip()
+    return "" if not k else (k if k.startswith("UC") else "UC" + k)
+
+
+def tim_kenh_dung_lai(ds: Iterable[dict], cac_ten: Iterable[str], uc_so: str = "") -> Optional[dict]:
+    """Kênh ĐÃ CÓ trên tài khoản nên dùng lại: đúng UC trong sổ trước, rồi trùng tên (so `khoa_ten`). None nếu không có."""
+    ds = [k for k in (ds or []) if k.get("uc")]
+    if uc_so:
+        for k in ds:
+            if k["uc"] == uc_so:
+                return k
+    khoa = {khoa_ten(t) for t in cac_ten if khoa_ten(t)}
+    for k in ds:
+        if khoa_ten(k.get("ten")) in khoa:
+            return k
+    return None
+
+
+def kenh_moi_xuat_hien(truoc: Iterable[str], sau: Iterable[dict], cac_ten: Iterable[str]) -> Optional[dict]:
+    """Sau khi bấm Tạo: kênh có UC CHƯA có trong `truoc`; nhiều kênh mới → chọn cái trùng tên, không rõ thì None."""
+    moi = [k for k in (sau or []) if k.get("uc") and k["uc"] not in set(truoc or ())]
+    if len(moi) == 1:
+        return moi[0]
+    return tim_kenh_dung_lai(moi, cac_ten)
+
+
+def duong_ghim_uc(goc: str = GOC) -> str:
+    return os.path.join(goc, "vm", "logs", "kenh-uc.json")
+
+
+def ghim_uc(kenh: str, uc: str, uc_tai_khoan: Iterable[str], goc: str = GOC) -> Tuple[bool, str, str]:
+    """Ghim UC kênh vào `vm/logs/kenh-uc.json` như máy đăng (`MayDangDom.lay_uc` ghim lần đầu). (đã_ghim, lý do, UC cũ).
+    Đang ghim UC KHÁC: chỉ ghi đè khi UC cũ là kênh khác của CÙNG tài khoản (vd kênh cá nhân trước khi chọn kênh thương hiệu);
+    ngược lại KHÔNG đụng (chốt an toàn của máy đăng)."""
+    duong = duong_ghim_uc(goc)
+    try:
+        with open(duong, encoding="utf-8") as f:
+            ghim = json.load(f) or {}
+        if not isinstance(ghim, dict):
+            return False, "kenh-uc.json không đúng dạng — không ghi", ""
+    except FileNotFoundError:
+        ghim = {}
+    except (OSError, ValueError) as e:
+        return False, "không đọc được kenh-uc.json ({0}) — không ghi".format(type(e).__name__), ""
+    cu = str(ghim.get(kenh) or "")
+    if cu == uc:
+        return True, "đã ghim sẵn", cu
+    if cu and cu not in set(uc_tai_khoan or ()):
+        return False, "kenh-uc.json đang ghim UC khác không thuộc tài khoản này — chủ kiểm", cu
+    ghim[kenh] = uc
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    tam = duong + ".tam"
+    with open(tam, "w", encoding="utf-8") as f:
+        json.dump(ghim, f, ensure_ascii=False, indent=1)
+    os.replace(tam, duong)
+    return True, ("ghim lần đầu" if not cu else "đổi ghim từ kênh cũ cùng tài khoản"), cu
 
 
 # ── sổ kết quả ───────────────────────────────────────────────────────────────
@@ -291,31 +387,188 @@ def _dien_va_bam_tao(page, ten: str, handle: str) -> bool:
         return False
 
 
-def _co_ten_trong_bang_chuyen(page, ten: str, cho: float = 0.0) -> bool:
-    """Tên kênh có trong bảng chuyển kênh (mọi kênh của tài khoản). `cho` = giây chờ trước khi đọc lại."""
-    deadline = time.time() + cho
-    while True:
-        _cho_tai(page, TRANG_CHUYEN_KENH)
-        time.sleep(3)
-        if ten_co_trong_trang(ten, _chu_trang(page)):
-            return True
-        if time.time() >= deadline:
-            return False
-        time.sleep(3)
+JS_DS_KENH = r"""
+  return JSON.stringify(Array.from(document.querySelectorAll('ytd-account-item-renderer')).map(function (a) {
+    var d = a.data || {}, t = (d.serviceEndpoint || {}).selectActiveIdentityEndpoint, ts = (t && t.supportedTokens) || [];
+    var key = '', url = '';
+    ts.forEach(function (x) {
+      if (x.offlineCacheKeyToken) key = x.offlineCacheKeyToken.clientCacheKey;
+      if (x.accountSigninToken) url = x.accountSigninToken.signinUrl;
+    });
+    var n = d.accountName || {}, ten = n.simpleText || (n.runs || []).map(function (r) { return r.text; }).join('');
+    if (!ten) ten = ((a.innerText || '').trim().split('\n')[0] || '');
+    return {ten: ten.trim(), key: key || '', url: url || '', chon: !!d.isSelected};
+  }));
+"""
 
 
-def _uc_cua_ten(page, ten: str) -> str:
-    """Mã UC của kênh có tên `ten` trên trang tài khoản (liên kết /channel/UC… gần chữ tên)."""
-    try:
-        href = page.run_js("""
-          const ten = %s;
-          const a = Array.from(document.querySelectorAll('a[href*="/channel/UC"]'))
-              .find(e => (e.innerText||'').includes(ten) || (e.closest('div,ytd-channel-name') || {innerText:''}).innerText.includes(ten));
-          return a ? a.getAttribute('href') : '';
-        """ % json.dumps(ten, ensure_ascii=False))
-        return tim_uc_trong_url(href or "")
-    except Exception:  # noqa: BLE001
+class TrinhDuyet:
+    """Các thao tác Chrome (DrissionPage) mà luồng cần — tách ra để test bằng đồ giả."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def mo(self, url: str) -> None:
+        _cho_tai(self.page, url)
+
+    def url(self) -> str:
+        return str(self.page.url or "")
+
+    def chu(self) -> str:
+        return _chu_trang(self.page)
+
+    def ds_kenh(self) -> Optional[List[dict]]:
+        """Mọi kênh của tài khoản trên channel_switcher: [{ten, uc, url(signinUrl), chon}]; None nếu không đọc được."""
+        try:
+            _cho_tai(self.page, TRANG_CHUYEN_KENH)
+            han = time.time() + 20
+            while time.time() < han:
+                du = [k for k in json.loads(self.page.run_js(JS_DS_KENH) or "[]") if k.get("key")]
+                if du:
+                    return [{"ten": k.get("ten") or "", "uc": uc_cua_khoa(k.get("key")), "url": k.get("url") or "",
+                             "chon": bool(k.get("chon"))} for k in du]
+                time.sleep(1.5)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def tao_kenh(self, ten: str, handle: str) -> bool:
+        mo = False
+        for lan in range(2):  # trang đôi khi tải chậm: tải lại tài khoản rồi thử thêm một lần
+            if lan:
+                _cho_tai(self.page, TRANG_TAI_KHOAN)
+                time.sleep(3)
+            mo = _mo_hop_thoai_tao(self.page)
+            if mo:
+                break
+        return bool(mo) and _dien_va_bam_tao(self.page, ten, handle)
+
+    def uc_studio(self) -> str:
+        """Tải Studio, đọc UC kênh đang chọn từ URL chuyển hướng ('' nếu không thấy)."""
+        try:
+            self.page.get("https://studio.youtube.com/")
+            for _ in range(30):
+                uc = tim_uc_trong_url(str(self.page.url or "").replace("studio.youtube.com", "youtube.com"))
+                if uc:
+                    return uc
+                time.sleep(1)
+        except Exception:  # noqa: BLE001
+            pass
         return ""
+
+    def ngu(self, giay: float) -> None:
+        time.sleep(giay)
+
+
+def chon_kenh(td, muc: dict, ngu=None, so_lan_tai: int = 3) -> Tuple[bool, str]:
+    """Chọn kênh `muc` (mục channel_switcher) như YouTube: mở `signinUrl` (có pageid), rồi TẢI LẠI Studio tới khi UC = đích
+    (chỉ lần tải Studio KẾ TIẾP mới đổi kênh). (đạt, UC Studio đọc được cuối)."""
+    ngu = ngu or td.ngu
+    dich = muc.get("uc") or ""
+    uc = td.uc_studio()
+    if uc == dich:
+        return True, uc
+    url = str(muc.get("url") or "")
+    if not url.startswith("/signin?") or "pageid=" not in url:
+        return False, uc
+    td.mo("https://www.youtube.com" + url)
+    ngu(5)
+    for _ in range(so_lan_tai):
+        uc = td.uc_studio()
+        if uc == dich:
+            return True, uc
+        ngu(5)
+    return False, uc
+
+
+def chay_luong(td, kenh: str, ten_goc: str, handle: str, kho_email: str, so_cu: Dict[str, Any],
+               thu: bool = False, goc: str = GOC, ghi: Callable[[str], None] = print, ngu=None,
+               ghi_dau=None, cho_kenh_moi: float = 40.0) -> Dict[str, Any]:
+    """Luồng trong Chrome đã mở (td = TrinhDuyet hoặc đồ giả). Trả kết quả để ghi sổ.
+    `ghi_dau(du)`: ghi sổ dấu `da_bam_tao` NGAY trước khi bấm Tạo (đứt giữa chừng vẫn không bấm lại)."""
+    ngu = ngu or td.ngu
+    ten = lam_sach_ten(ten_goc)
+    ket: Dict[str, Any] = {"ket_qua": "hong", "ly_do": "chưa chạy", "ten": ten, "uc": ""}
+    if ten != ten_goc:
+        ket["ten_goc"] = ten_goc
+        ghi("tên dự kiến có ký tự YouTube hay từ chối → dùng «{0}»".format(ten))
+    if not ten:
+        return {**ket, "ly_do": "tên kênh sau khi làm sạch bị rỗng"}
+    if so_cu.get("da_bam_tao"):
+        ket["da_bam_tao"] = so_cu["da_bam_tao"]
+    td.mo(TRANG_TAI_KHOAN)
+    if dang_bi_chan_dang_nhap(td.url()):
+        return {**ket, "ket_qua": "can_nguoi", "ly_do": "Chrome đòi đăng nhập lại"}
+    that = tim_email_trong_chu(td.chu())
+    if that and kho_email and that != kho_email:
+        return {**ket, "ket_qua": "sai_danh_tinh", "ly_do": "tài khoản trong Chrome không phải tài khoản của kênh"}
+    if not that:
+        return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "không đọc được email tài khoản — không tạo kênh"}
+
+    # Danh sách kênh của tài khoản TRƯỚC mọi việc: thiếu danh sách thì không biết có trùng không → không tạo.
+    ds = td.ds_kenh()
+    if not ds:
+        return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "không đọc được danh sách kênh của tài khoản — không tạo (tránh trùng)"}
+    cac_ten = [ten, ten_goc]
+    uc_so = str(so_cu.get("uc") or "")
+    muc = tim_kenh_dung_lai(ds, cac_ten, uc_so)
+    dau = so_cu.get("da_bam_tao") or {}
+    if not muc and dau:
+        muc = kenh_moi_xuat_hien(dau.get("truoc") or [], ds, cac_ten + [dau.get("ten") or ""])
+    if muc:
+        ket.update(ket_qua="da_co", ly_do="kênh đã có trên tài khoản — dùng lại, không tạo thêm", uc=muc["uc"], ten=muc.get("ten") or ten)
+    elif uc_so and so_cu.get("ket_qua") in ("ok", "da_co"):
+        return {**ket, "ket_qua": "can_nguoi", "uc": uc_so,
+                "ly_do": "sổ ghi đã có kênh thương hiệu nhưng không thấy trên tài khoản đang đăng nhập — kiểm tay, không tạo thêm"}
+    elif dau:
+        return {**ket, "ket_qua": "can_nguoi",
+                "ly_do": "đã bấm Tạo lúc {0} mà chưa thấy kênh trên tài khoản — kiểm tay, KHÔNG tạo lại (tránh trùng)".format(dau.get("luc") or "?")}
+    elif thu:
+        return {**ket, "ket_qua": "chi_doc", "ly_do": "chưa có kênh tên này — chạy lại không --thu để tạo"}
+    else:
+        if not handle:
+            return {**ket, "ly_do": "chưa có handle dự kiến (handle trong trang trạng thái mở kênh)"}
+        dau = {"luc": _bay_gio().strftime("%Y-%m-%d %H:%M"), "ten": ten, "truoc": [k["uc"] for k in ds]}
+        if ghi_dau:
+            ghi_dau({**ket, "ket_qua": "dang_tao", "ly_do": "đang bấm Tạo", "da_bam_tao": dau})
+        da_bam = td.tao_kenh(ten, handle)
+        han, muc, sau = (cho_kenh_moi if da_bam else 8.0), None, None
+        while True:
+            ngu(8)
+            han -= 8
+            sau = td.ds_kenh()
+            muc = kenh_moi_xuat_hien(dau["truoc"], sau or [], cac_ten)
+            if muc or han <= 0:
+                break
+        if not da_bam and not muc and sau:
+            # chắc chắn chưa có kênh mới (đã đọc lại danh sách) → gỡ dấu, lượt sau được thử lại
+            if ghi_dau:
+                ghi_dau({**ket, "ly_do": "không mở/gõ/bấm được hộp thoại tạo kênh (chưa bấm Tạo)"})
+            return {**ket, "ly_do": "không mở/gõ/bấm được hộp thoại tạo kênh (handle có thể đã có người dùng)"}
+        ket["da_bam_tao"] = dau
+        if not muc:
+            # KHÔNG bấm tạo lần nữa dù chưa thấy: lần trước "chưa thấy" nhưng kênh đã được tạo → trùng.
+            return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "đã bấm Tạo, chưa thấy kênh mới trên tài khoản — lượt sau đọc lại, không tạo lại"}
+        ket.update(ket_qua="ok", ly_do="đã tạo kênh thương hiệu", uc=muc["uc"], ten=muc.get("ten") or ten)
+    if thu:
+        return {**ket, "ket_qua": "chi_doc", "ly_do": "đã có kênh (chỉ đọc: không chọn/ghim)"}
+
+    # Chọn kênh trong Chrome kênh + ghim UC (máy đăng/quét dừng nếu Studio lệch UC ghim).
+    ok, uc_doc = chon_kenh(td, muc, ngu)
+    ket["chon_kenh"] = ok
+    if not ok:
+        return {**ket, "ket_qua": "chua_xac_minh",
+                "ly_do": "{0}; chưa chuyển được Studio sang kênh này (Studio đang {1}) — lượt sau thử lại".format(
+                    ket["ly_do"], "kênh khác" if uc_doc else "không đọc được")}
+    da_ghim, ly_ghim, uc_cu = ghim_uc(kenh, muc["uc"], [k["uc"] for k in ds], goc)
+    ket["ghim_uc"] = da_ghim
+    if uc_cu and uc_cu != muc["uc"]:
+        ket["uc_ghim_cu"] = uc_cu
+    ghi("Studio đã chọn kênh mới; ghim UC: {0}".format(ly_ghim))
+    if not da_ghim:
+        return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "{0}; {1}".format(ket["ly_do"], ly_ghim)}
+    ket["ly_do"] += "; Studio đã chọn kênh này, UC đã ghim"
+    return ket
 
 
 # ── luồng chính ───────────────────────────────────────────────────────────────
@@ -351,53 +604,22 @@ def tao(kenh: str, *, goc: str = GOC, thu: bool = False, bo_khung: bool = False,
         ghi("tạo kênh thương hiệu {0}: {1} — {2}".format(kenh, ma, ly))
         return ket
 
+    so_cu = doc_so(kenh, goc)
     page = None
     ket: Dict[str, Any] = {"ket_qua": "hong", "ly_do": "chưa chạy", "ten": ten, "uc": ""}
+
+    def ghi_dau(du):
+        ghi_so(kenh, {**du, "luc": _bay_gio().strftime("%Y-%m-%d %H:%M")}, goc)
+
     try:
         page = _mo_chrome_kenh(goc, kenh)
-        _cho_tai(page, TRANG_TAI_KHOAN)
-        if dang_bi_chan_dang_nhap(page.url):
-            return {**ket, "ket_qua": "can_nguoi", "ly_do": "Chrome đòi đăng nhập lại"}
-        that = tim_email_trong_chu(_chu_trang(page))
-        if that and kho_email and that != kho_email:
-            return {**ket, "ket_qua": "sai_danh_tinh", "ly_do": "tài khoản trong Chrome không phải tài khoản của kênh"}
-        if not that:
-            return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "không đọc được email tài khoản — không tạo kênh"}
-
-        # Kiểm TRÊN BẢNG CHUYỂN KÊNH (liệt kê đủ mọi kênh; trang tài khoản chỉ hiện một kênh — gây trùng 19/10).
-        if _co_ten_trong_bang_chuyen(page, ten):
-            ket = {"ket_qua": "da_co", "ly_do": "kênh tên này đã có trên tài khoản (bảng chuyển kênh)", "ten": ten,
-                   "uc": _uc_cua_ten(page, ten)}
-        elif thu:
-            ket = {"ket_qua": "chi_doc", "ly_do": "chưa có kênh tên này — chạy lại không --thu để tạo", "ten": ten, "uc": ""}
-        else:
-            mo = False
-            for lan in range(2):  # trang đôi khi tải chậm: tải lại tài khoản rồi thử thêm một lần
-                if lan:
-                    _cho_tai(page, TRANG_TAI_KHOAN)
-                    time.sleep(3)
-                mo = _mo_hop_thoai_tao(page)
-                if mo:
-                    break
-            if not mo:
-                return {**ket, "ket_qua": "hong", "ly_do": "không mở được hộp thoại tạo kênh — giao diện có thể đã đổi"}
-            if not handle:
-                return {**ket, "ket_qua": "hong", "ly_do": "chưa có handle dự kiến (handle trong trang trạng thái mở kênh)"}
-            if not _dien_va_bam_tao(page, ten, handle):
-                return {**ket, "ket_qua": "hong", "ly_do": "không gõ/bấm được (handle có thể đã có người dùng)"}
-            time.sleep(8)
-            # KHÔNG bấm tạo lần nữa dù chưa thấy: lần trước "chưa thấy" nhưng kênh đã được tạo → trùng.
-            if not _co_ten_trong_bang_chuyen(page, ten, cho=20):
-                return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "đã bấm tạo, chưa thấy trong bảng chuyển kênh — KIỂM TAY trước khi thử lại (tránh trùng)"}
-            uc = _uc_cua_ten(page, ten)
-            if not uc:
-                return {**ket, "ket_qua": "chua_xac_minh", "ly_do": "kênh đã hiện nhưng chưa lấy được mã UC — kiểm tay"}
-            _cho_tai(page, "https://www.youtube.com/channel/" + uc)
-            if not ten_co_trong_trang(ten, (page.title or "") + " " + _chu_trang(page)):
-                return {**ket, "ket_qua": "hong", "ly_do": "trang kênh không khớp tên dự kiến — kiểm tay"}
-            ket = {"ket_qua": "ok", "ly_do": "đã tạo kênh thương hiệu", "ten": ten, "uc": uc}
+        ket = chay_luong(TrinhDuyet(page), kenh, ten, handle, kho_email, so_cu, thu=thu, goc=goc, ghi=ghi,
+                         ghi_dau=None if thu else ghi_dau)
     except Exception as e:  # noqa: BLE001 — một lỗi không được làm gác tổng chết
         ket = {"ket_qua": "hong", "ly_do": "{0}: {1}".format(type(e).__name__, str(e)[:120]), "ten": ten, "uc": ""}
+        dau = doc_so(kenh, goc).get("da_bam_tao") or so_cu.get("da_bam_tao")   # dấu ghi trước khi bấm Tạo: GIỮ
+        if dau:
+            ket["da_bam_tao"] = dau
     finally:
         if page is not None:
             try:

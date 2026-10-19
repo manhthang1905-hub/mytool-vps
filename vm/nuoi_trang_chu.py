@@ -1216,7 +1216,8 @@ def kenh_den_luot(luc: float, dang_chay=(), goc: str = GOC_TOOL, ram=None, nang_
             ly[k] = "đang nuôi"
             continue
         so, dt = doc_so(k), doc_duy_tri(k)
-        bo = "" if k in bat else bo_qua_kenh(k, goc)
+        bo = bo_qua_kenh(k, goc)
+        bo = bo if (k not in bat or bo.startswith("kênh đã trả kho")) else ""      # 19/10: trả kho thắng công tắc
         if bo:
             ly[k] = bo + " — không tự nuôi lại"
             continue
