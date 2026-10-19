@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.216.11** — 2026-10-19 — `vps-jp1` — fix(vm): kiem suc khoe DOM khong bao nham o tieu de khi video dang A/B; lenh sua tieu de/bia xet lai luc LAM - video dang THANG thi bo (tru tra lai cu)
 - **2.216.10** — 2026-10-19 — `vps-jp1` — fix(mo-kenh): banner kenh moi khong cham hong oan (cho trang cong khai toi 5', khong tai lap), tao kenh: dung lai kenh trung ten + tu chuyen Studio + ghim UC + lam sach ten; kenh tra kho bi loai khoi moi lich DOM
 - **2.216.9** — 2026-10-19 — `vps-jp1` — fix(studio): bat hop Chao mung YouTube Studio cua kenh moi (hop_la nham tp-yt-paper-dialog that, bam Tiep tuc)
 - **2.216.8** — 2026-10-19 — `vps-jp1` — fix(thiet-lap-kenh): bam bi che boi hop chao hien tre -> dep hop la roi bam lai 1 lan
