@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.219.0** — 2026-10-20 — `vps-jp1` — feat(bia): mau thang tu dung theo so lieu (D21), ho chu chon theo CTR, vong phan hoi CTR 48h/7d
 - **2.218.0** — 2026-10-20 — `vps-jp1` — perf(dieu_phoi): xep lan theo han khe, lan_api toi 8, tran cho anh thich nghi, luot thua tu thoat, kiem cong suat ngay
 - **2.217.1** — 2026-10-20 — `vps-jp1` — fix(bia_lo): kenh moi muon bia thang kenh goc khac nhan vat - giam khao chi hoc bo cuc/chu/mau, nhan vat so nv1, san ngang bia giau
 - **2.217.0** — 2026-10-20 — `vps-jp1` — feat(kho): kho Chrome + kenh tra kho khong tinh + tu phat hien kenh khong phat va tu thay (D20)
