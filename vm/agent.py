@@ -1209,6 +1209,10 @@ def tim_chrome(cau_hinh: dict) -> str:
                 os.path.join(cha, kenh, kenh + ".exe"),
                 os.path.join(cha, kenh, kenh, kenh + ".exe"),
             ]
+    if kenh:
+        # 20/10/2026: kênh trả kho — Chrome đã dời vào `<cha của MyTool>\kho\<MÃ>\` (core/tra_kho.py). Chỉ để TÌM
+        # thấy (log, việc tay); lịch tự động vẫn bỏ kênh trả kho (`kenh_lich`).
+        ung_vien += [os.path.join(cha, "kho", kenh, kenh + ".exe") for cha in _cac_goc_trinh_duyet()]
     for duong in ung_vien:
         if os.path.isfile(duong):
             return duong
@@ -2821,6 +2825,50 @@ def kenh_lich(cac_kenh: list, goc_tool: str = None) -> list:
     return [k for k in cac_kenh if not kenh_tra_kho(k, goc_tool)]
 
 
+def nap_kenh_moi(cau_hinh: dict, cac_kenh: list, hieu_luc: dict, doc=None) -> list:
+    """NẠP NÓNG (20/10/2026): kênh mới được nối ĐUÔI `cac_kenh` trong config.json (mở kênh / thay kênh tự động —
+    `core/thay_kenh.py`) → thêm vào danh sách đang chạy NGAY, không cần khởi động lại agent. Chỉ nhận khi danh sách mới
+    giữ nguyên thứ tự cũ ở đầu (cổng DevTools = 9300 + vị trí): thứ tự đổi / kênh bị gỡ → bỏ qua, ghi một dòng (lần khởi
+    động sau tự đúng). Sửa `cac_kenh`, `hieu_luc` tại chỗ; trả các kênh vừa nạp."""
+    try:
+        moi_cfg = (doc or doc_cau_hinh)()
+    except (OSError, ValueError):
+        return []
+    moi = [str(k).strip() for k in (moi_cfg.get("cac_kenh") or []) if str(k).strip()]
+    moi = list(dict.fromkeys(moi))
+    if len(moi) <= len(cac_kenh) or len(cac_kenh) < 2:
+        return []
+    if moi[:len(cac_kenh)] != list(cac_kenh):
+        if _NAP_NONG.get("lech") != moi:
+            _NAP_NONG["lech"] = moi
+            ghi("config.json đổi thứ tự/gỡ kênh — không nạp nóng (cổng DevTools theo vị trí); khởi động lại agent để nhận")
+        return []
+    them = moi[len(cac_kenh):]
+    cau_hinh["cac_kenh"] = list(cac_kenh) + them
+    if isinstance(moi_cfg.get("chrome_theo_kenh"), dict):
+        rieng = dict(cau_hinh.get("chrome_theo_kenh") or {})
+        rieng.update({k: v for k, v in moi_cfg["chrome_theo_kenh"].items() if k in them})
+        cau_hinh["chrome_theo_kenh"] = rieng
+    phien = che_do_phien_bat(cau_hinh, hieu_luc.get(cac_kenh[0]))
+    for kenh in them:
+        cac_kenh.append(kenh)
+        _VI_TRI_KENH[kenh] = len(cac_kenh) - 1
+        hieu_luc[kenh] = cau_hinh_kenh(cau_hinh, kenh)
+        chrome = tim_chrome(hieu_luc[kenh])
+        ghi("NẠP NÓNG kênh mới {0} (vị trí {1}, cổng {2}) — Chrome: {3}".format(
+            kenh, len(cac_kenh) - 1, 9300 + len(cac_kenh) - 1, chrome or "CHƯA THẤY"))
+        try:
+            if bao_dam_tien_ich(hieu_luc[kenh]):
+                dong_bo_tien_ich_ben(hieu_luc[kenh])
+            ghi_che_do_mat_cao(hieu_luc[kenh], False if phien else None)
+        except Exception as loi:  # noqa: BLE001 — mắt cào lỗi: kênh vẫn chạy, lần mở Chrome sau tự nạp
+            ghi("extension kênh {0}: {1}".format(kenh, str(loi)[:120]))
+    return them
+
+
+_NAP_NONG: dict = {}
+
+
 def vi_tri_kenh(kenh: str, mac_dinh: int) -> int:
     """Vị trí kênh trong `cac_kenh` GỐC (đặt ở `chay()`); không có thì `mac_dinh`."""
     return _VI_TRI_KENH.get(kenh, mac_dinh)
@@ -4037,14 +4085,20 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
     bo_lich = None
     while True:
         co_loi = False
-        # Kênh trả kho: không lịch nào mở Chrome (việc TAY từ trạm vẫn nhận). Đọc lại mỗi nhịp.
+        # Kênh mới nối ĐUÔI `cac_kenh` trong config.json (mở kênh / thay kênh tự động) → nạp nóng, không khởi động lại.
+        if not mot_vong:
+            try:
+                nap_kenh_moi(cau_hinh, cac_kenh, hieu_luc)
+            except Exception as loi:  # noqa: BLE001 — nạp nóng hỏng: giữ danh sách cũ, lần khởi động sau sẽ thấy
+                ghi("nạp kênh mới hỏng: {0}".format(str(loi)[:160]))
+        # Kênh trả kho: KHÔNG việc nào mở Chrome — cả lịch lẫn việc từ trạm (chủ 20/10). Đọc lại mỗi nhịp.
         cac_kenh_lich = kenh_lich(cac_kenh)
         if bo_lich != [k for k in cac_kenh if k not in cac_kenh_lich]:
             bo_lich = [k for k in cac_kenh if k not in cac_kenh_lich]
             if bo_lich:
-                ghi("kênh TRẢ KHO — lịch tự động bỏ qua (không quét/phiên/ghim/sửa): {0}".format(", ".join(bo_lich)))
+                ghi("kênh TRẢ KHO — bỏ qua mọi việc Chrome (lịch, phiên, quét, việc từ trạm): {0}".format(", ".join(bo_lich)))
         nhip_tim("bước: hỏi việc từ trạm", ep=True)
-        for kenh in cac_kenh:
+        for kenh in cac_kenh_lich:
             try:
                 tra = hoi_viec(cau_hinh, kenh=kenh)
                 if "viec" in tra or "cai_dat" in tra:

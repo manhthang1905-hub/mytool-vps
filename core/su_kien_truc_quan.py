@@ -60,8 +60,10 @@ def _duoi(duong: str, so_byte: int = 600_000) -> List[str]:
 
 
 def cac_kenh(goc: str) -> List[str]:
+    from core.kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
     d = _json(os.path.join(goc, "vm", "cai-dat-tool.json"))
-    return sorted(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else []
+    return bo_kenh_tra_kho(goc, sorted(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else [])
 
 
 def _tieu_de_ke_hoach(goc: str, kenh: str) -> Dict[str, str]:

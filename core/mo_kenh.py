@@ -464,10 +464,13 @@ def _ngu_canh(goc: str, nhom: str) -> Dict[str, Any]:
 
 
 def _anh_em(goc: str, tep: str, nhom: str, tru: str = "") -> List[Dict[str, Any]]:
-    """Kênh anh em (cùng nhóm + cùng tệp), KHÔNG tính chính kênh đang chuẩn bị (chạy lại không tự so với mình)."""
+    """Kênh anh em (cùng nhóm + cùng tệp), KHÔNG tính chính kênh đang chuẩn bị (chạy lại không tự so với mình) và kênh
+    đã trả kho (20/10: kênh trả kho không tính ở đâu cả)."""
+    from .kenh import da_tra_kho  # noqa: PLC0415
+
     ra = []
     for m in _cac_kenh(goc):
-        if m == tru:
+        if m == tru or da_tra_kho(goc, m):
             continue
         y = _kenh_yaml(goc, m)
         if str(y.get("nhom") or "") == nhom and (str(y.get("tep") or "") == tep or not tep):
@@ -586,9 +589,11 @@ def chon_giong(kho: Sequence[Dict[str, Any]], giong_cung_tep: Sequence[str], dem
 
 
 def _dem_giong_nhom(goc: str, nhom: str, tru: str = "") -> Dict[str, int]:
+    from .kenh import da_tra_kho  # noqa: PLC0415
+
     dem: Dict[str, int] = {}
     for m in _cac_kenh(goc):
-        if m == tru:
+        if m == tru or da_tra_kho(goc, m):
             continue
         y = _kenh_yaml(goc, m)
         if str(y.get("nhom") or "") == nhom and y.get("voice_id"):
@@ -717,8 +722,14 @@ def handle_ranh(handle: str, ngon_ngu: str, kiem: Callable[[str], Optional[bool]
 
 # ── Chrome Portable ───────────────────────────────────────────────────────────
 def thu_muc_chrome(goc: str, ma: str) -> str:
-    """`<cha của MyTool>\\<MÃ>\\<MÃ>.exe` — nếp của cả tool (trung_tam.tim_trinh_duyet)."""
-    return os.path.join(os.path.dirname(os.path.abspath(goc)), ma, ma + ".exe")
+    """`<cha của MyTool>\\<MÃ>\\<MÃ>.exe` — nếp của cả tool (trung_tam.tim_trinh_duyet). 20/10: đường thường không có
+    mà kênh nằm trong kho Chrome (`<cha>\\kho\\<MÃ>\\<MÃ>.exe`, kênh trả kho) → trả đường trong kho."""
+    thuong = os.path.join(os.path.dirname(os.path.abspath(goc)), ma, ma + ".exe")
+    if not os.path.isfile(thuong):
+        from .tra_kho import tim_chrome  # noqa: PLC0415
+
+        return tim_chrome(goc, ma) or thuong
+    return thuong
 
 
 def _kich_thuoc(duong: str) -> int:
@@ -879,12 +890,17 @@ def chuan_bi(goc: str, ma: str, *, hang: Optional[Dict[str, Any]] = None, goi: O
         _ghi_json(duong_goc, du)
     log("  góc: {0}".format(_sach(du.get("goc"), 160)))
 
-    # 2) giọng từ kho — KHÔNG trùng kênh cùng tệp
+    # 2) giọng từ kho — KHÔNG trùng kênh cùng tệp (kênh thay tự động 20/10: KHÔNG trùng MỌI kênh đang chạy)
     kho = doc_kho_giong(goc, nhom)
-    giong = chon_giong(kho, [a["voice_id"] for a in anh_em], _dem_giong_nhom(goc, nhom, tru=ma))
+    cam = [a["voice_id"] for a in anh_em]
+    if hang.get("giong_rieng"):
+        from .thay_kenh import giong_dang_dung  # noqa: PLC0415
+
+        cam += giong_dang_dung(goc, tru=ma)
+    giong = chon_giong(kho, cam, _dem_giong_nhom(goc, nhom, tru=ma))
     if giong is None:
-        raise RuntimeError("kho giọng {0} hết giọng khác tệp — thêm voice_id đã duyệt (kèm ky_tu_moi_phut đã đo) vào {1}".format(
-            nhom, duong_kho_giong(goc, nhom)))
+        raise RuntimeError("kho giọng {0} hết giọng {1} — thêm voice_id đã duyệt (kèm ky_tu_moi_phut đã đo) vào {2}".format(
+            nhom, "chưa kênh nào dùng" if hang.get("giong_rieng") else "khác tệp", duong_kho_giong(goc, nhom)))
     log("  giọng: {0} ({1} ký tự/phút)".format(giong["voice_id"], giong["ky_tu_moi_phut"]))
 
     # 3) CHANNEL/<TÊN>
@@ -1007,6 +1023,20 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
             luu_trang_thai(goc, st)
             return {"trang_thai": d["trang_thai"], "ly_do": d["loi"]}
         d["trang_thai"] = "cho_chrome"
+        if d.get("can_thuong_hieu") and not ep:
+            # Kênh thay tự động (core/thay_kenh): Chrome kho chủ đã đăng nhập; kênh thương hiệu + ghim UC do thay_kenh làm
+            # (DOM, khoá máy) TRƯỚC khi ghép máy đăng — chưa xong thì đợi, không phải việc người.
+            from .thay_kenh import thuong_hieu_xong  # noqa: PLC0415
+
+            ok_th, ly_th = thuong_hieu_xong(goc, ma)
+            if not ok_th:
+                d["loi"] = "chờ máy tạo kênh thương hiệu: " + ly_th
+                luu_trang_thai(goc, st)
+                return {"trang_thai": "cho_chrome", "ly_do": d["loi"]}
+            if kiem_dang_nhap is None:
+                from .kho_chrome import da_dang_nhap  # noqa: PLC0415 — nhận cả phiên Google (Gmail) chủ đăng nhập tay
+
+                kiem_dang_nhap = da_dang_nhap
         ok, ly = (kiem_dang_nhap or chrome_da_dang_nhap)(exe)
         if not ok and not ep and kiem_dang_nhap is None:
             ok2, ly2 = _thu_dang_nhap_gmail(goc, ma, d, exe, bay_gio, log)
@@ -1017,6 +1047,13 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
             luu_trang_thai(goc, st)
             return {"trang_thai": "cho_chrome", "ly_do": d["loi"]}
         log("kích hoạt {0}: Chrome đã đăng nhập → ghép máy đăng + bật thiết lập kênh/nuôi trang chủ".format(ma))
+        if d.get("can_thuong_hieu"):
+            # tự đăng CHỈ bật khi thiết lập 11/11 + UC ghim (nhánh dang_thiet_lap dưới) — ghi may-ao.json trước để
+            # `them_kenh_vao_vm` không tự bật tu_dang cho kênh chưa có tệp
+            from . import vm_cai_dat  # noqa: PLC0415
+
+            if not os.path.isfile(os.path.join(goc, "CHANNEL", ma, vm_cai_dat.TEP)):
+                vm_cai_dat.luu(goc, ma, tu_dang=False, cach_dang="tu_dong")
         (them_vao_vm or them_kenh_vao_vm)(thu_muc_vm(goc), ma, chrome=exe)
         khoa: Dict[str, Any] = {"thiet_lap_kenh": True, "nuoi_trang_chu": True}
         ngon = str(_kenh_yaml(goc, ma).get("ngon_ngu") or "")
@@ -1030,6 +1067,20 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
     if tt == "dang_thiet_lap":
         so = (doc_so or (lambda m: doc_so_thiet_lap(m, goc)))(ma)
         tinh = str(so.get("trang_thai") or "")
+        if tinh == "xong" and d.get("can_thuong_hieu") and not ep:
+            # kênh thay tự động (chủ duyệt 20/10): bật tu_chay/tu_duyet/tu_dang CHỈ khi thiết lập đủ 11/11 + UC đã ghim
+            from .thay_kenh import MUC_THIET_LAP, thuong_hieu_xong  # noqa: PLC0415
+
+            dat = sum(1 for v in (so.get("muc") or {}).values() if isinstance(v, dict) and v.get("tt") == "dat")
+            ok_th, ly_th = thuong_hieu_xong(goc, ma)
+            if dat < MUC_THIET_LAP or not ok_th:
+                d["loi"] = "thiết lập {0}/{1}{2} — chưa bật tự chạy".format(dat, MUC_THIET_LAP, "" if ok_th else "; " + ly_th)
+                luu_trang_thai(goc, st)
+                return {"trang_thai": "dang_thiet_lap", "ly_do": d["loi"]}
+            from . import vm_cai_dat  # noqa: PLC0415
+
+            ghi_cai_kenh(goc, ma, tu_chay=True, tu_duyet=True)
+            vm_cai_dat.luu(goc, ma, tu_dang=True, cach_dang="tu_dong")
         if tinh == "xong" or ep:
             ghi_cai_kenh(goc, ma, tu_chay=True)
             d.update({"trang_thai": "xong", "loi": "", "ngay_xong": _bay_gio(bay_gio).strftime("%Y-%m-%d")})
@@ -1054,6 +1105,8 @@ def viec_cua_ban(goc: str) -> List[Dict[str, str]]:
     for ma in dang_mo(goc):
         d = st["kenh"][ma]
         tt = d.get("trang_thai")
+        if d.get("tu_dong") and tt in ("de_xuat", "chuan_bi_xong", "cho_chrome"):
+            continue            # kênh thay tự động: Chrome kho đã đăng nhập, máy lo hết — việc người (nếu có) ở core/thay_kenh
         if tt in ("chuan_bi_xong", "cho_chrome") or (tt == "de_xuat" and cd == "goi_y"):
             exe = thu_muc_chrome(goc, ma)
             co_chrome = os.path.isfile(exe)
@@ -1132,7 +1185,7 @@ def can_lam(goc: str, bay_gio: Optional[_dt.datetime] = None) -> str:
     st = doc_trang_thai(goc)
     for ma in dang_mo(goc):
         d = st["kenh"][ma]
-        if d.get("trang_thai") == "de_xuat" and che_do(goc) == "tu_chuan_bi":
+        if d.get("trang_thai") == "de_xuat" and (che_do(goc) == "tu_chuan_bi" or d.get("tu_dong")):
             return "chuẩn bị " + ma
         if d.get("trang_thai") in ("chuan_bi_xong", "cho_chrome", "dang_thiet_lap") and \
                 bay_gio.timestamp() - float(d.get("kiem_cuoi") or 0) >= PHUT_KIEM_LAI * 60:
@@ -1171,7 +1224,7 @@ def tiep_tuc(goc: str, *, bay_gio: Optional[_dt.datetime] = None, log: Callable[
     try:
         for ma in list(dang_mo(goc)):
             d = doc_trang_thai(goc)["kenh"][ma]
-            if d.get("trang_thai") == "de_xuat" and cd == "tu_chuan_bi":
+            if d.get("trang_thai") == "de_xuat" and (cd == "tu_chuan_bi" or d.get("tu_dong")):
                 st = doc_trang_thai(goc)
                 st["kenh"][ma]["kiem_cuoi"] = bay_gio.timestamp()            # lùi nhịp nếu hỏng: không thử lại mỗi 15 phút
                 luu_trang_thai(goc, st)

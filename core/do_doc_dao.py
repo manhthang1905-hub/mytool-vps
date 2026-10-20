@@ -449,9 +449,11 @@ def tom_tat_ho_so(thu_muc_luot: str) -> Optional[Dict[str, Any]]:
 # ── 4. BÁO CÁO (chỉ đọc) ────────────────────────────────────────────────────
 
 def cac_kenh_co_luot(goc: str) -> List[str]:
+    from .kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
     d = os.path.join(goc, "PROJECTS", "AUTO")
     try:
-        return sorted(x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x)))
+        return bo_kenh_tra_kho(goc, sorted(x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))))
     except OSError:
         return []
 

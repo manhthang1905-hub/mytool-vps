@@ -408,6 +408,8 @@ def _kenh_cung_tuyen(kenh: str, kh: Dict[str, Any], goc: str) -> List[Dict[str, 
             if k == kenh or k.startswith("_"):
                 continue
             ky = _yaml_kenh(k, goc)
+            if str(ky.get("tra_kho") or "").strip():  # 20/10: kênh trả kho không tính
+                continue
             if str(ky.get("nhom") or "x") != str(kh.get("nhom") or "y"):
                 continue
             hs = doc_ho_so(k, goc)

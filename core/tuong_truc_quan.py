@@ -75,8 +75,10 @@ def _muc(ten: str, ham: Callable[[], Any], ra: Dict[str, Any], loi: Dict[str, st
 
 
 def cac_kenh(goc: str) -> List[str]:
+    from core.kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
     d = _json(os.path.join(goc, "vm", "cai-dat-tool.json"))
-    return list(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else []
+    return bo_kenh_tra_kho(goc, list(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else [])
 
 
 def _yaml_khoa(goc: str, kenh: str, khoa: str) -> str:
@@ -386,13 +388,16 @@ def dong_ho(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) -
     ev: List[Dict[str, Any]] = []
     loi: Dict[str, str] = {}
     cai = _json(os.path.join(goc, "vm", "cai-dat-tool.json")) or {}
-    kenh = list((cai.get("kenh") or {}).keys())
+    kenh = cac_kenh(goc)                       # 20/10: bỏ kênh trả kho
+    tat_ca = list((cai.get("kenh") or {}).keys())
     tam: Dict[str, Any] = {}
 
     def _quet():
         g0 = _hhmm(_hang_so(goc, os.path.join("vm", "agent.py"), "QUET_NGAY_GIO_MAC_DINH")) or "02:10"
         cach = int(re.sub(r"\D", "", _hang_so(goc, os.path.join("vm", "agent.py"), "QUET_NGAY_CACH_PHUT") or "30") or 30)
-        for i, k in enumerate(kenh):
+        for i, k in enumerate(tat_ca):         # vị trí GỐC (agent giữ giờ quét so le theo vị trí trong cac_kenh)
+            if k not in kenh:
+                continue
             ch = (cai.get("kenh") or {}).get(k) or {}
             g = _hhmm(ch.get("quet_ngay_gio")) or _cong_phut(g0, i * int(ch.get("quet_ngay_cach_phut") or cach))
             ev.append({"gio": g, "dai": 25, "loai": "quet", "ten": "Quét ngày", "kenh": k})

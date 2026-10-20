@@ -72,7 +72,9 @@ def _ram_gb() -> Dict[str, float]:
 
 
 def _cac_kenh() -> List[str]:
-    return sorted((_json(VM, "cai-dat-tool.json").get("kenh") or {}).keys())
+    from core.kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
+    return bo_kenh_tra_kho(GOC, sorted((_json(VM, "cai-dat-tool.json").get("kenh") or {}).keys()))
 
 
 def _ten_kenh(kenh: str) -> str:

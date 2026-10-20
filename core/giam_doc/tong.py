@@ -98,6 +98,12 @@ def doc_so(goc: str) -> Dict[str, Any]:
 
 # ── bảng công ty ───────────────────────────────────────────────────────────
 
+def _da_tra_kho(goc: str, ma: str) -> bool:
+    from ..kenh import da_tra_kho  # noqa: PLC0415
+
+    return da_tra_kho(goc, ma)
+
+
 def _cac_kenh(goc: str) -> Dict[str, List[str]]:
     """{mã kênh YouTube (gốc): [mã kênh tool…]} — `X-v2` đăng cùng kênh YouTube với `X`."""
     from ..kenh import TEP_KENH, duong_kenh  # noqa: PLC0415
@@ -105,7 +111,7 @@ def _cac_kenh(goc: str) -> Dict[str, List[str]]:
     ra: Dict[str, List[str]] = {}
     for p in sorted(glob.glob(os.path.join(duong_kenh(goc), "*", TEP_KENH))):
         ma = os.path.basename(os.path.dirname(p))
-        if not ma.startswith("_"):
+        if not ma.startswith("_") and not _da_tra_kho(goc, ma):      # 20/10: kênh trả kho không tính
             ra.setdefault(re.sub(r"[-_]v\d+$", "", ma, flags=re.IGNORECASE), []).append(ma)
     return ra
 

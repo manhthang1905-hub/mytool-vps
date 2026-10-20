@@ -1022,6 +1022,27 @@ def d_kiem_vang(goc, kenh):
     return bia_lo.can_kiem_vang(goc, kenh)
 
 
+# D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
+
+def k_thay_kenh(goc, kenh):
+    from core import thay_kenh  # noqa: PLC0415
+    so = thay_kenh.doc_so(goc)
+    x = (so.get("ket_xet") or {}).get(kenh)
+    l = next((l for l in so["luot"].values() if l.get("moi") == kenh and l.get("buoc") != "xong"), None)
+    if l:
+        return CHO, "kênh thay cho {0} — bước {1}".format(l["cu"], l.get("buoc"))
+    if not x:
+        return CHO, "chưa xét luật kênh hỏng (xét mỗi ngày)"
+    if x.get("ket") == "hong":
+        return LOI, "HỎNG: " + str(x.get("ly_do") or "")[:120]
+    return DAT, "{0} ({1}): {2}".format(x.get("ket"), so.get("ngay_xet"), str(x.get("ly_do") or "")[:100])
+
+
+def d_thay_kenh(goc, kenh):
+    from core import thay_kenh  # noqa: PLC0415
+    return thay_kenh.can_lam(goc, _gio())
+
+
 def k_tao_kenh_thuong_hieu(goc, kenh):
     """Kênh thương hiệu mới đã tạo (vm/logs/tao-kenh/<K>.json, ghi bởi vm/tao_kenh_thuong_hieu.py)."""
     d = _json(_vm(goc, "logs", "tao-kenh", kenh + ".json"))
@@ -1190,6 +1211,15 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.bia_lo --kiem-vang --kenh K", k_kiem_vang, ["D02"], dieu_kien=d_kiem_vang,
            chay=lambda goc, kenh: _py("-m", "core.bia_lo", "--kiem-vang", "--kenh", kenh), nhip_gio=1, tu_ap=True,
            han_phut=90, mot_kenh=True),
+    KyNang("D20", "Thay kênh không được phát", "sua_chua",
+           "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
+           "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "
+           "Chrome mới đã đăng nhập trong kho (sổ _da-dung.json) → mã kế cùng dòng → mở kênh (khuôn kênh cũ, giọng chưa "
+           "kênh nào dùng) → kênh thương hiệu (không tạo trùng) + ghim UC → thiết lập 11/11 → bật tự chạy/duyệt/đăng → "
+           "một tin báo chủ. Tối đa một lượt thay mới mỗi ngày; kho hết Chrome / hết giọng → Việc của bạn.",
+           "python -X utf8 -m core.thay_kenh chay", k_thay_kenh, ["D01"], dieu_kien=d_thay_kenh,
+           chay=lambda goc, kenh: _py("-m", "core.thay_kenh", "chay"), nhip_gio=1, tu_ap=True, toan_may=True,
+           han_phut=40),
 ]
 
 

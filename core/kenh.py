@@ -39,6 +39,7 @@ __all__ = [
     "THU_MUC_KENH", "TEP_KENH", "TEP_STYLE", "BUOC_PROMPT", "nhan_ban_kenh",
     "TEP_CHIEN_LUOC",
     "Kenh", "duong_kenh", "liet_ke_kenh", "doc_kenh", "kiem_kenh",
+    "kenh_tra_kho", "da_tra_kho", "bo_kenh_tra_kho",
     "doc_yaml", "co_mui_khoa", "GIU_NGUYEN", "ten_khung",
     "CHE_DO_TIEU_DE", "ten_che_do",
 ]
@@ -743,11 +744,15 @@ def _duong_tu_goc(goc: str, gia_tri: Any) -> str:
     return duong
 
 
-def liet_ke_kenh(goc: str) -> List[str]:
+def liet_ke_kenh(goc: str, ca_tra_kho: bool = False) -> List[str]:
     """Tên các kênh đang có, xếp theo bảng chữ cái.
 
     Thư mục bắt đầu bằng `_` hoặc `.` bị bỏ qua — chỗ để người dùng cất bản
     nháp và bản mẫu mà không hiện ra trên giao diện.
+
+    20/10/2026 (chủ): kênh ĐÃ TRẢ KHO (`tra_kho:` trong kenh.yaml, `core/tra_kho.py`) KHÔNG được tính ở bất cứ đâu —
+    số liệu, não, thử nghiệm, học chéo, tự kiểm, bảng. Mặc định bỏ chúng; chỗ QUẢN LÝ kênh (trang quản lý kênh,
+    lấy lại kênh, đồng bộ) truyền `ca_tra_kho=True`. Dữ liệu lịch sử của kênh trả kho giữ nguyên trên đĩa.
     """
     thu_muc = duong_kenh(goc)
     try:
@@ -757,7 +762,48 @@ def liet_ke_kenh(goc: str) -> List[str]:
     ra = [t for t in muc
           if not t.startswith((".", "_"))
           and os.path.isfile(os.path.join(thu_muc, t, TEP_KENH))]
+    if not ca_tra_kho:
+        ra = bo_kenh_tra_kho(goc, ra)
     return sorted(ra)
+
+
+#: (đường kenh.yaml) → (mtime_ns, cỡ, ngày trả kho) — đọc lại chỉ khi tệp đổi (hàm này bị gọi rất dày).
+_TRA_KHO_DEM: Dict[str, Any] = {}
+_RE_TRA_KHO = re.compile(r"(?m)^tra_kho:[ \t]*([^\r\n#]*)")
+
+
+def kenh_tra_kho(goc: str, ma: str) -> str:
+    """Ngày kênh `ma` trả kho ('' = đang chạy / không đọc được). Đọc nhanh một khoá, nhớ theo mtime của kenh.yaml."""
+    ma = str(ma or "").strip()
+    if not ma:
+        return ""
+    duong = os.path.join(duong_kenh(goc, ma), TEP_KENH)
+    try:
+        st = os.stat(duong)
+    except OSError:
+        return ""
+    dau = (st.st_mtime_ns, st.st_size)
+    cu = _TRA_KHO_DEM.get(duong)
+    if cu and cu[0] == dau:
+        return cu[1]
+    try:
+        with open(duong, "r", encoding="utf-8-sig") as tep:
+            m = _RE_TRA_KHO.search(tep.read())
+    except (OSError, UnicodeDecodeError):
+        return ""
+    gt = m.group(1).strip().strip('"').strip("'").strip() if m else ""
+    _TRA_KHO_DEM[duong] = (dau, gt)
+    return gt
+
+
+def da_tra_kho(goc: str, ma: str) -> bool:
+    return bool(kenh_tra_kho(goc, ma))
+
+
+def bo_kenh_tra_kho(goc: str, ds: Any) -> List[str]:
+    """`ds` bỏ kênh đã trả kho, GIỮ thứ tự. MỘT cổng chung cho mọi chỗ liệt kê kênh không đi qua `liet_ke_kenh`
+    (vm/cai-dat-tool.json, vm/config.json, thư mục lượt…)."""
+    return [k for k in (ds or []) if not kenh_tra_kho(goc, k)]
 
 
 #: Ký tự không được có trong mã kênh (tên thư mục trên Windows).

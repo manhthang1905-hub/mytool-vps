@@ -79,8 +79,10 @@ def _json(duong: str) -> Any:
 
 def cac_kenh(goc: str) -> List[str]:
     """Kênh máy này quản lý (khai trong `vm/cai-dat-tool.json`) — như `chien_truong._cac_kenh`."""
+    from .kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
     d = _json(os.path.join(goc, "vm", "cai-dat-tool.json"))
-    return sorted(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else []
+    return bo_kenh_tra_kho(goc, sorted(((d or {}).get("kenh") or {}).keys()) if isinstance(d, dict) else [])
 
 
 def _muc(ten: str, ham, ra: Dict[str, Any]) -> None:

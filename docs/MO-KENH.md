@@ -49,3 +49,20 @@ người chạy `chuan-bi`).
 (bảng `NGON_NGU_DICH`: vi, ja, en, ko). Không khai = giữ `vi`; khai lệch quốc gia hồ sơ = giữ `vi`. Triển khai dần: kênh
 mới chỉ được khai khoá này khi `workspace/cai-dat.json: "ngon_ngu_tai_khoan_chung_minh": ["ja"]` (ghi sau khi kênh thử
 đăng thật qua Studio ngôn ngữ đó ĐẠT).
+
+## Kho Chrome + thay kênh không được phát (20/10/2026, `core/thay_kenh.py`, skill D20)
+
+- **Kho Chrome** = `<cha của MyTool>\kho\` (tính từ GOC). Trả kho (`python -m core.tra_kho tra <MÃ>`) dời Chrome kênh vào
+  `kho\<MÃ>\` khi Chrome không chạy / khoá máy không giữ cho kênh (bận thì `nhip` sau); `lay-lai` dời về. Không xoá, không đè.
+  Mọi chỗ tìm Chrome kênh lùi về `kho\<MÃ>\<MÃ>.exe`. Chủ thả Chrome Portable MỚI (tên tuỳ ý, có `<tên>.exe`) đã đăng
+  nhập Gmail tay vào kho; `python -m core.kho_chrome quet` liệt kê (chỉ đọc). Sổ đã giao: `kho\_da-dung.json`.
+- **Kênh trả kho không tính ở đâu cả**: `core.kenh.liet_ke_kenh` mặc định bỏ (chỗ quản lý truyền `ca_tra_kho=True`),
+  `core.kenh.bo_kenh_tra_kho` cho danh sách đọc từ `vm/cai-dat-tool.json` / `vm/config.json`; agent bỏ mọi việc Chrome
+  (kể cả việc từ trạm) của kênh trả kho; nguồn kênh trả kho đang giữ được nhả.
+- **Luật hỏng** (mỗi ngày): ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100, không video nào > 500 (bảng
+  `CHANNEL/<k>/chi-so/bang-tom-tat.csv`; cũ > 3 ngày / thiếu = không kết luận). `python -m core.thay_kenh xet` (chỉ đọc).
+- **Thay** (mỗi ngày tối đa một lượt mới, sổ `workspace/mo-kenh/thay-kenh.json`, chạy lại an toàn): trả kho → Chrome mới đã
+  đăng nhập trong kho → mã kế cùng dòng (`TL5-T7-K2` → `TL5-T7-K3`) → giọng chưa kênh đang chạy nào dùng → đăng ký mở kênh
+  (`loai: thay_kenh_tu_dong`, khuôn kênh cũ) → `vm/tao_kenh_thuong_hieu.py` (không tạo trùng, chọn kênh + ghim UC) → kích
+  hoạt (nối đuôi `cac_kenh`, agent nạp nóng) → thiết lập 11/11 + UC ghim → bật `tu_chay`/`tu_duyet`/`tu_dang` → một tin báo.
+  Kho hết Chrome / hết giọng / tạo kênh cần người → "Việc của bạn". Tắt: `workspace/cai-dat.json: thay_kenh_tu_dong: false`.

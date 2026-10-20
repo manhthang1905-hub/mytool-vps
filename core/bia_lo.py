@@ -504,6 +504,21 @@ def thu_muc_mau(goc: str, kenh: str, mau: Sequence[str] = ()) -> str:
     # (TL4-T7-K3 suýt trễ video đầu). Lấy mẫu của KÊNH GỐC ghi trong `workspace/mo-kenh/trang-thai.json` (`kenh_goc`).
     kg = str(((_doc_json(os.path.join(goc, "workspace", "mo-kenh", "trang-thai.json")) or {}).get("kenh") or {})
              .get(kenh, {}).get("kenh_goc") or "") if goc else ""
+    if kg and kg != kenh:
+        # 20/10/2026: kênh gốc đã TRẢ KHO (kênh thay tự động — `core/thay_kenh`) thì bìa của nó không phải bìa thắng →
+        # lấy mẫu của kênh ĐANG CHẠY cùng dòng (TL5-T7-K3 → TL5-T7 / TL5-T7-K2…) trước; không có mới dùng mẫu kênh gốc
+        # (để khâu bìa không giữ cả lượt).
+        try:
+            from .kenh import da_tra_kho, liet_ke_kenh  # noqa: PLC0415
+            if da_tra_kho(goc, kg):
+                dong = re.sub(r"-K\d+$", "", kg, flags=re.IGNORECASE)
+                for k in liet_ke_kenh(goc):
+                    if k != kenh and re.sub(r"-K\d+$", "", k, flags=re.IGNORECASE) == dong:
+                        d = os.path.join(goc, ten_thu_muc_thang(k))
+                        if os.path.isdir(d) and bia_thu_muc(d):
+                            return os.path.abspath(d)
+        except Exception:  # noqa: BLE001
+            pass
     return thu_muc_mau(goc, kg) if kg and kg != kenh else ""
 
 
@@ -2829,8 +2844,10 @@ def kenh_san_xuat(goc: str) -> List[str]:
         cac = sorted(os.listdir(goc_p))
     except OSError:
         return []
+    from .kenh import da_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+
     for k in cac:
-        if os.path.isfile(os.path.join(goc, "CHANNEL", k, "kenh.yaml")) and luot_moi_nhat(goc, k):
+        if os.path.isfile(os.path.join(goc, "CHANNEL", k, "kenh.yaml")) and not da_tra_kho(goc, k) and luot_moi_nhat(goc, k):
             ra.append(k)
     return ra
 

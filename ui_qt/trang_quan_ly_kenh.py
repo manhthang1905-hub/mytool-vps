@@ -1108,7 +1108,7 @@ class TrangQuanLyKenh(QWidget):
         """Đọc lại `CHANNEL/` — đĩa là bản chính, y nguyên tắc của tab Tự động."""
         dang = self._ma_dang_chon()
         self._danh_sach.clear()
-        for ma in liet_ke_kenh(self._app.base_dir):
+        for ma in liet_ke_kenh(self._app.base_dir, ca_tra_kho=True):   # quản lý: thấy cả kênh trả kho (lấy lại được)
             kenh = doc_kenh(self._app.base_dir, ma)
             loai = ("kênh riêng của bạn" if kenh.kenh_rieng
                     else "kênh mẫu của tool" if kenh.mau_cua_tool else "")

@@ -272,6 +272,13 @@ def _duong_giu(goc: str, ma_kenh: str, ma_nguon: str) -> str:
 
 
 def _giu_la_rac(goc: str, giu: Dict[str, Any]) -> bool:
+    try:   # 20/10/2026: kênh giữ đã TRẢ KHO → nhả nguồn ngay (kênh trả kho không tính ở đâu cả)
+        from .kenh import da_tra_kho  # noqa: PLC0415
+
+        if da_tra_kho(goc, str(giu.get("kenh") or "")):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
     try:
         luc = float(giu.get("luc") or 0)
     except (TypeError, ValueError):

@@ -666,8 +666,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--thu", action="store_true")
     a = ap.parse_args(argv)
     goc = a.goc
+    from .kenh import da_tra_kho  # noqa: PLC0415
+
     kenh_ds = a.kenh or sorted(x for x in os.listdir(os.path.join(goc, "CHANNEL"))
-                               if os.path.isfile(os.path.join(goc, "CHANNEL", x, "kenh.yaml")))
+                               if os.path.isfile(os.path.join(goc, "CHANNEL", x, "kenh.yaml")) and not da_tra_kho(goc, x))
     if a.lenh == "xem":
         for k in kenh_ds:
             ok, ly = can_chay(goc, k)

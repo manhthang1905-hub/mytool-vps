@@ -1647,6 +1647,9 @@ def quet_hom_nay(goc: str = GOC, bay_gio: Optional[_dt.datetime] = None) -> Tupl
         return [], []
     cai = _doc_json_tep(os.path.join(vm, "cai-dat-tool.json"))
     kenh = list(((cai or {}).get("kenh") or {}).keys()) if isinstance(cai, dict) else []
+    from .kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không quét, không đợi
+
+    kenh = bo_kenh_tra_kho(goc, kenh)
     hom = (bay_gio or _dt.datetime.now()).strftime("%Y-%m-%d")
     chua, xong = [], []
     for k in kenh:

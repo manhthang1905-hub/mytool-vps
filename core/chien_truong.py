@@ -49,9 +49,14 @@ def _doc_csv(duong: str) -> List[Dict[str, str]]:
 def _cac_kenh() -> List[str]:
     try:
         with open(os.path.join(GOC, "vm", "cai-dat-tool.json"), "r", encoding="utf-8") as tep:
-            return sorted((json.load(tep).get("kenh") or {}).keys())
+            ds = sorted((json.load(tep).get("kenh") or {}).keys())
     except (OSError, ValueError):
         return []
+    try:
+        from core.kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không tính
+        return bo_kenh_tra_kho(GOC, ds)
+    except Exception:  # noqa: BLE001
+        return ds
 
 
 def mo_ta_ngach() -> Dict[str, str]:

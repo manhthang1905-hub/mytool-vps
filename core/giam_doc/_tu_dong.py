@@ -382,6 +382,8 @@ def tu_nang_ha_quyen(goc: str, *, bay_gio: Optional[_dt.datetime] = None,
         if ma.startswith("_") or ma.lower().endswith(("-v2", "_v2")):
             continue
         cai = doc_yaml(os.path.join(duong_kenh(goc, ma), TEP_KENH)) or {}
+        if str(cai.get("tra_kho") or "").strip():  # 20/10: kênh trả kho không tính
+            continue
         cd = str(cai.get("giam_doc") or "tat").strip().lower()
         if cd not in ("goi_y", "tu_ap"):
             continue

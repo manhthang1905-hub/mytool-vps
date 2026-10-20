@@ -1184,8 +1184,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     a = p.parse_args(argv)
     goc = os.path.abspath(a.goc)
     if a.lenh == "dau-goi":
+        from .kenh import da_tra_kho  # noqa: PLC0415
+
         kenh = [a.kenh] if a.kenh else sorted(k for k in os.listdir(os.path.join(goc, "CHANNEL"))
-                                              if not k.startswith("_") and os.path.isdir(os.path.join(goc, "CHANNEL", k)))
+                                              if not k.startswith("_") and os.path.isdir(os.path.join(goc, "CHANNEL", k))
+                                              and not da_tra_kho(goc, k))
         ra = [r for k in kenh for r in dau_cac_goi(goc, k)]
         # 18/10/2026: GIỮ (chưa kiểm được / chưa làm được bìa thay) = mã HOÃN 10 của skill (`ky_nang_tu.MA_HOAN`) — không
         # tính lần hỏng (S05 TL1 bị tạm dừng sau 5 lần "hỏng" do lượt đọc lỗi / gói cũ không ảnh).

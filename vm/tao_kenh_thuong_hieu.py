@@ -596,7 +596,11 @@ def tao(kenh: str, *, goc: str = GOC, thu: bool = False, bo_khung: bool = False,
 
     # Danh tính được xác minh TRONG luồng (email trên trang tài khoản phải khớp kho trước khi làm gì),
     # nên cổng dang_nhap_ket không cần chặn trước. Giữ tham số để nếu có trạng thái thật thì vẫn đọc được.
-    duoc, ma, ly = quyet_dinh_truoc_khi_chay(ten, kho_email, "ok" if (thu or dn_ket in ("", "chua_thu")) else dn_ket,
+    # 20/10: Chrome lấy từ KHO CHROME (`chrome_kho`, core/thay_kenh) do CHỦ đăng nhập tay — tài khoản trong Chrome CHÍNH
+    # là tài khoản kênh, kho bí mật không có email: chỉ cần đọc được email trên trang tài khoản (không so).
+    tu_kho = bool(str(d.get("chrome_kho") or "").strip())
+    duoc, ma, ly = quyet_dinh_truoc_khi_chay(ten, kho_email or ("(chrome-kho)" if tu_kho else ""),
+                                             "ok" if (thu or tu_kho or dn_ket in ("", "chua_thu")) else dn_ket,
                                              dn.chrome_dang_chay(mo_kenh.thu_muc_chrome(goc, kenh)),
                                              bo_khung=bo_khung)
     if not duoc:

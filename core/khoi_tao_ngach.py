@@ -709,6 +709,8 @@ def _kenh_cung_nhom(goc: str, nhom: str, tru: str = "") -> List[Dict[str, Any]]:
         if t.startswith(("_", ".")) or t == tru:
             continue
         y = doc_yaml(os.path.join(duong_kenh(goc, t), TEP_KENH)) or {}
+        if str(y.get("tra_kho") or "").strip():  # 20/10: kênh trả kho không tính
+            continue
         if str(y.get("nhom") or "").strip() == nhom:
             ra.append(y)
     return ra

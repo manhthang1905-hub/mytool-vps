@@ -189,7 +189,14 @@ def client_secret_path(channel):
 def channel_browser_exe(channel):
     """Browser da dang nhap YouTube cua kenh: ...\\TL\\<kenh>\\<kenh>.exe"""
     parent = os.path.dirname(BASE_DIR)  # ...\TL  (cap tren upload)
-    return os.path.join(parent, channel, f"{channel}.exe")
+    duong = os.path.join(parent, channel, f"{channel}.exe")
+    if not os.path.isfile(duong):
+        # 20/10/2026: kenh tra kho — Chrome da doi vao <cha cua MyTool>\kho\<MA>\ (core/tra_kho.py)
+        for cha in (parent, os.path.dirname(parent)):
+            p = os.path.join(cha, "kho", channel, f"{channel}.exe")
+            if os.path.isfile(p):
+                return p
+    return duong
 
 
 def save_credentials(channel, creds):

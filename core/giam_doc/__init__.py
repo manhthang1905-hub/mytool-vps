@@ -305,6 +305,8 @@ def _kenh_bat(goc: str) -> List[str]:
         if ma.startswith("_"):
             continue
         cai = doc_yaml(os.path.join(duong_kenh(goc, ma), TEP_KENH)) or {}
+        if str(cai.get("tra_kho") or "").strip():  # 20/10: kênh trả kho không tính
+            continue
         if str(cai.get("giam_doc") or "tat").strip().lower() in ("goi_y", "tu_ap"):
             ra.append(ma)
     return ra

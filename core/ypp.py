@@ -153,16 +153,19 @@ def du_bao(goc: str, kenh: str, bay_gio: Optional[_dt.datetime] = None) -> dict:
 
 
 def cac_kenh(goc: str) -> List[str]:
+    """Kênh máy này quản lý — BỎ kênh đã trả kho (20/10/2026: kênh trả kho không tính ở đâu cả)."""
+    from .kenh import bo_kenh_tra_kho  # noqa: PLC0415
+
     try:
         with open(os.path.join(goc, "vm", "cai-dat-tool.json"), "r", encoding="utf-8") as tep:
             ds = sorted(((json.load(tep) or {}).get("kenh") or {}).keys())
         if ds:
-            return ds
+            return bo_kenh_tra_kho(goc, ds)
     except (OSError, ValueError):
         pass
     try:
-        return sorted(x for x in os.listdir(os.path.join(goc, "CHANNEL"))
-                      if os.path.isfile(os.path.join(goc, "CHANNEL", x, "chi-so", "kenh-theo-ngay.csv")))
+        return bo_kenh_tra_kho(goc, sorted(x for x in os.listdir(os.path.join(goc, "CHANNEL"))
+                                           if os.path.isfile(os.path.join(goc, "CHANNEL", x, "chi-so", "kenh-theo-ngay.csv"))))
     except OSError:
         return []
 

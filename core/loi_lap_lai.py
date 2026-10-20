@@ -50,6 +50,15 @@ DOC_TOI_DA_BYTE = 6_000_000
 TEP_UU_TIEN = ("workspace", "tu-kiem", "uu-tien.json")
 TEP_SO_TAY = ("workspace", "tu-kiem", "so-tay.json")
 
+
+def _tra_kho(goc: str, kenh: str) -> bool:
+    """Kênh đã trả kho (20/10: không tính ở tự kiểm)."""
+    try:
+        from .kenh import da_tra_kho  # noqa: PLC0415
+        return da_tra_kho(goc, kenh)
+    except Exception:  # noqa: BLE001
+        return False
+
 _RE_LOI = re.compile(
     r"lỗi(?! 0\b)|hỏng|\berror\b|exception|traceback|\bfail|thất bại|timeout|quá hạn|quá giờ|"
     r"mã thoát [1-9-]|mã [1-9]\d*\b|(?-i:\bKHÔNG\b|HỎNG)|kẹt|\btreo\b|đã chết|từ chối|(?<!không )chặn|"
@@ -145,6 +154,8 @@ def doc_nhat_ky_luot(goc: str) -> Iterator[Dong]:
     """`CHANNEL/<k>/tu-chay/<ngày>.json`: dòng nhật ký + lý do dừng của lượt (giờ = trưa ngày sổ — đủ cho đếm ngày)."""
     for p in sorted(glob.glob(os.path.join(goc, "CHANNEL", "*", "tu-chay", "????-??-??.json"))):
         kenh = os.path.basename(os.path.dirname(os.path.dirname(p)))
+        if _tra_kho(goc, kenh):  # 20/10: kênh trả kho không tính
+            continue
         ngay = os.path.basename(p)[:10]
         luc = _epoch(ngay, "12:00:00")
         if luc is None:

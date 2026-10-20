@@ -185,7 +185,10 @@ def _cai_kenh(goc: str, kenh: str) -> Dict[str, Any]:
 
 
 def da_tat(cai: Dict[str, Any]) -> bool:
-    """`kenh_khong_phat: tat` (hoặc false/khong) trong kenh.yaml → không bao giờ dừng kênh này."""
+    """`kenh_khong_phat: tat` (hoặc false/khong) trong kenh.yaml → không bao giờ dừng kênh này. 20/10: kênh đã TRẢ KHO
+    (`tra_kho:`) cũng coi như tắt — không báo, không việc người (core/thay_kenh đã xử lý)."""
+    if str(cai.get("tra_kho") or "").strip():
+        return True
     v = cai.get("kenh_khong_phat")
     return v is False or str(v if v is not None else "").strip().lower() in ("tat", "false", "khong", "0", "no")
 

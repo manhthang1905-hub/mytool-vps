@@ -306,7 +306,7 @@ def kiem_tra(goc: str, bay_gio: Optional[_dt.datetime] = None, *,
     bay_gio = bay_gio or _dt.datetime.now()
     hom_nay = bay_gio.strftime("%Y-%m-%d")
     thu_muc_vm = tt.thu_muc_vm(goc)
-    cac_kenh = liet_ke_kenh(goc)
+    cac_kenh = liet_ke_kenh(goc, ca_tra_kho=True)   # an toàn: việc dở của mọi kênh, kể cả kênh vừa trả kho
 
     # Lý do vì VIỆC THẬT đang chạy dở — không đoán được bao giờ xong.
     ly_do_trang_thai: List[str] = []

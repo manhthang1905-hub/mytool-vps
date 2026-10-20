@@ -321,6 +321,11 @@ def tim_trinh_duyet(thu_muc_vm_: str, ma: str) -> str:
                       os.path.join(goc_chrome, ma, ma, ma + ".exe")):
             if os.path.isfile(duong):
                 return duong
+    # 20/10/2026: kênh trả kho — Chrome đã dời vào `<cha của MyTool>\kho\<MÃ>\` (core/tra_kho.py)
+    for goc_chrome in dict.fromkeys(cac_goc):
+        duong = os.path.join(goc_chrome, "kho", ma, ma + ".exe")
+        if os.path.isfile(duong):
+            return duong
     return ""
 
 

@@ -1622,6 +1622,19 @@ def viec_cua_ban(goc: str, *, anh: Dict[str, Any], bay_gio: Optional[_dt.datetim
     except Exception:  # noqa: BLE001 — mở kênh hỏng không làm hỏng khối việc
         pass
 
+    # 17b) Thay kênh không được phát (`core/thay_kenh.py`, 20/10/2026): CHỈ việc người — kho hết Chrome mới đã đăng
+    # nhập, Chrome kho chưa đăng nhập, hết giọng chưa kênh nào dùng, tạo kênh thương hiệu cần người.
+    try:
+        from . import thay_kenh as _tk2  # noqa: PLC0415
+
+        for v in _tk2.viec_cua_ban(goc):
+            if v["khoa"] in da_xong:
+                continue
+            ra.append(_viec(v["khoa"], CANH_BAO, kenh=v.get("kenh", ""), chu=v["chu"], goi_y=v.get("goi_y", ""),
+                            nut=[("Đã xử lý", "danh_dau_xong", {"khoa": v["khoa"]})], xong_tay=True))
+    except Exception:  # noqa: BLE001 — thay kênh hỏng không làm hỏng khối việc
+        pass
+
     # 18) Skill tự kích hoạt (`core/ky_nang_tu.py`, 14/10/2026): skill hỏng 3 lần liền (máy tạm dừng 24 giờ), kenh.yaml
     # thiếu khoá tự chạy / BOM máy không tự gỡ (S02), não bộ phận chưa ngủ > 30 giờ (D12).
     try:

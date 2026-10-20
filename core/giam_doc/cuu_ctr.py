@@ -340,8 +340,10 @@ def _thang_ngach(goc: str, ma: str, toi_da: int = 6) -> List[str]:
             return []
         goc_ma = re.sub(r"-v\d+$", "", ma)
         ra: List[str] = []
+        from ..kenh import da_tra_kho  # noqa: PLC0415
+
         for k in sorted(os.listdir(duong_kenh(goc))):
-            if k.startswith("_") or re.sub(r"-v\d+$", "", k) == goc_ma:
+            if k.startswith("_") or re.sub(r"-v\d+$", "", k) == goc_ma or da_tra_kho(goc, k):  # 20/10: kênh trả kho không tính
                 continue
             if str((doc_yaml(os.path.join(duong_kenh(goc, k), TEP_KENH)) or {}).get("nhom") or "").strip() != ng:
                 continue
@@ -901,6 +903,8 @@ def _kenh_studio(goc: str) -> List[str]:
         if ma.startswith("_"):
             continue
         cai = doc_yaml(os.path.join(duong_kenh(goc, ma), TEP_KENH)) or {}
+        if str(cai.get("tra_kho") or "").strip():  # 20/10: kênh trả kho không tính
+            continue
         if str(cai.get("giam_doc") or "tat").strip().lower() in ("goi_y", "tu_ap") and bat_studio(cai):
             ra.append(ma)
     return ra

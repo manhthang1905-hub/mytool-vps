@@ -140,7 +140,9 @@ def cac_kenh(goc: str) -> List[str]:
             ten = []
         _KENH[goc] = sorted(t for t in ten if not t.startswith(("_", "."))
                             and os.path.isfile(os.path.join(thu_muc, t, "kenh.yaml")))
-    return _KENH[goc]
+    from ..kenh import bo_kenh_tra_kho  # noqa: PLC0415 — 20/10: kênh trả kho không vào não
+
+    return bo_kenh_tra_kho(goc, _KENH[goc])
 
 
 def tim_kenh(van: str, kenh_ds: Sequence[str]) -> str:
