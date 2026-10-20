@@ -10592,7 +10592,9 @@ def _bia_lo_luot(bc: BoiCanh, luot: LuotChay) -> Optional[Tuple[str, str, str, D
     if chan:
         _giu_bia(bc, luot, chan)
     try:  # 14/10/2026: mẫu tả bìa thắng RIÊNG kênh (một lượt AI khi khuôn đổi) trước khi chọn ảnh tham chiếu
-        hs = bia_lo.ho_so_kieu(bc.goc, bc.kenh.ma, goi=_goi_soat(bc), log=bc.ghi)
+        # 20/10/2026: họ kiểu chữ của lượt theo dữ liệu (`core/bia_du_lieu`) — ảnh tham chiếu cùng họ; `chay` dùng lại
+        # đúng họ đã ghi sổ cho lượt
+        hs = bia_lo.ho_so_kieu(bc.goc, bc.kenh.ma, goi=_goi_soat(bc), log=bc.ghi, luot=luot.thu_muc)
     except Exception as loi:  # noqa: BLE001 — hồ sơ hỏng: chọn mẫu như cũ
         bc.ghi("    (bìa lô: hồ sơ kiểu bìa hỏng: {0})".format(str(loi)[:120]))
         hs = None

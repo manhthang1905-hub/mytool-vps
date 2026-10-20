@@ -1022,6 +1022,25 @@ def d_kiem_vang(goc, kenh):
     return bia_lo.can_kiem_vang(goc, kenh)
 
 
+# D21 · Bìa thắng theo dữ liệu (20/10/2026) — `core/bia_du_lieu.py` ─────────────────────────────────────────────
+
+def k_bia_du_lieu(goc, kenh):
+    from core import bia_du_lieu  # noqa: PLC0415
+    tk = bia_du_lieu.doc_thong_ke(goc, kenh)
+    if not tk:
+        return (THIEU, "chưa dựng bộ bìa thắng theo dữ liệu") if os.path.isfile(bia_du_lieu.duong_bang(goc, kenh)) \
+            else (KHONG, "kênh chưa có bảng Studio")
+    ho = ", ".join("{0} {1}%".format(h, (x or {}).get("ctr")) for h, x in sorted((tk.get("ho") or {}).items()))
+    if tk.get("tut"):
+        return LOI, "3 bìa máy mới nhất CTR < 0,6 × bìa thắng — ép thử họ khác · họ: " + ho
+    return DAT, "{0} ({1}) · họ: {2}".format(tk.get("nguon_thang"), str(tk.get("luc") or "")[:16], ho or "chưa có nhãn")
+
+
+def d_bia_du_lieu(goc, kenh):
+    from core import bia_du_lieu  # noqa: PLC0415
+    return bia_du_lieu.can_chay(goc, kenh)
+
+
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1211,6 +1230,15 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.bia_lo --kiem-vang --kenh K", k_kiem_vang, ["D02"], dieu_kien=d_kiem_vang,
            chay=lambda goc, kenh: _py("-m", "core.bia_lo", "--kiem-vang", "--kenh", kenh), nhip_gio=1, tu_ap=True,
            han_phut=90, mot_kenh=True),
+    KyNang("D21", "Bìa thắng theo dữ liệu", "dinh_ky",
+           "Mỗi khi bảng Studio mới: bộ bìa thắng của kênh từ chi-so/bang-tom-tat.csv (≥ 48 giờ, ≥ 3.000 hiển thị, "
+           "lượt bấm cao nhất, CTR ≥ trung vị, 3–6 bìa, KHÔNG lọc kiểu, ảnh thật i.ytimg.com, sao lưu bộ cũ) + nhãn họ "
+           "kiểu chữ (trần / dải / hộp — AI ví ShopAPI, cache sha1) → CTR theo họ (lô chọn họ bằng mẫu Thompson); bìa "
+           "máy ở 48 giờ / 7 ngày → nghien-cuu/bia-ket-qua.jsonl + tương quan điểm giám khảo ↔ CTR; 3 bìa máy mới nhất "
+           "< 0,6 × trung vị bìa thắng → báo động một lần + ép thử họ khác. Kênh chưa đủ 3 video đạt → giữ bộ mượn.",
+           "python -X utf8 -m core.bia_du_lieu chay --kenh K", k_bia_du_lieu, ["D01"], dieu_kien=d_bia_du_lieu,
+           chay=lambda goc, kenh: _py("-m", "core.bia_du_lieu", "chay", "--kenh", kenh), nhip_gio=20, tu_ap=True,
+           han_phut=25, mot_kenh=True),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "
