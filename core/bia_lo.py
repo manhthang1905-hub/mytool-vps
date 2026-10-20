@@ -2393,6 +2393,10 @@ def kiem_san(u: Dict[str, Any], san: Dict[str, Any]) -> List[str]:
         return ["giám khảo không chấm «bấm như bìa thắng»"]
     ly = [u["mau_duoi"]] if u.get("mau_duoi") else []
     s, nguon = san_cua(u, san)
+    if san.get("phu_quyet_bam") is not None:
+        # 20/10/2026 — giám khảo không dự báo CTR thật của kênh (`core/hieu_chuan`): sàn «bấm như bìa thắng» chỉ còn
+        # PHỦ QUYẾT tấm điểm rất thấp; sàn màu (máy, ở trên) giữ nguyên.
+        s, nguon = min(s, float(san["phu_quyet_bam"])), "phủ quyết — giám khảo không dự báo CTR"
     if float(b) < s:
         ly.append("bấm như bìa thắng {0:.0f} < sàn {1:.0f} ({2})".format(float(b), s, nguon))
     return ly
@@ -2762,8 +2766,22 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     xh = cham(goi, uv, mau=mau, tieu_de=lu["tieu_de"], chu_bia=chu_ve, mo_dau=lu["kich_ban"][:800], thu_muc=ra,
               khoa=(khoa + ":" + van_tay[:6]) if tran else khoa, log=log, dem=dem, ho_so=hs, giau=giau)
     da_cham = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
+    # 20/10/2026 — HIỆU CHUẨN (`core/hieu_chuan`, D22): điểm giám khảo bìa lô ↔ CTR thật của kênh. Không dự báo
+    # (w < 1) → sàn «bấm như bìa thắng» chỉ phủ quyết + xếp hạng nghiêng về tiên nghiệm máy (màu so bìa thắng thật).
+    # Cổng cứng (lọc cứng, chữ lạc, nhân vật lệch, màu nhạt hẳn, cổng chữ) KHÔNG đổi.
+    hc = hieu_chuan_lo(goc, kenh)
+    san_chon = san if hc["w"] >= 1.0 else dict(san, phu_quyet_bam=_hc().SAN_BAM_PHU_QUYET)
     for u in da_cham:
-        u["duoi_san"] = kiem_san(u, san)
+        u["duoi_san"] = kiem_san(u, san_chon)
+    try:
+        tn = tien_nghiem_lo(hs, mau)
+        if hc["w"] < 1.0:
+            da_cham = _hc().xep_bia(da_cham, hc["w"], tn)
+        else:  # vẫn ghi tiên nghiệm (sổ cái `bia_mau`) để chính nó được hiệu chuẩn
+            for u in da_cham[:SO_TOP + 3]:
+                u["hieu_chuan"] = {"w": 1.0, "tien_nghiem": tn(u)}
+    except Exception as loi:  # noqa: BLE001 — tiên nghiệm hỏng: giữ thứ hạng giám khảo
+        log("  (bìa lô: tiên nghiệm màu hỏng: {0})".format(str(loi)[:120]))
     top = [u for u in da_cham if not u["duoi_san"]][:SO_TOP]
     san_truot = "" if top else ly_do_san_truot(xh, san)
     # 19/10/2026 (chủ): lô hết lượt mà vẫn dưới sàn → DÙNG tấm bấm-như-bìa-thắng cao nhất (đã qua chữ/nhân vật/lọc
@@ -2776,7 +2794,7 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
            "chu": chu, "chu_ve": chu_ve, "chu_dong": chu_dong, "chu_tang": tang, "mau": mau, "van_tay": van_tay,
            "kieu_chu": hs["kieu"], "bo_cuc": hs.get("bo_cuc"), "nguon_mau": hs.get("nguon_mau"),
            "ho_kieu": hs.get("ho") or "", "ho_cach": hs.get("ho_cach") or "", "ho_ly_do": hs.get("ho_ly_do") or "",
-           "muc_tieu": hs.get("muc_tieu") or {}, "san": san, "san_truot": san_truot,
+           "muc_tieu": hs.get("muc_tieu") or {}, "san": san, "san_truot": san_truot, "hieu_chuan": hc,
            "du_phong": [dict(u, hang=i) for i, u in enumerate(du_phong, 1)],
            "thu_muc_mau": hs.get("thu_muc_mau") or "",
            "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "giay": round(time.time() - t0),
@@ -2791,6 +2809,7 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
         " — DƯỚI SÀN: " + san_truot if san_truot else ""))
     ghi_nao_san(goc, kenh, ket)
     if ghi_so:
+        ghi_so_cai_hc(goc, kenh, ket)
         try:  # 20/10/2026 — sổ họ + điểm giám khảo của lượt (vòng phản hồi CTR, `core/bia_du_lieu`)
             from . import bia_du_lieu  # noqa: PLC0415
             bia_du_lieu.ghi_so_cai(goc, kenh, ket["luot"], {
@@ -2801,6 +2820,68 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
         except Exception:  # noqa: BLE001
             pass
     return ket
+
+
+# ── Hiệu chuẩn giám khảo bìa (20/10/2026) — `core/hieu_chuan` ───────────────
+
+
+def _hc():
+    from . import hieu_chuan  # noqa: PLC0415
+    return hieu_chuan
+
+
+def hieu_chuan_lo(goc: str, kenh: str) -> Dict[str, Any]:
+    """Trọng số giám khảo bìa lô của kênh (`{w, muc, rho, n, nguon}`); sàn bấm theo `bia_lo_bam` khi đủ mẫu riêng.
+    Hỏng → w = 1 (hành vi cũ)."""
+    try:
+        x = _hc().trong_so(goc, kenh, "bia_lo")
+        return {k: x.get(k) for k in ("w", "muc", "rho", "n", "nguon", "bo_cham")}
+    except Exception:  # noqa: BLE001
+        return {"w": 1.0, "muc": "mac_dinh"}
+
+
+def tien_nghiem_lo(hs: Dict[str, Any], mau: Sequence[str]) -> Callable[[Dict[str, Any]], Optional[float]]:
+    """Hàm tiên nghiệm MÁY cho một tấm: màu (`do_mau`) so phân phối bìa thắng THẬT của kênh (thư mục bìa thắng,
+    không có thì bìa mẫu) — `hieu_chuan.tien_nghiem_mau`."""
+    tm = str(hs.get("thu_muc_mau") or "")
+    thang_do = []
+    for t in ([b["tep"] for b in bia_thu_muc(tm, toi_da=99)] if tm else list(mau)):
+        try:
+            if t and os.path.isfile(t):
+                thang_do.append(do_mau(t))
+        except (OSError, ValueError):
+            continue
+
+    def tn(u: Dict[str, Any]) -> Optional[float]:
+        do = u.get("mau_do")
+        if not do and u.get("tep") and os.path.isfile(u["tep"]):
+            try:
+                do = do_mau(u["tep"])
+            except (OSError, ValueError):
+                do = None
+        return _hc().tien_nghiem_mau(do, thang_do)
+    tn.thang_do = thang_do  # type: ignore[attr-defined]
+    return tn
+
+
+def ghi_so_cai_hc(goc: str, kenh: str, ket: Dict[str, Any]) -> None:
+    """Sổ cái hiệu chuẩn: điểm giám khảo (tổng + «bấm như bìa thắng») và tiên nghiệm màu của các tấm vào top / dự
+    phòng — tấm đầu là tấm được chọn (hồ sơ video sửa lại nếu cổng chữ đổi tấm). Không ném lỗi."""
+    try:
+        hc = _hc()
+        ma = "{0}-{1}".format(kenh, ket.get("luot") or "")
+        ds = list(ket.get("top") or ket.get("du_phong") or [])[:SO_TOP]
+        w = (ket.get("hieu_chuan") or {}).get("w")
+        hc.ghi(goc, "bia_lo", kenh, ma, [{"id": u.get("ma"), "diem": u.get("tong"), "chon": i == 0,
+                                          "phu": dict(u.get("diem") or {}, hang_2=u.get("hang_2"))}
+                                         for i, u in enumerate(ds)], trong_so=w)
+        hc.ghi(goc, "bia_lo_bam", kenh, ma, [{"id": u.get("ma"), "diem": (u.get("diem") or {}).get("bam_nhu_thang"),
+                                              "chon": i == 0} for i, u in enumerate(ds)], trong_so=w)
+        tn = [(i, u, (u.get("hieu_chuan") or {}).get("tien_nghiem")) for i, u in enumerate(ds)]
+        hc.ghi(goc, "bia_mau", kenh, ma, [{"id": u.get("ma"), "diem": t, "chon": i == 0} for i, u, t in tn
+                                          if t is not None])
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # ── Sàn của MỘT lô (19/10/2026) ─────────────────────────────────────────────

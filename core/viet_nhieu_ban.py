@@ -457,6 +457,71 @@ def _canh_bao_hoc(hoc: Any, nguon: str, loi: Any) -> None:
         pass
 
 
+#: Lời dặn thêm cho bản hook THỬ theo nhãn (`tu_hoc.KIEU_HOOK`) — chỉ dặn KIỂU mở, mọi luật của lời nhắc kênh giữ nguyên.
+HUONG_HOOK = {
+    "ke_chuyen": "mở bằng MỘT CÂU CHUYỆN NGẮN về một người cụ thể (ai, chuyện gì xảy ra, khoảnh khắc bất ngờ) rồi mới "
+                 "dẫn sang điều video sẽ nói",
+    "cau_hoi": "mở bằng MỘT CÂU HỎI hỏi thẳng người xem về chính họ",
+    "canh_tinh_huong": "mở bằng MỘT CẢNH đời thường cụ thể mà người xem nhận ra ngay là mình",
+    "so_lieu_su_that": "mở bằng MỘT CON SỐ hoặc sự thật nghiên cứu gây bất ngờ",
+    "canh_bao": "mở bằng MỘT LỜI CẢNH BÁO nhẹ nhàng về điều người xem đang làm mà không biết",
+}
+
+
+def _thu_hook(hoc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Lần THỬ hook còn lượt của kênh (`nao.thu_dang_mo`) + lời dặn kiểu mở; không có / không dặn được → None."""
+    if not isinstance(hoc, dict) or not hoc.get("goc") or not hoc.get("kenh"):
+        return None
+    try:
+        from . import nao  # noqa: PLC0415
+
+        t = nao.thu_dang_mo(str(hoc["goc"]), str(hoc["kenh"]), "hook")
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao_hoc(hoc, "thu_dang_mo:hook", loi)
+        return None
+    if not t or t["gia_tri"] not in HUONG_HOOK:
+        return None
+    return dict(t, huong=("\n\nYÊU CẦU RIÊNG CHO BẢN NÀY (thử nghiệm của kênh): " + HUONG_HOOK[t["gia_tri"]]
+                          + ". Mọi yêu cầu khác ở trên giữ nguyên."))
+
+
+def _goi_khoa(goi: Callable[..., str], loi_nhac: str, khoa_phu: str) -> str:
+    """Gọi hàm viết với khoá idempotency riêng (`khoa_phu`) nếu nơi gọi nhận; không nhận thì gọi thường."""
+    import inspect  # noqa: PLC0415
+    try:
+        nhan = "khoa_phu" in inspect.signature(goi).parameters
+    except (TypeError, ValueError):
+        nhan = False
+    return goi(loi_nhac, khoa_phu=khoa_phu) if nhan else goi(loi_nhac)
+
+
+def _trong_so_hook(hoc: Optional[Dict[str, Any]]) -> float:
+    """Trọng số giám khảo hook của kênh (`core/hieu_chuan`); hỏng / chưa hiệu chuẩn → 1."""
+    try:
+        from . import hieu_chuan  # noqa: PLC0415
+
+        return float(hieu_chuan.trong_so(str(hoc["goc"]), str(hoc["kenh"]), "hook")["w"])  # type: ignore[index]
+    except Exception:  # noqa: BLE001
+        return 1.0
+
+
+def _ghi_so_cai_hook(hoc: Optional[Dict[str, Any]], diem: Any, chon: int) -> None:
+    """Sổ cái hiệu chuẩn: điểm giám khảo từng hook + hook được chọn (`hoc["ma_goi"]` có thì ghi). Không ném."""
+    try:
+        if not isinstance(hoc, dict) or not hoc.get("ma_goi") or not isinstance(diem, dict) or not diem:
+            return
+        from . import hieu_chuan  # noqa: PLC0415
+
+        ket = hoc.get("ket") or {}
+        hieu_chuan.ghi(str(hoc["goc"]), "hook", str(hoc["kenh"]), str(hoc["ma_goi"]), [
+            {"id": str(k).upper(), "diem": v, "chon": str(k).upper() == nhan_ban(chon),
+             "phu": {"nhan": ket.get("hook"), "thu_nghiem": (ket.get("thu_nghiem") or {}).get("id")}
+             if str(k).upper() == nhan_ban(chon) else None} for k, v in diem.items()],
+            trong_so=_trong_so_hook(hoc))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def thay_hook(goi_viet: Callable[[str], str],
               goi_cham: Optional[Callable[[str], str]],
               ban: str, hook_goc: str, *,
@@ -520,29 +585,57 @@ def thay_hook(goi_viet: Callable[[str], str],
         if luu_ban is not None:
             luu_ban(i, chu)
         hook.append(chu)
+
+    # ═══ LẦN THỬ HOOK CỦA BỘ NÃO: VIẾT HẲN MỘT BẢN ĐÚNG KIỂU ĐANG THỬ (20/10/2026) ═══
+    #
+    # `nao.py thu --truc hook --gia-tri ke_chuyen` (n039, 13/10) ra 0/2 video sau 7 ngày: bộ chọn chỉ NHÂN hệ số
+    # cho phương án đã MANG nhãn ấy, mà không bản nào được viết theo kiểu ấy (TL1 13–20/10: cau_hoi, canh_tinh_huong,
+    # so_lieu_su_that, khac — không một ke_chuyen). Giờ: còn lượt thử → viết THÊM một bản theo kiểu đang thử (khoá
+    # riêng), bản ấy qua rào chắn thì ĐƯỢC CHỌN (thử là ép N video — bộ chấm vẫn chấm để ghi sổ), nhãn ghi đúng giá
+    # trị thử + mã lần thử → hồ sơ video → ván tự học trừ lượt, khám nghiệm đo 0:30.
+    thu = _thu_hook(hoc)
+    i_thu = -1
+    if thu:
+        cu = (da_co(n) or "").strip() if da_co is not None else ""
+        try:
+            chu = cu or (_goi_khoa(goi_viet, loi_nhac + thu["huong"], "thu-" + thu["gia_tri"]) or "").strip()
+        except Exception as loi_thu:  # noqa: BLE001 — bản thử hỏng không được vỡ hook
+            chu = ""
+            noi("  (hook thử «{0}» hỏng: {1})".format(thu["gia_tri"], str(loi_thu)[:80]))
+        if chu:
+            if not cu and luu_ban is not None:
+                luu_ban(n, chu)
+            hook.append(chu)
+            i_thu = len(hook) - 1
+            noi("  hook {0} — THỬ «{1}» ({2}): {3} ký tự.".format(nhan_ban(n), thu["gia_tri"], thu["id"], len(chu)))
     if not hook:
         return ban, False, "không hook nào viết được"
 
     # Bỏ trước các bản không qua cửa, để bộ chấm khỏi chọn phải bản hỏng.
     dung: List[str] = []
-    for h in hook:
+    j_thu = -1
+    for i_h, h in enumerate(hook):
         ok, vi_sao = hook_dung_duoc(h, than, ban, dai_goc)
         if ok:
+            if i_h == i_thu:
+                j_thu = len(dung)
             dung.append(h)
         else:
-            noi("  (bỏ một hook: {0})".format(vi_sao))
+            noi("  (bỏ một hook{0}: {1})".format(" THỬ" if i_h == i_thu else "", vi_sao))
     if not dung:
         return ban, False, "mọi hook đều không qua rào chắn"
 
+    ghi_hoc: Dict[str, Any] = {}
     if len(dung) == 1:
         chon, ly_do, diem, bang = 0, "chỉ còn một hook qua rào chắn", {}, ""
     else:
-        sau, ghi_hoc = None, {}
+        sau = None
         if hoc is not None and goi_cham and khuon_cham.strip():
             try:
                 from . import tu_hoc  # noqa: PLC0415
 
-                sau, ghi_hoc = tu_hoc.bo_chon(hoc["goc"], hoc["kenh"], "hook", dung, hoc["hat"])
+                sau, ghi_hoc = tu_hoc.bo_chon(hoc["goc"], hoc["kenh"], "hook", dung, hoc["hat"],
+                                              trong_so_giam_khao=_trong_so_hook(hoc))
                 khuon_cham = khuon_cham + tu_hoc.yeu_cau_nhan("hook")
             except Exception as loi_hoc:  # noqa: BLE001
                 sau, ghi_hoc = None, {}
@@ -551,14 +644,28 @@ def thay_hook(goi_viet: Callable[[str], str],
             goi_cham if (goi_cham and khuon_cham.strip()) else None,
             dung, hook_goc or "", khuon_cham=khuon_cham, chung=o,
             muc_tieu=muc_tieu, ghi=ghi, sau_cham=sau)
+    chon_cham = chon
+    if j_thu >= 0 and chon != j_thu:
+        noi("  (thử hook «{0}» {1}: dùng bản THỬ {2} thay {3} của bộ chấm)".format(
+            thu["gia_tri"], thu["id"], nhan_ban(j_thu), nhan_ban(chon)))
+        chon = j_thu
     hook_chon = dung[chon]
     if hoc is not None:
         try:
             from . import tu_hoc  # noqa: PLC0415
 
             hoc["ket"] = tu_hoc.ket_nhan("hook", dung, chon, ghi_hoc if len(dung) > 1 else {})
+            if thu:
+                nhan_cham = (ghi_hoc.get("nhan") or [None] * len(dung))[j_thu] if j_thu >= 0 else None
+                hoc["ket"]["thu_nghiem"] = {"id": thu["id"], "gia_tri": thu["gia_tri"], "ep": j_thu >= 0,
+                                            "nhan_cham": nhan_cham, "chon_cham": nhan_ban(chon_cham),
+                                            **({} if j_thu >= 0 else {"ly_do": "bản thử không viết được / không qua "
+                                                                                "rào chắn"})}
+                if j_thu >= 0:
+                    hoc["ket"].update(hook=thu["gia_tri"], nhan_doan=False)
         except Exception as loi_hoc:  # noqa: BLE001
             _canh_bao_hoc(hoc, "ket_nhan:hook", loi_hoc)
+        _ghi_so_cai_hook(hoc, diem, chon)
 
     # ═══ VÁ HOOK ĐÃ CHỌN THEO ĐÚNG LỜI CHÊ (thêm 04/09/2026) ═══
     #
@@ -599,7 +706,12 @@ def thay_hook(goi_viet: Callable[[str], str],
                         try:
                             from . import tu_hoc  # noqa: PLC0415
 
+                            tn = (hoc.get("ket") or {}).get("thu_nghiem")
                             hoc["ket"] = tu_hoc.ket_nhan("hook", [va], 0, {})
+                            if tn:  # bản vá của bản THỬ vẫn là bản thử (vá theo lời chê, giữ kiểu mở)
+                                hoc["ket"]["thu_nghiem"] = dict(tn, va=True)
+                                if tn.get("ep"):
+                                    hoc["ket"].update(hook=tn["gia_tri"], nhan_doan=False)
                         except Exception:  # noqa: BLE001
                             pass
                     ghi_va = " · bộ chấm chọn hook ĐÃ VÁ: " + ly_do_so[:160]

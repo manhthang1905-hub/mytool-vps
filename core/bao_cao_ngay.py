@@ -3,6 +3,7 @@
 Bảy mục, mục nào hỏng cũng chỉ in một dòng "không đọc được" — không mục nào làm vỡ cả bản tin:
   1 Video mai (kênh nào đã có video ngày mai)      4 Chiến trường (thị phần, quy mô ngách, đối thủ số 1, lệnh tác chiến)
   2 Skill hỏng/thiếu (core.ky_nang)                4b Tín hiệu học thiếu/cũ (`_muc_hoc`: vòng tự học đứt ở đâu)
+                                                   4b+ Hiệu chuẩn bộ chấm (`core.hieu_chuan`: giám khảo LLM nào dự báo được)
                                                    4c Chất lượng thành phẩm (`_muc_chat_luong`: cổng lúc bàn giao)
   3 Đường tới YPP (core.ypp.du_bao)                5 Lỗi 24 giờ (workspace/loi-chay-max.md, bỏ mức nhắc)
                                                    6 Máy (RAM, đĩa, nhịp tim agent)
@@ -226,6 +227,12 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
     return ra or ["- vòng học kín: mọi kênh có số, có nhãn, chấm đều"]
 
 
+def _muc_hieu_chuan(goc: str, bay_gio: _dt.datetime) -> List[str]:
+    """20/10/2026 — bộ chấm LLM nào dự báo được kết quả thật, bộ nào bị co về phủ quyết (`core/hieu_chuan`, D22)."""
+    from core import hieu_chuan  # noqa: PLC0415
+    return hieu_chuan.dong_bao_cao(goc, bay_gio)
+
+
 # ── 4c. Chất lượng thành phẩm ────────────────────────────────────────────────
 
 def _muc_chat_luong(goc: str, bay_gio: _dt.datetime) -> List[str]:
@@ -319,6 +326,7 @@ def tao(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) -> st
         ("Đường tới YPP", lambda: _muc_ypp(goc, bay_gio)),
         ("Chiến trường", _muc_chien_truong),
         ("Tín hiệu học thiếu/cũ", lambda: _muc_hoc(goc, bay_gio)),
+        ("Hiệu chuẩn bộ chấm", lambda: _muc_hieu_chuan(goc, bay_gio)),
         ("Chất lượng thành phẩm", lambda: _muc_chat_luong(goc, bay_gio)),
         ("Lỗi 24 giờ", lambda: _muc_loi(goc, bay_gio)),
         ("Máy", lambda: _muc_may(goc)),

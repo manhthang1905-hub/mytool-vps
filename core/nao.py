@@ -505,6 +505,24 @@ def co_hieu_luc(goc: str, kenh: str, truc: str) -> bool:
     return bool(hieu_luc(goc, kenh, truc))
 
 
+def thu_dang_mo(goc: str, kenh: str, truc: str) -> Optional[Dict[str, Any]]:
+    """Lần `thu` CÒN LƯỢT của kênh ở trục (`{id, gia_tri, da_dung, so_video}`) — nơi VIẾT dùng để chủ động sinh một
+    phương án đúng giá trị đang thử (20/10/2026: n039 hook «ke_chuyen» 0/2 video sau 7 ngày vì bộ chọn chỉ nhân hệ số
+    cho phương án CÓ SẴN nhãn ấy, mà không bản hook nào được viết theo kiểu đó). Không có / hỏng → None."""
+    try:
+        for d in doc_hanh_dong(goc):
+            ts = d.get("tham_so") or {}
+            if (d.get("lenh") == "thu" and d.get("trang_thai") == "mo" and ts.get("kenh") == kenh
+                    and ts.get("truc") == truc and int(ts.get("da_dung") or 0) < int(ts.get("so_video") or 0)):
+                gt = _chuan_truc(truc, ts.get("gia_tri"))
+                if gt:
+                    return {"id": str(d.get("id") or ""), "gia_tri": gt, "da_dung": int(ts.get("da_dung") or 0),
+                            "so_video": int(ts.get("so_video") or 0)}
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.thu_dang_mo", loi, kenh)
+    return None
+
+
 def tru_luot(goc: str, *a: Any, **kw: Any) -> Any:
     with _khoa_hd(goc):
         return _tru_luot_g(goc, *a, **kw)
@@ -561,10 +579,22 @@ def ket_qua_goi(goc: str, kenh: str, goi: Any) -> List[str]:
             ket += " (phân vị {0} @{1}h)".format(_f(v.get("ket_pv")), _f(v.get("ket_tuoi")))
         elif v.get("ket_som") is not None:
             ket += " (tín hiệu sớm: phân vị {0})".format(_f(v.get("ket_som")))
-        ra.append("{0}: kết quả {1}, CTR-so-kênh {2} — hiển thị @48h {3}, CTR {4}".format(
+        # 20/10/2026 — % còn lại ở 0:30 (dự đoán của lần thử hook đo bằng số này) so trung vị kênh (`core/hieu_chuan`)
+        giu = ""
+        try:
+            from . import hieu_chuan  # noqa: PLC0415
+
+            g30 = hieu_chuan.giu_30s_goi(goc, kenh, ma)
+            if g30 is not None:
+                nen = hieu_chuan.nen_giu_30s(goc, kenh)
+                giu = ", 0:30 còn {0}%{1}".format(_f(g30, 1), " (trung vị kênh {0}%)".format(_f(nen, 1))
+                                                   if nen is not None else "")
+        except Exception:  # noqa: BLE001
+            giu = ""
+        ra.append("{0}: kết quả {1}, CTR-so-kênh {2} — hiển thị @48h {3}, CTR {4}{5}".format(
             ma, ket, chu.get(v.get("ket_ctr"), "chờ"),
             _f(m.get("impressions")) + (" (~{0})".format(m.get("moc_dung")) if m.get("xap_xi") else ""),
-            _f(m.get("ctr"), 2, "%")))
+            _f(m.get("ctr"), 2, "%"), giu))
     return ra
 
 

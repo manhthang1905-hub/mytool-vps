@@ -451,10 +451,16 @@ def he_so_chon(goc: str, ma_kenh: str, truc: str, nhan: Any, hat: str) -> Dict[s
     return {n: round(HE_SO_CHON_NEN + HE_SO_CHON_BIEN * rd[chuan_gia_tri(truc, n)], 3) for n in tho}
 
 
-def bo_chon(goc: str, ma_kenh: str, truc: str, ban: Any, hat: str) -> Tuple[Any, Dict[str, Any]]:
+def bo_chon(goc: str, ma_kenh: str, truc: str, ban: Any, hat: str,
+            trong_so_giam_khao: float = 1.0) -> Tuple[Any, Dict[str, Any]]:
     """`(sau_cham, ghi)` cho `viet_nhieu_ban.cham_va_chon(sau_cham=…)`: gắn nhãn, nhân hệ số vào điểm LLM,
-    chọn lại phương án điểm cao nhất. Mọi thứ giải thích được nằm trong `ghi` (cập nhật khi callback chạy)."""
+    chọn lại phương án điểm cao nhất. Mọi thứ giải thích được nằm trong `ghi` (cập nhật khi callback chạy).
+
+    20/10/2026 — `trong_so_giam_khao` (w, `core/hieu_chuan`): giám khảo không dự báo kết quả thật → điểm LLM được
+    lấy MŨ w trước khi nhân hệ số Thompson (log điểm = w·log LLM + log hệ số — tổng có trọng số), để kết quả thật
+    của trục nói nhiều hơn. w = 1: y như cũ."""
     ghi: Dict[str, Any] = {}
+    mu = max(0.05, min(1.0, float(trong_so_giam_khao if trong_so_giam_khao is not None else 1.0)))
 
     def sau_cham(chon: int, diem: Dict[str, Any], kieu_llm: Any) -> int:
         nhan, doan = gan_nhan(truc, ban, kieu_llm)
@@ -466,10 +472,12 @@ def bo_chon(goc: str, ma_kenh: str, truc: str, ban: Any, hat: str) -> Tuple[Any,
         d0 = {i: v for i, v in d0.items() if v is not None}
         if len(d0) < 2:
             return chon
-        d1 = {i: round(v * he.get(nhan[i], 1.0), 3) for i, v in d0.items()}
+        d1 = {i: round((max(v, 0.0) ** mu if mu < 1.0 else v) * he.get(nhan[i], 1.0), 3) for i, v in d0.items()}
         moi = max(d1, key=lambda i: (d1[i], i == chon))
         ghi["he_so"] = {"truc": truc, "he_so": he, "diem_goc": {chr(65 + i): v for i, v in d0.items()},
                         "diem_sau": {chr(65 + i): v for i, v in d1.items()}, "chon_truoc": chon, "chon_sau": moi}
+        if mu < 1.0:
+            ghi["he_so"]["trong_so_giam_khao"] = round(mu, 3)
         return moi
 
     return sau_cham, ghi

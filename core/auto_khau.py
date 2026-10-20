@@ -4156,12 +4156,13 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
         # `thay_hook` gọi hàm viết mà không truyền chỉ số.
         dem_hook = [0]
 
-        def goi_viet_hook(loi_nhac: str) -> str:
+        def goi_viet_hook(loi_nhac: str, khoa_phu: str = "") -> str:
+            # `khoa_phu` (20/10/2026): bản hook THỬ của bộ não — khoá riêng theo giá trị thử, không đụng bộ đếm bản thường.
             bc.kiem_dung()
-            dem_hook[0] += 1
+            if not khoa_phu:
+                dem_hook[0] += 1
             return _don_ban(_goi(bc, loi_nhac,
-                                 _khoa_chat(luot, "2d-hook.md:ban{0}".format(
-                                     dem_hook[0])),
+                                 _khoa_chat(luot, "2d-hook.md:" + (khoa_phu or "ban{0}".format(dem_hook[0]))),
                                  toi_da_token=2048), k.ngon_ngu)
 
         def goi_cham_hook(loi_nhac: str) -> str:
@@ -4181,7 +4182,8 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
             return _doc_chu(os.path.join(d, TEP_HOOK.format(chr(65 + i))))
 
         bc.ghi("  viết riêng {0} đoạn mở đầu…".format(so_hook))
-        hoc_hook = {"goc": bc.goc, "kenh": k.ma, "hat": "hk|{0}|{1}-{2}".format(k.ma, luot.ma_kenh, luot.ma_luot)}
+        hoc_hook = {"goc": bc.goc, "kenh": k.ma, "hat": "hk|{0}|{1}-{2}".format(k.ma, luot.ma_kenh, luot.ma_luot),
+                    "ma_goi": "{0}-{1}".format(luot.ma_kenh, luot.ma_luot) if getattr(luot, "ma_luot", "") else ""}
         try:
             ban_moi, da_thay, ghi_hook = thay_hook(
                 goi_viet_hook, goi_cham_hook, ban_chon,
@@ -4227,6 +4229,17 @@ def _viet_nhieu_ban(bc: BoiCanh, luot: LuotChay, k: Kenh, chung: Dict[str, Any],
     if so_vong > 0:
         ban_chon = _vong_cham_sua_luot(bc, luot, k, chung, ban_chon, tu_lieu, d,
                                        nhan="ghep", so_vong=so_vong)
+    try:  # 20/10/2026 — sổ cái hiệu chuẩn (`core/hieu_chuan`): điểm giám khảo từng bản kịch bản + bản được chọn
+        from . import hieu_chuan as _hck  # noqa: PLC0415
+
+        if isinstance(diem, dict) and diem and getattr(luot, "ma_luot", ""):
+            _hck.ghi(str(getattr(bc, "goc", "") or ""), "kich_ban", str(getattr(k, "ma", "") or ""),
+                     "{0}-{1}".format(luot.ma_kenh, luot.ma_luot),
+                     [{"id": str(x).upper(), "diem": v, "chon": str(x).upper() == chr(65 + chon)} for x, v in diem.items()],
+                     trong_so=_hck.trong_so(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""),
+                                            "kich_ban")["w"])
+    except Exception:  # noqa: BLE001
+        pass
     _ghi_chu(os.path.join(d, TEP_CHAM_DIEM),
              "{0}\n\nChọn: bản {1}\nĐiểm: {2}\nLý do: {3}\n{4}{5}".format(
                  bang, chr(65 + chon), json.dumps(diem, ensure_ascii=False),
@@ -5025,6 +5038,27 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         chon, ly_do, diem, bang = 0, "chấm hỏng — giữ đối chứng: {0}".format(str(loi)[:100]), {}, ""
 
     chon = chon if 0 <= chon < len(ban) else 0
+    # 20/10/2026 — HIỆU CHUẨN (`core/hieu_chuan`, D22): giám khảo tiêu đề ↔ CTR thật của kênh. Không dự báo (w < 1)
+    # → giám khảo chỉ phủ quyết điểm rất thấp; xếp hạng nghiêng về LOẠI ứng viên (đối chứng / nắn khuôn / bản N) đã cho
+    # CTR thật tốt hơn × hệ số Thompson kiểu tiêu đề (kết quả thật). Kênh chưa hiệu chuẩn / đủ tin: y như cũ.
+    hc_td: Dict[str, Any] = {}
+    try:
+        from . import hieu_chuan as _hcm  # noqa: PLC0415
+
+        ts_td = _hcm.trong_so(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "tieu_de")
+        he_td = (ghi_hoc_td.get("he_so") or {}) if isinstance(ghi_hoc_td, dict) else {}
+        nhan_td = (ghi_hoc_td.get("nhan") or []) if isinstance(ghi_hoc_td, dict) else []
+        he_i = {i: float((he_td.get("he_so") or {}).get(nhan_td[i], 1.0)) for i in range(min(len(ban), len(nhan_td)))}
+        moi_td, hc_td = _hcm.chon_tieu_de(ten_ban, diem if isinstance(diem, dict) else {}, chon, float(ts_td["w"]),
+                                          he_i, _hcm.tien_nghiem_luu(str(getattr(bc, "goc", "") or ""), "tieu_de"))
+        if hc_td:
+            hc_td.update(muc=ts_td.get("muc"), rho=ts_td.get("rho"), n=ts_td.get("n"), nguon=ts_td.get("nguon"))
+            if moi_td != chon:
+                bc.ghi("  (hiệu chuẩn: giám khảo tiêu đề {0} ở kênh này — chọn {1} thay {2})".format(
+                    _hcm.TEN_MUC.get(str(ts_td.get("muc")), ts_td.get("muc")), ten_ban[moi_td], ten_ban[chon]))
+            chon = moi_td
+    except Exception as loi_hc:  # noqa: BLE001 — hiệu chuẩn hỏng: giữ lựa chọn của giám khảo
+        _canh_bao_hoc(str(getattr(bc, "goc", "") or ""), "hieu_chuan:tieu_de", loi_hc, str(getattr(k, "ma", "") or ""))
     try:
         from . import tu_hoc as _th2  # noqa: PLC0415
 
@@ -5037,7 +5071,19 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         "ung_vien": [{"ten": ten_ban[i], "tieu_de": b} for i, b in enumerate(ban)],
         "chon": chon, "ten_chon": ten_ban[chon] if chon < len(ten_ban) else "",
         "tieu_de_chon": ban[chon], "ly_do": ly_do, "diem": diem, "bang_so_do": bang,
+        **({"hieu_chuan": hc_td} if hc_td else {}),
     })
+    try:  # sổ cái hiệu chuẩn — điểm giám khảo từng ứng viên + ứng viên được chọn
+        from . import hieu_chuan as _hcm2  # noqa: PLC0415
+
+        if isinstance(diem, dict) and diem:
+            _hcm2.ghi(str(getattr(bc, "goc", "") or ""), "tieu_de", str(getattr(k, "ma", "") or ""),
+                      "{0}-{1}".format(luot.ma_kenh, luot.ma_luot),
+                      [{"id": chr(65 + i), "diem": diem.get(chr(65 + i)), "chon": i == chon,
+                        "phu": {"ten": ten_ban[i]} if i == chon else None} for i in range(len(ban))],
+                      trong_so=(hc_td or {}).get("w"))
+    except Exception:  # noqa: BLE001
+        pass
     if chon != 0:
         bc.ghi("  [Việc 5] chọn {0} trong {1} ứng viên: 「{2}」".format(
             ten_ban[chon], len(ban), ban[chon][:70]))

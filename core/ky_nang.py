@@ -1041,6 +1041,30 @@ def d_bia_du_lieu(goc, kenh):
     return bia_du_lieu.can_chay(goc, kenh)
 
 
+# D22 · Hiệu chuẩn bộ chấm (20/10/2026) — `core/hieu_chuan.py` ─────────────────────────────────────────────────
+
+def k_hieu_chuan(goc, kenh):
+    from core import hieu_chuan  # noqa: PLC0415
+    p = hieu_chuan.moi_nhat(goc)
+    if not p:
+        return (THIEU, "chưa hiệu chuẩn lần nào") if hieu_chuan.kenh_hoc(goc) else (KHONG, "chưa có hồ sơ video")
+    du = _json(p) or {}
+    try:
+        tuoi = (_dt.datetime.now() - _dt.datetime.strptime(os.path.basename(p)[:10], "%Y-%m-%d")).days
+    except ValueError:
+        tuoi = 0
+    if tuoi > hieu_chuan.NGAY_NHIP + 1:
+        return LOI, "hiệu chuẩn cũ {0} ngày ({1})".format(tuoi, os.path.basename(p)[:10])
+    ts = ((du.get("trong_so") or {}).get("kenh") or {}).get(kenh) if kenh else (du.get("trong_so") or {}).get("chung")
+    khong = sorted(b for b, x in (ts or {}).items() if x.get("muc") == "khong_du_bao")
+    return DAT, "{0} · không dự báo (chỉ phủ quyết): {1}".format(os.path.basename(p)[:10], ", ".join(khong) or "không")
+
+
+def d_hieu_chuan(goc, kenh):
+    from core import hieu_chuan  # noqa: PLC0415
+    return hieu_chuan.can_chay(goc)
+
+
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1240,6 +1264,17 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.bia_du_lieu chay --kenh K", k_bia_du_lieu, ["D01"], dieu_kien=d_bia_du_lieu,
            chay=lambda goc, kenh: _py("-m", "core.bia_du_lieu", "chay", "--kenh", kenh), nhip_gio=20, tu_ap=True,
            han_phut=25, mot_kenh=True),
+    KyNang("D22", "Hiệu chuẩn bộ chấm", "dinh_ky",
+           "Mỗi tuần: sổ cái điểm giám khảo LLM (bìa lô, tiêu đề, kịch bản, hook, ảnh cảnh, biên tập — ghi thẳng ở nơi "
+           "chọn + bù từ hồ sơ video / xep-hang.json) × kết quả thật (CTR ≥ 1.000 hiển thị ≥ 48 giờ, % độ dài, 0:30, "
+           "thắng) → Spearman từng bộ chấm × kênh + gộp → workspace/hieu-chuan/<ngày>.json + trong-so.json. n ≥ 10 và "
+           "rho < 0,2 → «không dự báo»: chỉ còn phủ quyết (bìa lô: sàn bấm-như-bìa-thắng chỉ phủ quyết, xếp theo tiên "
+           "nghiệm màu so bìa thắng thật; tiêu đề: xếp theo loại ứng viên đã cho CTR thật tốt hơn; hook: điểm mũ w); "
+           "rho ≥ 0,4 → đủ quyền. Không gỡ cổng cứng. Kèm: 0:30 theo nhãn hook + lần thử hook của bộ não → não "
+           "«kich-ban»; bài học có/không vs đối chứng (bảng dung) — bài tự rút không giúp sau ≥ 8/8 mẫu → nghỉ.",
+           "python -X utf8 -m core.hieu_chuan chay", k_hieu_chuan, ["D01"], dieu_kien=d_hieu_chuan,
+           chay=lambda goc, kenh: _py("-m", "core.hieu_chuan", "chay"), nhip_gio=24 * 6, tu_ap=True, toan_may=True,
+           han_phut=20),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "
