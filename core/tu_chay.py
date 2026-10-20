@@ -320,7 +320,10 @@ def _giu_khoa(goc: str, ma_kenh: str, *,
     cu = _doc_khoa(duong)
     pid_cu = int(cu.get("pid") or 0)
     bat_dau_cu = float(cu.get("bat_dau") or 0)
-    tuoi_giay = (time.time() - bat_dau_cu) if bat_dau_cu else (KHOA_CU_QUA_GIAY + 1)
+    # 20/10/2026: lượt điều phối đang SỐNG làm tươi khoá (`nhip`, `core/canh_luot.py`) — tuổi tính từ nhịp cuối, nên
+    # lượt dài hợp lệ (chờ kho clip 10–16 giờ) không bị coi là "khoá cũ 12 giờ" rồi bị lượt khác giành mất.
+    moc_cu = max(bat_dau_cu, float(cu.get("nhip") or 0))
+    tuoi_giay = (time.time() - moc_cu) if moc_cu else (KHOA_CU_QUA_GIAY + 1)
     if pid_cu and tuoi_giay < KHOA_CU_QUA_GIAY and con_song(pid_cu):
         luc = (_dt.datetime.fromtimestamp(bat_dau_cu).strftime("%H:%M %d/%m")
               if bat_dau_cu else "?")
@@ -336,8 +339,17 @@ def _giu_khoa(goc: str, ma_kenh: str, *,
 
 
 def _nha_khoa(goc: str, ma_kenh: str) -> None:
+    """Nhả khoá kênh — CHỈ khi khoá còn là của tiến trình này (20/10/2026: lượt cũ bị thay mà về sau nhả mù là xoá
+    mất khoá của lượt mới, điều phối tưởng kênh rảnh rồi sinh thêm lượt thứ ba cùng kênh)."""
+    duong = _duong_khoa(goc, ma_kenh)
     try:
-        os.remove(_duong_khoa(goc, ma_kenh))
+        pid = int(_doc_khoa(duong).get("pid") or 0)
+    except (TypeError, ValueError):
+        pid = 0
+    if pid and pid != os.getpid():
+        return
+    try:
+        os.remove(duong)
     except OSError:
         pass
 

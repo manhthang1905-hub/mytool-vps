@@ -77,8 +77,10 @@ def _log_kenh(ma: str):
     """Lượt một kênh ở chế độ điều phối: ghi `tu-chay.log` (có tiền tố kênh —
     nhiều lượt song song cùng ghi) VÀ in ra nhật ký riêng của tiến trình."""
     ghi_dia = bo_log_tat_ca(BASE_DIR, in_console=False)
+    from core import canh_luot  # noqa: PLC0415
 
     def log(dong: str) -> None:
+        canh_luot.danh_dau()   # mỗi dòng nhật ký = lượt còn tiến triển (luồng canh, 20/10/2026)
         ghi_dia("[{0}] {1}".format(ma, dong))
         if sys.stdout is not None:
             try:
@@ -102,6 +104,11 @@ def _chay_kenh_dieu_phoi(args, che_do: str) -> int:
                      cho_toi_da=cho):
             log("── lượt điều phối kênh {0} (PID {1}) — giữ 1 làn API ──".format(
                 args.kenh, os.getpid()))
+            if args.tu_dieu_phoi:
+                # 20/10/2026: lượt bị lượt khác thay (khoá kênh) hay im ≥ 3 giờ thì TỰ THOÁT + nhả làn — xem đó.
+                from core import canh_luot  # noqa: PLC0415
+
+                canh_luot.bat(BASE_DIR, args.kenh, ghi=log)
             dieu_phoi.cai_moc_tien_trinh(BASE_DIR, kenh=args.kenh, ghi=log)
             client = build_client(config)
             ngay = time.strftime("%Y-%m-%d")

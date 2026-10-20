@@ -501,11 +501,13 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
                 ra.update(cho_engine=True, ly_do="chờ engine {0} tới {1} (đã nhả làn)".format(
                     ra["engine_cho"], _dt.datetime.fromtimestamp(tham).strftime("%H:%M")))
                 return ra
-            ra.update(chay=True, diem=-1000.0,
+            ra.update(chay=True, diem=-1000.0, luot_do=True,
                       ly_do="lượt dở — thăm dò lại engine {0}".format(ra["engine_cho"]))
+            ra["ly_do"] += _gan_han(goc, ma, k, bay_gio, ra)
             return ra
-        ra.update(chay=True, diem=-1000.0, ly_do="lượt dở — chạy tiếp" + (
+        ra.update(chay=True, diem=-1000.0, luot_do=True, ly_do="lượt dở — chạy tiếp" + (
             " (kênh không được phát: xếp sau kênh đang được phát)" if kp_dung else ""))
+        ra["ly_do"] += _gan_han(goc, ma, k, bay_gio, ra)
         return ra
     if kp_dung and getattr(kenh_khong_phat, "DUNG_SAN_XUAT", False):
         ra["ly_do"] = kp_ly
@@ -529,7 +531,54 @@ def trang_thai_kenh(goc: str, ma: str, *, bay_gio: Optional[_dt.datetime] = None
     thieu = (int(tt.get("kho_dem_can") or 0) - int(tt.get("kho_dem") or 0)
              if tt.get("che_do") == "kho_dem" else 1)
     ra.update(chay=True, diem=-float(thieu), ly_do="thiếu kho đệm {0}".format(thieu))
+    ra["ly_do"] += _gan_han(goc, ma, k, bay_gio, ra)
     return ra
+
+
+# ── xếp làn theo HẠN (20/10/2026) ──────────────────────────────────────────
+#
+# Đo 15–20/10: máy ra ~5 video/ngày cho 8 kênh × 1 khe/ngày, kênh trống ngày đăng (17/10 năm kênh trống). Luật cũ: mọi
+# "lượt dở" điểm −1000 luôn đi trước, còn lại theo số thiếu kho đệm — lượt dở của kênh mà khe kế tiếp còn xa cứ chiếm
+# làn, hai kênh mới chưa có video nào đợi cả buổi sáng. Luật mới (chủ duyệt 20/10: video đầu của kênh mới được ưu tiên):
+#   1. kênh đang được phát trước kênh không được phát (`khong_phat`, như cũ);
+#   2. kênh MỚI chưa có video nào (`xep_lich.han_san_xuat.chua_co_video`) trước;
+#   3. rồi theo HẠN = khe đăng sớm nhất chưa có video phủ, gom theo khung `GIO_HAN_NGANG` giờ;
+#   4. cùng khung hạn thì lượt dở (đã đổ tiền) đi trước — lượt dở không bao giờ đói vì hạn của chính kênh nó tiến dần
+#      tới đầu hàng; rồi hạn chính xác, số thiếu kho đệm, mã kênh.
+
+#: Hai hạn cùng khung ngần này giờ (tính từ bây giờ) coi như "ngang nhau" — khi ấy lượt dở đi trước.
+GIO_HAN_NGANG = 3.0
+
+
+def _gan_han(goc: str, ma: str, k: Any, bay_gio: _dt.datetime, ra: Dict[str, Any]) -> str:
+    """Gắn `han` (ISO) / `han_ts` / `kenh_moi` vào `ra`; trả đuôi lý do cho nhật ký. Hỏng thì im (không hạn)."""
+    try:
+        from . import xep_lich  # noqa: PLC0415
+
+        h = xep_lich.han_san_xuat(goc, ma, k, bay_gio=bay_gio)
+    except Exception:  # noqa: BLE001 — tính hạn hỏng không được chặn điều phối
+        return ""
+    if h.get("chua_co_video"):
+        ra["kenh_moi"] = True
+    han = h.get("han")
+    if han is not None:
+        ra.update(han=han.isoformat(timespec="minutes"), han_ts=han.timestamp())
+    if ra.get("kenh_moi"):
+        return " · kênh mới chưa có video — ưu tiên video đầu"
+    if han is None:
+        return " · không có khe đăng"
+    return " · hạn khe {0:%d/%m %H:%M}".format(han)   # không in "còn N giờ": dòng tóm tắt chỉ in khi ĐỔI
+
+
+def khoa_xep(c: Dict[str, Any], bay_gio: _dt.datetime) -> Tuple[Any, ...]:
+    """Khoá sắp xếp ứng viên của một nhịp (nhỏ = sinh trước) — xem khối chú thích trên."""
+    han = c.get("han_ts")
+    if han is None:
+        khung, han = 10 ** 6, float("inf")
+    else:
+        khung = int(max(0.0, float(han) - bay_gio.timestamp()) // (GIO_HAN_NGANG * 3600.0))
+    return (bool(c.get("khong_phat")), 0 if c.get("kenh_moi") else 1, khung,
+            0 if c.get("luot_do") else 1, han, float(c.get("diem") or 0.0), c["ma"])
 
 
 # ── sinh lượt ──────────────────────────────────────────────────────────────
@@ -774,9 +823,9 @@ def _nhip_trong_khoa(goc: str, *, bay_gio: _dt.datetime, sinh: Callable[[str, st
             ra["chi_thang"] = thang
             if thang >= nst_may:
                 chan = "trần ngân sách tháng máy {0}/{1}".format(thang, nst_may)
-    # Kênh không được phát (`khong_phat`, chỉ còn lượt dở) xếp SAU mọi kênh đang được phát (12/10/2026).
-    ung_vien = sorted((c for c in cac if c.get("chay")),
-                      key=lambda c: (bool(c.get("khong_phat")), c["diem"], c["ma"]))
+    # Kênh không được phát (`khong_phat`, chỉ còn lượt dở) xếp SAU mọi kênh đang được phát (12/10/2026);
+    # còn lại theo HẠN khe đăng, kênh mới trước, lượt dở thắng khi cùng khung hạn (20/10/2026, `khoa_xep`).
+    ung_vien = sorted((c for c in cac if c.get("chay")), key=lambda c: khoa_xep(c, bay_gio))
     # Van Ổ ĐĨA (01/10/2026, `core/don_dep_mo_rong.van_o`), cạnh van ví: ổ < 10 GB
     # → không sinh lượt MỚI (lượt dở vẫn làm nốt); ổ đủ lại thì nhịp sau tự mở.
     if not chan and ung_vien:

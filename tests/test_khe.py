@@ -276,10 +276,12 @@ def test_api_hai_lan_chay_song_song_lan_thu_ba_xep_hang(tmp_path):
     p3b.nha()
 
 
-def test_so_lan_api_doc_cai_dat_va_kep_1_4(tmp_path):
+def test_so_lan_api_doc_cai_dat_va_kep_1_8(tmp_path):
     goc = str(tmp_path)
     _ghi_cai_dat(goc, {"lan_api": 99})
-    assert khe.so_lan_api(goc) == 4
+    assert khe.so_lan_api(goc) == 8          # 20/10/2026: khai tay được tới 8 làn
+    _ghi_cai_dat(goc, {"lan_api": 6})
+    assert khe.so_lan_api(goc) == 6
     _ghi_cai_dat(goc, {"lan_api": 0})
     assert khe.so_lan_api(goc) == 1
     _ghi_cai_dat(goc, {"lan_api": "khong-phai-so"})

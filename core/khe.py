@@ -92,7 +92,11 @@ NHIP_KIEM_MAC_DINH_GIAY = 10.0
 #: Tên tệp khoá lớp "nang" — GIỮ NGUYÊN đường của `core/tu_chay.py` cũ.
 TEN_TEP_KHOA_NANG = ".khoa-may"
 
-_TRAN_API_MIN, _TRAN_API_MAX = 1, 4
+_TRAN_API_MIN, _TRAN_API_MAX = 1, 8
+#: 20/10/2026: khai tay `lan_api` được tới 8 (mỗi lượt chỉ 30–90 MB RAM, chủ yếu chờ mạng; van RAM của điều phối vẫn hạ
+#: về 1 khi nghẹt). Công thức theo RAM khi KHÔNG khai vẫn kẹp 4 như cũ.
+_TRAN_API_MAC_DINH_MAX = 4
+TRAN_LAN_API_TOI_DA = _TRAN_API_MAX
 
 
 class KheHetGio(TimeoutError):
@@ -217,12 +221,12 @@ def _tinh_lan_api_mac_dinh(ram_tong_gb: Optional[float]) -> int:
     if not ram_tong_gb or ram_tong_gb <= 0:
         return _TRAN_API_MIN
     n = int(math.floor((float(ram_tong_gb) - 6.0) / 3.0))
-    return max(_TRAN_API_MIN, min(_TRAN_API_MAX, n))
+    return max(_TRAN_API_MIN, min(_TRAN_API_MAC_DINH_MAX, n))
 
 
 def so_lan_api(goc: str, *, ram_tong_gb: Optional[float] = None) -> int:
     """Số khe "api" song song. Ưu tiên `workspace/cai-dat.json` khoá `lan_api`
-    (kẹp 1..4); thiếu/hỏng thì tính theo RAM tổng máy.
+    (kẹp 1..8, 20/10/2026); thiếu/hỏng thì tính theo RAM tổng máy (kẹp 1..4).
 
     Đọc `cai-dat.json` TRỰC TIẾP bằng `json.load` — không qua `core.cai_dat`
     (khoá `lan_api` không nằm trong bảng `MAC_DINH` của module đó, và file này
@@ -329,6 +333,18 @@ def _tao_khoa_doc_quyen(duong: str, noi_dung: Dict[str, Any]) -> bool:
     except OSError:
         return False
     return True
+
+
+def _xoa_neu_cua_minh(duong: str) -> None:
+    """Nhả tệp giữ khe — CHỈ khi nó còn là của tiến trình này (20/10/2026: làn của lượt bị thay có thể đã được lượt
+    khác giành lại; nhả mù là xoá mất tệp của người đang giữ). Đọc không được → xoá như cũ."""
+    du = _doc_json(duong)
+    try:
+        if du is not None and int(du.get("pid") or 0) not in (0, os.getpid()):
+            return
+    except (TypeError, ValueError):
+        pass
+    _xoa_tep(duong)
 
 
 def _khe_trong(duong: str) -> bool:
@@ -691,12 +707,39 @@ def _cac_tep_lan_api(goc: str) -> List[Tuple[int, str]]:
     return sorted(ra)
 
 
-def dem_lan_api(goc: str) -> Dict[str, Any]:
+def duong_khoa_kenh(goc: str, kenh: str) -> str:
+    """`CHANNEL/<kenh>/tu-chay/.khoa` — khoá lượt của kênh (`core/tu_chay._duong_khoa`, chép đường để file này tự đứng)."""
+    return os.path.join(goc, "CHANNEL", str(kenh), "tu-chay", ".khoa")
+
+
+#: Lượt giữ làn bị coi là ĐÃ BỊ THAY khi khoá kênh của nó do một PID KHÁC còn sống giữ, giành SAU lúc lượt này giữ
+#: làn ít nhất ngần này giây (lượt mới nhặt lại đúng kênh đó — lượt cũ treo/chờ là thừa).
+GIAY_LECH_BI_THAY = 120.0
+
+
+def lan_bi_thay_the(goc: str, du: Optional[Dict[str, Any]]) -> bool:
+    """Tệp làn API `du` thuộc một lượt ĐÃ BỊ THAY (20/10/2026: lượt TL3 giữ api-0 30 giờ ở 0% CPU sau khi lượt mới đã
+    giành khoá kênh — khe chỉ dọn làn của PID CHẾT nên không ai lấy lại). Chỉ đọc đĩa; không giết ai."""
+    if not isinstance(du, dict) or du.get("loai", LOP_API) != LOP_API or not du.get("kenh"):
+        return False
+    kh = _doc_json(duong_khoa_kenh(goc, str(du.get("kenh")))) or {}
+    try:
+        pid, bat_dau = int(du.get("pid") or 0), float(du.get("bat_dau") or 0.0)
+        pid_k, bat_dau_k = int(kh.get("pid") or 0), float(kh.get("bat_dau") or 0.0)
+    except (TypeError, ValueError):
+        return False
+    return bool(pid and pid_k and pid_k != pid and bat_dau
+                and bat_dau_k > bat_dau + GIAY_LECH_BI_THAY and pid_con_song(pid_k))
+
+
+def dem_lan_api(goc: str, *, don_thay_the: bool = False) -> Dict[str, Any]:
     """Đếm làn API: `{"lan", "tran", "dang_lam", "dang_cho_clip", "giu": {đường: tệp}}`.
 
     `dang_lam` = tệp làn người SỐNG giữ mà KHÔNG có dấu chờ clip sống (cái này
     so với `lan`); `dang_cho_clip` = tệp làn của lượt đang chờ kho clip. Tệp
-    của PID chết bị dọn (như `_khe_trong`)."""
+    của PID chết bị dọn (như `_khe_trong`). Làn của lượt ĐÃ BỊ THAY
+    (`lan_bi_thay_the`) không tính; `don_thay_the=True` (lúc giành làn) thì
+    xoá luôn tệp đó để làn được giành lại."""
     cho = doc_cho_clip(goc)
     giu: Dict[str, Dict[str, Any]] = {}
     so_cho = 0
@@ -704,6 +747,12 @@ def dem_lan_api(goc: str) -> Dict[str, Any]:
         if _khe_trong(duong):
             continue
         du = _doc_json(duong) or {}
+        if lan_bi_thay_the(goc, du):
+            if don_thay_the:
+                _xoa_tep(duong)
+                _ghi_nhat_ky(goc, {"viec_nk": "don_lan_bi_thay", "lop": LOP_API, "kenh": du.get("kenh"),
+                                   "pid": du.get("pid"), "boi": os.getpid()})
+            continue
         giu[duong] = du
         if dang_cho_clip(cho, du.get("pid"), du.get("kenh")):
             so_cho += 1
@@ -718,7 +767,7 @@ def _khe_api_trong(goc: str) -> Tuple[List[str], int]:
     Không có lượt chờ clip → y như cũ: đúng `so_lan_api` tệp `api-0..N-1`, cạnh
     tranh bằng `O_EXCL` (trần cứng). Có lượt chờ clip → mở thêm đúng ngần ấy chỉ
     số, nhưng số được giành = `lan − đang_làm` (và không vượt trần tổng)."""
-    dem = dem_lan_api(goc)
+    dem = dem_lan_api(goc, don_thay_the=True)
     so_duoc = min(dem["lan"] - dem["dang_lam"], dem["tran"] - len(dem["giu"]))
     so_tep = min(dem["tran"], dem["lan"] + dem["dang_cho_clip"])
     trong = [duong_khoa_api(goc, i) for i in range(so_tep)
@@ -910,7 +959,7 @@ def giu(goc: str, lop: str, viec: str, kenh: str = "", uu_tien: float = 2,
         yield huy_thuc
     finally:
         _tat_giam_sat_han(dung_giam_sat, luong_giam_sat)
-        _xoa_tep(duong_khoa_giu)
+        _xoa_neu_cua_minh(duong_khoa_giu)
         _ghi_nhat_ky(goc, {"viec_nk": "nha", "lop": lop, "viec": viec, "kenh": kenh,
                            "pid": pid, "ram_trong_gb": ram_gb()[0]})
 
@@ -947,7 +996,7 @@ class PhienGiu:
         self._da_nha = True
         _tat_giam_sat_han(self._dung_giam_sat, self._luong_giam_sat)
         if self._duong:   # rỗng = phiên TÁI NHẬP, khoá thuộc lớp giữ bên ngoài
-            _xoa_tep(self._duong)
+            _xoa_neu_cua_minh(self._duong)
         _ghi_nhat_ky(self._goc, {"viec_nk": "nha", "lop": self._lop,
                                  "viec": self._viec, "kenh": self._kenh,
                                  "pid": os.getpid(), "ram_trong_gb": ram_gb()[0]})
@@ -1000,7 +1049,7 @@ def trang_thai(goc: str) -> Dict[str, Any]:
                 con = pid_con_song(int(d.get("pid") or 0))
             except (TypeError, ValueError):
                 con = False
-            if not con:
+            if not con or lan_bi_thay_the(goc, d):
                 d = None
         if d is None and i >= lan:
             continue

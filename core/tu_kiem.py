@@ -732,9 +732,110 @@ def kiem_trang_chu(K: BoiCanh) -> List[Dict[str, Any]]:
     return ra
 
 
+# ── 10) thông lượng sản xuất (20/10/2026) ──────────────────────────────────────
+#
+# Đo 15–20/10: ~5 video/ngày cho 8 kênh × 1 khe/ngày, trung vị 15 giờ/video (khâu clip 10–16 giờ ngày 16–18/10) — không
+# bộ kiểm nào kêu. Mỗi ngày một mục cho HÔM QUA: số video dựng xong, trung vị giờ/video (tạo lượt → dựng xong) và từng
+# khâu, số khe lỡ của từng kênh tự chạy (nhịp 1 ngày; kênh chưa từng lên video nào chỉ ghi chú). HỎNG khi có kênh lỡ khe
+# hoặc trung vị giờ/video > `HE_SO_CHAM` × trung vị 7 ngày trước đó → báo động gộp (một lần/ngày, `_bao_gop`).
+
+HE_SO_CHAM = 2.0
+KHAU_DO = ("kich-ban", "giong-doc", "phu-de", "bang-canh", "anh", "clip", "thumbnail", "dung")
+
+
+def _trung_vi(ds: Sequence[float]) -> Optional[float]:
+    s = sorted(ds)
+    if not s:
+        return None
+    g = len(s) // 2
+    return s[g] if len(s) % 2 else (s[g - 1] + s[g]) / 2.0
+
+
+def luot_dung_xong(goc: str, tu: _dt.datetime, den: _dt.datetime) -> List[Dict[str, Any]]:
+    """Lượt có khâu dựng XONG trong [tu; den): {kenh, ma_luot, gio, khau: {khâu: phút}} — đọc `trang-thai.json`."""
+    import glob  # noqa: PLC0415
+
+    ra = []
+    a, b = tu.timestamp(), den.timestamp()
+    for p in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", "*", "*", "trang-thai.json")):
+        du = _json(p)
+        if not isinstance(du, dict):
+            continue
+        kh = du.get("khau") or {}
+        d = kh.get("dung") or {}
+        try:
+            xong, tao = float(d.get("ket_thuc") or 0), float(du.get("tao_luc") or 0)
+        except (TypeError, ValueError):
+            continue
+        if d.get("trang_thai") != "xong" or not (a <= xong < b) or not tao or xong <= tao:
+            continue
+        phut = {}
+        for ma in KHAU_DO:
+            x = kh.get(ma) or {}
+            try:
+                if x.get("bat_dau") and x.get("ket_thuc"):
+                    phut[ma] = max(0.0, (float(x["ket_thuc"]) - float(x["bat_dau"])) / 60.0)
+            except (TypeError, ValueError):
+                pass
+        ra.append({"kenh": os.path.basename(os.path.dirname(os.path.dirname(p))),
+                   "ma_luot": os.path.basename(os.path.dirname(p)), "gio": (xong - tao) / 3600.0, "khau": phut})
+    return ra
+
+
+def _chu_ky_kenh(goc: str, kenh: str) -> int:
+    try:
+        from .ky_nang import _kenh_yaml  # noqa: PLC0415
+        return max(1, int(_kenh_yaml(goc, kenh).get("chu_ky_dang_ngay") or 1))
+    except Exception:  # noqa: BLE001
+        return 1
+
+
+def kiem_cong_suat(K: BoiCanh) -> List[Dict[str, Any]]:
+    hom_qua = K.bay.date() - _dt.timedelta(days=1)
+    khoa = "cong_suat:{0}".format(hom_qua)
+    viec = "thông lượng {0:%d/%m}: không kênh nào lỡ khe, giờ/video ≤ {1:g}× trung vị 7 ngày".format(hom_qua, HE_SO_CHAM)
+    if not K.can_kiem(khoa):
+        return [_giu_cu(K, "cong_suat", "", khoa, viec, K.bay)]
+    dau = _dt.datetime.combine(hom_qua, _dt.time())
+    luot = luot_dung_xong(K.goc, dau, dau + _dt.timedelta(days=1))
+    truoc = luot_dung_xong(K.goc, dau - _dt.timedelta(days=7), dau)
+    tv, tv7 = _trung_vi([x["gio"] for x in luot]), _trung_vi([x["gio"] for x in truoc])
+    khau = {ma: _trung_vi([x["khau"][ma] for x in luot if ma in x["khau"]]) for ma in KHAU_DO}
+    lich_theo: Dict[str, List[_dt.datetime]] = {}
+    for khoa_so, m in _so_video(K.goc).items():
+        if isinstance(m, dict) and "/" in khoa_so and m.get("video_id") and m.get("trang_thai") not in (
+                "nhap", "dang-tai", "loi-tai", "tai-hong"):
+            t = _gio(m.get("lich_dat") or m.get("lich"))
+            if t:
+                lich_theo.setdefault(khoa_so.split("/", 1)[0], []).append(t)
+    lo: Dict[str, int] = {}
+    chua_len: List[str] = []
+    for kenh in K.kenh_ds:
+        if _dang_o_may_khac(K.goc, kenh) or not _kenh_tu_chay(K.goc, kenh) or _chu_ky_kenh(K.goc, kenh) >= 2:
+            continue
+        ds = lich_theo.get(kenh, [])
+        if not any(t.date() < hom_qua for t in ds):
+            if not any(t.date() == hom_qua for t in ds):
+                chua_len.append(kenh)
+            continue
+        thieu = len(_khe_kenh(K.goc, kenh)) - sum(1 for t in ds if t.date() == hom_qua)
+        if thieu > 0:
+            lo[kenh] = thieu
+    cham = tv is not None and tv7 is not None and tv > HE_SO_CHAM * tv7
+    bang = "{0}; {1} video dựng xong; giờ/video trung vị {2} (7 ngày trước {3}){4}{5}; khâu (phút): {6}".format(
+        "lỡ khe: " + ", ".join("{0} ×{1}".format(k, n) for k, n in sorted(lo.items())) if lo else "không kênh nào lỡ khe",
+        len(luot), "?" if tv is None else "{0:.1f}".format(tv), "?" if tv7 is None else "{0:.1f}".format(tv7),
+        " — CHẬM > {0:g}×".format(HE_SO_CHAM) if cham else "",
+        "; chưa lên video đầu: " + ", ".join(chua_len) if chua_len else "",
+        ", ".join("{0} {1:.0f}".format(ma, v) for ma, v in khau.items() if v is not None) or "-")
+    return [_muc("cong_suat", "", khoa, viec, K.bay, HONG if (lo or cham) else DAT, bang,
+                 so_lieu={"so_video": len(luot), "gio_trung_vi": tv, "gio_trung_vi_7_ngay": tv7, "khau_phut": khau,
+                          "lo_khe": lo, "chua_len": chua_len})]
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
-        ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu))
+        ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────
@@ -832,6 +933,8 @@ def _dong_loi_gan(goc: str, kenh: str, bay: _dt.datetime, gio: float = 30.0) -> 
 def phan_loai(K: BoiCanh, m: Dict[str, Any], so_tay: Dict[str, Any]) -> Dict[str, Any]:
     """→ {bai, lop, ten, dong, sua}. Lượt kẹt / khoá chết / đói suất mà sổ tay vừa xử lý cho kênh này → `sua`."""
     from . import loi_lap_lai as ll  # noqa: PLC0415
+    if m.get("loai") == "cong_suat":   # số đo tổng — không có dòng lỗi nào để phân lớp; báo thẳng
+        return {"bai": "", "lop": "", "ten": "thông lượng sản xuất", "dong": "", "sua": "", "nguoi": False}
     kenh = m.get("kenh") or ""
     for x in so_tay.get("luot_ket") or [] if isinstance(so_tay.get("luot_ket"), list) else []:
         if x.get("kenh") == kenh and m["loai"] in ("nhip", "dang"):

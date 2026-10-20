@@ -403,7 +403,8 @@ def _khoa_con_tuoi(goc: str, ma_kenh: str,
         with open(duong, "r", encoding="utf-8") as tep:
             du = json.load(tep)
         if isinstance(du, dict):
-            moc = float(du.get("bat_dau") or 0) or None
+            # 20/10/2026: lượt sống làm tươi khoá (`nhip`, `core/canh_luot.py`) — tuổi tính từ nhịp cuối.
+            moc = max(float(du.get("bat_dau") or 0), float(du.get("nhip") or 0)) or None
     except (OSError, ValueError, TypeError):
         moc = None
     if moc is None:

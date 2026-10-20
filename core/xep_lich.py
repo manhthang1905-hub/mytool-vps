@@ -401,6 +401,41 @@ def khe_trong_som_nhat(goc: str, ma_kenh: str, kenh: Any, *,
     return "", ""
 
 
+def han_san_xuat(goc: str, ma_kenh: str, kenh: Any, *,
+                 bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Hạn của video KẾ TIẾP mà kênh phải sản xuất (điều phối xếp làn theo hạn, 20/10/2026).
+
+    `han`: mốc khe công khai SỚM NHẤT chưa có video phủ (≥ bây giờ, không biên) — khe trống theo kế hoạch + sổ máy
+    đăng, bỏ qua thêm đúng số gói "Sẵn sàng" chưa có lịch (`dem_kho_dem.goi_cho`: mỗi gói ấy sẽ lấp một khe trống sớm
+    nhất). Kênh không khai giờ / hết 60 ngày → None. `chua_co_video`: kênh chưa từng có video (không mốc công khai nào
+    trong kế hoạch lẫn sổ máy đăng, kho đệm rỗng) — video đầu của kênh mới."""
+    bay_gio = bay_gio or _dt.datetime.now()
+    so = doc_so_video_id(goc)
+    khe = khe_cua_kenh(kenh)
+    try:
+        kho = dem_kho_dem(goc, ma_kenh, kenh, bay_gio=bay_gio)
+    except Exception:  # noqa: BLE001 — kế hoạch hỏng: coi như kho rỗng
+        kho = {"kho": 0, "goi_cho": []}
+    da_co = moc_da_co(goc, ma_kenh, so_video_id=so)
+    ra: Dict[str, Any] = {"han": None, "chua_co_video": not da_co and int(kho.get("kho") or 0) == 0}
+    if not khe:
+        return ra
+    dung = set(khe_da_dung(goc, ma_kenh, so_video_id=so, khe=khe))
+    co_nhip = list(da_co) if chu_ky_ngay(kenh) >= 2 else None
+    moc = None
+    for _i in range(len(kho.get("goi_cho") or []) + 1):
+        ngay, gio = khe_trong_som_nhat(goc, ma_kenh, kenh, bay_gio=bay_gio, bien_gio=0,
+                                       da_dung=dung, da_co=co_nhip)
+        moc = _moc(ngay, gio) if ngay else None
+        if moc is None:
+            return ra
+        dung.add((ngay, gio))
+        if co_nhip is not None:
+            co_nhip.append(moc)
+    ra["han"] = moc
+    return ra
+
+
 def khe_som_hon_khi_tai(goc: str, ma_kenh: str, kenh: Any, ma_goi: str, ngay: str, gio: str, *,
                         bay_gio: Optional[_dt.datetime] = None,
                         so_video_id: Optional[Dict[str, Any]] = None,

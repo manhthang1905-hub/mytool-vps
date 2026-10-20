@@ -446,7 +446,8 @@ def test_nhip_toi_gio_tham_do_thi_sinh_lai_luot_do_truoc(tmp_path, monkeypatch):
     ra, sinh, _nhat = _nhip(goc, monkeypatch, {"K1", "K2", "K3", "K4"})
     assert sinh == ["K1", "K2", "K3", "K4"], "lượt dở (thăm dò) đi trước, đúng 4 làn"
     assert ra["so_cho_engine"] == 0
-    assert all(c["ly_do"] == "lượt dở — thăm dò lại engine tts" for c in ra["kenh"] if c["ma"] in sinh)
+    # 20/10/2026: lý do mang thêm đuôi hạn khe (" · hạn khe …" / " · kênh mới …") — xếp làn theo hạn
+    assert all(c["ly_do"].startswith("lượt dở — thăm dò lại engine tts") for c in ra["kenh"] if c["ma"] in sinh)
 
 
 def test_nhip_tham_do_van_xep_lan_nhu_luot_thuong(tmp_path, monkeypatch):

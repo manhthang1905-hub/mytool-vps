@@ -46,6 +46,8 @@ import sys
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Sequence
 
+from . import khe
+
 __all__ = [
     "LOP_KHAU", "KHE_NGAY_PHUT", "MOC_MAC_DINH",
     "doc_khau", "doc_phien_quet", "doc_tai_len", "doc_hoat_dong_kenh",
@@ -320,13 +322,13 @@ def _chia_giai_doan(mau: Sequence[Dict[str, Any]], moc: str) -> Dict[str, List[D
 
 
 def _so_lan_api_that(goc: str) -> Optional[int]:
-    """`lan_api` khai trong `workspace/cai-dat.json` (1..4); không khai → None."""
+    """`lan_api` khai trong `workspace/cai-dat.json` (kẹp như `khe.so_lan_api`); không khai → None."""
     cai = _doc_json(os.path.join(goc, "workspace", "cai-dat.json"))
     try:
         v = int((cai or {}).get("lan_api"))
     except (TypeError, ValueError, AttributeError):
         return None
-    return max(1, min(4, v)) if v >= 1 else None
+    return max(1, min(khe.TRAN_LAN_API_TOI_DA, v)) if v >= 1 else None
 
 
 def do_chu_ky_that(goc: str, so_ngay: float = 3.0,
@@ -922,7 +924,7 @@ def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,
     phut_api = sum(nk["phut"]["api"].values())
     cai = _doc_json(os.path.join(goc, "workspace", "cai-dat.json")) or {}
     try:
-        lan = max(1, min(4, int(cai.get("lan_api") or 2)))
+        lan = max(1, min(khe.TRAN_LAN_API_TOI_DA, int(cai.get("lan_api") or 2)))
     except (TypeError, ValueError):
         lan = 2
     dp = _doc_json(os.path.join(goc, "workspace", "khe", "dieu-phoi.json")) or {}

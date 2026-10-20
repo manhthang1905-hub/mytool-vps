@@ -488,6 +488,33 @@ def _tran_may_chu(bc: "BoiCanh", loai: str) -> int:
         return 0
 
 
+#: Sàn suất mỗi lượt khi chia trần máy chủ cho các lượt đang chạy (`_suat_chia_luot`).
+SAN_SUAT_MOI_LUOT = 4
+
+
+def _suat_chia_luot(bc: Any, loai: str, cua_loai: int) -> int:
+    """Phần trần `concurrent_jobs[loai]` của TÀI KHOẢN dành cho lượt này (20/10/2026).
+
+    Trước đây mỗi lượt điều phối coi cả trần tài khoản là của riêng mình: 4 lượt × 40 luồng ảnh = 160 luồng tranh 120
+    suất toàn máy (`khe.giu_job`, min(`tran_api_tong`, trần máy chủ)) — đo 20/10: 92 lần luồng đợi suất đủ 30 phút rồi
+    "chạy luôn" vượt trần. Nay: trần (ảnh/clip: đã kẹp `tran_api_tong`) chia đều cho số lượt ĐANG LÀM (làn API sống,
+    `khe.dem_lan_api`), sàn `SAN_SUAT_MOI_LUOT` (không quá trần). Không có lượt điều phối nào (chạy tay) → giữ nguyên."""
+    goc = getattr(bc, "goc", "") or ""
+    if cua_loai <= 0 or not goc:
+        return cua_loai
+    try:
+        from . import khe  # noqa: PLC0415
+
+        so_luot = int(khe.dem_lan_api(goc).get("dang_lam") or 0)
+        if so_luot <= 1:
+            return cua_loai
+        tong = min(cua_loai, khe.tran_api_tong(goc)) if loai in _LOAI_KHE_JOB_TOAN_MAY else cua_loai
+        phan = -(-tong // so_luot)
+        return min(cua_loai, max(min(SAN_SUAT_MOI_LUOT, tong), phan))
+    except Exception:  # noqa: BLE001 — đếm hỏng thì giữ lối cũ
+        return cua_loai
+
+
 def _so_luong(bc: "BoiCanh", loai: str, mac_dinh: int = SONG_SONG_CANH,
               can: int = 0) -> int:
     """Bao nhiêu luồng cho khâu này — theo con số máy chủ tự khai.
@@ -507,6 +534,7 @@ def _so_luong(bc: "BoiCanh", loai: str, mac_dinh: int = SONG_SONG_CANH,
             cua_loai = int((han.get("concurrent_jobs") or {}).get(loai) or 0)
         except (TypeError, ValueError):
             cua_loai = 0
+        cua_loai = _suat_chia_luot(bc, loai, cua_loai)
         ra = min(cua_loai, TRAN_LUONG_MAY) if cua_loai > 0 else mac_dinh
     # ═══ HAI TRẦN KHÁC NHAU (30/09/2026) ═══
     #
@@ -1533,6 +1561,9 @@ KHOANG_KE_CHO = 90.0
 
 #: Đợi một job tối đa bao lâu rồi coi như kẹt.
 #:
+#: 20/10/2026: job ẢNH không còn dùng số này — trần thích nghi theo số đo (`_tran_cho_anh`, `core/thoi_gian_job.py`,
+#: 3–12 phút); clip/giọng đọc giữ nguyên.
+#:
 #: Từng để 3600 giây. Số đó sai theo cả hai hướng: quá dài để hữu ích (clip
 #: veo3 mất 1–3 phút; đợi một tiếng là đợi một thứ không bao giờ tới) và quá
 #: ngắn để an toàn (nó vẫn hết hạn, chỉ là sau khi đã giữ chỗ một luồng suốt
@@ -1875,6 +1906,32 @@ class SoTheoDoi:
                                  str(loi)[:70]))
             return
         self._hong_lien = 0
+
+
+def _tran_cho_anh(bc: Any) -> float:
+    """Trần chờ job ẢNH (giây) — thích nghi theo số đo (`core/thoi_gian_job.py`); không có gốc → `TRAN_CHO_JOB` cũ."""
+    goc = getattr(bc, "goc", "") or ""
+    if not goc:
+        return TRAN_CHO_JOB
+    try:
+        from .thoi_gian_job import tran_cho_anh  # noqa: PLC0415
+
+        return float(tran_cho_anh(goc))
+    except Exception:  # noqa: BLE001 — sổ đo hỏng thì về trần cũ, không chặn khâu
+        return TRAN_CHO_JOB
+
+
+def _ghi_thoi_gian_job(bc: Any, loai: str, goi: Any, bat_dau: float) -> None:
+    """Ghi thời gian một job XONG vào sổ đo dùng chung. Hỏng thì bỏ qua — chỉ là số đo."""
+    goc = getattr(bc, "goc", "") or ""
+    if not goc:
+        return
+    try:
+        from . import thoi_gian_job as tg  # noqa: PLC0415
+
+        tg.ghi(goc, loai, tg.giay_cua_job(goi, time.time() - bat_dau))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _cho_job(bc: BoiCanh, job, tran: float = TRAN_CHO_JOB,
@@ -2327,7 +2384,12 @@ def _tao_anh(bc: BoiCanh, luot: LuotChay, loi_nhac: str,
                        prompt=loi_nhac, n=max(1, int(n)), aspect_ratio="16:9",
                        reference_images=anh_tc or None,
                        idempotency_key=khoa + hau_to)
-        return _cho_job(bc, job, ten_viec=ten_hien, so=so)
+        # 20/10/2026: trần chờ ảnh THÍCH NGHI (`core/thoi_gian_job.py`) thay 12 phút cố định — job treo lộ ra sớm,
+        # đặt lại bằng khoá mới như cũ; job xong ghi số đo cho trần lần sau.
+        bat_dau = time.time()
+        goi = _cho_job(bc, job, tran=_tran_cho_anh(bc), ten_viec=ten_hien, so=so)
+        _ghi_thoi_gian_job(bc, "image", goi, bat_dau)
+        return goi
 
     dang_dung = hop.lay()
     try:
@@ -5091,8 +5153,11 @@ def _khau_giong_doc(bc: BoiCanh):
                 # phải rộng hơn trần chung. Đo 15/08/2026: để trần chung 12
                 # phút thì M02 và M03 cùng chết ở khâu này, mỗi lượt mất luôn
                 # cả kịch bản đã trả tiền.
-                return _cho_job(bc, job, tran=TRAN_CHO_TTS,
-                                ten_viec="đoạn {0}".format(so), so=theo_doi)
+                bat_dau = time.time()
+                goi_xong = _cho_job(bc, job, tran=TRAN_CHO_TTS,
+                                    ten_viec="đoạn {0}".format(so), so=theo_doi)
+                _ghi_thoi_gian_job(bc, "tts", goi_xong, bat_dau)
+                return goi_xong
 
             # Máy chủ nhận việc rồi bỏ đó — đặt lại bằng khoá MỚI. Hai nấc,
             # và đuôi bám thời gian nên chạy lại lượt cũng ra khoá khác; xem
@@ -7040,7 +7105,10 @@ def _lam_clip(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], anh: str,
                                       giay) + (":kd" if khung_dau else "")
             + (":kc" + url_cuoi[-12:] if url_cuoi else "")
             + (":tc" if luat_tieng else "") + hau_to)
-        return _cho_job(bc, job, ten_viec="cảnh {0}".format(so_canh), so=so)
+        bat_dau = time.time()
+        goi_xong = _cho_job(bc, job, ten_viec="cảnh {0}".format(so_canh), so=so)
+        _ghi_thoi_gian_job(bc, "video", goi_xong, bat_dau)
+        return goi_xong
 
     # Xem `TRAN_TREO_CLIP`: cùng (ảnh, lời nhắc) đã treo đủ trần → không gửi nữa, kể cả lần gọi đầu.
     dau_treo = _dau_treo_clip(c, anh, anh_cuoi if url_cuoi else None)
