@@ -59,6 +59,17 @@ def test_dang_cong_khai_va_rieng_tu(tmp_path):
     assert tt == {"TL1-T7": tk.DAT, "TL2-T7": tk.HONG, "TL3-T7": tk.CHO}
 
 
+def test_can_xac_minh_dien_thoai_thanh_viec_nguoi(tmp_path):
+    goc = str(tmp_path)
+    _ghi(os.path.join(goc, "vm", "logs", "can-xac-minh-dt.json"), {
+        "TL5-T7": {"tu": "2026-10-17 01:33:01", "lan_cuoi": "2026-10-17 07:40:33", "ma": "TL5-T7-0001"},
+        "TL9-T7": {"tu": "2026-10-17 01:00:00", "lan_cuoi": "2026-10-17 01:00:00", "ma": "TL9-T7-0001"}})
+    K = tk.BoiCanh(goc, bay=BAY, tai=_mang({}), kenh_ds=["TL5-T7"], so={})
+    ra = [m for m in tk.kiem_dang(K) if m["khoa"].startswith("xac-minh-dt:")]
+    assert [m["kenh"] for m in ra] == ["TL5-T7"]
+    assert ra[0]["nguoi"] is True and "youtube.com/verify" in ra[0]["can_lam"]
+
+
 def test_doi_bia_so_van_tay_va_thu_lai(tmp_path, monkeypatch):
     goc = str(tmp_path)
     dung = os.path.join(goc, "bia", "dung.jpg")

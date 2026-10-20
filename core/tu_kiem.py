@@ -288,6 +288,14 @@ def kiem_dang(K: BoiCanh) -> List[Dict[str, Any]]:
                   ma, "riêng tư / chưa công khai" if ma in (401, 403) else "không tìm thấy" if ma == 404 else "?",
                   m.get("trang_thai_studio") or m.get("trang_thai") or "?"))
         ra.append(_muc("dang", kenh, khoa, viec, han, tt, bc, video_id=vid, ma_goi=ma_goi))
+    # 20/10: máy đăng gặp hộp «xác minh số điện thoại» khi đặt bìa → giữ gói; 1 mục việc người mỗi kênh.
+    xm = _json(K.goc, "vm", "logs", "can-xac-minh-dt.json")
+    for kenh, m in (xm.items() if isinstance(xm, dict) else []):
+        if kenh in K.kenh_ds and isinstance(m, dict):
+            ra.append(_muc("dang", kenh, "xac-minh-dt:" + kenh, "đặt bìa tuỳ chỉnh {0}".format(m.get("ma") or ""),
+                           _gio(m.get("lan_cuoi")), CHO, "YouTube đòi xác minh điện thoại từ {0} — máy đăng giữ gói "
+                           "(không đăng thiếu bìa)".format(m.get("tu")), nguoi=True,
+                           can_lam="youtube.com/verify — xác minh số điện thoại kênh {0}".format(kenh)))
     return ra
 
 

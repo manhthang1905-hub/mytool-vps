@@ -69,6 +69,8 @@ HAN_MHKT_GIAY = 600
 HAN_PHIEN_MAC_DINH = 90 * 60
 #: 05/10: giao diện Studio máy đăng đo/kiểm được (ja làm hỏng bìa/phụ đề/MHKT/thẻ/ô giờ) — `lay_uc` tự ép về đây
 NGON_NGU_GIAO_DIEN_DANG = "vi"
+#: Hộp «hãy xác minh số điện thoại» khi bấm thêm hình thu nhỏ (kênh mới chưa xác minh).
+RE_XAC_MINH_DT = re.compile(r"xác minh số điện thoại|verify (your )?phone|phone verification|電話番号.{0,6}(確認|認証)", re.I)
 #: 30/09/2026 — CHỜ TẢI XONG 100%: không bao giờ bấm Lên lịch / đóng tab khi chưa
 #: có BẰNG CHỨNG tải xong. Hạn chờ = max(10 phút, dung lượng ÷ 1 MB/s × 2); còn
 #: thấy % tăng thì kéo dài, trần cứng `CHO_TAI_TRAN_GIAY` (và không quá hạn phiên).
@@ -1487,8 +1489,8 @@ class MayDangDom:
             return
         dich = NGON_NGU_GIAO_DIEN_DANG
 
-        def doc():
-            for _ in range(10):
+        def doc(lan: int = 10):
+            for _ in range(lan):
                 try:
                     lang = str(tb.js_tho("document.documentElement.lang") or "")
                 except Exception:  # noqa: BLE001
@@ -1524,7 +1526,15 @@ class MayDangDom:
             self.ngu(3)
         except Exception as loi:  # noqa: BLE001
             raise LoiTruoc("Studio giao diện {0!r}, đặt cookie hl={1} lỗi: {2}".format(lang, dich, loi))
-        sau = doc()
+        # 20/10: Studio mở lại sau đổi cookie có lúc >10s mới có <html lang> (kênh mới) → đọc "" là CHƯA TẢI XONG,
+        # không phải giao diện lạ: chờ lâu hơn, rỗng thì mở lại 1 lần nữa.
+        sau = doc(40)
+        if not sau:
+            try:
+                tb.mo(self._url("studio"), han=90)
+            except Exception:  # noqa: BLE001
+                pass
+            sau = doc(40)
         if not sau.lower().startswith(dich):
             raise LoiTruoc("Studio giao diện {0!r} (cookie hl={1} → {2}), vẫn {3!r} — không đăng trên giao diện lạ".format(
                 lang, dich, ok, sau))
@@ -1832,6 +1842,39 @@ class MayDangDom:
             raise Exception("gõ thẻ xong không thấy chip nào")
         return "ok"
 
+    def _doi_xac_minh_dt(self, ta) -> bool:
+        """20/10: kênh mới chưa xác minh điện thoại → bấm thumbnail bật hộp «hãy xác minh số điện thoại» (che cả
+        trang bằng iron-overlay-backdrop). Đọc chữ hộp thoại đang mở."""
+        try:
+            chu = str(ta.js_tho(
+                "Array.from(document.querySelectorAll('tp-yt-paper-dialog,ytcp-dialog,[role=dialog]'))"
+                ".filter(e=>e.offsetParent!==null).map(e=>e.innerText).join(' | ')") or "")
+        except Exception:  # noqa: BLE001
+            return False
+        return bool(RE_XAC_MINH_DT.search(chu))
+
+    def _ghi_xac_minh_dt(self, ma: str, can: bool) -> None:
+        """`logs/can-xac-minh-dt.json` {kênh: {tu, lan_cuoi, ma}} — `core/tu_kiem` đưa ra bảng «việc người»."""
+        p = os.path.join(THU_MUC_LOG, "can-xac-minh-dt.json")
+        try:
+            with open(p, encoding="utf-8") as f:
+                du = json.load(f)
+        except (OSError, ValueError):
+            du = {}
+        du = du if isinstance(du, dict) else {}
+        if can:
+            bay = time.strftime("%Y-%m-%d %H:%M:%S")
+            du[self.kenh] = {"tu": (du.get(self.kenh) or {}).get("tu") or bay, "lan_cuoi": bay, "ma": ma}
+        elif self.kenh in du:
+            du.pop(self.kenh)
+        else:
+            return
+        try:
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(du, f, ensure_ascii=False, indent=1)
+        except OSError:
+            pass
+
     def _chi_tiet(self, ta, d: dict, tep: dict) -> None:
         ta.go("tieu_de", d["tieu_de"])
         ta.go("mo_ta", d["mo_ta"])
@@ -1840,7 +1883,13 @@ class MayDangDom:
                 if ta.du_phong.get("nut_thumbnail") or not ta.tim("nut_thumbnail", han=0):
                     ta.ghi_bang_chung("chi-tiet-" + d["ma"])   # để chốt chon#1 nút thumbnail
                 ta.dat_tep("nut_thumbnail", tep["anh"])
+                self._ghi_xac_minh_dt(d["ma"], False)
             except Exception as loi:  # noqa: BLE001 — thumbnail hỏng: cảnh báo, đi tiếp
+                if self._doi_xac_minh_dt(ta):
+                    # Không đăng video thiếu bìa: giữ gói (nháp còn đó), báo chủ 1 mục; lượt sau tự làm nốt.
+                    self._ghi_xac_minh_dt(d["ma"], True)
+                    raise LoiSau("YouTube đòi XÁC MINH SỐ ĐIỆN THOẠI để đặt bìa tuỳ chỉnh — giữ gói, chờ chủ xác minh "
+                                 "kênh {0} (youtube.com/verify)".format(self.kenh))
                 self._canh_bao("{0}: thumbnail hỏng ({1})".format(d["ma"], loi))
         else:
             self._canh_bao("{0}: gói không có ảnh thumbnail".format(d["ma"]))
