@@ -257,6 +257,10 @@ what works and what is missing"}}]}} — one item per candidate."""
 #: Câu nói ảnh NHÂN VẬT tham chiếu trong lời nhắc chấm vòng 1 (ảnh đứng ngay sau các bìa thắng).
 NV_CAU_CHAM = (" Image {so} is the channel's CHARACTER REFERENCE (only the figure): the main character of every "
                "thumbnail must be exactly this figure.")
+#: 20/10/2026 — kênh MỚI mượn bìa thắng của kênh gốc có nhân vật KHÁC (`mau_muon`): giám khảo chỉ học bố cục/chữ/màu.
+NV_CAU_MUON = (" The winners come from a SISTER channel and show a DIFFERENT character: learn only their layout, "
+               "lettering, colours and composition; judge the character ONLY against image {so} and never mark a "
+               "candidate down for not looking like the winners' character.")
 #: Đổi lời nhắc / ảnh gửi giám khảo → đổi số này (vào khoá lượt chấm: cùng khoá khác nội dung = cổng trả 409).
 PHIEN_BAN_CHAM = 2
 
@@ -427,6 +431,25 @@ def _nhan_vat_kenh(goc: str, kenh: str) -> str:
         st = {}
     tho = str(st.get("default_character_lock") or st.get("reference_lock") or "")
     return ", ".join(x.strip() for x in tho.split(",") if x.strip() and not _RE_BO_NV.search(x))[:400]
+
+
+def mau_muon(goc: str, kenh: str) -> str:
+    """20/10/2026 — kênh mở mới chép thư mục bìa thắng từ kênh gốc (`workspace/mo-kenh/trang-thai.json: kenh_goc`) mà
+    nhân vật KHÁC (style.yaml) → mã kênh gốc; '' = bìa thắng là của chính nhân vật kênh. TL4-T7-K3 (người tóc đen) mượn
+    bìa nhân vật đầu tròn trắng: giám khảo chấm 23/28 tấm "lệch nhân vật", bìa thắng giấu chỉ 4 điểm → kẹt cả lô."""
+    try:
+        with open(os.path.join(goc, "workspace", "mo-kenh", "trang-thai.json"), encoding="utf-8") as f:
+            du = json.load(f)
+    except (OSError, ValueError):
+        return ""
+    m = du.get(kenh) if isinstance(du, dict) else None
+    if not isinstance(m, dict):
+        m = ((du.get("kenh") or {}).get(kenh) if isinstance(du, dict) and isinstance(du.get("kenh"), dict) else None) or {}
+    goc_k = str(m.get("kenh_goc") or "").strip()
+    if not goc_k or goc_k == kenh:
+        return ""
+    a, b = _nhan_vat_kenh(goc, kenh), _nhan_vat_kenh(goc, goc_k)
+    return goc_k if a and b and a != b else ""
 
 
 def mau_dau_nv(duong: str) -> Optional[Tuple[int, int, int]]:
@@ -1160,6 +1183,10 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
     hs["nv"] = nv if os.path.isfile(nv) else ""
     hs["mau_dau"] = mau_dau_nv(nv) if hs["nv"] else None
     hs["nhan_vat"] = _nhan_vat_kenh(goc, kenh)
+    try:
+        hs["mau_muon"] = mau_muon(goc, kenh)
+    except Exception:  # noqa: BLE001
+        hs["mau_muon"] = ""
     try:
         mt = mau_thang(goc, kenh, khuon, goi=goi, log=log, dem=dem, thu_muc=tm)
     except Exception as loi:  # noqa: BLE001
@@ -2265,6 +2292,12 @@ def kiem_san(u: Dict[str, Any], san: Dict[str, Any]) -> List[str]:
 def san_cua(u: Dict[str, Any], san: Dict[str, Any]) -> Tuple[float, str]:
     """(sàn `bam_nhu_thang` của tấm, nguồn): điểm bìa thắng GIẤU trong cùng nhóm chấm − `SAN_BAM_DUOI` (kẹp
     `SAN_BAM_KEP`) khi có; không thì sàn hiệu chỉnh của kênh / mặc định."""
+    if isinstance(u.get("bam_giau"), (int, float)) and san.get("muon"):
+        # 20/10/2026 — bìa thắng MƯỢN (nhân vật khác): giám khảo hạ cả bìa thắng giấu vì lệch nhân vật kênh mới → sàn
+        # tuyệt đối 7 kẹt mọi lô. Sàn = ngang bìa thắng giấu cùng nhóm (≥ 5 = không kém hẳn), không trên sàn thường.
+        g = float(u["bam_giau"])
+        return (max(5.0, min(SAN_BAM_KEP[0], g)),
+                "mẫu mượn {0}: ngang bìa thắng giấu cùng nhóm {1:.0f}".format(san.get("muon"), g))
     if isinstance(u.get("bam_giau"), (int, float)):
         return (max(SAN_BAM_KEP[0], min(SAN_BAM_KEP[1], float(u["bam_giau"]) - SAN_BAM_DUOI)),
                 "bìa thắng giấu cùng nhóm {0:.0f}".format(float(u["bam_giau"])))
@@ -2332,7 +2365,8 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
     # 19/10/2026 — ảnh nhân vật kênh (nv1.png) ngay sau bìa thắng: giám khảo xét SÀN NHÂN VẬT (`lech_nhan_vat`).
     nv = str((ho_so or {}).get("nv") or "")
     nv_url = [_url_anh(nv, cat=False)] if nv and os.path.isfile(nv) else []
-    tt1 = dict(tt, nv_cau=NV_CAU_CHAM.format(so=len(mau_url) + 1) if nv_url else "",
+    muon = bool(nv_url and (ho_so or {}).get("mau_muon"))
+    tt1 = dict(tt, nv_cau=(NV_CAU_CHAM + (NV_CAU_MUON if muon else "")).format(so=len(mau_url) + 1) if nv_url else "",
                nv_ref="the character reference image" if nv_url else "the winners",
                **{k: lk[k] for k in ("o_chu", "chu_ten", "ngoai_chu", "phong_cach_ta")})
     qua = sorted([u for u in ds if not u.get("loai")], key=lambda u: (u["bien"], u["y"]))
@@ -2356,7 +2390,8 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
         try:
             to = to_dien_thoai(thang, g, os.path.join(tm, "_vong-1-{0}.jpg".format(i + 1)))
             tho = goi_dem(LOI_NHAC_CHAM_1.format(k=len(mau_url), n=len(g), **tt1), khoa="{0}:cham1:{1}".format(
-                khoa, _bam(*[u["ma"] for u in g], "dt", PHIEN_BAN_CHAM, os.path.basename(giau or ""))),
+                khoa, _bam(*[u["ma"] for u in g], "dt", PHIEN_BAN_CHAM, os.path.basename(giau or ""),
+                           *(["muon"] if muon else []))),
                 toi_da_token=7000, mo_hinh=MO_HINH_CHAM,  # 7 tấm × lý do tiếng Việt: 3000 bị cắt
                 anh=mau_url + nv_url + [_url_anh(u["tep"]) for u in g] + [_url_anh(to, 1100, cat=False)])
             kq = doc_cham_1(_json(tho), len(g))
@@ -2652,11 +2687,15 @@ def san_lo(hs: Dict[str, Any], mau: Sequence[str], *, giau: str = "") -> Dict[st
     tm = str(hs.get("thu_muc_mau") or "")
     thang = [b["tep"] for b in bia_thu_muc(tm, toi_da=99)] if tm else list(mau)
     bam, nguon = san_bam(tm)
+    muon = str(hs.get("mau_muon") or "")
     try:
-        dau = dau_dung_duoc(str(hs.get("nv") or ""), thang, hs.get("mau_dau"), noi=hs.get("kieu") == "tran")
+        # bìa thắng mượn vẽ nhân vật KHÁC → bộ dò đầu đo trên chúng vô nghĩa: chỉ còn giám khảo (so nv1.png) xét
+        dau = False if muon else dau_dung_duoc(str(hs.get("nv") or ""), thang, hs.get("mau_dau"),
+                                               noi=hs.get("kieu") == "tran")
     except Exception:  # noqa: BLE001 — bộ dò hỏng: chỉ còn giám khảo xét nhân vật
         dau = False
-    return {"mau": san_mau(thang), "bam": bam, "nguon_bam": nguon, "dau": bool(dau), "so_bia_thang": len(thang)}
+    return {"mau": san_mau(thang), "bam": bam, "nguon_bam": nguon, "dau": bool(dau), "so_bia_thang": len(thang),
+            "muon": muon}
 
 
 def loc_san(u: Dict[str, Any], san: Dict[str, Any]) -> None:
@@ -2982,14 +3021,17 @@ def doi_chieu(goi: Callable[..., str], *, hs: Dict[str, Any], mau: Sequence[str]
     nv_url = [_url_anh(nv, cat=False)] if nv and os.path.isfile(nv) else []
     mau_url = [_url_anh(m) for m in list(mau)[:2]]
     thang = [t for t in (hs.get("bia_so") or list(mau)) if t and os.path.isfile(t)][:SO_BIA_SO]
+    muon = bool(nv_url and hs.get("mau_muon"))
     tt = {"tieu_de": tieu_de, "chu_bia": chu_bia, "mo_dau": " ".join(str(mo_dau or "").split())[:700] or "(none)",
-          "bang_chung": lk["bang_chung"], "nv_cau": NV_CAU_CHAM.format(so=len(mau_url) + 1) if nv_url else "",
+          "bang_chung": lk["bang_chung"],
+          "nv_cau": (NV_CAU_CHAM + (NV_CAU_MUON if muon else "")).format(so=len(mau_url) + 1) if nv_url else "",
           "nv_ref": "the character reference image" if nv_url else "the winners",
           **{k: lk[k] for k in ("o_chu", "chu_ten", "ngoai_chu", "phong_cach_ta")}}
     to = to_dien_thoai(thang, uv, os.path.join(thu_muc, "_doi-chieu.jpg"))
     try:
         tho = goi(LOI_NHAC_CHAM_1.format(k=len(mau_url), n=len(uv), **tt),
-                  khoa="{0}:doi-chieu:{1}".format(khoa, _bam(*[os.path.getsize(t) for t in ds], PHIEN_BAN_CHAM)),
+                  khoa="{0}:doi-chieu:{1}".format(khoa, _bam(*[os.path.getsize(t) for t in ds], PHIEN_BAN_CHAM,
+                                                              *(["muon"] if muon else []))),
                   toi_da_token=8000, mo_hinh=MO_HINH_CHAM,  # 19/10: 3500 cắt mất tấm 4-7
                   anh=mau_url + nv_url + [_url_anh(u["tep"]) for u in uv] + [_url_anh(to, 1100, cat=False)])
         kq = doc_cham_1(_json(tho), len(uv))
