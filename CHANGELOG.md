@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.221.1** — 2026-10-20 — `vps-jp1` — docs: ke hoach tu hoc kieu co vua (dieu kien thang, ham gia tri, lo trinh)
 - **2.221.0** — 2026-10-20 — `vps-jp1` — feat(hieu-chuan): so hieu chuan bo cham vs CTR/giu chan that (D22), trong so bia/tieu de/hook theo so lieu, hook thu nghiem duoc viet that, do bai hoc co ich
 - **2.220.0** — 2026-10-20 — `vps-jp1` — feat(hoc): dong vong hoc dot 1 - giac ngu nao duong vi, ep chon nguon thanh cho giu, A/B tieu de thu ket qua, kenh tra kho khoi hoc chung, tran o dia dung
 - **2.219.0** — 2026-10-20 — `vps-jp1` — feat(bia): mau thang tu dung theo so lieu (D21), ho chu chon theo CTR, vong phan hoi CTR 48h/7d
