@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.216.14** — 2026-10-20 — `vps-jp1` — fix(dang): cho Studio tai xong sau doi hl; hop xac minh dien thoai khi dat bia -> giu goi + viec nguoi
 - **2.216.13** — 2026-10-20 — `vps-jp1` — fix(bia-lo): kenh moi chua co mau bia thang thi lay mau cua kenh goc (workspace/mo-kenh/trang-thai.json kenh_goc) - TL4-T7-K3 bi giu khau bia
 - **2.216.12** — 2026-10-19 — `vps-jp1` — fix(lich-dang): khong de ho ngay khi co video san - ban giao chi can cach gio dang 90 phut, luc tai len keo ve khe trong som nhat (>=45'), goi bo/giu khong chiem khe; tu kiem ghi ly do tung ngay ho
 - **2.216.11** — 2026-10-19 — `vps-jp1` — fix(vm): kiem suc khoe DOM khong bao nham o tieu de khi video dang A/B; lenh sua tieu de/bia xet lai luc LAM - video dang THANG thi bo (tru tra lai cu)
