@@ -1090,6 +1090,24 @@ def d_gia_tri(goc, kenh):
     return gia_tri.can_chay(goc)
 
 
+# D24 · Nhãn nghĩa tiêu đề (20/10/2026) — `core/nhan_nghia.py` (G2 bản 2) ─────────────────────────────────────
+
+def k_nhan_nghia(goc, kenh):
+    from core import nhan_nghia  # noqa: PLC0415
+    if not nhan_nghia.bat(goc):
+        return KHONG, "cài đặt {0} tắt".format(nhan_nghia.KHOA_CAI)
+    n = len(nhan_nghia.doc_nho(goc))
+    if not n:
+        return THIEU, "chưa gắn nhãn nghĩa tiêu đề nào"
+    c = nhan_nghia.tong_chi(goc)
+    return DAT, "{0:,} tiêu đề có nhãn · đã chi {1:,.0f}đ ({2:,} lô)".format(n, c["vnd"], c["lo"])
+
+
+def d_nhan_nghia(goc, kenh):
+    from core import nhan_nghia  # noqa: PLC0415
+    return nhan_nghia.can_chay(goc)
+
+
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1309,6 +1327,15 @@ DANH_MUC: List[KyNang] = [
            "gia_tri_tieu_de / gia_tri_de_tai hằng tuần.",
            "python -X utf8 -m core.gia_tri huan-luyen", k_gia_tri, [], dieu_kien=d_gia_tri,
            chay=lambda goc, kenh: _py("-m", "core.gia_tri", "huan-luyen"), nhip_gio=24 * 6, tu_ap=True, toan_may=True,
+           han_phut=40),
+    KyNang("D24", "Nhãn nghĩa tiêu đề", "dinh_ky",
+           "Mỗi ngày: LLM ví ShopAPI (không bao giờ Claude Max) đọc tiêu đề CHƯA có nhãn — video ta, mọi ứng viên tiêu "
+           "đề của gói, video đối thủ mới — và gắn 17 nhãn nghĩa cố định (kiểu hứa hẹn, tệp, cảm xúc, độ cược, uy "
+           "tín…) + cụm chủ đề; lô 50, 4 lượt song song, đọc chặt + 1 lượt sửa, nhớ đệm workspace/gia-tri/"
+           "nhan-nghia.jsonl (không lên kho), số token/tiền thật ở nhan-nghia-chi.jsonl, ước > 150.000đ thì dừng. Nhãn là "
+           "đặc trưng cho hàm giá trị D23 (bản 2) và báo cáo «tín hiệu thị trường». Tắt: cài đặt nhan_nghia_tieu_de=false.",
+           "python -X utf8 -m core.nhan_nghia gan --toi-da 6000", k_nhan_nghia, [], dieu_kien=d_nhan_nghia,
+           chay=lambda goc, kenh: _py("-m", "core.nhan_nghia", "gan", "--toi-da", "6000"), nhip_gio=20, tu_ap=True, toan_may=True,
            han_phut=40),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "

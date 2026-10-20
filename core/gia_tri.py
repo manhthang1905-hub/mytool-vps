@@ -21,6 +21,10 @@ vào `D_BAM` ô (băm cố định, không phụ thuộc tiến trình), chuẩn
 「」, ｜, kiểu tiêu đề (`tu_hoc.nhan_tieu_de_regex`), vùng đề tài chiến trường (`chien_truong._cum` + vùng AI theo link),
 thời lượng, thứ trong tuần, log người đăng ký (BIẾN KIỂM SOÁT — để mô hình học hiệu ứng NỘI DUNG, không học quy mô).
 Mô hình nhúng câu (onnx) chưa dùng: máy chỉ IPv6 không tải được tệp mô hình từ HuggingFace (20/10).
+BẢN 2 (20/10 tối): + khối NHÃN NGHĨA (`core/nhan_nghia`: LLM ví đọc tiêu đề → 17 trường kiểu hứa hẹn / tệp khán giả /
+cảm xúc / độ cược / uy tín… + cụm chủ đề tiếng Anh) băm vào `D_NGHIA` ô thưa: one-hot từng trường («t:»), thứ tự độ
+cược / sắc thái («o:»), từ chủ đề («cd:»), tương tác vùng × trường và tệp × kiểu hứa hẹn («x:»); thiếu nhãn → «nghia_thieu».
+λ riêng cho khối (`LAMBDA_NGHIA_THU`, chọn trên lát thẩm định).
 
 ═══ MÔ HÌNH ═══ ridge (numpy, gradient liên hợp trên ma trận thưa), λ chọn trên lát thẩm định; chia THEO THỜI GIAN:
 học trên video cũ, giữ lại `TI_LE_GIU` video MỚI NHẤT để kiểm. Mô hình dùng = bản học trên phần cũ (số kiểm trung
@@ -38,6 +42,12 @@ tiêu đề LLM trên CÙNG tập video. Bộ chấm `gia_tri_tieu_de` / `gia_tr
 LLM 0,24, phân vị (n 66) mô hình 0,20 vs LLM −0,03. CHƯA qua cổng (rho giữ lại < 0,3) → chưa nối vào nơi chọn; D22 đo
 tiếp hằng tuần.
 
+═══ SỐ ĐO 21/10/2026 (bản 2, nhãn nghĩa phủ 99,9%) ═══ cùng chia thời gian, cùng tập giữ lại: bản 1 rho 0,083 lift
+×1,72 · bản 2 đủ khối 0,081 ×1,60 · chỉ one-hot + thứ tự 0,080 ×1,65 · + từ chủ đề 0,082 ×1,70 · CHỈ nhãn (n-gram tắt)
+0,051 ×1,55. Video ta (đối đầu LLM): CTR rho_w (n 44) bản 1 0,107 / bản 2 0,102 / chỉ nhãn 0,129 vs LLM 0,243; phân
+vị (n 66) bản 1 0,182 / bản 2 0,114 / + chủ đề 0,185 vs LLM −0,03. Nhãn có tín hiệu riêng nhưng KHÔNG cộng thêm
+vào n-gram → D23 học cả hai, giữ bản rho giữ lại cao hơn; chưa qua cổng.
+
 Dùng:  python -X utf8 -m core.gia_tri huan-luyen [--thu] [--goc G]    (--thu: học + in số, không ghi mô hình)
        python -X utf8 -m core.gia_tri du-doan "<tiêu đề>" [--goc G]
        python -X utf8 -m core.gia_tri kiem-ta [--goc G]                (chuyển giao sang video của ta, chỉ đọc)
@@ -48,6 +58,7 @@ from __future__ import annotations
 import csv
 import datetime as _dt
 import glob
+import hashlib
 import io
 import json
 import math
@@ -65,7 +76,7 @@ import numpy as np  # noqa: E402
 
 THU_MUC = ("workspace", "gia-tri")
 TEP_HIEN_HANH = "hien-hanh.json"
-PHIEN_BAN = 1
+PHIEN_BAN = 2
 TUOI_MIN = 7
 SO_KENH_MIN = 5
 SO_LANG_GIENG = 10
@@ -78,10 +89,19 @@ TI_LE_THAM_DINH = 0.15
 LAMBDA_THU = (30.0, 10.0, 3.0)          # giảm dần — lần sau khởi động từ nghiệm lần trước (hội tụ nhanh hơn)
 SO_VONG_CG = 60                          # đo 20/10: xếp hạng ổn định từ ~40 vòng; mỗi vòng ~0,3 giây trên VPS
 LAMBDA_CAU_TRUC = 1.0
+#: Khối nhãn nghĩa (bản 2): số ô băm, λ thử (giá trị 0/1 — λ lớn hơn n-gram), các khối con dùng.
+D_NGHIA = 1 << 16
+LAMBDA_NGHIA_THU = (3000.0, 1000.0, 300.0, 100.0)
+KHOI_NGHIA = ("t", "o", "cd", "x")
+#: Tương tác hai trường nhãn (tệp × kiểu hứa hẹn …) và vùng đề tài × trường.
+CAP_NGHIA = (("tuoi", "hua"), ("vai", "hua"), ("cam", "hua"), ("gioi", "vai"), ("cam", "linhvuc"), ("tuoi", "cam"))
+VUNG_X_NGHIA = ("hua", "cam", "linhvuc", "vai", "tuoi")
 GIU_TOI_DA = 4
 #: Nhãn học. Đo 20/10 (giữ lại 16.862 video): học y_toc (tốc độ tuyệt đối, lẫn quy mô kênh) → rho với độ nổ 0,03, lift
 #: top 10% ×0,67 — tệ hơn ngẫu nhiên; học y_no → rho 0,08, lift ×1,6. Chỉ học y_no.
 NHAN_HOC = ("y_no",)
+#: Bản 2: học thêm biến thể có khối nhãn nghĩa khi ≥ ngần này video học đã có nhãn (`core/nhan_nghia`).
+TI_LE_NGHIA_MIN = 0.5
 #: Cổng nối vào sản xuất (đề bài 20/10): held-out rho ≥ 0,3 VÀ trên video của ta rho > giám khảo LLM với n ≥ 20.
 RHO_GIU_LAI_TOI_THIEU = 0.3
 N_TA_TOI_THIEU = 20
@@ -390,6 +410,74 @@ def bam_ngram(chu: Sequence[str], d: int = D_BAM, ngram: Sequence[int] = NGRAM
     return r, c, v
 
 
+_DEM_O_NGHIA: Dict[str, int] = {}
+
+
+def _o_nghia(khoa: str, d: int) -> int:
+    """Ô băm cố định (blake2b) của một khoá đặc trưng nhãn nghĩa."""
+    k = "{0}:{1}".format(d, khoa)
+    o = _DEM_O_NGHIA.get(k)
+    if o is None:
+        o = int.from_bytes(hashlib.blake2b(khoa.encode("utf-8"), digest_size=8).digest(), "little") % d
+        if len(_DEM_O_NGHIA) < 1_000_000:
+            _DEM_O_NGHIA[k] = o
+    return o
+
+
+def khoa_nghia(nghia: Any, vung: Any = None, khoi: Sequence[str] = KHOI_NGHIA) -> List[Tuple[str, float]]:
+    """Nhãn nghĩa của một tiêu đề (`core/nhan_nghia`: `{"n": {trường: mã}, "c": chủ đề}`) → [(khoá, giá trị)].
+    Chưa có nhãn → [("nghia_thieu", 1)]."""
+    if not isinstance(nghia, dict) or not isinstance(nghia.get("n"), dict):
+        return [("nghia_thieu", 1.0)]
+    from core.nhan_nghia import TEN_TRUONG, THU_TU  # noqa: PLC0415
+    n = {f: nghia["n"].get(f) for f in TEN_TRUONG}
+    ra: List[Tuple[str, float]] = []
+    if "t" in khoi:
+        ra += [("t:{0}={1}".format(f, v), 1.0) for f, v in n.items() if v]
+    if "o" in khoi:
+        for f, bang in THU_TU.items():
+            v = bang.get(str(n.get(f)))
+            if v is not None:
+                ra.append(("o:" + f, v / 3.0 if f == "cuoc" else v))
+    if "cd" in khoi:
+        tu = str(nghia.get("c") or "").split()[:6]
+        ra += [("cd:" + t, 1.0 / math.sqrt(len(tu))) for t in tu]
+    if "x" in khoi:
+        ra += [("x:{0}={1}|{2}={3}".format(a, n[a], b, n[b]), 1.0) for a, b in CAP_NGHIA if n.get(a) and n.get(b)]
+        if vung:
+            ra += [("x:vung={0}|{1}={2}".format(vung, f, n[f]), 1.0) for f in VUNG_X_NGHIA if n.get(f)]
+    return ra
+
+
+def bam_nghia(ds: Sequence[Dict[str, Any]], d: int = D_NGHIA, khoi: Sequence[str] = KHOI_NGHIA
+              ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Khối nhãn nghĩa thưa (hàng, cột 0..d−1, giá trị) — dòng đọc `x["nghia"]` và `x["vung"]`."""
+    r: List[int] = []
+    c: List[int] = []
+    v: List[float] = []
+    for i, x in enumerate(ds):
+        for k, gt in khoa_nghia(x.get("nghia"), x.get("vung"), khoi):
+            r.append(i)
+            c.append(_o_nghia(k, d))
+            v.append(gt)
+    return np.array(r, dtype=np.int64), np.array(c, dtype=np.int64), np.array(v, dtype=np.float64)
+
+
+def gan_nghia(goc: str, ds: List[Dict[str, Any]]) -> float:
+    """Gắn `x["nghia"]` (nhãn nghĩa trong nhớ đệm `core/nhan_nghia`, None nếu chưa có) TẠI CHỖ. Trả tỉ lệ có nhãn."""
+    try:
+        from core import nhan_nghia  # noqa: PLC0415
+        nho = nhan_nghia.doc_nho(goc)
+    except Exception:  # noqa: BLE001
+        nho = {}
+    co = 0
+    for x in ds:
+        if "nghia" not in x or x["nghia"] is None:
+            x["nghia"] = nho.get(nhan_nghia.bam(x.get("tieu_de"))) if nho else None
+        co += x["nghia"] is not None
+    return co / len(ds) if ds else 0.0
+
+
 def ten_cau_truc(vung: Sequence[str]) -> List[str]:
     return (["do_dai", "do_dai_2", "ngoac", "ngoac_dau", "co_so", "so_nhom", "hoi", "cam", "trich", "ke_doc"]
             + ["kieu:" + x for x in KIEU_TD] + ["vung:" + x for x in vung]
@@ -461,10 +549,13 @@ def ham_vung(goc: str) -> Optional[Callable[[str, str], str]]:
 
 
 class MaTran:
-    """X = [thưa (băm n-gram) | đặc (cấu trúc, đã chuẩn hoá)] — nhân X·w và Xᵀ·r bằng bincount (không cần scipy)."""
+    """X = [thưa (băm n-gram | nhãn nghĩa) | đặc (cấu trúc, đã chuẩn hoá)] — nhân X·w và Xᵀ·r bằng bincount (không cần
+    scipy). `d0` = ranh giới n-gram / nhãn nghĩa trong phần thưa (= d khi không có khối nghĩa)."""
 
-    def __init__(self, r: np.ndarray, c: np.ndarray, v: np.ndarray, n: int, d: int, dac: np.ndarray):
+    def __init__(self, r: np.ndarray, c: np.ndarray, v: np.ndarray, n: int, d: int, dac: np.ndarray,
+                 d0: Optional[int] = None):
         self.r, self.c, self.v, self.n, self.d, self.dac = r, c, v.astype(np.float64), n, d, dac
+        self.d0 = d if d0 is None else d0
 
     @property
     def so_cot(self) -> int:
@@ -483,7 +574,7 @@ class MaTran:
         moi = np.full(self.n, -1, dtype=np.int64)
         moi[idx] = np.arange(len(idx))
         m = moi[self.r] >= 0
-        return MaTran(moi[self.r[m]], self.c[m], self.v[m], len(idx), self.d, self.dac[idx])
+        return MaTran(moi[self.r[m]], self.c[m], self.v[m], len(idx), self.d, self.dac[idx], self.d0)
 
 
 def ridge(X: MaTran, y: np.ndarray, lam: np.ndarray, w0: Optional[np.ndarray] = None, so_vong: int = SO_VONG_CG,
@@ -513,11 +604,16 @@ def dac_tho(ds: Sequence[Dict[str, Any]], vung_ds: Sequence[str]) -> np.ndarray:
     return np.array([cau_truc(x, vung_ds) for x in ds], dtype=np.float64).reshape(len(ds), len(ten_cau_truc(vung_ds)))
 
 
-def ma_tran(ds: Sequence[Dict[str, Any]], tho: np.ndarray, tb: np.ndarray, lc: np.ndarray, d: int = D_BAM) -> MaTran:
-    """Ma trận đặc trưng: n-gram băm + cấu trúc chuẩn hoá (tb, lc) + cột hằng số 1 cuối."""
+def ma_tran(ds: Sequence[Dict[str, Any]], tho: np.ndarray, tb: np.ndarray, lc: np.ndarray, d: int = D_BAM,
+            d_nghia: int = 0, khoi: Sequence[str] = KHOI_NGHIA) -> MaTran:
+    """Ma trận đặc trưng: n-gram băm [+ khối nhãn nghĩa `d_nghia` ô khi > 0] + cấu trúc chuẩn hoá (tb, lc) + cột hằng
+    số 1 cuối."""
     r, c, v = bam_ngram([chuan_chu(x.get("tieu_de")) for x in ds], d)
+    if d_nghia > 0:
+        r2, c2, v2 = bam_nghia(ds, d_nghia, khoi)
+        r, c, v = np.concatenate([r, r2]), np.concatenate([c, c2 + d]), np.concatenate([v, v2])
     dac = np.hstack([(tho - tb) / lc, np.ones((len(ds), 1))])
-    return MaTran(r, c, v, len(ds), d, dac)
+    return MaTran(r, c, v, len(ds), d + d_nghia, dac, d)
 
 
 def chuan_hoa(tho: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -526,8 +622,10 @@ def chuan_hoa(tho: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return tb, np.where(lc > 1e-9, lc, 1.0)
 
 
-def _lam_vec(X: MaTran, lam_thua: float) -> np.ndarray:
+def _lam_vec(X: MaTran, lam_thua: float, lam_nghia: Optional[float] = None) -> np.ndarray:
     lam = np.full(X.so_cot, float(lam_thua))
+    if lam_nghia is not None:
+        lam[X.d0:X.d] = float(lam_nghia)
     lam[X.d:] = LAMBDA_CAU_TRUC
     lam[-1] = 1e-6
     return lam
@@ -565,9 +663,12 @@ def moc_don_gian(ds: Sequence[Dict[str, Any]], hoc: np.ndarray, giu: np.ndarray,
 
 
 def huan_luyen_mo_hinh(ds: Sequence[Dict[str, Any]], ten_y: str = "y_no", lam_thu: Sequence[float] = LAMBDA_THU,
-                       d: int = D_BAM, in_ra: Callable[[str], None] = lambda *_a: None) -> Dict[str, Any]:
+                       d: int = D_BAM, in_ra: Callable[[str], None] = lambda *_a: None, *, nghia: bool = False,
+                       lam_nghia_thu: Sequence[float] = LAMBDA_NGHIA_THU, khoi: Sequence[str] = KHOI_NGHIA,
+                       d_nghia: int = D_NGHIA) -> Dict[str, Any]:
     """Học ridge trên phần CŨ, chọn λ trên lát thẩm định (cuối phần cũ), kiểm trên phần giữ lại (MỚI). Trả mô hình
-    (trọng số + chuẩn hoá + từ điển vùng) và số kiểm."""
+    (trọng số + chuẩn hoá + từ điển vùng) và số kiểm. `nghia=True` (bản 2): thêm khối nhãn nghĩa (dòng có
+    `x["nghia"]`), λ khối chọn cùng lúc trên lát thẩm định."""
     t0 = time.time()
     ds = list(ds)
     y = np.array([x[ten_y] for x in ds], dtype=np.float64)
@@ -576,7 +677,8 @@ def huan_luyen_mo_hinh(ds: Sequence[Dict[str, Any]], ten_y: str = "y_no", lam_th
     vung_ds = sorted({str(ds[i].get("vung")) for i in hoc if ds[i].get("vung")})
     tho = dac_tho(ds, vung_ds)
     tb, lc = chuan_hoa(tho[hoc])          # chuẩn hoá theo tập học
-    X_all = ma_tran(ds, tho, tb, lc, d)
+    dn = int(d_nghia) if nghia else 0
+    X_all = ma_tran(ds, tho, tb, lc, d, dn, khoi)
     # lát thẩm định trong phần học
     th = hoc[np.argsort([ds[i]["dang"].toordinal() for i in hoc], kind="mergesort")]
     cat = int(len(th) * (1 - TI_LE_THAM_DINH))
@@ -584,30 +686,34 @@ def huan_luyen_mo_hinh(ds: Sequence[Dict[str, Any]], ten_y: str = "y_no", lam_th
     Xh2, Xtd = X_all.con(h2), X_all.con(td)
     tot, w = None, None
     thu_lam = []
-    for lam in lam_thu:
-        w = ridge(Xh2, y[h2], _lam_vec(Xh2, lam), w0=w)
-        rho = spearman(Xtd.nhan(w), y[td]) or -1.0
-        thu_lam.append({"lam": lam, "rho_tham_dinh": rho})
-        in_ra("  λ={0:<6} rho thẩm định {1} · {2:.0f}s".format(lam, rho, time.time() - t0))
-        if tot is None or rho > tot[1]:
-            tot = (lam, rho, w)
+    for ln in (lam_nghia_thu if dn else (None,)):
+        for lam in lam_thu:
+            w = ridge(Xh2, y[h2], _lam_vec(Xh2, lam, ln), w0=w)
+            rho = spearman(Xtd.nhan(w), y[td]) or -1.0
+            thu_lam.append({"lam": lam, "lam_nghia": ln, "rho_tham_dinh": rho})
+            in_ra("  λ={0:<6} λ nghĩa={1:<6} rho thẩm định {2} · {3:.0f}s".format(lam, str(ln), rho, time.time() - t0))
+            if tot is None or rho > tot[1]:
+                tot = (lam, rho, w, ln)
     lam = tot[0] if tot else LAMBDA_THU[0]
+    lam_n = tot[3] if tot else None
     Xh = X_all.con(hoc)
-    w = ridge(Xh, y[hoc], _lam_vec(Xh, lam), w0=tot[2] if tot else None)
+    w = ridge(Xh, y[hoc], _lam_vec(Xh, lam, lam_n), w0=tot[2] if tot else None)
     Xg = X_all.con(giu)
     p = Xg.nhan(w)
-    kq = {"n_hoc": int(len(hoc)), "n_giu": int(len(giu)), "moc_giu": moc, "lam": lam, "thu_lam": thu_lam,
+    kq = {"n_hoc": int(len(hoc)), "n_giu": int(len(giu)), "moc_giu": moc, "lam": lam, "lam_nghia": lam_n,
+          "thu_lam": thu_lam, "nghia": bool(dn),
           "rho_giu": spearman(p, y[giu]), "rho_giu_y_no": spearman(p, y_no[giu]), "lift_10": lift_top(y_no[giu], p),
           "giay": round(time.time() - t0, 1)}
     return {"w": w.astype(np.float32), "tb": tb, "lc": lc, "vung": vung_ds, "d": d, "ngram": list(NGRAM),
-            "nhan": ten_y, "kiem": kq, "moc_du_lieu": moc, "p_giu": p, "giu": giu}
+            "nhan": ten_y, "kiem": kq, "moc_du_lieu": moc, "p_giu": p, "giu": giu, "d_nghia": dn, "khoi": list(khoi)}
 
 
 def du_doan_mh(mh: Dict[str, Any], ds: Sequence[Dict[str, Any]]) -> np.ndarray:
     """Điểm của mô hình cho các dòng `{tieu_de, [vung, dai, dang, subs]}` (log tỉ lệ so trung vị kênh)."""
     if not ds:
         return np.zeros(0)
-    X = ma_tran(ds, dac_tho(ds, mh["vung"]), np.asarray(mh["tb"]), np.asarray(mh["lc"]), int(mh["d"]))
+    X = ma_tran(ds, dac_tho(ds, mh["vung"]), np.asarray(mh["tb"]), np.asarray(mh["lc"]), int(mh["d"]),
+                int(mh.get("d_nghia") or 0), mh.get("khoi") or KHOI_NGHIA)
     return X.nhan(np.asarray(mh["w"], dtype=np.float64))
 
 
@@ -626,7 +732,9 @@ def luu(goc: str, mh: Dict[str, Any], meta: Dict[str, Any]) -> str:
         np.savez_compressed(tep, w=np.asarray(mh["w"], dtype=np.float32), tb=np.asarray(mh["tb"]),
                             lc=np.asarray(mh["lc"]), meta=np.array(json.dumps(
                                 {"vung": mh["vung"], "d": mh["d"], "ngram": mh["ngram"], "nhan": mh["nhan"],
-                                 "moc_du_lieu": mh["moc_du_lieu"], "phien_ban": PHIEN_BAN}, ensure_ascii=False)))
+                                 "moc_du_lieu": mh["moc_du_lieu"], "phien_ban": PHIEN_BAN,
+                                 "d_nghia": int(mh.get("d_nghia") or 0), "khoi": list(mh.get("khoi") or KHOI_NGHIA)},
+                                ensure_ascii=False)))
     os.replace(p + ".tmp", p)
     _ghi_json(duong_hien_hanh(goc), dict(meta, tep=ten, luc=time.strftime("%Y-%m-%d %H:%M:%S"), phien_ban=PHIEN_BAN))
     ds = sorted(glob.glob(os.path.join(thu_muc(goc), "mo-hinh-*.npz")))
@@ -658,6 +766,7 @@ def nap(goc: str) -> Optional[Dict[str, Any]]:
             meta = json.loads(str(z["meta"]))
             mh = {"w": z["w"].astype(np.float64), "tb": z["tb"], "lc": z["lc"], "vung": meta["vung"], "d": int(meta["d"]),
                   "ngram": meta.get("ngram"), "nhan": meta.get("nhan"), "moc_du_lieu": meta.get("moc_du_lieu"),
+                  "d_nghia": int(meta.get("d_nghia") or 0), "khoi": meta.get("khoi") or list(KHOI_NGHIA),
                   "hien_hanh": hh}
     except Exception:  # noqa: BLE001
         mh = None
@@ -686,6 +795,8 @@ def du_doan_nhieu(goc: str, tieu_de: Sequence[str], *, dai_giay: Optional[float]
             lk = (link[i] if link and i < len(link) else "") or ""
             ds.append({"tieu_de": str(t or ""), "vung": fv(str(t or ""), lk) if fv else None, "dai": dai_giay,
                        "dang": ngay, "subs": subs})
+        if mh.get("d_nghia"):
+            gan_nghia(goc, ds)
         return [round(float(x), 4) for x in du_doan_mh(mh, ds)]
     except Exception:  # noqa: BLE001 — hàm giá trị hỏng không bao giờ làm hỏng nơi chọn
         return [None] * len(tieu_de or [])
@@ -754,8 +865,14 @@ def kiem_kenh_ta(goc: str, mh: Dict[str, Any], bay: Optional[_dt.datetime] = Non
     for k in kenh_ds:
         ds += _bang_ta(goc, k, bay)
     _do_no_ta(ds)
-    diem = du_doan_mh(mh, [dict(x, vung=(ham_vung(goc) or (lambda *_a: None))(x["tieu_de"], ""), subs=None)
-                           for x in ds]) if ds else np.zeros(0)
+
+    def cham(dong: List[Dict[str, Any]]) -> np.ndarray:
+        if mh.get("d_nghia"):
+            gan_nghia(goc, dong)
+        return du_doan_mh(mh, dong)
+
+    diem = cham([dict(x, vung=(ham_vung(goc) or (lambda *_a: None))(x["tieu_de"], ""), subs=None)
+                 for x in ds]) if ds else np.zeros(0)
     for x, p in zip(ds, diem):
         x["diem"] = float(p)
     ra: Dict[str, Any] = {"kenh": kenh_ds, "n_video": len(ds)}
@@ -780,7 +897,7 @@ def kiem_kenh_ta(goc: str, mh: Dict[str, Any], bay: Optional[_dt.datetime] = Non
             if not td:
                 continue
             dai = _so(hs.get("thoi_luong_giay"))
-            p = float(du_doan_mh(mh, [{"tieu_de": td, "vung": fv(td, ""), "dai": dai}])[0])
+            p = float(cham([{"tieu_de": td, "vung": fv(td, ""), "dai": dai}])[0])
             if r.get("pv") is not None:
                 pv.append((p, float(r["pv"])))
             tc = hs.get("tieu_de_cham") if isinstance(hs.get("tieu_de_cham"), dict) else {}
@@ -791,7 +908,7 @@ def kiem_kenh_ta(goc: str, mh: Dict[str, Any], bay: Optional[_dt.datetime] = Non
                 continue
             uv = tc.get("ung_vien") or []
             td_chon = str((uv[tc["chon"]] or {}).get("tieu_de") or td) if 0 <= tc["chon"] < len(uv) else td
-            p2 = p if td_chon == td else float(du_doan_mh(mh, [{"tieu_de": td_chon, "vung": fv(td_chon, ""), "dai": dai}])[0])
+            p2 = p if td_chon == td else float(cham([{"tieu_de": td_chon, "vung": fv(td_chon, ""), "dai": dai}])[0])
             if r.get("ctr") is not None and chuan[k]["ctr"]:
                 doi.append((g, p2, float(r["ctr"]) / float(chuan[k]["ctr"]), math.sqrt(float(r.get("imp") or 0))))
             if r.get("pv") is not None:
@@ -831,10 +948,12 @@ def tap_hoc(goc: str, in_ra: Callable[[str], None] = lambda *_a: None) -> Tuple[
     fv = ham_vung(goc)
     for x in nhan:
         x["vung"] = fv(x["tieu_de"], "https://www.youtube.com/watch?v=" + x["vid"]) if fv else None
+    tt["ti_le_nghia"] = round(gan_nghia(goc, nhan), 4)
     tt["giay_doc"] = round(time.time() - t0, 1)
     tt["n_kenh_do"] = sum(1 for x in nhan if x["nguon"] == "kenh-do")
-    in_ra("dữ liệu: {0} video đọc → {1} đủ tuổi ≥ {2} ngày → {3} có trung vị kênh tin được ({4} kênh) · {5}s".format(
-        tt.get("n_vao"), tt.get("n_du_tuoi"), TUOI_MIN, tt.get("n"), tt.get("n_kenh"), tt["giay_doc"]))
+    in_ra("dữ liệu: {0} video đọc → {1} đủ tuổi ≥ {2} ngày → {3} có trung vị kênh tin được ({4} kênh) · có nhãn nghĩa "
+          "{5:.0%} · {6}s".format(tt.get("n_vao"), tt.get("n_du_tuoi"), TUOI_MIN, tt.get("n"), tt.get("n_kenh"),
+                                  tt["ti_le_nghia"], tt["giay_doc"]))
     return nhan, tt
 
 
@@ -892,15 +1011,18 @@ def chay(goc: str, *, thu: bool = False, in_ra: Callable[[str], None] = print,
         in_ra(bc["loi"])
         return bc
     tot = None
-    for nhan in NHAN_HOC:
-        in_ra("học nhãn {0}…".format(nhan))
-        mh = huan_luyen_mo_hinh(ds, nhan, in_ra=in_ra)
+    bien_the = [("", False)] + ([("+nghia", True)] if (tt.get("ti_le_nghia") or 0) >= TI_LE_NGHIA_MIN else [])
+    for nhan, (hau, nghia) in [(n, b) for n in NHAN_HOC for b in bien_the]:
+        ten = nhan + hau
+        in_ra("học {0}…".format(ten))
+        mh = huan_luyen_mo_hinh(ds, nhan, in_ra=in_ra, nghia=nghia)
         y = np.array([x["y_no"] for x in ds])
         moc = moc_don_gian(ds, np.setdiff1d(np.arange(len(ds)), mh["giu"]), mh["giu"], y)
         ta = kiem_kenh_ta(goc, mh, bay)
-        bc["mo_hinh"][nhan] = {"kiem": mh["kiem"], "moc": moc, "ta": ta}
+        bc["mo_hinh"][ten] = {"kiem": mh["kiem"], "moc": moc, "ta": ta}
+        mh["ten"] = ten
         in_ra("  {0}: giữ lại n {1} rho(nhãn) {2} rho(y_no) {3} lift top10% {4} · mốc vùng {5} · mốc độ dài {6}".format(
-            nhan, mh["kiem"]["n_giu"], mh["kiem"]["rho_giu"], mh["kiem"]["rho_giu_y_no"], mh["kiem"]["lift_10"],
+            ten, mh["kiem"]["n_giu"], mh["kiem"]["rho_giu"], mh["kiem"]["rho_giu_y_no"], mh["kiem"]["lift_10"],
             moc["vung"]["rho"], moc["do_dai"]["rho"]))
         in_ra("  video ta: view n {0} rho {1} · CTR n {2} rho_w {3} · phân vị n {4} rho {5} · đối đầu LLM (CTR) n {6}: "
               "mô hình {7} vs LLM {8} · đối đầu LLM (phân vị) n {9}: mô hình {10} vs LLM {11}".format(
@@ -925,7 +1047,7 @@ def chay(goc: str, *, thu: bool = False, in_ra: Callable[[str], None] = print,
             if r_cu is not None and (r_moi is None or r_moi < r_cu - 0.005):
                 bc["giu_ban_cu"] = True
     ok, ly = dat_cong(mh["kiem"], ta)
-    bc["cong"] = {"dat": ok, "ly_do": ly, "nhan": mh["nhan"]}
+    bc["cong"] = {"dat": ok, "ly_do": ly, "nhan": mh.get("ten") or mh["nhan"]}
     in_ra("cổng nối sản xuất: {0} — {1}".format("ĐẠT" if ok else "chưa", ly))
     if not thu:
         if not bc.get("giu_ban_cu"):
@@ -936,6 +1058,12 @@ def chay(goc: str, *, thu: bool = False, in_ra: Callable[[str], None] = print,
             _ghi_json(duong_hien_hanh(goc), dict(hh, luc_hoc=bc["luc"], lan_hoc_kem=bc.get("so_ban_cu")))
         _ghi_json(os.path.join(thu_muc(goc), "bao-cao-{0}.json".format(bay.date().isoformat())), _gon(bc))
         _ghi_nao(goc, bc, bay)
+        if (tt.get("ti_le_nghia") or 0) >= TI_LE_NGHIA_MIN:
+            try:      # bản 2: làm mới báo cáo nhãn + khối «tín hiệu thị trường» của lời nhắc tiêu đề
+                from core import nhan_nghia  # noqa: PLC0415
+                nhan_nghia.bao_cao(goc, nhan_nghia.phan_tich(ds))
+            except Exception as loi:  # noqa: BLE001
+                in_ra("  (báo cáo nhãn nghĩa hỏng: {0})".format(str(loi)[:120]))
     return bc
 
 

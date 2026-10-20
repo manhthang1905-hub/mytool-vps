@@ -4950,6 +4950,14 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
         ab_td = ""
     if ab_td:
         khoi_bai_td += "\n\n" + ab_td
+    # 20/10/2026 (G2 bản 2): «tín hiệu thị trường» — nhãn nghĩa tiêu đề đối thủ ↔ xác suất nổ (`core/nhan_nghia`).
+    # CHỈ vào lượt VIẾT N bản (gợi ý), không vào lượt chấm; cài đặt `tin_hieu_thi_truong_tieu_de` tắt / chưa có số → "".
+    try:
+        from . import nhan_nghia as _nn  # noqa: PLC0415
+        khoi_thi_truong = _nn.khoi_tin_hieu(str(getattr(bc, "goc", "") or ""))
+    except Exception:  # noqa: BLE001
+        khoi_thi_truong = ""
+    khoi_thi_truong = ("\n\n" + khoi_thi_truong) if khoi_thi_truong else ""
 
     if k.nan_khuon_tieu_de:
         mau = tieu_de_thang_cua_kenh(bc.goc, k.ma)
@@ -4977,7 +4985,7 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
             bc.kiem_dung()
             bc.ghi("  đang viết {0} cách đặt tiêu đề khác…".format(k.so_tieu_de))
             tra = _goi(bc, _de_bai_n_ban_tieu_de(sach, k.so_tieu_de, k.nhan_tieu_de,
-                                             luat_do_dai_tieu_de(k)) + khoi_bai_td,
+                                             luat_do_dai_tieu_de(k)) + khoi_bai_td + khoi_thi_truong,
                       _khoa_chat(luot, "tieu-de:n-ban"))
             moi_ds = _doc_nhieu_tieu_de(tra, k.so_tieu_de)
             for moi in moi_ds:
@@ -5043,6 +5051,9 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
     # CTR thật tốt hơn × hệ số Thompson kiểu tiêu đề (kết quả thật). Kênh chưa hiệu chuẩn / đủ tin: y như cũ.
     hc_td: Dict[str, Any] = {}
     try:
+        # Chấm hỏng → luật an toàn "giữ đối chứng" (xem `goi_cham`) — hiệu chuẩn KHÔNG được ghi đè (21/10/2026).
+        if "chấm hỏng" in str(ly_do or ""):
+            raise LookupError("chấm hỏng — bỏ qua hiệu chuẩn")
         from . import hieu_chuan as _hcm  # noqa: PLC0415
 
         ts_td = _hcm.trong_so(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""), "tieu_de")
@@ -5057,6 +5068,8 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
                 bc.ghi("  (hiệu chuẩn: giám khảo tiêu đề {0} ở kênh này — chọn {1} thay {2})".format(
                     _hcm.TEN_MUC.get(str(ts_td.get("muc")), ts_td.get("muc")), ten_ban[moi_td], ten_ban[chon]))
             chon = moi_td
+    except LookupError:
+        pass
     except Exception as loi_hc:  # noqa: BLE001 — hiệu chuẩn hỏng: giữ lựa chọn của giám khảo
         _canh_bao_hoc(str(getattr(bc, "goc", "") or ""), "hieu_chuan:tieu_de", loi_hc, str(getattr(k, "ma", "") or ""))
     try:
