@@ -20,7 +20,9 @@ và bớt quyền của bộ không dự báo — không đợi người soi.
        bìa / tiêu đề → CTR (≥ 1.000 hiển thị, ≥ 48 giờ; có trọng số √hiển thị — sai số CTR co theo √n, trọng số
                        thẳng theo hiển thị thì một video nổ nuốt cả mẫu); bìa/tiêu đề đã sửa trên Studio → số TRƯỚC sửa.
        kịch bản → % độ dài (AVD %) và % còn lại ở 0:30;  hook → % còn lại ở 0:30;  ảnh cảnh → AVD % (yếu, chỉ báo);
-       biên tập → thắng/không (thước chung `core.thuoc_thang`).
+       biên tập → thắng/không (thước chung `core.thuoc_thang`);
+       hàm giá trị học máy (`core/gia_tri`, G2: `gia_tri_tieu_de`, `gia_tri_de_tai`) → CTR và phân vị thước chung
+                       (điểm theo mô hình HIỆN HÀNH, chấm lại mỗi lượt — mô hình chỉ học video đối thủ).
    LUẬT: n ≥ `N_TOI_THIEU` và rho < `RHO_KHONG` → «không dự báo», trọng số `W_PHU_QUYET` (chỉ còn PHỦ QUYẾT lỗi rõ);
    rho ≥ `RHO_DU` → trọng số 1; giữa hai mốc nội suy thẳng. Kênh chưa đủ mẫu → dùng số GỘP; gộp cũng chưa đủ → 1
    (giữ nguyên hành vi cũ). Ghi `workspace/hieu-chuan/<ngày>.json` + `trong-so.json` (nơi chọn đọc) + một dòng báo
@@ -101,7 +103,12 @@ BO_CHAM: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "hook": ("giám khảo hook", ("giu_30s",)),
     "anh_canh": ("giám khảo ảnh cảnh", ("avd_pct",)),
     "bien_tap": ("biên tập viên AI (xác suất thắng)", ("thang",)),
+    # 20/10/2026 — G2: hàm giá trị HỌC MÁY (`core/gia_tri`, học trên video đối thủ) — đo như mọi bộ chấm khác
+    "gia_tri_tieu_de": ("hàm giá trị học máy — tiêu đề được chọn", ("ctr", "pv")),
+    "gia_tri_de_tai": ("hàm giá trị học máy — đề tài (tiêu đề nguồn)", ("pv", "ctr")),
 }
+#: Bộ chấm là MÔ HÌNH (điểm đổi khi học lại mỗi tuần) → dòng sổ cái được cập nhật theo mô hình hiện hành.
+BO_CHAM_MO_HINH = ("gia_tri_tieu_de", "gia_tri_de_tai")
 #: Chuỗi lùi khi bộ chấm chưa đủ mẫu (kênh → gộp → bộ chấm cùng lượt chấm). KHÔNG lùi bìa lô về giám khảo bìa đời cũ
 #: (`bia`): khác lời nhắc, khác cách so (tờ điện thoại cạnh bìa thắng) — đo 20/10: `bia` gộp rho −0,39 (n 45) mà
 #: `bia_lo` gộp +0,68 (n 6); mượn số của dụng cụ khác để tước quyền là phạt oan.
@@ -376,7 +383,33 @@ def _bu_mot(goc: str, kenh: str, ma: str, hs: Dict[str, Any],
                     phu={"so_canh": ac.get("so_canh")})
     if d:
         ra.append(d)
-    return ra
+    return ra + _dong_gia_tri(goc, kenh, ma, hs, luc)
+
+
+def _dong_gia_tri(goc: str, kenh: str, ma: str, hs: Dict[str, Any], luc: str) -> List[Dict[str, Any]]:
+    """G2 (20/10/2026): điểm hàm giá trị học máy (`core/gia_tri`, mô hình HIỆN HÀNH) của tiêu đề ĐƯỢC CHỌN
+    (`gia_tri_tieu_de`) và của tiêu đề NGUỒN — ứng viên «đối chứng» = đề tài (`gia_tri_de_tai`). Mô hình học trên
+    video ĐỐI THỦ (không có video của ta) nên chấm lại video cũ không rò nhãn. Chưa có mô hình → []."""
+    try:
+        from . import gia_tri  # noqa: PLC0415
+        mh = gia_tri.nap(goc)
+        if mh is None:
+            return []
+        tc = hs.get("tieu_de_cham") if isinstance(hs.get("tieu_de_cham"), dict) else {}
+        uv = [u for u in tc.get("ung_vien") or [] if isinstance(u, dict)]
+        nguon = next((str(u.get("tieu_de") or "") for u in uv if u.get("ten") == LOAI_TD[0]), "")
+        td = str(hs.get("tieu_de") or "")
+        diem = gia_tri.du_doan_nhieu(goc, [td, nguon], dai_giay=_so(hs.get("thoi_luong_giay")), mh=mh)
+        tep = str((mh.get("hien_hanh") or {}).get("tep") or "")
+        ra = []
+        for bo, chu, p in (("gia_tri_tieu_de", td, diem[0]), ("gia_tri_de_tai", nguon, diem[1])):
+            d = dong_so_cai(bo, kenh, ma, "chon" if bo == "gia_tri_tieu_de" else "nguon", p, chon=True,
+                            nguon="mo-hinh", luc=luc, phu={"mo_hinh": tep}) if chu else None
+            if d:
+                ra.append(d)
+        return ra
+    except Exception:  # noqa: BLE001 — hàm giá trị hỏng không làm hỏng sổ cái
+        return []
 
 
 def _bu_bien_tap(goc: str, kenh: str) -> List[Dict[str, Any]]:
@@ -403,7 +436,7 @@ def gom(goc: str, kenh_ds: Optional[Sequence[str]] = None, *, ghi_dia: bool = Tr
         bu = [d for ma, hs in ho_so_kenh(goc, k).items() for d in _bu_mot(goc, k, ma, hs, dem_mau)]
         for d in bu + _bu_bien_tap(goc, k):
             cu = co.get(d["khoa"])
-            if cu is None or (d["bo_cham"].startswith("bia") and _khac(cu, d)):
+            if cu is None or ((d["bo_cham"].startswith("bia") or d["bo_cham"] in BO_CHAM_MO_HINH) and _khac(cu, d)):
                 co[d["khoa"]] = d
                 moi.append(d)
     if ghi_dia and moi:
@@ -547,7 +580,7 @@ def _cap(dong: Sequence[Dict[str, Any]], kq: Dict[str, Dict[str, Dict[str, Any]]
         if y is None:
             continue
         w = math.sqrt(float(k.get("imp") or 0)) if ket == "ctr" else 1.0
-        if chuan is not None and ket != "thang":
+        if chuan is not None and ket not in ("thang", "pv"):     # phân vị thước chung đã theo chính kênh
             tv = (chuan.get(d["kenh"]) or {}).get(ket)
             if tv is None or (ket == "ctr" and tv <= 0):
                 continue

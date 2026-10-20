@@ -149,6 +149,19 @@ def _muc_chien_truong() -> List[str]:
     for x in (d.get("de_xuat_tan_cong") or [])[:3]:
         vs = " | ".join("{0} ({1})".format(v.get("ten"), v.get("co_hoi")) for v in (x.get("vung") or [])[:2])
         ra.append("- Lệnh {0} → {1}".format(x.get("kenh"), vs or "-"))
+    # 20/10/2026 — G1 bảng điểm thắng: kênh tốt nhất cách top 10 bao xa + mục tiêu tuần; thị phần đứng yên 7 ngày
+    bd = d.get("bang_diem") or {}
+    tot = (bd.get("kenh") or {}).get(bd.get("tot_nhat") or "")
+    if tot:
+        ra.append("- Kênh tốt nhất {0}: hạng #{1}/{2} · cần ×{3} tới top {4} ({5}/tháng) · mục tiêu tuần {6} xem/28 ngày "
+                  "(+{7}%/tuần)".format(bd.get("tot_nhat"), tot.get("hang"), bd.get("so_kenh_ngach"), tot.get("gap"),
+                                        bd.get("so_top"), _gon(bd.get("nguong_top")), _gon(tot.get("muc_tieu_tuan")),
+                                        tot.get("tang_tuan_pct")))
+    try:
+        from core import bat_thuong  # noqa: PLC0415
+        ra += bat_thuong.bao_thi_phan(chien_truong.GOC)
+    except Exception as loi:  # noqa: BLE001
+        ra.append("- Bảng điểm thắng: lỗi ({0})".format(str(loi)[:80]))
     return ra
 
 
@@ -230,7 +243,13 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
 def _muc_hieu_chuan(goc: str, bay_gio: _dt.datetime) -> List[str]:
     """20/10/2026 — bộ chấm LLM nào dự báo được kết quả thật, bộ nào bị co về phủ quyết (`core/hieu_chuan`, D22)."""
     from core import hieu_chuan  # noqa: PLC0415
-    return hieu_chuan.dong_bao_cao(goc, bay_gio)
+    ra = hieu_chuan.dong_bao_cao(goc, bay_gio)
+    try:  # 20/10/2026 — G2: hàm giá trị học máy (D23) có dự báo được không, đã qua cổng nối sản xuất chưa
+        from core import gia_tri  # noqa: PLC0415
+        ra += gia_tri.dong_bao_cao(goc)
+    except Exception as loi:  # noqa: BLE001
+        ra.append("- Hàm giá trị (G2): lỗi ({0})".format(str(loi)[:80]))
+    return ra
 
 
 # ── 4c. Chất lượng thành phẩm ────────────────────────────────────────────────

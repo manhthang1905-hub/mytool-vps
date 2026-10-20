@@ -347,7 +347,7 @@
 
   <div class="luoi-ba">
     <section class="panel goc dich" aria-label="Bảng xếp hạng">
-      <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="trophy"></svg>Bảng xếp hạng thị phần</h2></div>
+      <div class="panel-dau"><h2><svg class="ic" viewBox="0 0 24 24" data-ic="trophy"></svg>Bảng xếp hạng thị phần</h2><span class="phu" id="bxh-phu" style="margin-left:auto"></span></div>
       <div class="bxh" id="bxh"></div>
       <div class="mo rat-nho" id="cach-do" style="padding:0 16px 14px"></div>
     </section>
@@ -643,6 +643,14 @@ function nhiemVu() {
 }
 
 /* ---------- quân đoàn ---------- */
+function hangNgach(b) {     // G1: hạng ngách theo xem/tháng, khoảng cách tới top 10, mục tiêu tuần
+  if (!b || !b.hang) return "";
+  const bd = DU.bang_diem || {}, n = bd.so_top || 10;
+  const xa = b.trong_top ? `trong top ${n}` : (b.gap ? `cần ×${so(b.gap, 1)} tới top ${n}` : "");
+  const tuan = !b.trong_top && b.muc_tieu_tuan ? `<span class="mo">tuần tới ${fmt(b.muc_tieu_tuan)} xem</span>` : "";
+  const xu = b.hang_7 ? (b.hang_7 > b.hang ? ` <b class="ta-c">▲${b.hang_7 - b.hang}</b>` : b.hang_7 < b.hang ? ` <b class="dich-c">▼${b.hang - b.hang_7}</b>` : "") : "";
+  return `<div class="di" title="Hạng trong ${so(bd.so_kenh_ngach)} kênh của ngách theo lượt xem/tháng · ngưỡng top ${n} ≈ ${fmt(bd.nguong_top)}/tháng · mục tiêu tuần = tăng đều ${so(b.tang_tuan_pct, 1)}%/tuần để chạm ngưỡng sau ${bd.tuan_muc_tieu || 12} tuần">${ic("crown")}<span>Hạng ngách #${so(b.hang)}${xu}${xa ? " · " + xa : ""}</span>${tuan}</div>`;
+}
 function doiHinh() {
   const q = DU.quan || [];
   const ypp = q.filter(x => x.gio_xem >= 4000 && x.dang_ky >= 1000).length;
@@ -659,6 +667,7 @@ function doiHinh() {
         <div><div class="dong"><span>QUÂN SỐ · ĐĂNG KÝ</span><b>${so(x.dang_ky)} / 1.000</b></div><div class="thanh-tien hp"><b style="width:${(pS * 100).toFixed(1)}%"></b></div></div>
       </div>
       <div class="chi-nho"><div><small>Xem 28 ngày</small><b>${fmt(x.view_28)}</b></div><div><small>Giờ/ngày</small><b class="${x.gio_tang > 0 ? "ta-c" : ""}">${x.gio_tang > 0 ? "+" : ""}${fmt(Math.round(x.gio_tang || 0))}</b></div><div><small>Video</small><b>${so(x.so_video)}</b></div></div>
+      ${hangNgach(x.bang_diem)}
       ${x.tot_nhat ? `<div class="di" title="${esc(x.tot_nhat.tieu_de)}">${ic("trophy")}<span>Trận hay nhất: ${fmt(x.tot_nhat.hien_thi)} hiển thị · CTR ${esc(x.tot_nhat.ctr)}</span></div>` : ""}
       <div class="di">${ic("swords")}<span>Đánh tiếp:</span><b>${esc(x.tan_cong_ten || "—")}</b>${x.ngay_mai ? `<span class="mo">${esc(x.ngay_mai)}</span>` : ""}</div>
     </article>`;
@@ -680,6 +689,8 @@ function bxh() {
         <div class="thanh-tien ${d.ta ? "" : "dich"}"><b style="width:${Math.max(d.ta ? 1.5 : 0, d.view / mx * 100).toFixed(1)}%"></b></div></div>
       <div class="gt-h">${pc(d.thi_phan)}<small>${fmt(d.view)}/th</small></div>
     </div>`).join("");
+  const bd = DU.bang_diem || {};
+  document.getElementById("bxh-phu").textContent = bd.nguong_top ? `ngưỡng top ${bd.so_top || 10} ≈ ${fmt(bd.nguong_top)}/tháng${bd.doi_thi_phan_7 != null ? ` · thị phần 7 ngày ${bd.doi_thi_phan_7 >= 0 ? "+" : ""}${so(bd.doi_thi_phan_7, 2)} điểm` : ""}` : "";
   document.getElementById("cach-do").textContent = DU.cach_do ? "Cách đo: " + DU.cach_do : "";
 }
 function theNo(n) {

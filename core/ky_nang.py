@@ -1065,6 +1065,31 @@ def d_hieu_chuan(goc, kenh):
     return hieu_chuan.can_chay(goc)
 
 
+# D23 · Học lại hàm giá trị (20/10/2026) — `core/gia_tri.py` (G2) ─────────────────────────────────────────────
+
+def k_gia_tri(goc, kenh):
+    from core import gia_tri  # noqa: PLC0415
+    hh = _json(gia_tri.duong_hien_hanh(goc))
+    if not hh:
+        return (THIEU, "chưa học hàm giá trị lần nào") if gia_tri.co_du_lieu(goc) else (KHONG, "chưa có dữ liệu đối thủ")
+    luc = str(hh.get("luc_hoc") or hh.get("luc") or "")[:19]
+    try:
+        tuoi = (_dt.datetime.now() - _dt.datetime.strptime(luc, "%Y-%m-%d %H:%M:%S")).days
+    except ValueError:
+        tuoi = 0
+    if tuoi > 8:
+        return LOI, "hàm giá trị cũ {0} ngày ({1})".format(tuoi, luc[:10])
+    k = hh.get("kiem") or {}
+    return DAT, "{0} · giữ lại rho {1}, lift top 10% ×{2} · cổng sản xuất: {3}".format(
+        luc[:10], k.get("rho_giu_y_no"), (k.get("lift_10") or {}).get("lift"),
+        "đạt" if (hh.get("cong") or {}).get("dat") else "chưa")
+
+
+def d_gia_tri(goc, kenh):
+    from core import gia_tri  # noqa: PLC0415
+    return gia_tri.can_chay(goc)
+
+
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1275,6 +1300,16 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.hieu_chuan chay", k_hieu_chuan, ["D01"], dieu_kien=d_hieu_chuan,
            chay=lambda goc, kenh: _py("-m", "core.hieu_chuan", "chay"), nhip_gio=24 * 6, tu_ap=True, toan_may=True,
            han_phut=20),
+    KyNang("D23", "Học lại hàm giá trị", "dinh_ky",
+           "Mỗi tuần, giờ vắng (01–05 hoặc 21–23 giờ, khe nặng rảnh, một luồng, ưu tiên thấp): học lại hàm giá trị đề "
+           "tài + tiêu đề (G2) trên video đối thủ (kenh-do.json + content.csv, bỏ trùng, tuổi ≥ 7 ngày, nhãn = lượt xem "
+           "so trung vị của chính kênh cùng tuổi) — n-gram ký tự + cấu trúc, ridge numpy, chia theo thời gian; kiểm trên "
+           "video mới nhất giữ lại + chuyển giao sang video ta (đối đầu giám khảo tiêu đề LLM) → workspace/gia-tri/ "
+           "(mô hình không lên kho). Bản mới kém bản đang dùng trên cùng tập giữ lại → giữ bản cũ. D22 đo bộ chấm "
+           "gia_tri_tieu_de / gia_tri_de_tai hằng tuần.",
+           "python -X utf8 -m core.gia_tri huan-luyen", k_gia_tri, [], dieu_kien=d_gia_tri,
+           chay=lambda goc, kenh: _py("-m", "core.gia_tri", "huan-luyen"), nhip_gio=24 * 6, tu_ap=True, toan_may=True,
+           han_phut=40),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "

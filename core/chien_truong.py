@@ -262,6 +262,59 @@ def de_xuat_tan_cong(ds: List[Dict[str, Any]], quan: List[Dict[str, Any]], so_vu
     return ra
 
 
+#: G1 bảng điểm thắng (20/10/2026, `docs/KE-HOACH-TU-HOC-KIEU-CO-VUA.md`): mốc «top N» của ngách, và số tuần để mục
+#: tiêu tuần kéo kênh từ chỗ hiện tại lên ngưỡng top N (tăng đều theo cấp số nhân).
+SO_TOP = 10
+TUAN_MUC_TIEU = 12
+
+
+def _thi_phan(v: float, tong: float) -> float:
+    return round(100.0 * v / tong, 3) if tong > 0 else 0.0
+
+
+def bang_diem(view_dich: Dict[str, float], quan: List[Dict[str, Any]], lich_su: List[Dict[str, Any]] = None,
+              hom: _dt.date = None) -> Dict[str, Any]:
+    """BẢNG ĐIỂM THẮNG: mỗi kênh ta → hạng trong ngách theo lượt xem/tháng (giữa MỌI kênh đối thủ + các kênh ta), ngưỡng
+    top `SO_TOP`, khoảng cách (×) tới ngưỡng, mục tiêu tuần (lượt xem 28 ngày tuần tới nếu tăng đều để chạm ngưỡng sau
+    `TUAN_MUC_TIEU` tuần), thị phần và xu hướng 7 ngày (từ ảnh chụp lịch sử). Hàm thuần, không đọc đĩa.
+    `view_dich`: {kênh đối thủ: lượt xem/tháng}; `quan`: [{ma, view_28}]; `lich_su`: ảnh chụp ngày (cũ → mới)."""
+    hom = hom or _dt.date.today()
+    ta = {q["ma"]: float(q.get("view_28") or 0) for q in quan}
+    tat_ca = sorted([float(v) for v in view_dich.values()] + list(ta.values()), reverse=True)
+    nguong = tat_ca[SO_TOP - 1] if len(tat_ca) >= SO_TOP else (tat_ca[-1] if tat_ca else 0.0)
+    tong = sum(float(v) for v in view_dich.values()) + sum(ta.values())
+    moc = (hom - _dt.timedelta(days=7)).isoformat()
+    cu = [x for x in (lich_su or []) if str(x.get("ngay") or "") <= moc]
+    cu = cu[-1] if cu else None
+    tong_cu = 0.0
+    if cu:
+        t = cu.get("tong") or {}
+        tong_cu = float(t.get("dich") or 0) + float(t.get("ta") or 0)
+    kenh: Dict[str, Dict[str, Any]] = {}
+    for ma, v in ta.items():
+        hang = 1 + sum(1 for x in view_dich.values() if float(x) > v) + sum(1 for m, x in ta.items() if m != ma and x > v)
+        gap = round(nguong / v, 1) if v > 0 and nguong > 0 else None
+        he = (nguong / v) ** (1.0 / TUAN_MUC_TIEU) if v > 0 and nguong > v else 1.0
+        x: Dict[str, Any] = {"hang": hang, "view": round(v), "thi_phan": _thi_phan(v, tong), "gap": gap,
+                             "trong_top": bool(nguong and v >= nguong), "muc_tieu_tuan": round(v * he) if v > 0 else None,
+                             "tang_tuan_pct": round(100.0 * (he - 1.0), 1)}
+        if cu:
+            v_cu = float(((cu.get("quan") or {}).get(ma) or {}).get("view_28") or 0)
+            tp_cu = _thi_phan(v_cu, tong_cu)
+            x.update(view_7=round(v_cu), thi_phan_7=tp_cu, doi_thi_phan_7=round(x["thi_phan"] - tp_cu, 3),
+                     hang_7=((cu.get("bang_diem") or {}).get("hang") or {}).get(ma))
+        kenh[ma] = x
+    tp = _thi_phan(sum(ta.values()), tong)
+    ra = {"so_top": SO_TOP, "nguong_top": round(nguong), "so_kenh_ngach": len(tat_ca), "thi_phan": tp,
+          "tuan_muc_tieu": TUAN_MUC_TIEU, "kenh": kenh, "ngay_7": cu.get("ngay") if cu else None}
+    if cu:
+        ra["thi_phan_7"] = float((cu.get("tong") or {}).get("thi_phan") or 0)
+        ra["doi_thi_phan_7"] = round(tp - ra["thi_phan_7"], 3)
+    tot = min(kenh.values(), key=lambda x: x["hang"]) if kenh else None
+    ra["tot_nhat"] = next((m for m, x in kenh.items() if x is tot), None)
+    return ra
+
+
 def _gon(n) -> str:
     n = float(n or 0)
     return "%.1ftr" % (n / 1e6) if n >= 1e6 else ("%dN" % round(n / 1e3) if n >= 1e4 else "%d" % round(n))
@@ -410,6 +463,14 @@ def tinh(bay_gio: _dt.date = None) -> Dict[str, Any]:
         chu_quyen = {}
     ra["chu_quyen"] = {v: m.get("chu") for v, m in (chu_quyen.get("vung") or {}).items() if isinstance(m, dict)}
     ra["de_xuat_tan_cong"] = de_xuat_tan_cong(ds, quan, chu_quyen=chu_quyen)
+    try:  # 20/10/2026 — G1 bảng điểm thắng (hạng ngách, khoảng cách top 10, mục tiêu tuần, xu hướng thị phần)
+        from core import chien_truong_lich_su as _ls  # noqa: PLC0415
+        bd = bang_diem({k: b["view"] for k, b in bxh.items()}, quan, _ls.doc_lich_su(GOC, 30), hom)
+    except Exception:  # noqa: BLE001
+        bd = {}
+    ra["bang_diem"] = bd
+    for q in quan:
+        q["bang_diem"] = (bd.get("kenh") or {}).get(q["ma"]) or {}
     _ghi_tan_cong(hom, ra)
     ra["lich_su"] = _lich_su_gon(hom, ra)
     return ra

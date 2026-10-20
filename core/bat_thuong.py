@@ -490,6 +490,82 @@ def sua_bia(goc: str, kenh: str, *, vid: str = "", goi: Optional[Callable[..., s
         return {"ket": "hong", "ma": v["ma"], "ly_do": str(loi)[:300]}
 
 
+# ── G1 (20/10/2026): THỊ PHẦN NGÁCH ĐỨNG YÊN ───────────────────────────────────────────────────────────────────
+#: Thị phần cả nhóm (ảnh chụp chiến trường hằng ngày `workspace/chien-truong/lich-su.jsonl`) sau `NGAY_DUNG_YEN` ngày
+#: mà tăng < `TANG_DUNG_YEN` (tương đối) — kể cả giảm — là «đứng yên»: một tín hiệu (bỏ trùng theo tuần ISO) vào bộ
+#: não, bộ phận chọn content (chiến lược đề tài), và một dòng báo cáo ngày. Không báo động / Telegram (chủ đã từ chối).
+NGAY_DUNG_YEN = 7
+TANG_DUNG_YEN = 0.10
+
+
+def thi_phan_dung_yen(lich_su: Sequence[Dict[str, Any]], so_ngay: int = NGAY_DUNG_YEN,
+                      tang_min: float = TANG_DUNG_YEN) -> Optional[Dict[str, Any]]:
+    """Hàm thuần trên ảnh chụp (cũ → mới). Cần ảnh mới nhất và ảnh cách ≥ `so_ngay` ngày; không đủ → None."""
+    ds = [x for x in lich_su if isinstance(x, dict) and x.get("ngay")]
+    if len(ds) < 2:
+        return None
+    moi = ds[-1]
+    try:
+        moc = (_dt.date.fromisoformat(str(moi["ngay"])[:10]) - _dt.timedelta(days=so_ngay)).isoformat()
+    except ValueError:
+        return None
+    cu = [x for x in ds[:-1] if str(x["ngay"]) <= moc]
+    if not cu:
+        return None
+    cu = cu[-1]
+    tp = lambda x: float((x.get("tong") or {}).get("thi_phan") or 0)  # noqa: E731
+    a, b = tp(cu), tp(moi)
+    cua_so = [tp(x) for x in ds if str(x["ngay"]) >= str(cu["ngay"])]
+    doi = (b - a) / a if a > 0 else (1.0 if b > 0 else 0.0)
+    kenh = {}
+    for m, q in (moi.get("quan") or {}).items():
+        v0 = float(((cu.get("quan") or {}).get(m) or {}).get("view_28") or 0)
+        kenh[m] = {"view_28": float((q or {}).get("view_28") or 0), "view_28_cu": v0}
+    return {"dung_yen": doi < tang_min, "ngay_cu": cu["ngay"], "ngay_moi": moi["ngay"], "thi_phan_cu": a, "thi_phan_moi": b,
+            "doi_pct": round(100.0 * doi, 1), "thap": min(cua_so), "cao": max(cua_so), "kenh": kenh,
+            "nguong_top": (moi.get("bang_diem") or {}).get("nguong_top"), "hang": (moi.get("bang_diem") or {}).get("hang")}
+
+
+def _tuan_iso(ngay: str) -> str:
+    try:
+        n, t, _ = _dt.date.fromisoformat(str(ngay)[:10]).isocalendar()
+        return "{0}-W{1:02d}".format(n, t)
+    except ValueError:
+        return str(ngay)[:10]
+
+
+def bao_thi_phan(goc: str, *, thu: bool = False, lich_su: Optional[Sequence[Dict[str, Any]]] = None) -> List[str]:
+    """Dòng báo cáo ngày (bảng điểm thắng + thị phần đứng yên); đứng yên thì ghi MỘT sự kiện não/tuần (khoá
+    `thi-phan-dung-yen:<tuần ISO>`). Không bao giờ ném lỗi."""
+    try:
+        if lich_su is None:
+            from . import chien_truong_lich_su  # noqa: PLC0415
+            lich_su = chien_truong_lich_su.doc_lich_su(goc, 30)
+        r = thi_phan_dung_yen(lich_su or [])
+    except Exception as loi:  # noqa: BLE001
+        return ["- Bảng điểm thắng: lỗi đọc lịch sử chiến trường ({0})".format(str(loi)[:80])]
+    if r is None:
+        return ["- Bảng điểm thắng: chưa đủ {0} ngày ảnh chụp chiến trường".format(NGAY_DUNG_YEN)]
+    hang = r.get("hang") or {}
+    ra = []
+    if hang:
+        ra.append("- Hạng ngách (ngưỡng top 10 ≈ {0}/tháng): {1}".format(
+            "{0:,.0f}".format(float(r["nguong_top"])) if r.get("nguong_top") else "?",
+            ", ".join("{0} #{1}".format(m, h) for m, h in sorted(hang.items(), key=lambda x: (x[1] or 1e9)) if h)))
+    ra.append("- Thị phần nhóm {0}% → {1}% ({2:+.1f}% sau {3}→{4}){5}".format(
+        r["thi_phan_cu"], r["thi_phan_moi"], r["doi_pct"], r["ngay_cu"], r["ngay_moi"],
+        " — ĐỨNG YÊN: đổi đề tài/đóng gói, không chờ thêm" if r["dung_yen"] else ""))
+    if r["dung_yen"] and not thu:
+        _nao(goc, "", "chon-content", "do",
+             "thị phần ngách đứng yên {0} ngày: {1}% → {2}% ({3:+.1f}%, dao động {4}–{5}%); ngưỡng top 10 ≈ {6}/tháng — "
+             "chiến lược đề tài/tiêu đề hiện tại không kéo được thị phần".format(
+                 NGAY_DUNG_YEN, r["thi_phan_cu"], r["thi_phan_moi"], r["doi_pct"], r["thap"], r["cao"],
+                 r.get("nguong_top")),
+             "thi-phan-dung-yen:" + _tuan_iso(r["ngay_moi"]),
+             so={k: r[k] for k in ("ngay_cu", "ngay_moi", "thi_phan_cu", "thi_phan_moi", "doi_pct", "nguong_top", "hang")})
+    return ra
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     import argparse  # noqa: PLC0415
     p = argparse.ArgumentParser(prog="python -X utf8 -m core.bat_thuong")

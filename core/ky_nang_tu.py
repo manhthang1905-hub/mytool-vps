@@ -44,7 +44,7 @@ TEN_TAC_VU = "ShopAPI-KyNang"
 BO_PHAN = {"S02": "dieu-phoi", "S03": "bia", "S04": "ban-giao", "S05": "bia", "D09": "dang-video", "K20": "dang-video",
            "D10": "kich-ban", "D11": "bia", "D12": "suc-khoe-may", "D13": "bia", "D14": "chi-so-studio",
            "D15": "tieu-de", "D16": "chi-so-studio", "D17": "anh-clip", "S06": "bia", "D18": "doi-thu", "D19": "bia",
-           "D20": "dieu-phoi", "D21": "bia", "D22": "dieu-phoi"}
+           "D20": "dieu-phoi", "D21": "bia", "D22": "dieu-phoi", "D23": "chon-content"}
 NHAN = {"se_chay": "sẽ chạy", "nen_chay": "nên chạy — chờ chủ", "cho_nhip": "đã chạy, chờ nhịp", "tam_dung": "tạm dừng",
         "cong_tac_tat": "công tắc chung tắt", "tat_kenh": "tắt ở kênh này", "khong": "chưa cần", "xong": "xong",
         "hong": "hỏng", "hoan": "hoãn", "bo_qua": "để lượt sau"}

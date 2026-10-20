@@ -46,6 +46,9 @@ def tao_anh_chup(du: Dict[str, Any], ngay: str = "") -> Dict[str, Any]:
                      for b in (du.get("dich_top") or [])[:10]],
         "quan": {q["ma"]: {"gio_xem": q.get("gio_xem", 0), "dang_ky": q.get("dang_ky", 0), "view_28": q.get("view_28", 0)}
                  for q in (du.get("quan") or [])},
+        # 20/10/2026 — G1: hạng ngách từng kênh + ngưỡng top 10 của ngày (xu hướng hạng, báo thị phần đứng yên)
+        "bang_diem": {"nguong_top": (du.get("bang_diem") or {}).get("nguong_top"),
+                      "hang": {m: x.get("hang") for m, x in ((du.get("bang_diem") or {}).get("kenh") or {}).items()}},
     }
 
 

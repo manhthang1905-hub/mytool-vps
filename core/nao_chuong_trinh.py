@@ -760,6 +760,16 @@ def _dong_radar_thi_truong(goc: str, bay_gio: _dt.datetime) -> List[str]:
     return radar_dot_bien.dong_cho_nao(goc, bay_gio) or ["- chưa có nhóm kênh / bảng radar"]
 
 
+# ═══ (g) BẢNG ĐIỂM THẮNG (G1, 20/10/2026) ═══════════════════════════════════════
+
+def _dong_bang_diem(goc: str, ghi: bool = True) -> List[str]:
+    """Hạng ngách từng kênh + thị phần nhóm 7 ngày từ ảnh chụp chiến trường (`core.bat_thuong.bao_thi_phan` — chỉ đọc
+    ảnh chụp, không tính lại chiến trường)."""
+    from . import bat_thuong  # noqa: PLC0415
+
+    return ["  " + x for x in bat_thuong.bao_thi_phan(goc, thu=not ghi)]
+
+
 # ═══ GỘP ═════════════════════════════════════════════════════════════════════
 
 def chuong_trinh(goc: str, kenh_ds: Optional[Sequence[str]] = None,
@@ -786,7 +796,9 @@ def chuong_trinh(goc: str, kenh_ds: Optional[Sequence[str]] = None,
                      ("(d) BAO BÌ A/B", lambda: dong_bao_bi(goc, kenh_ds, bay_gio)),
                      ("(e) GIỮ CHÂN THEO ĐOẠN so kênh mẫu", lambda: dong_giu_chan(goc, kenh_ds, bay_gio)),
                      ("(f) RADAR THỊ TRƯỜNG — video ĐỐI THỦ đang nổ ở tuổi thật (máy đã ép chọn ca cực mạnh)",
-                      lambda: _dong_radar_thi_truong(goc, bay_gio))):
+                      lambda: _dong_radar_thi_truong(goc, bay_gio)),
+                     ("(g) BẢNG ĐIỂM THẮNG — hạng ngách, thị phần 7 ngày (đứng yên = đổi chiến lược đề tài/đóng gói)",
+                      lambda: _dong_bang_diem(goc, ghi))):
         ra.append("")
         ra.append("-- " + ten + " --")
         try:
