@@ -850,6 +850,12 @@ def chay(goc: str, *, kenh_ds: Optional[Sequence[str]] = None, ghi: bool = True,
     from . import nhat_ky  # noqa: PLC0415
 
     kenh_ds = list(kenh_ds or kenh_phong_thi_nghiem(goc))
+    try:  # 20/10/2026: kênh trả kho không vào bảng xếp hạng / luật quyết dù được truyền tay — nhật ký cũ giữ nguyên
+        from ..kenh import bo_kenh_tra_kho  # noqa: PLC0415
+
+        kenh_ds = bo_kenh_tra_kho(goc, kenh_ds)
+    except Exception:  # noqa: BLE001
+        pass
     reg, k = gtm.nap(goc, ghi=ghi)
     hien = {g["id"]: g["phien_ban"] for g in reg}
     con = [g["id"] for g in reg if g["trang_thai"] != gtm.LOAI]

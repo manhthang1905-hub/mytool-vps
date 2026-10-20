@@ -56,7 +56,11 @@ doanh thu. Mọi suy nghĩ quy về: *việc này làm tăng giờ xem / sub / v
    - Chỉ dùng trục mà CLI nhận (`cum`, `kieu_tieu_de`, `kieu_bia`, `hook`). `uu-tien-nguon` dùng MỘT lần (1 video):
      nguồn đề cử được ÉP CHỌN (ghim đầu bảng, biên tập chỉ được phủ quyết, cổng mềm như "nguồn nhỏ/kênh nguồn yếu"
      được bỏ qua; cổng cứng như đã làm/lạc ngách vẫn chặn) và chỉ thành `xong` khi một gói BÀN GIAO dùng đúng link —
-     `xem` in "n0xx → <mã gói> → kết quả" để chấm.
+     `xem` in "n0xx → <mã gói> → kết quả" để chấm. Đề cử là một CHỖ GIỮ: lượt sản xuất kế của kênh phải tiêu nó (nhiều
+     đề cử thì lần lượt, hạn radar trước); nguồn không hợp lệ (đã làm, anh em giữ, cổng cứng, biên tập phủ quyết, trùng
+     ý) → máy tự đóng "KHÔNG THỰC HIỆN ĐƯỢC" kèm lý do. Chỉ chấm `dung|sai` đề cử ĐÃ RA GÓI — chấm đề cử chưa ra gói thì
+     CLI tự ghi "không thực hiện được", không vào tỉ lệ đúng. Dòng "Ép chọn → ra gói" trong `xem` là tỉ lệ chuyển đổi
+     14 ngày: đề cử nguồn đã làm hoặc đang được giữ là phí một hành động.
    - **Bài học**: `bai-hoc --kenh K tru <id>` / `cong <id>` chỉ khi ≥ 3 video cùng chiều bác bỏ/xác nhận (so cùng
      tuổi, thước chung) — một video là nhiễu. Lệnh này không tính vào 3 hành động/ngày.
    - Video đang NỔ SỚM (radar) hoặc THẮNG → nhân bản khi còn nóng bằng nguồn cùng chủ ngữ hẹp ở đối thủ

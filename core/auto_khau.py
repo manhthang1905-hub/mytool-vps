@@ -4929,6 +4929,14 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
                        "{0}-{1}".format(luot.ma_kenh, luot.ma_luot) if getattr(luot, "ma_luot", "") else "", sach)
     if nao_td:
         khoi_bai_td += "\n\n" + nao_td
+    # 20/10/2026: kết quả A/B tiêu đề YouTube đã chọn trên CHÍNH video của kênh — chưa có kết quả thì "" (y hệt từng byte).
+    try:
+        from . import ab_tieu_de as _ab  # noqa: PLC0415
+        ab_td = _ab.khoi_thang(str(getattr(bc, "goc", "") or ""), str(getattr(k, "ma", "") or ""))
+    except Exception:  # noqa: BLE001
+        ab_td = ""
+    if ab_td:
+        khoi_bai_td += "\n\n" + ab_td
 
     if k.nan_khuon_tieu_de:
         mau = tieu_de_thang_cua_kenh(bc.goc, k.ma)

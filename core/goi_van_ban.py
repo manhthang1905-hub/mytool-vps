@@ -368,6 +368,21 @@ class TraRong(ValueError):
     """
 
 
+def ghi_so_dung(so_dung: Optional[Dict[str, Any]], phan_hoi: Any) -> None:
+    """Cộng `usage` (prompt_tokens / completion_tokens) của một phản hồi ví vào `so_dung`. Không ném lỗi."""
+    if so_dung is None:
+        return
+    try:
+        tho = phan_hoi.to_dict() if hasattr(phan_hoi, "to_dict") else phan_hoi
+        u = tho.get("usage") if isinstance(tho, dict) else None
+        u = u if isinstance(u, dict) else {}
+        so_dung["token_vao"] = int(so_dung.get("token_vao") or 0) + int(u.get("prompt_tokens") or 0)
+        so_dung["token_ra"] = int(so_dung.get("token_ra") or 0) + int(u.get("completion_tokens") or 0)
+        so_dung["luot"] = int(so_dung.get("luot") or 0) + 1
+    except (TypeError, ValueError, AttributeError):
+        pass
+
+
 def _doc_chu(phan_hoi: Any) -> str:
     """Lấy đoạn chữ ra khỏi phản hồi, hoặc ném lỗi nói rõ hỏng ở đâu."""
     tho = phan_hoi.to_dict() if hasattr(phan_hoi, "to_dict") else phan_hoi
@@ -421,8 +436,12 @@ def goi_van_ban(
     ngu: Callable[[float], None] = time.sleep,
     qua_vi: bool = False,
     goc: str = "",
+    so_dung: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Nhờ AI viết, kiên nhẫn qua trục trặc tạm. Trả về đoạn chữ.
+
+    `so_dung` (tuỳ chọn, 20/10/2026): dict nơi gọi đưa vào để nhận số token THẬT của lượt ví — cộng dồn
+    `token_vao`/`token_ra`/`luot` từ `usage` của phản hồi (mọi lượt thử lại đều cộng: ví trừ tiền từng lượt).
 
     Máy bật viết chữ bằng thuê bao Claude Max (`core.viet_max.duong_viet_chu`)
     thì lượt này đi Claude Code trên phiên đăng nhập của máy — `client`,
@@ -498,11 +517,13 @@ def goi_van_ban(
         goi_bang = _client_khong_tu_thu_lai(client, tran)
 
         def mot_lan(_khoa: str = khoa_luot, _tran: int = tran) -> str:
-            return _doc_chu(goi_bang.request(
+            phan_hoi = goi_bang.request(
                 "POST", "/v1/chat/completions",
                 json={"model": mo_hinh, "stream": False,
                       "max_tokens": int(_tran), "messages": tin_nhan},
-                idempotency_key=_khoa))
+                idempotency_key=_khoa)
+            ghi_so_dung(so_dung, phan_hoi)
+            return _doc_chu(phan_hoi)
 
         try:
             return goi_kien_nhan(mot_lan, on_log=on_log, kiem_dung=kiem_dung,

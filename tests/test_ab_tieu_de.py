@@ -452,3 +452,110 @@ def test_moi_luot_mot_kenh_viec_ab(tmp_path, monkeypatch):
     chay = []
     knt.tu_kich_hoat(goc, chay_lenh=lambda lenh, cwd, han: (chay.append(lenh), (10, "hoãn"))[1], in_ra=lambda s: None)
     assert len(chay) == 1 and chay[0][-1] == "--test-compare"
+
+
+# ═══ 6. KẾT QUẢ THỬ NGHIỆM (20/10/2026): đọc lại → sổ → não "tieu-de" → trục kieu_tieu_de → lời nhắc ═══════════
+
+B_THEM = "【脳科学】なぜ感情的にならない人は損をしないのか？"           # nhãn câu hỏi (khác A)
+EXP_CHAY = {"state": "CREATOR_EXPERIMENT_STATE_STARTED", "resultState": "CREATOR_EXPERIMENT_RESULT_STATE_NOT_CONCLUSIVE_YET",
+            "arms": [{"armId": "a1", "title": A}, {"armId": "a2", "title": B_THEM}]}
+
+
+def _dat(goc, vid="FAKEmoi0001", luc=BAY):
+    m = ab.lap(goc, K, video_id=vid, ma_goi=K + "-0001", tieu_de_a=A, tieu_de_them=[B_THEM], nguon="moi", bay_gio=luc)
+    gd.cap_nhat_viec_may_kieu(goc, m["viec"], trang_thai="xong")         # việc đặt đã xong (bộ chạy đã đặt)
+    ab.cap_nhat(goc, K, vid, trang_thai=ab.TT_DA_DAT, bay_gio=luc,
+                ket={"ket": "da_dat", "che_do": "tieu_de", "tieu_de": [A, B_THEM], "trang_thai": "dang_chay"})
+
+
+def test_doc_ket_thu_nghiem_rong_dang_chay_thang_va_khong_ket_luan():
+    assert ab.doc_ket_thu_nghiem({})["xong"] is False
+    k = ab.doc_ket_thu_nghiem(EXP_CHAY)
+    assert k["xong"] is False and [n["tieu_de"] for n in k["nhanh"]] == [A, B_THEM]
+    xong = dict(EXP_CHAY, state="CREATOR_EXPERIMENT_STATE_COMPLETED", resultState="CREATOR_EXPERIMENT_RESULT_STATE_WINNER",
+                arms=[{"armId": "a1", "title": A, "watchTimeShare": 0.41},
+                      {"armId": "a2", "title": B_THEM, "isWinner": True, "watchTimeShare": 0.59}])
+    k = ab.doc_ket_thu_nghiem(xong)
+    assert k["xong"] and k["thang"] == 1 and not k["khong_ket_luan"] and k["nhanh"][1]["so"]["watchTimeShare"] == 0.59
+    ref = dict(xong, winningArmId="a1", arms=[{"armId": "a1", "title": A}, {"armId": "a2", "title": B_THEM}])
+    assert ab.doc_ket_thu_nghiem(ref)["thang"] == 0                       # khoá "winning…" tham chiếu id nhánh
+    so = dict(xong, arms=[{"title": A, "sharePercent": "38%"}, {"title": B_THEM, "sharePercent": "62%"}])
+    k = ab.doc_ket_thu_nghiem(so)
+    assert k["thang"] == 1 and k["suy_ra"] is True                         # không cờ: suy từ % thời gian xem
+    hoa = dict(EXP_CHAY, state="CREATOR_EXPERIMENT_STATE_COMPLETED",
+               resultState="CREATOR_EXPERIMENT_RESULT_STATE_INCONCLUSIVE")
+    k = ab.doc_ket_thu_nghiem(hoa)
+    assert k["xong"] and k["khong_ket_luan"] and k["ro_khong_ket_luan"] and k["thang"] is None
+
+
+def test_can_doc_ket_qua_theo_tuoi_va_nhip(tmp_path):
+    goc = _goc(tmp_path)
+    _dat(goc)
+    assert ab.can_doc_ket_qua(goc, K, BAY + dt.timedelta(days=1)) == []                # chưa đủ 2 ngày
+    nay = BAY + dt.timedelta(days=3)
+    assert ab.can_doc_ket_qua(goc, K, nay) == ["FAKEmoi0001"]
+    assert ab.ghi_doc_ket_qua(goc, K, "FAKEmoi0001", ab.doc_ket_thu_nghiem(EXP_CHAY), nay) is None   # còn chạy
+    assert ab.muc_cua(goc, K, "FAKEmoi0001")["trang_thai"] == ab.TT_DA_DAT
+    assert ab.can_doc_ket_qua(goc, K, nay + dt.timedelta(hours=5)) == []                # đọc ≤ 1 lần / ngày
+    assert ab.can_doc_ket_qua(goc, K, nay + dt.timedelta(hours=25)) == ["FAKEmoi0001"]
+    ok, ly = sm.dieu_kien_test(goc, K)                                                  # D13 chạy để đọc
+    assert ok and "đọc kết quả" in ly
+
+
+def test_ket_qua_thang_ghi_so_nao_tu_hoc_va_loi_nhac(tmp_path, monkeypatch):
+    from core import nao_bo_phan, tu_hoc
+    goc = _goc(tmp_path)
+    _dat(goc)
+    ghi_nao = []
+    monkeypatch.setattr(nao_bo_phan, "ghi", lambda *a, **kw: ghi_nao.append((a, kw)) or True)
+    xong = dict(EXP_CHAY, state="CREATOR_EXPERIMENT_STATE_COMPLETED",
+                arms=[{"title": A}, {"title": B_THEM, "isWinner": True}])
+    kq = ab.ghi_doc_ket_qua(goc, K, "FAKEmoi0001", ab.doc_ket_thu_nghiem(xong), BAY + dt.timedelta(days=4))
+    assert kq["ket_luan"] == ab.KL_THANG and kq["thang"] == "B" and kq["tieu_de_thua"] == [A]
+    m = ab.muc_cua(goc, K, "FAKEmoi0001")
+    assert m["trang_thai"] == ab.TT_XONG and m["doc_kq_tho"] and ab.chan_doi_truc_tiep(goc, K, "FAKEmoi0001")
+    (_g, bp, loai), kw = ghi_nao[-1]
+    assert (bp, loai, kw["so"]["ket"], kw["so"]["thang_la"]) == ("tieu-de", "ket_qua", "thang", "B")
+    nt, na = kq["nhan_thang"], tu_hoc.nhan_tieu_de_regex(A)
+    assert nt == "cau_hoi" and na != nt
+    bd = tu_hoc.bang_diem(goc, K)["kieu_tieu_de"]
+    assert bd[nt]["a"] == 2.0 and bd[na]["b"] == 2.0 and bd[nt]["thang_ab"] == 1          # Beta(1,1) + 1 cặp
+    khoi = ab.khoi_thang(goc, K)
+    assert "KẾT QUẢ A/B TIÊU ĐỀ" in khoi and B_THEM[:20] in khoi and A[:15] in khoi
+    assert ab.ghi_doc_ket_qua(goc, K, "FAKEmoi0001", ab.doc_ket_thu_nghiem(xong)) is None   # đã xong: không ghi lại
+
+
+def test_thu_nghiem_go_khoi_trang_sua_suy_tu_tieu_de_hien_va_dong_qua_han(tmp_path):
+    goc = _goc(tmp_path)
+    _dat(goc)
+    nay = BAY + dt.timedelta(days=5)
+    kq = ab.ghi_doc_ket_qua(goc, K, "FAKEmoi0001", ab.kt_khong_con(), nay, tieu_de_hien=B_THEM)
+    assert kq["ket_luan"] == ab.KL_THANG and kq["thang"] == "B" and kq["suy_ra"] == "tieu_de_hien"
+    _dat(goc, vid="FAKEmoi0002")
+    kq = ab.ghi_doc_ket_qua(goc, K, "FAKEmoi0002", ab.kt_khong_con(), nay, tieu_de_hien=A)
+    assert kq["ket_luan"] == ab.KL_KHONG                                  # tiêu đề vẫn A: không phân biệt được
+    _dat(goc, vid="FAKEmoi0003")
+    assert ab.dong_qua_han(goc, K, BAY + dt.timedelta(days=10)) == []
+    dong = ab.dong_qua_han(goc, K, BAY + dt.timedelta(days=15))
+    assert [m["video_id"] for m in dong] == ["FAKEmoi0003"] and dong[0]["ket_qua"]["ket_luan"] == ab.KL_KHONG
+    assert ab.can_doc_ket_qua(goc, K, BAY + dt.timedelta(days=16)) == []
+    assert [k["video_id"] for k in ab.ket_qua_xong(goc, K)] == ["FAKEmoi0001"]
+
+
+def test_chay_test_chi_doc_ket_qua_cung_phien(tmp_path, monkeypatch):
+    goc = _goc(tmp_path)
+    monkeypatch.setattr(sdm, "GOC", os.path.join(goc, "vm"))
+    monkeypatch.setattr(sdm, "GOC_TOOL", goc)
+    monkeypatch.setattr(sdm, "_kiem_dung", lambda agent, kenh: None)
+    _dat(goc, luc=dt.datetime.now() - dt.timedelta(days=3))
+    xong = dict(EXP_CHAY, state="CREATOR_EXPERIMENT_STATE_COMPLETED",
+                arms=[{"title": A}, {"title": B_THEM, "isWinner": True}])
+    monkeypatch.setattr(sdm, "doc_trang_sua", lambda S, vid: ({"videoId": vid, "title": B_THEM,
+                                                                "videoCreatorExperiment": xong}, {}))
+    monkeypatch.setattr(sdm, "test_mot_video", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("không đặt")))
+    phien = []
+    ma = sdm.chay_test(K, lambda s: None, phien=lambda k, g, lam, c, **kw: (phien.append(c), (0, lam(object(), None, None)))[1])
+    assert ma == sdm.MA_XONG and phien == ["test"]
+    assert ab.muc_cua(goc, K, "FAKEmoi0001")["ket_qua"]["thang"] == "B"
+    assert sdm.chay_test(K, lambda s: None, phien=lambda *a, **kw: (_ for _ in ()).throw(AssertionError("thừa"))) \
+        == sdm.MA_KHONG_CAN                                                # đã đọc xong: không mở phiên nữa

@@ -393,6 +393,18 @@ def viec_cua_ban(goc: str, bay: Optional[_dt.datetime] = None) -> List[Dict[str,
                    "chu": "Não bộ phận chưa ngủ {0} (> {1:.0f} giờ)".format(
                        "lần nào" if ngu is None else "{0:.0f} giờ".format(ngu), kn.GIO_NGU_CU),
                    "goi_y": "→ xem tác vụ ShopAPI-NaoBoPhan-Ngu (03:40) · chạy tay: python -X utf8 -m core.nao_bo_phan ngu"})
+    if co:
+        # 20/10/2026: giấc ngủ CHẠY mà rỗng (0 lệnh nhiều đêm / token 0) — 18–20/10 chết im lặng ba đêm.
+        try:
+            from .nao_bo_phan.ngu import suc_khoe_tep  # noqa: PLC0415
+
+            cau = suc_khoe_tep(goc)
+        except Exception:  # noqa: BLE001
+            cau = ""
+        if cau:
+            ra.append({"khoa": "ky-nang:D12:ngu-rong:{0:%Y-%m-%d}".format(bay), "kenh": "", "chu": cau,
+                       "goi_y": "→ máy tự thử lại 03:40 · xem bảng giac_ngu (nao/bo-phan.db) · chạy tay: python -X utf8 "
+                                "-m core.nao_bo_phan ngu --bo-phan <mã>"})
     return ra
 
 

@@ -207,6 +207,22 @@ def _muc_hoc(goc: str, bay_gio: _dt.datetime) -> List[str]:
         top = sorted(dem.items(), key=lambda x: -x[1])[:3]
         ra.append("- Cảnh báo học 24h: {0} ({1})".format(len(cb), ", ".join(
             "{0}{1}".format(k, " x{0}".format(n) if n > 1 else "") for k, n in top)))
+    try:  # 20/10/2026: quyết định của não có thật sự vào sản xuất không (đề cử nguồn → gói bàn giao)
+        from core import nao  # noqa: PLC0415
+
+        cd = nao.chuyen_doi_ep_chon(goc, 14, bay_gio=bay_gio)
+        if cd.get("tao"):
+            ra.append("- " + nao.dong_chuyen_doi(cd))
+    except Exception as loi:  # noqa: BLE001
+        ra.append("- Ép chọn → ra gói: không đọc được ({0})".format(str(loi)[:60]))
+    try:  # 20/10/2026: giấc ngủ não bộ phận chạy mà rỗng (18–20/10 chết im lặng)
+        from core.nao_bo_phan.ngu import suc_khoe_tep  # noqa: PLC0415
+
+        cau = suc_khoe_tep(goc)
+        if cau:
+            ra.append("- " + cau)
+    except Exception:  # noqa: BLE001
+        pass
     return ra or ["- vòng học kín: mọi kênh có số, có nhãn, chấm đều"]
 
 
@@ -407,6 +423,12 @@ def chay_hang_ngay(goc: Optional[str] = None, thu_muc: Optional[str] = None, bay
     nd = tao(goc, bay_gio)
     duong = ""
     if tt.get("ngay_ghi") != hom:
+        try:  # 20/10/2026: sổ chuyển đổi "ép chọn → ra gói" mỗi ngày một dòng (nao/nhat-ky/ep-chon-chuyen-doi.jsonl)
+            from core import nao  # noqa: PLC0415
+
+            nao.ghi_chuyen_doi(goc, bay_gio)
+        except Exception:  # noqa: BLE001
+            pass
         duong = ghi(goc, tm, bay_gio, nd)
         tt = _doc_tt(tm)
         tt["ngay_ghi"] = hom

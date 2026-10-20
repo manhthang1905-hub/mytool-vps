@@ -554,6 +554,11 @@ def doc_bang_nhom(goc: str, nhom: str, *,
 
         nguong = float(_v7.CAU_HINH_MAC_DINH["thang"]["toi_thieu_48h"])
     bo = {str(x or "").strip() for x in (bo_kenh or ())}
+    # 20/10/2026: kênh TRẢ KHO không là tín hiệu anh em — bảng trên đĩa có thể còn dòng của nó (viết trước khi trả kho).
+    from .kenh import kenh_tra_kho  # noqa: PLC0415
+
+    bo |= {k for k in {str(d.get("Kênh") or "").strip() for d in hang if isinstance(d, dict)}
+           if k and kenh_tra_kho(goc, k)}
 
     #: {mã cụm: {mã kênh: [số thắng, tổng]}}
     dem: Dict[str, Dict[str, List[int]]] = {}

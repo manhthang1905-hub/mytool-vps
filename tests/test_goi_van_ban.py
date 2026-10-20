@@ -70,6 +70,22 @@ class TestKienNhan:
         may = MayChuGia([CHUA_NHAN, CHUA_NHAN, "xong rồi đây"])
         assert goi_van_ban(may, [{"role": "user", "content": "x"}], **KHONG_NGU) == "xong rồi đây"
 
+    def test_so_dung_cong_token_that_cua_vi(self):
+        """20/10/2026: nơi gọi nhận token thật (`usage`) của lượt ví — giấc ngủ não ghi bảng, không còn 0."""
+        from core.goi_van_ban import ghi_so_dung
+
+        class CoUsage(MayChuGia):
+            def request(self, *a, **k):
+                d = super().request(*a, **k)
+                d["usage"] = {"prompt_tokens": 1200, "completion_tokens": 80}
+                return d
+        sd = {}
+        assert goi_van_ban(CoUsage(["ok"]), [{"role": "user", "content": "x"}], qua_vi=True, so_dung=sd) == "ok"
+        assert sd == {"token_vao": 1200, "token_ra": 80, "luot": 1}
+        ghi_so_dung(sd, {"khong": "co usage"})
+        ghi_so_dung(None, {"usage": {"prompt_tokens": 5}})
+        assert sd == {"token_vao": 1200, "token_ra": 80, "luot": 2}
+
     def test_dang_lam_do_thi_doi_chu_khong_hong(self):
         may = MayChuGia([DANG_LAM, "kết quả"])
         assert goi_van_ban(may, [{"role": "user", "content": "x"}], **KHONG_NGU) == "kết quả"

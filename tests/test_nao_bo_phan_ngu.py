@@ -606,3 +606,130 @@ def test_panel_nao_bo_phan_8790(tmp_path, monkeypatch):
                                           (2, 4, C.UNG_VIEN, C.NGHI), (9, 1, C.NGHI, C.NGHI)])
 def test_xep_trang_thai(a, b, cu, ra):
     assert ngu_mod.xep_trang_thai(a, b, cu) == ra
+
+
+# ── 20/10/2026: đường ví — lời nhắc phân tích, lượt sửa, token thật, sức khoẻ giấc ngủ, kênh trả kho ─────────────
+
+def test_loi_nhac_vi_phan_tich_va_ma_moi(tmp_path):
+    so = "BẢNG SỐ\n- HỎNG #5 ...\n  ĐƯỢC #12 ...\n- lỗi lặp · #3 #14"
+    cu = ngu_mod.ve_loi_nhac("anh-clip", so, "", [])
+    moi = ngu_mod.ve_loi_nhac("anh-clip", so, "", [], phan_tich=True, tu_id=10)
+    assert '"không lệnh" tốt hơn một bài học yếu' in cu and "phan_tich" not in cu       # đường Max giữ nguyên
+    assert '{"lenh": []}' in cu and "{{" not in cu and "{{" not in moi
+    assert '"phan_tich"' in moi and "NHẮC LẠI VIỆC" in moi and moi.rfind("NHẮC LẠI VIỆC") > moi.find("BẢNG SỐ")
+    assert "Mã MỚI có trong bảng: #12 #14" in moi and "mã > 10" in moi and "thà không đăng" in moi
+
+
+def _vi_gia(monkeypatch, tra):
+    """Ví giả: `goi_chat_that` trả hàm ghi lời gọi, cộng token vào `so_dung`, trả lần lượt `tra`."""
+    from core import cai_dat
+    from core.giam_doc import quan_ly
+
+    goi = []
+
+    def g(de_bai, **kw):
+        goi.append((de_bai, kw))
+        sd = kw.get("so_dung")
+        if sd is not None:
+            sd["token_vao"] = sd.get("token_vao", 0) + 1000
+            sd["token_ra"] = sd.get("token_ra", 0) + 50
+            sd["luot"] = sd.get("luot", 0) + 1
+        return tra[min(len(goi), len(tra)) - 1]
+    monkeypatch.setattr(cai_dat, "doc", lambda _g: {"viet_chu_bang": "vi"})
+    monkeypatch.setattr(quan_ly, "goi_chat_that", lambda _g, *a, **k: g)
+    return goi
+
+
+def test_ngu_vi_luot_sua_khi_khong_lenh_nao_qua_va_ghi_token(tmp_path, monkeypatch):
+    goc = _goc(tmp_path)
+    bg = time.time()
+    _anh_clip(goc, bg)
+    nbp.gom(goc, bay_gio=bg)
+    a = _ids(goc, "anh-clip")
+    hay = json.dumps({"phan_tich": ["4/16 hỏng"], "lenh": [
+        {"lenh": "them", "cau": "Khâu ảnh hỏng 4/16 lượt (25%) khi chờ 12 phút — chờ máy chủ veo3 rồi mới thử lại",
+         "huong": "nen", "pham_vi": ["khau/anh"], "vao_loi_nhac": False, "bang_chung": a[:3]}]})
+    goi = _vi_gia(monkeypatch, ['{"lenh": []}', hay])
+    kq = ngu_mod.ngu(goc, bay_gio=bg, soat_tuan=False, bao=False)
+    r = kq["bo_phan"][0]
+    assert len(goi) == 2 and len(r["ap"]) == 1 and (r["token_vao"], r["token_ra"]) == (2000, 100)
+    (ln1, kw1), (ln2, kw2) = goi
+    assert '"phan_tich"' in ln1 and "LƯỢT TRƯỚC: 0 lệnh đề xuất" in ln2 and kw1["mo_hinh"] == ngu_mod.MO_HINH_VI
+    assert kw1["khoa"].startswith("nao-bo-phan-ngu:anh-clip:") and kw1["khoa"] != kw2["khoa"]   # khoá theo lời nhắc
+    with _db(goc) as con:
+        tv, tr, ct = con.execute("SELECT token_vao, token_ra, chi_tiet FROM giac_ngu").fetchone()
+    assert (tv, tr) == (2000, 100) and json.loads(ct)["duong"] == "vi" and json.loads(ct)["vong_sua"] == 1
+
+
+def test_ngu_vi_luot_dau_dat_thi_khong_goi_them(tmp_path, monkeypatch):
+    goc = _goc(tmp_path)
+    bg = time.time()
+    _anh_clip(goc, bg)
+    nbp.gom(goc, bay_gio=bg)
+    a = _ids(goc, "anh-clip")
+    goi = _vi_gia(monkeypatch, [json.dumps({"lenh": [
+        {"lenh": "them", "cau": "Khâu ảnh hỏng 4/16 lượt (25%) khi chờ 12 phút", "bang_chung": a[:2]}]})])
+    kq = ngu_mod.ngu(goc, bay_gio=bg, soat_tuan=False, bao=False)
+    assert len(goi) == 1 and len(kq["bo_phan"][0]["ap"]) == 1
+
+
+def _giac(goc, ngay_lui, ap, token, bp="bia"):
+    with _db(goc) as con:
+        con.execute("INSERT INTO giac_ngu(luc, bo_phan, de_xuat, ap, token_vao, token_ra, loi) VALUES (?,?,?,?,?,0,'')",
+                    (time.time() - ngay_lui * NGAY, bp, ap, ap, token))
+
+
+def test_suc_khoe_ba_dem_rong_hoac_token_0_thi_bao(tmp_path, monkeypatch):
+    goc = _goc(tmp_path)
+    kho.mo(goc).close()
+    _giac(goc, 4, 2, 5000)
+    for n in (3, 2, 1):
+        _giac(goc, n, 0, 5000)
+    with _db(goc) as con:
+        assert "3 đêm liền" in ngu_mod.suc_khoe(con)
+    assert "3 đêm liền" in ngu_mod.suc_khoe_tep(goc)
+    _giac(goc, 0, 1, 0)                                                     # đêm nay có lệnh nhưng token 0
+    with _db(goc) as con:
+        assert "0 token" in ngu_mod.suc_khoe(con)
+    _giac(goc, 0, 1, 900, bp="tieu-de")                                    # cùng đêm có token → khoẻ
+    with _db(goc) as con:
+        assert ngu_mod.suc_khoe(con) == ""
+    # ngu() có bộ phận ngủ mà vẫn hỏng → báo động một đường chung
+    goc2 = _goc(tmp_path / "b")
+    bg = time.time()
+    _anh_clip(goc2, bg)
+    nbp.gom(goc2, bay_gio=bg)
+    for n in (3, 2):
+        _giac(goc2, n, 0, 5000)
+    bao = []
+    monkeypatch.setattr(ngu_mod, "bao_ngu_rong", lambda g, cau, b=None: bao.append(cau) or True)
+    kq = ngu_mod.ngu(goc2, bay_gio=bg, goi=lambda ln, bp: '{"lenh": []}', soat_tuan=False)
+    assert "3 đêm liền" in kq["canh_bao"] and bao == [kq["canh_bao"]]
+
+
+def test_bao_ngu_rong_di_duong_bao_dong_chung(tmp_path, monkeypatch):
+    from core import bao_dong
+
+    goi = []
+    monkeypatch.setattr(bao_dong, "bao_dong", lambda loai, td, ct="", **kw: goi.append((loai, td, kw)) or True)
+    assert ngu_mod.bao_ngu_rong(str(tmp_path), "Não bộ phận ngủ 3 đêm liền …")
+    assert goi[0][0] == ngu_mod.LOAI_BAO_DONG and goi[0][2]["goc"] == str(tmp_path)
+
+
+def test_bang_so_bo_kenh_tra_kho(tmp_path):
+    """20/10/2026: kênh trả kho — sự kiện cũ giữ trong kho nhưng KHÔNG vào bảng số (kênh không được phân phối)."""
+    goc = _goc(tmp_path)
+    bg = time.time()
+    _anh_clip(goc, bg)
+    with open(os.path.join(goc, "CHANNEL", "KB", "kenh.yaml"), "a", encoding="utf-8") as tep:
+        tep.write("tra_kho: 2026-10-19\n")
+    nbp.gom(goc, bay_gio=bg)
+    assert ngu_mod.kenh_tra_kho_ds(goc) == ["KB"]
+    con = kho.mo(goc)
+    try:
+        ca = ngu_mod.to_so(con, "anh-clip", bg)
+        bo = ngu_mod.to_so(con, "anh-clip", bg, bo_kenh=["KB"])
+        assert con.execute("SELECT COUNT(*) FROM su_kien WHERE kenh = 'KB'").fetchone()[0] > 0   # không xoá
+    finally:
+        con.close()
+    assert "[KB]" in ca and "[KB]" not in bo and "kênh: KA" in bo

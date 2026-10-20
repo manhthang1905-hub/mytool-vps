@@ -273,7 +273,8 @@ def goi_chat_that(goc: str, ghi: Optional[Callable[[str], None]] = None) -> Opti
         return None
     hop: Dict[str, Any] = {}
 
-    def goi(de_bai: str, mo_hinh: str = "claude-sonnet-5", khoa: str = "", toi_da_token: int = TOI_DA_TOKEN) -> str:
+    def goi(de_bai: str, mo_hinh: str = "claude-sonnet-5", khoa: str = "", toi_da_token: int = TOI_DA_TOKEN,
+            so_dung: Optional[Dict[str, Any]] = None) -> str:
         import os  # noqa: PLC0415
 
         from ..goi_van_ban import goi_van_ban, tin_nhan_viet  # noqa: PLC0415
@@ -289,8 +290,10 @@ def goi_chat_that(goc: str, ghi: Optional[Callable[[str], None]] = None) -> Opti
             if ch.problem:
                 raise RuntimeError("tool chưa đăng nhập được: " + ch.problem)
             hop["client"] = build_client(ch)
+        # 20/10/2026: truyền `goc` — không có thì đường viết chữ dò theo thư mục chứa mã (bản sao làm việc không có
+        # cai-dat.json → tự đi thuê bao), khác cài đặt của chính máy đang gọi.
         return goi_van_ban(hop["client"], tin_nhan_viet(de_bai), mo_hinh=mo_hinh, toi_da_token=int(toi_da_token),
-                           khoa=khoa, on_log=ghi)
+                           khoa=khoa, on_log=ghi, goc=goc, so_dung=so_dung)
 
     goi.that = True  # type: ignore[attr-defined] — AI thật: khám nghiệm được lấy bình luận (mạng, 0 đồng)
     return goi

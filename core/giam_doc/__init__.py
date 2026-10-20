@@ -209,6 +209,10 @@ def chay_kenh(goc: str, ma: str, *, che_do: Optional[str] = None, goi_chat: Opti
         try:
             from .. import ab_tieu_de  # noqa: PLC0415
 
+            if viet:  # 20/10/2026: thử nghiệm quá 14 ngày chưa đọc được kết quả → đóng "không kết luận"
+                for m in ab_tieu_de.dong_qua_han(goc, ma, getattr(bs, "bay_gio", None)):
+                    (ghi or (lambda _s: None))("  [A/B tiêu đề] {0}: quá {1:g} ngày chưa có kết quả — đóng không kết luận".format(
+                        m.get("video_id"), ab_tieu_de.NGAY_DONG_KHONG_KL))
             for m in ab_tieu_de.xu_ly_moi(goc, ma, bs, goi_chat, viet=viet, ghi=ghi):
                 kq.da_lam.append({"viec": "ab_tieu_de", "video_id": m.get("video_id"), "trang_thai": m.get("trang_thai"),
                                   "moi": m.get("tieu_de_them")})

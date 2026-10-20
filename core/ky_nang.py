@@ -1142,7 +1142,8 @@ DANH_MUC: List[KyNang] = [
            "video mới / video trượt, kenh.yaml `ab_tieu_de`) → Studio, trang sửa video, «Thử nghiệm A/B»: «Tiêu đề và "
            "hình thu nhỏ» (tiêu đề A + 1–2 tiêu đề đã soát, bìa A + 1–2 bìa có dấu cổng chữ) | «Chỉ tiêu đề» | «Chỉ hình "
            "thu nhỏ» → Lưu → đọc lại thử nghiệm STARTED + tiêu đề. Video đã có thử nghiệm → không đụng. Kênh thiếu tính "
-           "năng nâng cao / không còn ứng viên → bỏ việc.",
+           "năng nâng cao / không còn ứng viên → bỏ việc. Thử nghiệm đang chạy ≥ 2 ngày → cùng phiên đọc lại bản thắng "
+           "(≤ 1 lần/ngày/video) → sổ, não tiêu đề, trục tự học kieu_tieu_de.",
            "python vm/studio_may_dom.py --kenh K --test-compare", k_test_compare, ["K01"],
            dieu_kien=d_test_compare, chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "studio_may_dom.py"), "--kenh", kenh,
                                                                  "--test-compare"),

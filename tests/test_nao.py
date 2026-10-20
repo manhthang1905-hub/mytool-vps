@@ -270,6 +270,109 @@ def test_de_cu_vang_mat_khoi_bang_khong_bi_tinh_la_da_dung(tmp_path):
     assert d["trang_thai"] == "xong" and d.get("khong_tinh") and "không vào danh sách" in d["ghi_chu_cham"]
 
 
+def _de_cu(goc, ma, kenh="KA", bay_gio=HOM_NAY):
+    assert _chay(goc, "uu-tien-nguon", "--kenh", kenh, "--link", "https://youtu.be/" + ma, "--ly-do",
+                 "view 120k trong 5 ngày, đúng cụm tiền bạc", "--du-doan", "video này vào top 3 hiển thị 48h của kênh",
+                 "--kiem-ngay", (bay_gio + dt.timedelta(days=7)).strftime("%Y-%m-%d"), bay_gio=bay_gio) == 0
+    return nao.doc_hanh_dong(goc)[-1]["id"]
+
+
+def _hd(goc, id_):
+    return next(x for x in nao.doc_hanh_dong(goc) if x["id"] == id_)
+
+
+def test_de_cu_khong_hop_le_dong_ngay_la_khong_thuc_hien(tmp_path):
+    """20/10/2026: lượt chọn thật phát hiện nguồn không hợp lệ (đã làm / anh em giữ / cổng cứng / phủ quyết / trùng ý)
+    → đề cử đóng NGAY là KHÔNG THỰC HIỆN ĐƯỢC kèm lý do, không đợi 3 lượt, không bao giờ "sai"."""
+    goc = _goc(tmp_path)
+    a = _de_cu(goc, "AAAAAAAAAAA")
+    nao.ghi_khong_duoc("KA", a, "nguồn đã làm / đang được kênh anh em giữ")
+    nao.ghi_khong_duoc("KB", a, "kênh khác — không đụng")
+    assert nao.dung_xong_de_cu(goc, "KA", chon="https://youtu.be/ZZZZZZZZZZZ") == 1
+    d = _hd(goc, a)
+    assert (d["trang_thai"], d["cham"], d["khong_tinh"]) == ("xong", nao.CHAM_KHONG_THUC_HIEN, True)
+    assert d["ghi_chu_cham"] == "không thực hiện được: nguồn đã làm / đang được kênh anh em giữ"
+    assert nao.ti_le_dung(nao.doc_hanh_dong(goc)) == (0, 0) and "KB" in nao._DE_CU_KHONG_DUOC
+
+
+def test_nhieu_de_cu_giu_cho_lan_luot_va_chon_tay_khong_tinh_vang(tmp_path):
+    """20/10/2026: kênh có nhiều đề cử → lượt này tiêu đề cử cũ nhất (đầu bảng), các đề cử còn lại GIỮ CHỖ (không đếm
+    vắng / bỏ qua); người chốt tay cũng không làm đề cử mất lượt."""
+    goc = _goc(tmp_path)
+    a = _de_cu(goc, "AAAAAAAAAAA", bay_gio=HOM_NAY)
+    b = _de_cu(goc, "BBBBBBBBBBB", bay_gio=HOM_NAY + dt.timedelta(minutes=5))
+    ds = [{"ma": "m0", "link": "https://youtu.be/CCCCCCCCCCC", "diem": 90},
+          {"ma": "mb", "link": "https://youtu.be/BBBBBBBBBBB", "diem": 50},
+          {"ma": "ma", "link": "https://youtu.be/AAAAAAAAAAA", "diem": 10}]
+    ra = nao.ap_uu_tien(goc, "KA", ds)
+    assert [u["ma"] for u in ra] == ["ma", "mb", "m0"] and "_giu_cho" not in ra[0]      # cũ nhất trước
+    nao.dung_xong_de_cu(goc, "KA", chon=ra[0]["link"])
+    assert _hd(goc, a)["tham_so"]["chon_luc"] and _hd(goc, b)["trang_thai"] == "mo"
+    assert _hd(goc, b)["tham_so"].get("giu_cho_luc") and not _hd(goc, b)["tham_so"].get("lan_bo_qua")
+    for _ in range(nao.DE_CU_VANG_TOI_DA + 1):                                         # chốt tay nhiều lượt
+        nao.ap_uu_tien(goc, "KA", ds)
+        nao.dung_xong_de_cu(goc, "KA", chon="https://youtu.be/CCCCCCCCCCC", chon_tay=True)
+    d = _hd(goc, b)
+    assert d["trang_thai"] == "mo" and not d["tham_so"].get("lan_bo_qua") and not d["tham_so"].get("lan_vang")
+
+
+def test_cham_de_cu_chua_ra_goi_thanh_khong_thuc_hien_va_ti_le_chi_tinh_da_lam(tmp_path):
+    goc = _goc(tmp_path)
+    a = _de_cu(goc, "AAAAAAAAAAA")
+    assert _chay(goc, "cham", a, "sai", "chưa có video nào làm từ đúng link này") == 0
+    d = _hd(goc, a)
+    assert d["cham"] == nao.CHAM_KHONG_THUC_HIEN and d["khong_tinh"] and "não định chấm sai" in d["ghi_chu_cham"]
+    b = _de_cu(goc, "BBBBBBBBBBB")
+    nao.ghi_ban_giao(goc, "KA", "KA-0001", "https://youtu.be/BBBBBBBBBBB")
+    assert _chay(goc, "cham", b, "dung", "phân vị 70 @96h ≥ 50") == 0 and _hd(goc, b)["cham"] == "dung"
+    # dòng CŨ: chấm "sai" khi chưa ra gói → bỏ khi tính (không sửa sổ); dòng cũ nêu đúng video thật → vẫn tính
+    cu = [{"id": "x1", "lenh": "uu-tien-nguon", "tham_so": {"kenh": "KA"}, "trang_thai": "xong", "cham": "sai",
+           "ghi_chu_cham": "Hạn 14/10: không gói bàn giao nào làm từ link"},
+          {"id": "x2", "lenh": "uu-tien-nguon", "tham_so": {"kenh": "KA"}, "trang_thai": "xong", "cham": "sai",
+           "ghi_chu_cham": "video KA FAKEvid0011 @47h chỉ có 1.244 hiển thị < 6.000"}]
+    ds = nao.doc_hanh_dong(goc) + cu
+    assert nao.ti_le_dung(ds) == (1, 2) and [nao.da_thuc_hien(x) for x in cu] == [False, True]
+
+
+def test_ti_le_dung_bo_kenh_tra_kho(tmp_path):
+    goc = _goc(tmp_path)
+    with open(os.path.join(goc, "CHANNEL", "KB", "kenh.yaml"), "a", encoding="utf-8") as tep:
+        tep.write("tra_kho: 2026-10-19\n")
+    ds = [{"id": "t1", "lenh": "thu", "tham_so": {"kenh": "KA"}, "cham": "dung"},
+          {"id": "t2", "lenh": "thu", "tham_so": {"kenh": "KB"}, "cham": "sai"}]
+    assert nao.ti_le_dung(ds) == (1, 2) and nao.ti_le_dung(ds, goc) == (1, 1)
+
+
+def test_chuyen_doi_ep_chon_va_so_ngay(tmp_path):
+    goc = _goc(tmp_path)
+    bg = dt.datetime(2026, 10, 20, 7, 0)
+    a = _de_cu(goc, "AAAAAAAAAAA", bay_gio=bg - dt.timedelta(days=1))
+    b = _de_cu(goc, "BBBBBBBBBBB", bay_gio=bg - dt.timedelta(days=1))
+    _de_cu(goc, "CCCCCCCCCCC", bay_gio=bg - dt.timedelta(days=1))
+    nao.ghi_ban_giao(goc, "KA", "KA-0002", "https://youtu.be/AAAAAAAAAAA")
+    nao.ghi_khong_duoc("KA", b, "vướng cổng chất lượng “lạc ngách”")
+    nao.dung_xong_de_cu(goc, "KA", chon="https://youtu.be/ZZZZZZZZZZZ", bay_gio=bg)
+    cd = nao.chuyen_doi_ep_chon(goc, 14, bay_gio=bg)
+    assert (cd["tao"], cd["ra_goi"], cd["khong_thuc_hien"], cd["dang_mo"], cd["ti_le"]) == (3, 1, 1, 1, 0.5)
+    assert "vướng cổng chất lượng “…”" in cd["ly_do"] and "ra gói 1 (50%" in nao.dong_chuyen_doi(cd)
+    assert "Ép chọn → ra gói" in "\n".join(nao.bao_cao_hanh_dong(goc, bg))
+    for _ in range(2):                                                      # một dòng mỗi ngày (ghi lại thì thay)
+        nao.ghi_chuyen_doi(goc, bg)
+    with open(os.path.join(nao.duong_nao(goc), "nhat-ky", nao.TEP_CHUYEN_DOI), encoding="utf-8") as tep:
+        dong = [json.loads(x) for x in tep.read().splitlines() if x.strip()]
+    assert len(dong) == 1 and dong[0]["hom_qua"] == {"tao": 3, "ra_goi": 1} and dong[0]["cua_so_14"]["ra_goi"] == 1
+
+
+def test_tu_chay_ghi_de_cu_bi_bien_tap_loai(tmp_path):
+    from core import tu_chay
+
+    nao._DE_CU_KHONG_DUOC.clear()
+    truoc = [{"ma": "AAAAAAAAAAA", "ep_chon": True, "de_cu_nao": "n007"}, {"ma": "BBBBBBBBBBB"}]
+    tu_chay._ghi_ep_chon_bi_loai("KA", truoc, [truoc[1]], {"ly_do": {"AAAAAAAAAAA": "trùng ý video đã làm X"}})
+    assert nao._DE_CU_KHONG_DUOC["KA"]["n007"].startswith("biên tập AI phủ quyết: trùng ý")
+    nao._DE_CU_KHONG_DUOC.clear()
+
+
 def test_bai_hoc_cong_tru_nguon_nao(tmp_path):
     from core.giam_doc import kham_nghiem as kn
 

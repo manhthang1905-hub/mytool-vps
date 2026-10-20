@@ -291,10 +291,24 @@ def _muc_so_do(ds: List[Dict[str, Any]]) -> List[str]:
     return ra
 
 
-def to_so(con: sqlite3.Connection, bp: str, bay_gio: float, moi: int = 0, tran: int = TRAN_TO_SO) -> str:
+def kenh_tra_kho_ds(goc: str) -> List[str]:
+    """Kênh đã TRẢ KHO (`core/tra_kho.py`) — sự kiện của chúng không vào bảng số (20/10/2026: kênh bị trả vì YouTube
+    không phát, kết quả trượt của nó là "kênh không được phân phối", không phải bài học nội dung). Dòng cũ GIỮ trong
+    kho, chỉ bỏ khi tính. Lỗi đọc → []."""
+    try:
+        from ..kenh import liet_ke_kenh  # noqa: PLC0415
+
+        return sorted(set(liet_ke_kenh(goc, ca_tra_kho=True)) - set(liet_ke_kenh(goc)))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def to_so(con: sqlite3.Connection, bp: str, bay_gio: float, moi: int = 0, tran: int = TRAN_TO_SO,
+          bo_kenh: Iterable[str] = ()) -> str:
     """Bảng số của bộ phận trong `NGAY_TO_SO` ngày qua — mã tính, mỗi dòng có mã `#id`; cắt ≤ `tran` ký tự (mục
-    quan trọng trước)."""
-    ds = doc_su_kien(con, bp, bay_gio - NGAY_TO_SO * NGAY)
+    quan trọng trước). `bo_kenh`: kênh không tính (kênh trả kho — `kenh_tra_kho_ds`)."""
+    bo_k = {str(k) for k in (bo_kenh or ())}
+    ds = [e for e in doc_su_kien(con, bp, bay_gio - NGAY_TO_SO * NGAY) if not (bo_k and e["kenh"] in bo_k)]
     bo_kp = sum(1 for e in ds if e["loai"] == "ket_qua" and khong_duoc_phat(e))
     ds = [e for e in ds if not (e["loai"] == "ket_qua" and khong_duoc_phat(e))]
     dem = Counter(e["loai"] for e in ds)
@@ -347,14 +361,53 @@ def dong_bai(b: Dict[str, Any]) -> str:
         "nên" if b.get("huong") != "tranh" else "tránh", ", ".join(b.get("pham_vi") or []) or "—", b.get("cau"))
 
 
-def ve_loi_nhac(bp: str, to_so_: str, so_tay: str, bai: Sequence[Dict[str, Any]]) -> str:
+#: Đường ví (20/10/2026): ShopAPI định tuyến tên `claude-*` sang mô hình nhanh (sổ cái ví ghi "nhamay/gemini-3-flash",
+#: "gpt-5.6-terra"…) — mô hình đó đọc câu "không có gì chắc thì trả rỗng" theo nghĩa đen: 15 giấc ngủ 18–20/10 ra 1
+#: lệnh (Max 17/10: 11). Chẩn đoán thật 20/10 (kich-ban, 48 sự kiện mới): lời nhắc cũ → `{"lenh": []}` 3/3 lần (opus-5,
+#: fable-5 ×2), cùng bảng số đó Max ra 3 lệnh. Đường ví bắt PHÂN TÍCH TRƯỚC (bước nghĩ ghi ra giấy) rồi mới ra lệnh, và
+#: nhắc lại việc SAU bảng số (mô hình nhỏ nhớ đoạn cuối hơn). Luật kiểm lệnh giữ nguyên — không hạ chuẩn bài học.
+VIEC_RONG = ("VIỆC: đề xuất TỐI ĐA {toi_da} lệnh sửa sổ bài học — CHỈ phần thay đổi, KHÔNG viết lại cả sổ. Không có gì "
+             "chắc thì trả\n{{\"lenh\": []}} — \"không lệnh\" tốt hơn một bài học yếu.")
+VIEC_PHAN_TICH = (
+    "VIỆC: đọc KỸ bảng số rồi đề xuất TỐI ĐA {toi_da} lệnh sửa sổ bài học — CHỈ phần thay đổi, KHÔNG viết lại cả sổ.\n"
+    "LÀM THEO 2 BƯỚC:\n"
+    "  Bước 1 — \"phan_tich\": 3–6 nhận xét ngắn, mỗi nhận xét nêu SỐ và mã sự kiện (vd \"lỗi [chữ ký] lặp 166 lần ở "
+    "một kênh; #13585 hỏng 12 lần rồi #13836 cùng khâu xong 1 lần\"). Ưu tiên mục LỖI LẶP và CẶP HỎNG ⇄ ĐƯỢC.\n"
+    "  Bước 2 — \"lenh\": MỖI nhận xét có mã sự kiện MỚI thành MỘT lệnh: đã có bài cùng ý → \"ung_ho\" (mới xác nhận) "
+    "hoặc \"phan_doi\" (mới bác) với mã MỚI; chưa có bài → \"them\" (câu: hoàn cảnh + nên/tránh gì + số, ≥ 2 mã). Bảng "
+    "có sự kiện mới thì thường có ít nhất 1 lệnh đúng.")
+DUOI_PHAN_TICH = (
+    "\n═══ NHẮC LẠI VIỆC ═══\n"
+    "Trả về DUY NHẤT một JSON {{\"phan_tich\": [\"...\"], \"lenh\": [...]}}. Mỗi lệnh trích mã sự kiện là SỐ NGUYÊN có "
+    "trong BẢNG SỐ ở trên; bài mới ≥ 2 mã và câu có số; cùng ý bài cũ thì \"ung_ho\" / \"phan_doi\" — CHỈ với mã MỚI (mã "
+    "> {tu_id}; mã cũ đã tính rồi, máy bỏ); không khuyên hạ chất lượng; không bàn tiền / kênh / lịch đăng.\n"
+    "Mã MỚI có trong bảng: {moi}\n"
+    "Mẫu một lệnh \"them\" đúng dạng (mã giả): {{\"lenh\":\"them\",\"cau\":\"Ở khâu X kênh K, khi lỗi Y lặp 12 lần "
+    "trong 13707 giây thì tránh thử lại liên tục; lượt sau cùng khâu xong 1 lần trong 2094 giây\",\"huong\":\"tranh\","
+    "\"pham_vi\":[\"khau/X\",\"kenh/K\"],\"vao_loi_nhac\":false,\"bang_chung\":[101,102]}}\n")
+#: Đường ví: lượt đầu không lệnh nào qua kiểm → gọi THÊM một lượt, đưa lý do máy bỏ cho mô hình sửa (sinh nhiều bản +
+#: tiêu chí chấm tốt; một lượt ví ≈ 15 đ). Không bao giờ hạ luật kiểm.
+VONG_SUA_VI = 1
+
+
+def ve_loi_nhac(bp: str, to_so_: str, so_tay: str, bai: Sequence[Dict[str, Any]], phan_tich: bool = False,
+                tu_id: int = 0) -> str:
+    """Lời nhắc giấc ngủ. `phan_tich=True` (đường ví — xem `VIEC_PHAN_TICH`): phân tích trước, nhắc việc ở cuối
+    (kèm mốc mã sự kiện mới `tu_id`)."""
     song = [b for b in bai if b.get("trang_thai") != NGHI]
+    viec = (VIEC_PHAN_TICH if phan_tich else VIEC_RONG).format(toi_da=LENH_TOI_DA)
+    dang = '{"phan_tich": ["..."], "lenh": [...]}' if phan_tich else '{"lenh": [...]}'
+    duoi = ""
+    if phan_tich:
+        moi = sorted({int(x) for x in re.findall(r"#(\d+)", to_so_ or "") if int(x) > int(tu_id or 0)})
+        duoi = DUOI_PHAN_TICH.format(tu_id=int(tu_id or 0),
+                                     moi=" ".join("#%d" % x for x in moi[:40]) + (" …" if len(moi) > 40 else "")
+                                     if moi else "(không có — chỉ \"them\" từ lỗi lặp / cặp nếu chưa có bài)")
     return """Bạn là bộ phận «{ten}» (mã {bp}) của một dây chuyền tự làm video YouTube, đang NGỦ để rút kinh nghiệm từ
 số liệu của chính mình. Bên dưới: (1) BẢNG SỐ máy tính từ sổ sự kiện thô — mỗi dòng có mã sự kiện #id thật;
 (2) SỔ TAY hiện tại; (3) BÀI HỌC hiện có do các giấc ngủ trước rút (id, trạng thái, α/β, câu).
 
-VIỆC: đề xuất TỐI ĐA {toi_da} lệnh sửa sổ bài học — CHỈ phần thay đổi, KHÔNG viết lại cả sổ. Không có gì chắc thì trả
-{{"lenh": []}} — "không lệnh" tốt hơn một bài học yếu.
+{viec}
 
 Các lệnh (JSON):
 - {{"lenh":"them","cau":"<MỘT câu tiếng Việt có SỐ cụ thể: trong hoàn cảnh nào (khâu/engine/kênh/giờ) thì nên/tránh làm gì, vì số nào>","huong":"nen"|"tranh","pham_vi":["khau/<mã>","engine/<tên>","kenh/<mã>","bo-chon/<khoá>","ma-kiem/<mã>"],"vao_loi_nhac":true|false,"bang_chung":[<mã sự kiện>,...]}}
@@ -376,7 +429,7 @@ LUẬT (máy kiểm từng lệnh, sai là bỏ):
    bài vận hành (chờ máy chủ, thử lại, bộ chọn DOM…) để false.
 7. Không bịa số: chỉ dùng số có trong bảng.
 
-Trả về DUY NHẤT một JSON {{"lenh": [...]}} — không chữ nào khác.
+Trả về DUY NHẤT một JSON {dang} — không chữ nào khác.
 
 ═══ (1) BẢNG SỐ ═══
 {to_so}
@@ -386,8 +439,9 @@ Trả về DUY NHẤT một JSON {{"lenh": [...]}} — không chữ nào khác.
 
 ═══ (3) BÀI HỌC TỰ RÚT HIỆN CÓ ({n}) ═══
 {bai}
-""".format(ten=BO_PHAN.get(bp, bp), bp=bp, toi_da=LENH_TOI_DA, to_so=to_so_, so_tay=so_tay.strip() or "(chưa có)",
-           n=len(song), bai="\n".join(dong_bai(b) for b in song) or "(chưa có)")
+{duoi}""".format(ten=BO_PHAN.get(bp, bp), bp=bp, viec=viec, dang=dang, to_so=to_so_, duoi=duoi,
+                 so_tay=so_tay.strip() or "(chưa có)", n=len(song),
+                 bai="\n".join(dong_bai(b) for b in song) or "(chưa có)")
 
 
 def doc_lenh(chu: str) -> List[Any]:
@@ -680,19 +734,50 @@ def goi_max(ra: str, loi_nhac: str, bp: str) -> str:
     return viet_max.dung_goi_chat_max(ra, viec="nao-bo-phan-ngu:" + bp)(loi_nhac, toi_da_token=4000)
 
 
-def ngu_mot(con: sqlite3.Connection, ra: str, bp: str, moi: int, tu_id: int, den_id: int, goi: Goi, bay_gio: float
-            ) -> Dict[str, Any]:
+def ve_phan_hoi(lenh: Sequence[Any], bo: Sequence[Tuple[Any, str]], tu_id: int) -> str:
+    """Đoạn nối vào lời nhắc cho lượt sửa (đường ví): lượt trước đề xuất gì, máy bỏ vì sao."""
+    ly = Counter(str(l) for _x, l in bo)
+    return ("\n═══ LƯỢT TRƯỚC: {0} lệnh đề xuất, KHÔNG lệnh nào qua kiểm ═══\n{1}\nĐọc lại BẢNG SỐ và đề xuất lại theo đúng "
+            "luật: ung_ho/phan_doi chỉ với mã > {2}; nhận xét nào có mã mới mà chưa có bài thì \"them\" (≥ 2 mã có "
+            "trong bảng, câu có số).\n").format(
+        len(lenh), "\n".join("- bỏ {0} lệnh: {1}".format(n, x) for x, n in ly.most_common(6)) or
+        "- bạn trả danh sách lệnh rỗng", int(tu_id or 0))
+
+
+def ngu_mot(con: sqlite3.Connection, ra: str, bp: str, moi: int, tu_id: int, den_id: int, goi: Goi, bay_gio: float,
+            phan_tich: bool = False, so_dung: Optional[Dict[str, Dict[str, int]]] = None) -> Dict[str, Any]:
+    """Một bộ phận ngủ. `phan_tich` (đường ví): lời nhắc phân tích trước + `VONG_SUA_VI` lượt sửa khi không lệnh nào
+    qua kiểm. `so_dung[bp]` (đường ví): token thật `goi` cộng vào — không có thì đọc sổ thuê bao Max (`_token`)."""
     vault = duong_vault(ra)
     t0 = time.time()
-    so = to_so(con, bp, bay_gio, moi)
+    so = to_so(con, bp, bay_gio, moi, bo_kenh=kenh_tra_kho_ds(ra))
     bai = no_ron.doc_bai_ngu(vault, bp)
-    loi_nhac = ve_loi_nhac(bp, so, doc_chu(os.path.join(vault, bp, "so-tay.md")) or "", bai)
+    loi_nhac = ve_loi_nhac(bp, so, doc_chu(os.path.join(vault, bp, "so-tay.md")) or "", bai, phan_tich=phan_tich,
+                           tu_id=tu_id)
     lenh = doc_lenh(goi(loi_nhac, bp))
     ap, bo = kiem_lenh(con, bp, lenh, bai)
+    vong = 0
+    loi_vong: List[str] = []
+    while phan_tich and not ap and vong < VONG_SUA_VI:
+        vong += 1
+        try:
+            lenh2 = doc_lenh(goi(loi_nhac + ve_phan_hoi(lenh, bo, tu_id), bp))
+        except Exception as loi:  # noqa: BLE001 — lượt sửa hỏng: giữ kết quả lượt đầu (đã ghi đủ lý do bỏ)
+            loi_vong.append("{0}: {1}".format(type(loi).__name__, str(loi)[:160]))
+            break
+        ap, bo2 = kiem_lenh(con, bp, lenh2, bai)
+        lenh, bo = list(lenh) + list(lenh2), list(bo) + list(bo2)
     dong = ap_lenh(con, vault, bp, ap, bai, bay_gio)
-    tv, tr = _token(ra, "nao-bo-phan-ngu:" + bp, t0)
+    sd = (so_dung or {}).get(bp) or {}
+    if sd:
+        tv, tr = int(sd.get("token_vao") or 0), int(sd.get("token_ra") or 0)
+    else:
+        tv, tr = _token(ra, "nao-bo-phan-ngu:" + bp, t0)
     giay = round(time.time() - t0, 1)
-    chi_tiet = {"ap": ap, "bo": [{"lenh": l, "ly_do": ly} for l, ly in bo], "ky_tu_to_so": len(so)}
+    chi_tiet = {"ap": ap, "bo": [{"lenh": l, "ly_do": ly} for l, ly in bo], "ky_tu_to_so": len(so),
+                "duong": "vi" if phan_tich else "max", "vong_sua": vong, "luot_goi": int(sd.get("luot") or 0)}
+    if loi_vong:
+        chi_tiet["loi_vong_sua"] = loi_vong
     con.execute("INSERT INTO giac_ngu(luc, bo_phan, tu_id, den_id, de_xuat, ap, bo, giay, ky_tu, token_vao, token_ra, "
                 "chi_tiet, loi) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, '')",
                 (bay_gio, bp, tu_id, den_id, len(lenh), len(ap), len(bo), giay, len(loi_nhac), tv, tr,
@@ -769,13 +854,17 @@ def soat(con: sqlite3.Connection, vault: str, bay_gio: float) -> Dict[str, Dict[
 # ── cả đêm ───────────────────────────────────────────────────────────────────
 
 def ngu(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None, goi: Optional[Goi] = None,
-        chi: Sequence[str] = (), toi_da: int = BO_PHAN_TOI_DA_DEM, soat_tuan: Optional[bool] = None) -> Dict[str, Any]:
+        chi: Sequence[str] = (), toi_da: int = BO_PHAN_TOI_DA_DEM, soat_tuan: Optional[bool] = None,
+        phan_tich: Optional[bool] = None, bao: bool = True) -> Dict[str, Any]:
     """Giấc ngủ đêm (đọc mốc / ghi ở `ra`, mặc định `goc`). `goi(lời nhắc, bộ phận) -> chữ` thay được trong bài kiểm;
-    mặc định = `goi_max` (thuê bao). Không bao giờ ném lỗi ra khỏi một bộ phận; xong thì dựng lại sổ tay + chỉ mục."""
+    mặc định = ví (`viet_chu_bang: "vi"`, lời nhắc phân tích trước + lượt sửa) hoặc `goi_max` (thuê bao). Không bao giờ
+    ném lỗi ra khỏi một bộ phận; xong thì dựng lại sổ tay + chỉ mục, rồi tự soát sức khoẻ (`suc_khoe`) — hỏng thì
+    `kq["canh_bao"]` + báo động chống lặp (`bao=False` để tắt trong bài kiểm)."""
     t0 = time.time()
     bay_gio = bay_gio or time.time()
     ra = ra or goc
     kq: Dict[str, Any] = {"bo_phan": [], "soat": {}, "bo_qua": ""}
+    so_dung: Dict[str, Dict[str, int]] = {}
     con = kho.mo(ra, cho=5.0)
     try:
         ds = can_ngu(con, chi, toi_da)
@@ -794,8 +883,7 @@ def ngu(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None, goi: Opti
                     kq["bo_qua"] = "van ví đang chặn gọi AI — giấc ngủ đợi lượt sau"
                     ds = []
                 else:
-                    goi = lambda loi_nhac, bp: g(loi_nhac, mo_hinh="claude-opus-5", toi_da_token=4000,  # noqa: E731
-                                                 khoa="nao-bo-phan-ngu:" + bp)
+                    phan_tich, goi = True, _goi_vi(g, so_dung)
             elif viet_max.co_claude_code():
                 goi = lambda loi_nhac, bp: goi_max(ra, loi_nhac, bp)  # noqa: E731
             else:
@@ -803,7 +891,8 @@ def ngu(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None, goi: Opti
                 ds = []
         for bp, moi, tu, den in ds:
             try:
-                kq["bo_phan"].append(ngu_mot(con, ra, bp, moi, tu, den, goi, bay_gio))
+                kq["bo_phan"].append(ngu_mot(con, ra, bp, moi, tu, den, goi, bay_gio, phan_tich=bool(phan_tich),
+                                             so_dung=so_dung))
             except Exception as loi:  # noqa: BLE001 — một bộ phận hỏng không chặn bộ phận khác; mốc không dời
                 try:
                     con.rollback()
@@ -822,7 +911,106 @@ def ngu(goc: str = GOC, ra: str = "", bay_gio: Optional[float] = None, goi: Opti
             kq["soat"] = soat(con, duong_vault(ra), bay_gio)
         if ds or soat_tuan:
             kq["vault"] = {k: v for k, v in no_ron.dung_vault(con, goc, ra, bay_gio).items() if k != "no_ron"}
+        if ds:
+            kq["canh_bao"] = suc_khoe(con)
     finally:
         con.close()
+    if kq.get("canh_bao") and bao:
+        bao_ngu_rong(goc, kq["canh_bao"], bay_gio)
     kq["giay"] = round(time.time() - t0, 1)
     return kq
+
+
+# ── sức khoẻ giấc ngủ: không chết im lặng ────────────────────────────────────
+
+#: Bấy nhiêu ĐÊM ngủ liền (đêm có ít nhất một bộ phận ngủ) mà không áp được lệnh nào = hỏng (18–20/10/2026: 15 giấc ngủ
+#: ra 1 lệnh, bảng ghi token 0, không lỗi, không ai biết).
+DEM_RONG_TOI_DA = 3
+LOAI_BAO_DONG = "nao_ngu_rong"
+
+
+def _goi_vi(g: Callable[..., str], so_dung: Dict[str, Dict[str, int]]) -> Goi:
+    """Gọi ví cho giấc ngủ: khoá chống trùng THEO LỜI NHẮC (gọi lại đúng lời nhắc → nhận lại đúng câu trả lời; đêm sau
+    lời nhắc khác → khoá khác — khoá cố định `nao-bo-phan-ngu:<bộ phận>` cũ đụng "khoá đã dùng" từ đêm thứ hai và hết
+    4 lượt đổi khoá ở đêm thứ năm); token thật cộng vào `so_dung[bộ phận]`."""
+    import hashlib  # noqa: PLC0415
+
+    def goi(loi_nhac: str, bp: str) -> str:
+        bam_ = hashlib.sha1(loi_nhac.encode("utf-8", "replace")).hexdigest()[:16]
+        return g(loi_nhac, mo_hinh=MO_HINH_VI, toi_da_token=4000, khoa="nao-bo-phan-ngu:{0}:{1}".format(bp, bam_),
+                 so_dung=so_dung.setdefault(bp, {}))
+    return goi
+
+
+#: Tên mô hình gửi ví (máy chủ ShopAPI tự định tuyến tên này sang mô hình thật — xem `VIEC_PHAN_TICH`).
+MO_HINH_VI = "claude-opus-5"
+
+
+def dem_ngu(con: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Mỗi ĐÊM ngủ một dòng (theo ngày giờ máy của `luc`), cũ → mới: {ngay, giac, loi, ap, de_xuat, token}."""
+    ra: Dict[str, Dict[str, Any]] = {}
+    for luc, ap, dx, tv, tr, loi in con.execute(
+            "SELECT luc, ap, de_xuat, token_vao, token_ra, loi FROM giac_ngu ORDER BY luc, id"):
+        ngay = time.strftime("%Y-%m-%d", time.localtime(float(luc or 0)))
+        d = ra.setdefault(ngay, {"ngay": ngay, "giac": 0, "loi": 0, "ap": 0, "de_xuat": 0, "token": 0})
+        if loi:
+            d["loi"] += 1
+            continue
+        d["giac"] += 1
+        d["ap"] += int(ap or 0)
+        d["de_xuat"] += int(dx or 0)
+        d["token"] += int(tv or 0) + int(tr or 0)
+    return [ra[k] for k in sorted(ra)]
+
+
+def suc_khoe(con: sqlite3.Connection, so_dem: int = DEM_RONG_TOI_DA) -> str:
+    """'' nếu giấc ngủ khoẻ; câu người đọc được nếu HỎNG: `so_dem` đêm ngủ liền không áp lệnh nào, hoặc đêm gần nhất
+    có giấc ngủ không lỗi mà token ghi 0 (gọi AI không thật / không đo được)."""
+    try:
+        dem = dem_ngu(con)
+    except sqlite3.Error:
+        return ""
+    if not dem:
+        return ""
+    cuoi = dem[-so_dem:]
+    if len(cuoi) >= so_dem and all(d["ap"] == 0 for d in cuoi):
+        return ("Não bộ phận ngủ {0} đêm liền ({1} → {2}) mà không rút được bài học nào: {3} giấc ngủ, {4} lệnh đề xuất, "
+                "0 lệnh áp{5}.").format(so_dem, cuoi[0]["ngay"], cuoi[-1]["ngay"], sum(d["giac"] for d in cuoi),
+                                       sum(d["de_xuat"] for d in cuoi),
+                                       ", {0} giấc hỏng".format(sum(d["loi"] for d in cuoi))
+                                       if any(d["loi"] for d in cuoi) else "")
+    d = dem[-1]
+    if d["giac"] and not d["token"]:
+        return ("Não bộ phận ngủ đêm {0} ({1} giấc) nhưng bảng ghi 0 token — lượt gọi AI không thật hoặc không đo "
+                "được.").format(d["ngay"], d["giac"])
+    return ""
+
+
+def suc_khoe_tep(goc: str) -> str:
+    """`suc_khoe` đọc CHỈ ĐỌC `nao/bo-phan.db` (cho bảng "Việc của bạn" / tự kiểm). Không có kho / lỗi → ''."""
+    import urllib.request  # noqa: PLC0415
+
+    p = os.path.join(goc, "nao", "bo-phan.db")
+    if not os.path.isfile(p):
+        return ""
+    try:
+        con = sqlite3.connect("file:{0}?mode=ro".format(urllib.request.pathname2url(p)), uri=True, timeout=1)
+    except sqlite3.Error:
+        return ""
+    try:
+        return suc_khoe(con)
+    finally:
+        con.close()
+
+
+def bao_ngu_rong(goc: str, cau: str, bay_gio: Optional[float] = None) -> bool:
+    """Báo động (chống lặp theo loại — đường `core.bao_dong` chung). Không ném lỗi."""
+    try:
+        from .. import bao_dong  # noqa: PLC0415
+
+        return bool(bao_dong.bao_dong(
+            LOAI_BAO_DONG, cau, "Máy tự thử lại mỗi đêm 03:40. Xem bảng giac_ngu trong nao/bo-phan.db và nhật ký "
+            "nao/bo-phan/<bộ phận>/nhat-ky.md; chạy tay: python -X utf8 -m core.nao_bo_phan ngu --bo-phan <mã>.",
+            goc=goc, bay_gio=bay_gio))
+    except Exception:  # noqa: BLE001
+        return False

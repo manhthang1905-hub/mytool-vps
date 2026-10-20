@@ -531,7 +531,8 @@ def test_d12_gom_cu_thi_gom_ngu_cu_thi_bao(tmp_path):
     assert any(v["khoa"].startswith("ky-nang:D12:ngu:") for v in knt.viec_cua_ban(goc))
     con = kho.mo(goc)
     kho.dat_meta(con, "gom_cuoi", "%.0f" % (BAY - dt.timedelta(hours=1)).timestamp())
-    con.execute("INSERT INTO giac_ngu(luc, bo_phan, loi) VALUES (?, 'bia', '')", ((BAY - dt.timedelta(hours=5)).timestamp(),))
+    con.execute("INSERT INTO giac_ngu(luc, bo_phan, ap, token_vao, loi) VALUES (?, 'bia', 1, 900, '')",  # giấc khoẻ
+                ((BAY - dt.timedelta(hours=5)).timestamp(),))
     con.commit()
     con.close()
     assert not kn.d_nao_bp(goc, "")[0] and kn.k_nao_bp(goc, "")[0] == kn.DAT

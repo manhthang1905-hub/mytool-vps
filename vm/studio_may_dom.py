@@ -1049,6 +1049,35 @@ def _ghi_so_ab(goc: str, kenh: str, vid: str, kv: Dict[str, Any], ghi) -> None:
         ghi("   (!) ghi sổ A/B tiêu đề hỏng: {0}".format(str(e)[:120]))
 
 
+def doc_ket_qua_ab(S, goc: str, kenh: str, vids: List[str], ghi, ghi_that: bool = True, agent=None) -> Dict[str, Any]:
+    """20/10/2026 — ĐỌC KẾT QUẢ thử nghiệm A/B tiêu đề đang chạy (CÙNG phiên D13, cùng đường trang sửa `doc_trang_sua`
+    đã bắt `videoCreatorExperiment`): mỗi video → `ab_tieu_de.doc_ket_thu_nghiem` (gói rỗng = thử nghiệm đã gỡ →
+    `kt_khong_con`) + tiêu đề hiện tại → `ab_tieu_de.ghi_doc_ket_qua` (sổ, não "tieu-de", trục `kieu_tieu_de`). Chỉ ĐỌC
+    Studio — không bấm gì. Một video hỏng: video kế vẫn đọc. Trả {video: {ket_luan | dang_chay | loi}}."""
+    from core import ab_tieu_de as ab  # noqa: PLC0415
+    ra: Dict[str, Any] = {}
+    for vid in vids:
+        if agent is not None:
+            _kiem_dung(agent, kenh)
+        kt, tieu_de = None, ""
+        try:
+            goi, _kb = doc_trang_sua(S, vid)
+            if goi is not None:
+                exp = goi.get("videoCreatorExperiment")
+                kt = ab.doc_ket_thu_nghiem(exp) if isinstance(exp, dict) and exp else ab.kt_khong_con()
+                tieu_de = mdd_chuan(goi.get("title") or "")
+        except (DangXuat, tl.Hoan, tl.CanNguoi):
+            raise
+        except Exception as e:  # noqa: BLE001
+            ghi("   {0}: đọc kết quả A/B hỏng: {1}".format(vid, str(e)[:160]))
+        kq = ab.ghi_doc_ket_qua(goc, kenh, vid, kt, tieu_de_hien=tieu_de) if ghi_that else None
+        ra[vid] = (kq or {}).get("ket_luan") or ("loi" if kt is None else "dang_chay")
+        ghi("   {0}: kết quả A/B tiêu đề — {1}{2}".format(vid, ra[vid], " · thắng {0} «{1}»".format(
+            kq.get("thang"), _gon(kq.get("tieu_de_thang"), 60)) if kq and kq.get("ket_luan") == ab.KL_THANG else
+            " · {0}".format((kt or {}).get("trang_thai_tho", "")[:80]) if kt else ""))
+    return ra
+
+
 def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua_khung: bool = False,
               chi_viec: str = "", rng=None, tai=None, cham=None, phien=None) -> int:
     import datetime as _dt  # noqa: PLC0415
@@ -1056,7 +1085,14 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
     # 16/10/2026: cùng một phiên làm cả việc bìa (`studio_test_compare`, đề xuất bộ não) lẫn A/B tiêu đề + bìa
     # (`studio_ab_tieu_de`, giám đốc kênh — sổ `giam-doc/ab-tieu-de.json`).
     ds = _viec(goc, LOAI_TEST, kenh, chi_viec) + _viec(goc, LOAI_AB, kenh, chi_viec)
-    if not ds:
+    # 20/10/2026: cùng phiên ĐỌC KẾT QUẢ thử nghiệm A/B tiêu đề đang chạy đủ tuổi (`ab_tieu_de.can_doc_ket_qua`)
+    try:
+        from core import ab_tieu_de as _ab  # noqa: PLC0415
+        doc_kq = [] if chi_viec else _ab.can_doc_ket_qua(goc, kenh)
+    except Exception as e:  # noqa: BLE001
+        ghi("   (!) không đọc được sổ A/B tiêu đề: {0}".format(str(e)[:120]))
+        doc_kq = []
+    if not ds and not doc_kq:
         ghi("không có việc Thử nghiệm A/B của {0}".format(kenh))
         return MA_KHONG_CAN
     ghi_that = not (thu or khong_luu)
@@ -1086,7 +1122,7 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
             _cap_nhat(goc, m["id"], ghi, trang_thai=tt, ket={"ly_do": ly, "video": kv, "luc": _bay()})
             for v, x in kv.items():
                 _ghi_so_ab(goc, kenh, v, x, ghi)
-    if not can_studio:
+    if not can_studio and not doc_kq:
         return MA_XONG
     dang: List[str] = []
     xong: List[str] = []
@@ -1145,6 +1181,8 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
                         for v in m2.get("video_ids") or []:
                             _ghi_so_ab(goc, kenh, v, {"ket": sm.KV_KHONG_QUYEN, "ly_do": ly}, ghi)
                 break
+        if doc_kq and not any(x.get("ket") == sm.KV_KHONG_QUYEN for v in ra.values() for x in (v.get("video") or {}).values()):
+            ra["doc_ket_qua"] = doc_ket_qua_ab(S, goc, kenh, doc_kq, ghi, ghi_that=ghi_that, agent=agent)
         return ra
     ma, r = (phien or chay_phien)(kenh, ghi, lam, "test", bo_qua_khung=bo_qua_khung, cho_luu=not thu, rng=rng)
     if ma != MA_XONG:
@@ -1155,7 +1193,7 @@ def chay_test(kenh: str, ghi, thu: bool = False, khong_luu: bool = False, bo_qua
                                                                                   "khong_luu": khong_luu, "viec": r})
     if not ghi_that:
         return MA_XONG
-    return MA_LOI if any(v.get("trang_thai") == "loi" for v in (r or {}).values()) else MA_XONG
+    return MA_LOI if any(isinstance(v, dict) and v.get("trang_thai") == "loi" for v in (r or {}).values()) else MA_XONG
 
 
 def main(argv=None) -> int:

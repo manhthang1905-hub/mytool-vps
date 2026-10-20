@@ -1517,6 +1517,25 @@ def _chuan_hoa_cho_bien_tap(goc: str, ma_kenh: str, d: Dict[str, Any], ten_ct: s
     return ra
 
 
+def _ghi_ep_chon_bi_loai(ma_kenh: str, truoc: List[Dict[str, Any]], sau: List[Dict[str, Any]],
+                         ket: Optional[Dict[str, Any]] = None, vi_sao: str = "biên tập AI phủ quyết") -> None:
+    """20/10/2026 — đề cử bộ não (dòng `ep_chon` + `de_cu_nao`) bị một cổng chất lượng của lượt này LOẠI → ghi lý do
+    (bộ nhớ) để `nao.dung_xong_de_cu` đóng nó là KHÔNG THỰC HIỆN ĐƯỢC (không phải "sai") ngay lượt này."""
+    try:
+        con = {str(d.get("ma") or "") for d in sau}
+        ly = {so.ma_video(str(k)) or str(k): v for k, v in ((ket or {}).get("ly_do") or {}).items()}
+        bi = [d for d in truoc if d.get("ep_chon") and d.get("de_cu_nao") and str(d.get("ma") or "") not in con]
+        if not bi:
+            return
+        from . import nao  # noqa: PLC0415
+
+        for d in bi:
+            ma = str(d.get("ma") or "")
+            nao.ghi_khong_duoc(ma_kenh, d.get("de_cu_nao"), "{0}: {1}".format(vi_sao, str(ly.get(ma) or "TỆ")[:180]))
+    except Exception:  # noqa: BLE001 — sổ não hỏng không được chặn lượt chọn
+        pass
+
+
 def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
                  goi_chat: Optional[Callable[..., str]], co_v7_truoc: bool,
                  log: Callable[[str], None]) -> List[Dict[str, Any]]:
@@ -1555,7 +1574,9 @@ def _bien_tap_ai(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
                 du_doan_bien_tap.ghi(goc, ma_kenh, day_du, ket_cs)
             except Exception as loi:  # noqa: BLE001
                 log("  (sổ dự đoán biên tập: chưa ghi được — {0})".format(str(loi)[:100]))
-            return _ap_cham_bien_tap(ds, ket_cs, log, chi_phu_quyet=chi_pq)
+            ra = _ap_cham_bien_tap(ds, ket_cs, log, chi_phu_quyet=chi_pq)
+            _ghi_ep_chon_bi_loai(ma_kenh, ds, ra, ket_cs)
+            return ra
         return ds
     top = [_chuan_hoa_cho_bien_tap(goc, ma_kenh, d, ten_ct, tep) for d in ds[:SO_UNG_VIEN_BIEN_TAP]]
     try:
@@ -1632,7 +1653,8 @@ def _chon_nguon(goc: str, ma_kenh: str, *a: Any, **kw: Any) -> Optional[Dict[str
                 from . import nao  # noqa: PLC0415
 
                 # 12/10/2026: đưa link ĐÃ CHỌN — đề cử chỉ `xong` khi gói bàn giao dùng đúng link (`nao.ghi_ban_giao`).
-                nao.dung_xong_de_cu(goc, ma_kenh, chon=str((chon or {}).get("link") or ""))
+                nao.dung_xong_de_cu(goc, ma_kenh, chon=str((chon or {}).get("link") or ""),
+                                    chon_tay=bool((chon or {}).get("chon_tay")))
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1836,6 +1858,9 @@ def _chon_khong_trung_y(goc: str, ma_kenh: str, ds: List[Dict[str, Any]],
            .format(tieu_de[:60], voi[:60] or "?", ly_do[:150] if ly_do else "không rõ lý do",
                    lan, SO_LAN_KIEM_TRUNG_Y_TOI_DA))
         da_loai.add(ma)
+        if ung_vien.get("ep_chon") and ung_vien.get("de_cu_nao"):   # 20/10/2026: đề cử trùng ý = không thực hiện được
+            _ghi_ep_chon_bi_loai(ma_kenh, [ung_vien], [], {"ly_do": {ma: "“{0}”: {1}".format(voi[:60], ly_do[:120])}},
+                                 vi_sao="trùng ý video đã làm")
         # 30/09/2026: nhớ TỆ vào bộ nhớ cổng chất lượng (`bien-tap/nho-cham.json`) — lượt sau biên tập
         # viên khỏi chấm lại, lớp này khỏi tốn thêm một lượt kiểm cho đúng nguồn ấy. Hỏng thì bỏ qua.
         try:

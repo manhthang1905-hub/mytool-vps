@@ -760,28 +760,40 @@ def _video_ban_giao(goc: str, tu_luc: float, bo_truoc: Optional[float] = None,
     return dem
 
 
-# ═══ TRẦN THEO Ổ ĐĨA (01/10/2026) ═══════════════════════════════════════════
+# ═══ TRẦN THEO Ổ ĐĨA (01/10/2026; mô hình lại 20/10/2026) ════════════════════
 #
-# Mô hình "đang dọn đều" (luật dọn `core/don_dep.py`):
-#   * PROJECTS: mỗi kênh giữ `giu_toi_da_luot` lượt xong + 1 lượt đang dựng →
-#     phần CỐ ĐỊNH = số kênh × (giữ + 1) × GB/lượt, KHÔNG tăng theo nhịp.
-#   * DONE: mỗi video nằm đó từ lúc bàn giao tới giờ công khai + 3 ngày (luật
-#     DONE) → phần TỈ LỆ = video/ngày × ngày nằm DONE × GB/video, trừ phần trùng
-#     liên kết cứng với `giữ` lượt mới nhất trong PROJECTS.
-#   * Sàn: luôn chừa `NGUONG_O_CHAN_GB` (dưới mức ấy van ổ chặn mở lượt mới).
+# Mô hình "THỜI GIAN SỐNG CỦA PHẦN NẶNG" (luật dọn thật `core/don_dep.py`):
+#   * Một lượt giữ phần NẶNG (ảnh cảnh, clip, mp3, `8-video.mp4`) từ lúc bắt đầu dựng tới lúc bị dọn — đo THẬT từ
+#     `CHANNEL/<k>/tu-chay/don-dep.log` (mốc dọn đầu tiên của gói) trừ mốc khâu đầu tiên trong `trang-thai.json`.
+#     Luật DONE (01/10, `NGAY_SAU_CONG_KHAI`) dọn CẢ gói DONE lẫn lượt PROJECTS ngay khi video đã lên YouTube, và gói
+#     DONE là liên kết cứng của `8-video.mp4` (một inode) — nên không có "phần DONE riêng" cộng thêm.
+#   * Ổn định: phần nặng đang nằm ≈ (video/ngày) × GB/lượt × ngày giữ nặng → trần = ngân sách / (GB/lượt × ngày).
+#   * Ngân sách = chỗ trống + phần nặng SẼ được dọn (lượt của kênh đang tự chạy, mới ≤ `NGAY_NANG_TAM` ngày) − sàn
+#     `NGUONG_O_CHAN_GB`. Phần nặng kẹt mãi (kênh đã tắt / trả kho, lượt hỏng bỏ dở cũ) KHÔNG phải ngân sách.
+#   * Bản 01/10 lấy "mỗi kênh luôn đầy `giu_toi_da_luot`+1 lượt nguyên" (8 × 4 × 0,75 = 24 GB) làm phần cố định rồi trừ
+#     vào ngân sách đã gồm chính phần đang nằm trên đĩa — ra trần 0 video/ngày dù ổ còn 20 GB, lượt dọn sau ~0,8 ngày.
+#     Trần `giu` chỉ là chặn trên (luật hai), giờ chỉ báo kèm (`chan_tren_projects_gb`).
 # Mọi cỡ đo theo inode (hardlink PROJECTS↔DONE chỉ tính một lần).
 
 NGUONG_O_CHAN_GB = 10.0  # = don_dep_mo_rong.NGUONG_O_GB
-GIO_CHO_DONE_SAU_CONG_KHAI = 72.0  # = don_dep.NGAY_SAU_CONG_KHAI
+#: Phần nặng của lượt mới hơn ngần này ngày (kênh đang tự chạy) coi là SẼ được dọn — cũ hơn là kẹt (không tính).
+NGAY_NANG_TAM = 7.0
+#: Không đo được thời gian giữ nặng (chưa có lượt dọn nào) → giả định ngần này ngày.
+NGAY_GIU_NANG_MAC_DINH = 2.0
 _MB = 1024.0 ** 2
 _GB = 1024.0 ** 3
+_RE_DON_LOG = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\tgói (\S+)\t[^\t]*\t(\d+) byte")
 
 
 def _tep_inode(thu_muc: str, da_thay: Optional[set] = None) -> int:
-    """Byte của mọi tệp dưới `thu_muc`, mỗi inode tính một lần (cập nhật `da_thay`)."""
+    """Byte của mọi tệp dưới `thu_muc` (hoặc chính tệp ấy), mỗi inode tính một lần (cập nhật `da_thay`)."""
     da_thay = da_thay if da_thay is not None else set()
     tong = 0
-    for cha, _thu, tep in os.walk(thu_muc):
+    if os.path.isfile(thu_muc):
+        ds = [(os.path.dirname(thu_muc), [os.path.basename(thu_muc)])]
+    else:
+        ds = [(cha, tep) for cha, _thu, tep in os.walk(thu_muc)]
+    for cha, tep in ds:
         for t in tep:
             try:
                 st = os.stat(os.path.join(cha, t))
@@ -795,13 +807,53 @@ def _tep_inode(thu_muc: str, da_thay: Optional[set] = None) -> int:
     return tong
 
 
+def _muc_nang() -> Sequence[str]:
+    try:
+        from .don_dep import _MUC_NANG_QUA_SO_LUOT  # noqa: PLC0415
+        return _MUC_NANG_QUA_SO_LUOT
+    except Exception:  # noqa: BLE001
+        return ("5-anh", "6-clip", "8-video.mp4", "9-video-capcut.mp4", "2-giong-doc.mp3", "8-nhac-nen.m4a",
+                "_lam-lai", "_dung-do", "_cat", "2-doan")
+
+
+def _luc_don_theo_goi(goc: str, ma_cac: Sequence[str]) -> Dict[str, float]:
+    """{mã gói: epoch lần dọn NẶNG đầu tiên (≥ 50 MB)} từ `CHANNEL/<k>/tu-chay/don-dep.log`."""
+    ra: Dict[str, float] = {}
+    for ma in ma_cac:
+        try:
+            with open(os.path.join(goc, "CHANNEL", ma, "tu-chay", "don-dep.log"), encoding="utf-8",
+                      errors="replace") as tep:
+                dong = tep.read().splitlines()
+        except OSError:
+            continue
+        for d in dong:
+            m = _RE_DON_LOG.match(d)
+            if not m or int(m.group(3)) < 50 * _MB:
+                continue
+            try:
+                luc = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").timestamp()
+            except ValueError:
+                continue
+            ra.setdefault(m.group(2), luc)
+    return ra
+
+
+def _bat_dau_luot(thu: str) -> Optional[float]:
+    du = _doc_json(os.path.join(thu, "trang-thai.json"))
+    khau = (du or {}).get("khau") if isinstance(du, dict) else None
+    bd = [float(m["bat_dau"]) for m in (khau or {}).values()
+          if isinstance(m, dict) and isinstance(m.get("bat_dau"), (int, float))]
+    return min(bd) if bd else None
+
+
 def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
-                    so_kenh: Optional[int] = None) -> Dict[str, Any]:
-    """Mỗi video cần bao nhiêu GB, ổ chịu được bao nhiêu video/ngày khi dọn đều.
+                    so_kenh: Optional[int] = None, bay_gio: Optional[float] = None) -> Dict[str, Any]:
+    """Mỗi video cần bao nhiêu GB·ngày, ổ chịu được bao nhiêu video/ngày khi dọn đều (mô hình ở đầu mục).
 
     `tran_video_ngay` = None khi chưa đo được (chưa có lượt/gói thật trên đĩa)."""
     from .kenh import doc_kenh  # noqa: PLC0415
 
+    bay = bay_gio if bay_gio is not None else datetime.now().timestamp()
     ma_cac: List[str] = []
     for d in sorted(glob.glob(os.path.join(goc, "CHANNEL", "*", "kenh.yaml"))):
         try:
@@ -823,11 +875,27 @@ def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
     giu = max(giu_ds) if giu_ds else 3
     giu = giu if giu > 0 else 3
 
-    # Đang dùng (PROJECTS + DONE, mỗi inode một lần)
+    # Đang dùng (PROJECTS + DONE, mỗi inode một lần) — chỉ để báo
     da_thay: set = set()
     dung = _tep_inode(os.path.join(goc, "PROJECTS", "AUTO"), da_thay)
     for d in done_ds:
         dung += _tep_inode(d, da_thay)
+
+    # Phần NẶNG sẽ được dọn: lượt của kênh đang tự chạy, sửa ≤ NGAY_NANG_TAM ngày (DONE là liên kết cứng — một inode)
+    nang = _muc_nang()
+    thay_nang: set = set()
+    nang_tam = 0
+    for ma in ma_cac:
+        for thu in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", ma, "*")):
+            try:
+                if not os.path.isdir(thu) or bay - os.path.getmtime(thu) > NGAY_NANG_TAM * 86400:
+                    continue
+            except OSError:
+                continue
+            for m in nang:
+                p = os.path.join(thu, m)
+                if os.path.exists(p):
+                    nang_tam += _tep_inode(p, thay_nang)
 
     # GB / lượt: lượt còn nguyên (có 8-video.mp4, chưa `da-don.json`)
     mau_luot: List[float] = []
@@ -838,30 +906,30 @@ def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
         b = _tep_inode(thu)
         if b >= 50 * _MB:
             mau_luot.append(b / _GB)
-    # GB / video DONE + số ngày nằm DONE (bàn giao → công khai + 3 ngày)
-    so = _doc_json(os.path.join(goc, "vm", "logs", "so-video-id.json")) or {}
+    # GB / video DONE (chỉ báo)
     mau_video: List[float] = []
-    mau_tre: List[float] = []
     for d in done_ds:
         for v in glob.glob(os.path.join(d, "*", "*.mp4")):
             try:
-                kt, mt = os.path.getsize(v), os.path.getmtime(v)
+                kt = os.path.getsize(v)
             except OSError:
                 continue
-            if kt < 10 * _MB:
+            if kt >= 10 * _MB:
+                mau_video.append(kt / _GB)
+    # Ngày giữ nặng: bắt đầu lượt → lần dọn nặng đầu tiên (30 ngày gần nhất)
+    luc_don = _luc_don_theo_goi(goc, ma_cac)
+    mau_song: List[float] = []
+    for ma in ma_cac:
+        for thu in glob.glob(os.path.join(goc, "PROJECTS", "AUTO", ma, "*")):
+            t1 = luc_don.get("{0}-{1}".format(ma, os.path.basename(thu)))
+            if t1 is None or bay - t1 > 30 * 86400:
                 continue
-            mau_video.append(kt / _GB)
-            ma = os.path.basename(os.path.dirname(v))
-            muc = so.get("{0}/{1}".format(ma.rsplit("-", 1)[0], ma)) if isinstance(so, dict) else None
-            try:
-                lich = datetime.strptime(str((muc or {}).get("lich") or ""), "%d/%m/%Y %H:%M")
-                mau_tre.append(max(0.0, (lich.timestamp() - mt) / 86400.0))
-            except ValueError:
-                pass
+            t0 = _bat_dau_luot(thu)
+            if t0 is not None and 0 < t1 - t0 < 30 * 86400:
+                mau_song.append((t1 - t0) / 86400.0)
     g_luot = statistics.median(mau_luot) if mau_luot else None
     g_video = statistics.median(mau_video) if mau_video else None
-    tre = statistics.median(mau_tre) if mau_tre else 1.0
-    ngay_done = tre + GIO_CHO_DONE_SAU_CONG_KHAI / 24.0 + 1.0 / 24.0
+    ngay_nang = statistics.median(mau_song) if len(mau_song) >= 3 else NGAY_GIU_NANG_MAC_DINH
     if con_trong_gb is None:
         try:
             import shutil  # noqa: PLC0415
@@ -870,23 +938,20 @@ def tran_theo_o_dia(goc: str, *, con_trong_gb: Optional[float] = None,
         except OSError:
             con_trong_gb = None
     ra: Dict[str, Any] = {"so_kenh": n_kenh, "giu_luot": giu, "con_trong_gb": _r(con_trong_gb),
-                          "dang_dung_gb": round(dung / _GB, 2), "gb_moi_luot": _r(g_luot),
-                          "gb_moi_video_done": _r(g_video), "ngay_nam_done": round(ngay_done, 2),
+                          "dang_dung_gb": round(dung / _GB, 2), "nang_se_don_gb": round(nang_tam / _GB, 2),
+                          "gb_moi_luot": _r(g_luot), "gb_moi_video_done": _r(g_video),
+                          "ngay_giu_nang": round(ngay_nang, 2), "mau_giu_nang": len(mau_song),
                           "nguong_chan_gb": NGUONG_O_CHAN_GB, "mau_luot": len(mau_luot),
                           "mau_video": len(mau_video), "tran_video_ngay": None}
     if g_luot is None and g_video is None or con_trong_gb is None or n_kenh <= 0:
         return ra
-    g_video = g_video if g_video is not None else 0.4
-    g_luot = g_luot if g_luot is not None else g_video * 2.5
-    co_dinh = n_kenh * (giu + 1) * g_luot
-    ngan_sach = con_trong_gb + dung / _GB - NGUONG_O_CHAN_GB
-    gb_ngay = g_video * ngay_done  # GB·ngày mỗi video (phần tỉ lệ)
-    trung = n_kenh * giu  # video nằm cả PROJECTS lẫn DONE (một inode)
-    tran = max(0.0, (ngan_sach - co_dinh) / gb_ngay + trung / ngay_done) if ngan_sach > co_dinh \
-        else 0.0
-    ra.update({"co_dinh_projects_gb": round(co_dinh, 1), "ngan_sach_gb": round(ngan_sach, 1),
-               "gb_ngay_moi_video": round(gb_ngay, 2),
-               "gb_moi_video": round(g_luot + g_video, 2),
+    g_luot = g_luot if g_luot is not None else (g_video if g_video is not None else 0.4) * 2.5
+    ngan_sach = con_trong_gb + nang_tam / _GB - NGUONG_O_CHAN_GB
+    gb_ngay = g_luot * max(ngay_nang, 1.0 / 24.0)   # GB·ngày mỗi video
+    tran = max(0.0, ngan_sach / gb_ngay) if ngan_sach > 0 else 0.0
+    ra.update({"ngan_sach_gb": round(ngan_sach, 1), "gb_ngay_moi_video": round(gb_ngay, 2),
+               "gb_moi_video": round(g_luot, 2),
+               "chan_tren_projects_gb": round(n_kenh * (giu + 1) * g_luot, 1),
                "tran_video_ngay": round(tran, 1)})
     return ra
 
@@ -898,11 +963,11 @@ def _r(x: Optional[float]) -> Optional[float]:
 def cau_o_dia(o: Dict[str, Any]) -> str:
     if not o or o.get("tran_video_ngay") is None:
         return ""
-    return ("Ổ đĩa: mỗi video ~{0} GB lúc dựng + {1} GB nằm DONE ~{2} ngày; cố định PROJECTS "
-            "{3} GB ({4} kênh × {5}+1 lượt) → ổ chịu ≈ {6} video/ngày (chừa sàn {7:g} GB)").format(
-                o.get("gb_moi_luot"), o.get("gb_moi_video_done"), o.get("ngay_nam_done"),
-                o.get("co_dinh_projects_gb"), o.get("so_kenh"), o.get("giu_luot"),
-                o.get("tran_video_ngay"), o.get("nguong_chan_gb"))
+    return ("Ổ đĩa: mỗi video ~{0} GB nặng, giữ ~{1} ngày (dựng → dọn sau khi lên YouTube, {2} mẫu) = {3} GB·ngày; "
+            "ngân sách {4} GB (trống {5} + nặng sẽ dọn {6} − sàn {7:g}) → ổ chịu ≈ {8} video/ngày").format(
+                o.get("gb_moi_video"), o.get("ngay_giu_nang"), o.get("mau_giu_nang"), o.get("gb_ngay_moi_video"),
+                o.get("ngan_sach_gb"), o.get("con_trong_gb"), o.get("nang_se_don_gb"), o.get("nguong_chan_gb"),
+                o.get("tran_video_ngay"))
 
 
 def cong_suat_hien_tai(goc: str, *, gio: float = 24.0,

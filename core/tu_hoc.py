@@ -887,10 +887,50 @@ def _dem(van: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, float]
     return ra
 
 
+#: 20/10/2026 — kết quả A/B tiêu đề YouTube (`core.ab_tieu_de.ket_qua_xong`): một cặp thắng/thua TRÊN CÙNG video là
+#: bằng chứng sạch (cùng nội dung, cùng bìa, cùng giờ) → nhãn thắng a += trọng số, mỗi nhãn thua (khác nhãn) b += trọng
+#: số. Thắng suy từ số / từ tiêu đề hiện tại (không có cờ của YouTube) nặng một nửa.
+TRONG_SO_AB = 1.0
+
+
+def _dem_ab(goc: str, ma_kenh: str) -> Dict[str, Dict[str, float]]:
+    """`{nhãn kieu_tieu_de: {a, b, n_ab, thang_ab}}` từ các thử nghiệm A/B đã có bản thắng. Hỏng → {} (có cảnh báo)."""
+    ra: Dict[str, Dict[str, float]] = {}
+    try:
+        from .ab_tieu_de import ket_qua_xong  # noqa: PLC0415
+        ds = ket_qua_xong(goc, ma_kenh)
+    except Exception as loi:  # noqa: BLE001
+        canh_bao(goc, "ab_tieu_de", loi, ma_kenh)
+        return {}
+    for k in ds:
+        thang = chuan_nhan("kieu_tieu_de", k.get("nhan_thang"))
+        if not thang:
+            continue
+        w = TRONG_SO_AB * (0.5 if k.get("suy_ra") else 1.0)
+        thua = [t for t in (chuan_nhan("kieu_tieu_de", x) for x in k.get("nhan_thua") or []) if t and t != thang]
+        if not thua:
+            continue
+        o = ra.setdefault(thang, {"a": 0.0, "b": 0.0, "n_ab": 0, "thang_ab": 0})
+        o["a"] += w
+        o["n_ab"] += 1
+        o["thang_ab"] += 1
+        for t in thua:
+            p = ra.setdefault(t, {"a": 0.0, "b": 0.0, "n_ab": 0, "thang_ab": 0})
+            p["b"] += w
+            p["n_ab"] += 1
+    return ra
+
+
 def bang_diem(goc: str, ma_kenh: str) -> Dict[str, Dict[str, Dict[str, float]]]:
-    """`{trục: {giá trị: {"a", "b", "n", "thang", [n_tv, thang_tv, n_ctr, thang_ctr]}}}` — a/b là tham số Beta
-    (1 + số có trọng số của kênh + tiên nghiệm nhóm × 0,3)."""
+    """`{trục: {giá trị: {"a", "b", "n", "thang", [n_tv, thang_tv, n_ctr, thang_ctr, n_ab, thang_ab]}}}` — a/b là tham
+    số Beta (1 + số có trọng số của kênh + cặp thắng/thua A/B tiêu đề của kênh + tiên nghiệm nhóm × 0,3)."""
     own = _dem(doc_van(goc, ma_kenh))
+    for gt, o_ab in _dem_ab(goc, ma_kenh).items():
+        o = own.setdefault("kieu_tieu_de", {}).setdefault(gt, _o_moi())
+        o["a"] += o_ab["a"]
+        o["b"] += o_ab["b"]
+        o["n_ab"] = int(o.get("n_ab") or 0) + int(o_ab["n_ab"])
+        o["thang_ab"] = int(o.get("thang_ab") or 0) + int(o_ab["thang_ab"])
     nhom: Dict[str, Dict[str, Dict[str, float]]] = {}
     try:
         from .nhom_kenh import thanh_vien  # noqa: PLC0415
@@ -914,6 +954,8 @@ def bang_diem(goc: str, ma_kenh: str) -> Dict[str, Dict[str, Dict[str, float]]]:
                                            "n": int(o["n"]), "thang": int(o["thang"])}
             if o.get("n_ctr"):
                 ra[truc][gt].update({"n_ctr": int(o["n_ctr"]), "thang_ctr": int(o["thang_ctr"])})
+            if o.get("n_ab"):
+                ra[truc][gt].update({"n_ab": int(o["n_ab"]), "thang_ab": int(o.get("thang_ab") or 0)})
     return ra
 
 

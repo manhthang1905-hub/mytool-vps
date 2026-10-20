@@ -230,16 +230,52 @@ def _ngay(chu: Any) -> Optional[_dt.date]:
         return None
 
 
-def ti_le_dung(ds: List[Dict[str, Any]]) -> Tuple[int, int]:
+#: Kết cục của hành động KHÔNG THỰC HIỆN ĐƯỢC (20/10/2026): đề cử nguồn vướng cổng / đã làm / anh em giữ / biên tập
+#: phủ quyết / quá hạn chưa vào sản xuất — không có video nào để đúng hay sai. Không bao giờ là "sai".
+CHAM_KHONG_THUC_HIEN = "khong_thuc_hien"
+
+
+#: Dòng chấm CŨ (trước khi `ghi_ban_giao` ghi `tham_so.goi`, 12/10/2026) vẫn được tính là đã thực hiện nếu lời chấm nêu
+#: một video thật (mã 11 ký tự) và không tự nói "không có gói / không có hiệu lực".
+_RE_CHAM_CO_VIDEO = re.compile(r"\bvideo\b[^.;]{0,30}?(?<![\w-])[\w-]{11}(?![\w-])")
+_CHAM_KHONG_CO_VIDEO = ("không gói", "không làm từ", "chưa có video", "không có video", "không có hiệu lực")
+
+
+def da_thuc_hien(d: Dict[str, Any]) -> bool:
+    """Hành động đã THẬT SỰ chạy ra sản phẩm chưa — `uu-tien-nguon` chỉ khi có gói bàn giao (`tham_so.goi`), hoặc dòng
+    chấm cũ nêu đúng video đã làm (`_RE_CHAM_CO_VIDEO`); lệnh khác coi như đã thực hiện (bộ chấm cũ)."""
+    if d.get("lenh") != "uu-tien-nguon":
+        return True
+    if (d.get("tham_so") or {}).get("goi"):
+        return True
+    g = str(d.get("ghi_chu_cham") or "")
+    return bool(d.get("cham") in ("dung", "sai") and _RE_CHAM_CO_VIDEO.search(g)
+                and not any(x in g for x in _CHAM_KHONG_CO_VIDEO))
+
+
+def ti_le_dung(ds: List[Dict[str, Any]], goc: str = "") -> Tuple[int, int]:
     """`(số đúng, số đã chấm)` — chỉ tính hành động có dự đoán (không tính ghi cộng/trừ, không tính đề cử MÁY tạo —
-    `tu_dong`, vd radar thị trường: phòng thí nghiệm đo chúng, không phải quyền của não)."""
-    da = [d for d in ds if d.get("cham") in ("dung", "sai") and not d.get("khong_tinh") and not d.get("tu_dong")]
+    `tu_dong`, vd radar thị trường: phòng thí nghiệm đo chúng, không phải quyền của não).
+
+    20/10/2026: CHỈ hành động ĐÃ THỰC HIỆN (`da_thuc_hien`) — dòng cũ chấm "sai" cho đề cử chưa từng ra gói (lỗi dây
+    chuyền, không phải lỗi não) bị bỏ khi tính, không sửa sổ; `goc` cho trước thì bỏ cả kênh đã trả kho (kênh không
+    được phân phối)."""
+    bo: set = set()
+    if goc:
+        try:
+            from .kenh import liet_ke_kenh  # noqa: PLC0415
+
+            bo = set(liet_ke_kenh(goc, ca_tra_kho=True)) - set(liet_ke_kenh(goc))
+        except Exception:  # noqa: BLE001
+            bo = set()
+    da = [d for d in ds if d.get("cham") in ("dung", "sai") and not d.get("khong_tinh") and not d.get("tu_dong")
+          and da_thuc_hien(d) and str((d.get("tham_so") or {}).get("kenh") or "") not in bo]
     return sum(1 for d in da if d["cham"] == "dung"), len(da)
 
 
-def han_muc_ngay(ds: List[Dict[str, Any]]) -> int:
+def han_muc_ngay(ds: List[Dict[str, Any]], goc: str = "") -> int:
     """Quyền theo thành tích: ≥ 10 hành động đã chấm mà đúng < 50% thì chỉ 1 hành động/ngày."""
-    dung, tong = ti_le_dung(ds)
+    dung, tong = ti_le_dung(ds, goc)
     if tong >= TOI_THIEU_DA_CHAM and dung / tong < TI_LE_DUNG_TOI_THIEU:
         return TOI_DA_MOI_NGAY_KEM
     return TOI_DA_MOI_NGAY
@@ -313,9 +349,9 @@ def _tao_hanh_dong_g(goc: str, lenh: str, tham_so: Dict[str, Any], *, ly_do: str
             raise TuChoi("--kiem-ngay tối đa {0} ngày kể từ hôm nay".format(TOI_DA_NGAY_KIEM))
         da_dung = sum(1 for d in ds if str(d.get("luc") or "")[:10] == hom_nay
                       and not d.get("khong_tinh") and not d.get("ngoai_han_muc") and d.get("trang_thai") != "huy")
-        tran = han_muc_ngay(ds)
+        tran = han_muc_ngay(ds, goc)
         if da_dung >= tran and not radar:
-            dung, tong = ti_le_dung(ds)
+            dung, tong = ti_le_dung(ds, goc)
             vi_sao = (" (quyền bị co vì tỉ lệ đúng {0}/{1} < 50% — chấm lại cho thật thà và rút kinh nghiệm)"
                       .format(dung, tong) if tran < TOI_DA_MOI_NGAY else "")
             raise TuChoi("hôm nay đã dùng {0}/{1} hành động{2}".format(da_dung, tran, vi_sao))
@@ -691,6 +727,7 @@ def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         la_radar_tt = bool((hd.get("tham_so") or {}).get("radar_thi_truong"))
         if khoa in (getattr(nc, "loai_tru", None) or ()):
             nc.ghi("  [bộ não] đề cử {0}: nguồn đã làm / đang được kênh anh em giữ — không ép.".format(hd.get("id")))
+            ghi_khong_duoc(nc.ma_kenh, hd.get("id"), "nguồn đã làm / đang được kênh anh em giữ")
             continue
         x = bang.get(khoa)
         if x is None and la_radar_tt:
@@ -710,6 +747,7 @@ def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         d, ly = x
         if ly and not any(m in ly for m in CONG_MEM_EP):
             nc.ghi("  [bộ não] đề cử {0}: vướng cổng chất lượng “{1}” — không ép.".format(hd.get("id"), ly[:80]))
+            ghi_khong_duoc(nc.ma_kenh, hd.get("id"), "vướng cổng chất lượng “{0}”".format(ly[:120]))
             continue
         hang = next((i + 1 for i, u in enumerate(getattr(kq, "ung_vien", None) or [])
                      if str(getattr(u, "ma", "") or "") == khoa), 0)
@@ -727,6 +765,33 @@ def ep_chon(nc: Any, ds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         nc.ghi("  [bộ não] ép chọn: nối “{0}” vào bảng (đề cử {1}).".format(
             str(u.get("tieu_de") or "")[:60], (u.get("tin_hieu") or {}).get("ep_chon_nao")))
     return list(ds) + them
+
+
+#: id đề cử → lý do KHÔNG THỰC HIỆN ĐƯỢC mà lượt chọn này phát hiện (`ep_chon`: đã làm / anh em giữ / cổng cứng;
+#: `tu_chay`: biên tập phủ quyết / trùng ý). Chỉ trong bộ nhớ — `ep_chon` còn được trạm gọi, KHÔNG ghi đĩa; lượt chọn
+#: THẬT (`dung_xong_de_cu`) mới đọc và đóng đề cử.
+_DE_CU_KHONG_DUOC: Dict[str, Dict[str, str]] = {}
+
+
+def ghi_khong_duoc(kenh: str, id_: Any, ly_do: str) -> None:
+    """Ghi (bộ nhớ) lý do đề cử `id_` của kênh không thực hiện được ở lượt chọn đang chạy."""
+    if id_:
+        _DE_CU_KHONG_DUOC.setdefault(str(kenh), {}).setdefault(str(id_), str(ly_do)[:240])
+
+
+def _khong_thuc_hien(d: Dict[str, Any], ly_do: str, luc: str = "") -> None:
+    """Đóng một hành động là KHÔNG THỰC HIỆN ĐƯỢC (không tính điểm, không bao giờ là `sai`)."""
+    d["trang_thai"] = "xong"
+    d["khong_tinh"] = True
+    d["cham"] = CHAM_KHONG_THUC_HIEN
+    d["ghi_chu_cham"] = "không thực hiện được: " + str(ly_do)[:300]
+    d["cham_luc"] = luc or _dt.datetime.now().replace(microsecond=0).isoformat()
+
+
+def _thu_tu_giu_cho(u: Dict[str, Any], hd: Dict[str, Any]) -> Tuple[str, str]:
+    """Thứ tự TIÊU giữ chỗ khi kênh có nhiều đề cử mở: hạn sản xuất sớm nhất (radar) trước, rồi đề cử cũ nhất."""
+    ts = hd.get("tham_so") or {}
+    return (str(ts.get("han_san_xuat") or "9999"), str(hd.get("luc") or ""))
 
 
 def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -> List[Dict[str, Any]]:
@@ -753,6 +818,7 @@ def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -
             u["bo_nao"] = d.get("ly_do") or "đề cử của bộ não"
             u["ep_chon"] = True
             u["de_cu_nao"] = d.get("id")
+            u["_giu_cho"] = _thu_tu_giu_cho(u, d)
             if (d.get("tham_so") or {}).get("radar_thi_truong"):
                 u = _gan_radar(u, d)
             dau.append(u)
@@ -764,6 +830,9 @@ def ap_uu_tien(goc: str, kenh: str, ds: List[Dict[str, Any]], log: Any = None) -
                 if d["id"] not in _DE_CU_THAY.get(kenh, ()):
                     log("  [bộ não] đề cử {0} KHÔNG có trong danh sách ứng viên (bị lọc: đã làm / quá cũ / lạc ngách / "
                         "thiếu lời thoại) — giữ lại cho lượt sau".format(d["id"]))
+        # 20/10/2026 — GIỮ CHỖ CỨNG: nhiều đề cử mở thì tiêu theo hạn (radar 48h trước), rồi cũ nhất trước — lượt này
+        # tiêu một, các đề cử còn lại vẫn giữ chỗ cho lượt sau (không bị tính vắng / bỏ qua).
+        dau.sort(key=lambda u: u.pop("_giu_cho", ("9999", "")))
         return dau + con if dau else ds
     except Exception:  # noqa: BLE001
         return ds
@@ -789,77 +858,175 @@ _DE_CU_THAY: Dict[str, set] = {}
 DE_CU_VANG_TOI_DA = 3
 
 
-def _dung_xong_de_cu_g(goc: str, kenh: str, chon: str = "", bay_gio: Optional[_dt.datetime] = None) -> int:
+def _dung_xong_de_cu_g(goc: str, kenh: str, chon: str = "", bay_gio: Optional[_dt.datetime] = None,
+                       chon_tay: bool = False) -> int:
     """Lần chọn content thật đã chạy (`chon` = link nguồn lượt này lấy) → cập nhật đề cử mở của kênh.
 
-    12/10/2026 (`workspace/chan-doan/nao-vong-hoc-2026-10-12.md` #6): trước đây đề cử CÓ MẶT trong bảng là `xong` ngay
-    — 3 đề cử có mặt, bị biên tập AI xếp xuống, lượt chọn nguồn khác mà vẫn ghi đã dùng. Giờ CHỈ `ghi_ban_giao` (gói
-    bàn giao dùng ĐÚNG link) mới đóng `xong`. Ở đây:
-      * link == `chon` → ghi `chon_luc` (đang sản xuất), vẫn mở chờ bàn giao; quá `NGAY_CHO_BAN_GIAO` ngày không bàn
-        giao → đóng `khong_tinh`;
-      * có trong bảng mà lượt chọn nguồn khác (bị phủ quyết / trùng ý) → đếm `lan_bo_qua`; vắng khỏi bảng → đếm
-        `lan_vang`; mỗi loại tới `DE_CU_VANG_TOI_DA` lượt thì đóng `khong_tinh` kèm lý do để não tự quyết lại."""
+    12/10/2026 (`workspace/chan-doan/nao-vong-hoc-2026-10-12.md` #6): CHỈ `ghi_ban_giao` (gói bàn giao dùng ĐÚNG link)
+    mới đóng `xong` có hiệu lực.
+
+    20/10/2026 — GIỮ CHỖ CỨNG (55 đề cử → 5 gói, 9%; phần lớn "sai" là vì nguồn chưa từng được sản xuất): đề cử là một
+    chỗ giữ mà lượt sản xuất KẾ của kênh phải tiêu. Ở đây:
+      * link == `chon` → ghi `chon_luc` (đang sản xuất), mở chờ bàn giao; quá `NGAY_CHO_BAN_GIAO` ngày → KHÔNG THỰC
+        HIỆN ĐƯỢC;
+      * lượt này phát hiện nguồn KHÔNG HỢP LỆ (`_DE_CU_KHONG_DUOC`: đã làm / anh em giữ / cổng cứng / biên tập phủ quyết
+        / trùng ý) → đóng NGAY là KHÔNG THỰC HIỆN ĐƯỢC kèm lý do (không đợi 3 lượt, không bao giờ "sai");
+      * lượt này tiêu một đề cử KHÁC của kênh, hoặc người chốt tay (`chon_tay`) → đề cử còn lại GIỮ CHỖ, không đếm;
+      * radar quá `GIO_RADAR_SAN_XUAT` chưa vào sản xuất → KHÔNG THỰC HIỆN ĐƯỢC;
+      * còn lại (lý do không rõ): có trong bảng mà không được chọn → `lan_bo_qua`; vắng khỏi bảng (thường: chưa có
+        trong sổ content — đợi quét) → `lan_vang`; tới `DE_CU_VANG_TOI_DA` lượt → KHÔNG THỰC HIỆN ĐƯỢC."""
     try:
         ds = doc_hanh_dong(goc)
         thay = _DE_CU_THAY.pop(kenh, set())
+        khong = _DE_CU_KHONG_DUOC.pop(kenh, {})
         n = 0
         bg = bay_gio or _dt.datetime.now()
         luc = bg.replace(microsecond=0).isoformat()
         khoa_chon = _khoa_link(chon) if chon else ""
-        for d in ds:
-            if d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo" and (d.get("tham_so") or {}).get("kenh") == kenh:
-                ts = d.setdefault("tham_so", {})
-                if khoa_chon and _khoa_link(ts.get("link")) == khoa_chon:
-                    ts["chon_luc"] = luc
-                    ts["lan_chon"] = int(ts.get("lan_chon") or 0) + 1
-                    n += 1
-                    continue
-                if ts.get("chon_luc"):
-                    try:
-                        cho = (bg - _dt.datetime.fromisoformat(str(ts["chon_luc"]))).days
-                    except (TypeError, ValueError):
-                        cho = 0
-                    if cho <= NGAY_CHO_BAN_GIAO:
-                        continue  # đang sản xuất (nguồn nằm trong "đã làm" nên vắng khỏi bảng) — chờ bàn giao
-                    d["trang_thai"] = "xong"
-                    d["khong_tinh"] = True
-                    d["ghi_chu_cham"] = ("đã chọn {0} nhưng {1} ngày chưa bàn giao được video — không có hiệu lực, "
-                                         "không tính điểm").format(str(ts["chon_luc"])[:10], cho)
-                    n += 1
-                    continue
-                if _radar_qua_han(d, bg):
-                    d["trang_thai"] = "xong"
-                    d["khong_tinh"] = True
-                    d["ghi_chu_cham"] = ("radar: quá {0} giờ chưa vào sản xuất — không có hiệu lực, không tính "
-                                         "điểm").format(GIO_RADAR_SAN_XUAT)
-                    n += 1
-                    continue
-                if d.get("id") in thay:
-                    ts["lan_bo_qua"] = int(ts.get("lan_bo_qua") or 0) + 1
-                    ts["bo_qua_luc"] = luc
-                    if ts["lan_bo_qua"] >= DE_CU_VANG_TOI_DA:
-                        d["trang_thai"] = "xong"
-                        d["khong_tinh"] = True
-                        d["ghi_chu_cham"] = ("có trong bảng ứng viên nhưng không được chọn {0} lượt (biên tập phủ "
-                                             "quyết / trùng ý / thiếu lời thoại) — không có hiệu lực, không tính "
-                                             "điểm").format(ts["lan_bo_qua"])
-                    n += 1
-                    continue
-                else:
-                    ts["lan_vang"] = int(ts.get("lan_vang") or 0) + 1
-                    if ts["lan_vang"] < DE_CU_VANG_TOI_DA:
-                        n += 1
-                        continue
-                    d["trang_thai"] = "xong"
-                    d["khong_tinh"] = True
-                    d["ghi_chu_cham"] = ("nguồn đề cử không vào danh sách ứng viên {0} lượt (bị lọc: đã làm / quá cũ / "
-                                         "lạc ngách / thiếu lời thoại) — không có hiệu lực, không tính điểm").format(ts["lan_vang"])
+        mo = [d for d in ds if d.get("lenh") == "uu-tien-nguon" and d.get("trang_thai") == "mo"
+              and (d.get("tham_so") or {}).get("kenh") == kenh]
+        tieu_de_cu_khac = bool(khoa_chon) and any(_khoa_link((d.get("tham_so") or {}).get("link")) == khoa_chon
+                                                  for d in mo)
+        for d in mo:
+            ts = d.setdefault("tham_so", {})
+            if khoa_chon and _khoa_link(ts.get("link")) == khoa_chon:
+                ts["chon_luc"] = luc
+                ts["lan_chon"] = int(ts.get("lan_chon") or 0) + 1
                 n += 1
+                continue
+            if ts.get("chon_luc"):
+                try:
+                    cho = (bg - _dt.datetime.fromisoformat(str(ts["chon_luc"]))).days
+                except (TypeError, ValueError):
+                    cho = 0
+                if cho <= NGAY_CHO_BAN_GIAO:
+                    continue  # đang sản xuất (nguồn nằm trong "đã làm" nên vắng khỏi bảng) — chờ bàn giao
+                _khong_thuc_hien(d, "đã chọn {0} nhưng {1} ngày chưa bàn giao được video".format(
+                    str(ts["chon_luc"])[:10], cho), luc)
+                n += 1
+                continue
+            ly = khong.get(str(d.get("id")))
+            if ly:
+                _khong_thuc_hien(d, ly, luc)
+                n += 1
+                continue
+            if _radar_qua_han(d, bg):
+                _khong_thuc_hien(d, "radar: quá {0} giờ chưa vào sản xuất".format(GIO_RADAR_SAN_XUAT), luc)
+                n += 1
+                continue
+            if tieu_de_cu_khac or chon_tay:
+                ts["giu_cho_luc"] = luc     # lượt này tiêu đề cử khác / người chốt tay — chỗ này đợi lượt sau
+                n += 1
+                continue
+            if d.get("id") in thay:
+                ts["lan_bo_qua"] = int(ts.get("lan_bo_qua") or 0) + 1
+                ts["bo_qua_luc"] = luc
+                if ts["lan_bo_qua"] >= DE_CU_VANG_TOI_DA:
+                    _khong_thuc_hien(d, "có trong bảng ứng viên nhưng không được chọn {0} lượt (biên tập phủ quyết / "
+                                        "trùng ý / thiếu lời thoại)".format(ts["lan_bo_qua"]), luc)
+                n += 1
+                continue
+            ts["lan_vang"] = int(ts.get("lan_vang") or 0) + 1
+            if ts["lan_vang"] >= DE_CU_VANG_TOI_DA:
+                _khong_thuc_hien(d, "nguồn đề cử không vào danh sách ứng viên {0} lượt (chưa có trong sổ content / "
+                                    "quá cũ / lạc ngách)".format(ts["lan_vang"]), luc)
+            n += 1
         if n:
             ghi_hanh_dong(goc, ds)
         return n
     except Exception:  # noqa: BLE001
         return 0
+
+
+# ── chuyển đổi "ép chọn → ra gói" (20/10/2026) ───────────────────────────────
+
+TEP_CHUYEN_DOI = "ep-chon-chuyen-doi.jsonl"
+
+
+def chuyen_doi_ep_chon(goc: str, ngay: int = 14, ds: Optional[List[Dict[str, Any]]] = None,
+                       bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Đo "ép chọn → ra gói" của mọi `uu-tien-nguon` tạo trong `ngay` ngày qua (bỏ kênh trả kho):
+    `{tu, den, tao, ra_goi, dang_chay, dang_mo, khong_thuc_hien, khac, ti_le, ly_do: {lý do: n}, theo_ngay: {...}}`.
+    `ti_le` = ra gói / (tạo − còn giữ chỗ − đang chạy) — chỉ tính đề cử đã có kết cục."""
+    ds = ds if ds is not None else doc_hanh_dong(goc)
+    bg = bay_gio or _dt.datetime.now()
+    tu = (bg.date() - _dt.timedelta(days=max(1, int(ngay)) - 1)).isoformat()
+    try:
+        from .kenh import liet_ke_kenh  # noqa: PLC0415
+
+        bo = set(liet_ke_kenh(goc, ca_tra_kho=True)) - set(liet_ke_kenh(goc))
+    except Exception:  # noqa: BLE001
+        bo = set()
+    dem = {"tao": 0, "ra_goi": 0, "dang_chay": 0, "dang_mo": 0, "khong_thuc_hien": 0, "khac": 0}
+    ly: Dict[str, int] = {}
+    theo_ngay: Dict[str, Dict[str, int]] = {}
+    for d in ds:
+        ts = d.get("tham_so") or {}
+        ngay_tao = str(d.get("luc") or "")[:10]
+        if d.get("lenh") != "uu-tien-nguon" or ngay_tao < tu or d.get("trang_thai") == "huy" or \
+                str(ts.get("kenh") or "") in bo:
+            continue
+        if ts.get("goi") or (d.get("trang_thai") != "mo" and da_thuc_hien(d)):
+            loai = "ra_goi"
+        elif d.get("trang_thai") == "mo":
+            loai = "dang_chay" if ts.get("chon_luc") else "dang_mo"
+        else:   # đã đóng mà không có gói = không thực hiện (kể cả dòng cũ từng bị chấm đúng/sai khi chưa ra gói)
+            loai = "khong_thuc_hien"
+            if d.get("cham") in ("dung", "sai"):
+                g = "chưa ra gói (dòng cũ từng bị chấm {0})".format(d["cham"])
+            else:
+                g = str(d.get("ghi_chu_cham") or "").replace("không thực hiện được: ", "").split(" — ")[0]
+                g = re.sub(r"\(hạn [^)]*\)", "", re.sub(r"“[^”]*”", "“…”", g))
+                g = re.sub(r"\s+", " ", re.sub(r"\d+", "N", g)).strip()[:70] or "?"
+            ly[g] = ly.get(g, 0) + 1
+        dem["tao"] += 1
+        dem[loai] += 1
+        o = theo_ngay.setdefault(ngay_tao, {"tao": 0, "ra_goi": 0})
+        o["tao"] += 1
+        o["ra_goi"] += 1 if loai == "ra_goi" else 0
+    xong = dem["tao"] - dem["dang_mo"] - dem["dang_chay"]
+    return dict(dem, tu=tu, den=bg.date().isoformat(), ti_le=round(dem["ra_goi"] / xong, 3) if xong else None,
+                ly_do=dict(sorted(ly.items(), key=lambda x: -x[1])), theo_ngay=dict(sorted(theo_ngay.items())))
+
+
+def dong_chuyen_doi(cd: Dict[str, Any]) -> str:
+    """Một dòng người đọc được cho báo cáo não / báo cáo ngày."""
+    if not cd or not cd.get("tao"):
+        return "Ép chọn → ra gói: chưa có đề cử nguồn nào trong {0} → {1}.".format(
+            (cd or {}).get("tu", "?"), (cd or {}).get("den", "?"))
+    ly = "; ".join("{0} ×{1}".format(k, v) for k, v in list((cd.get("ly_do") or {}).items())[:3])
+    return ("Ép chọn → ra gói ({0} → {1}): {2} đề cử, ra gói {3}{4}, đang chạy {5}, còn giữ chỗ {6}, không thực hiện "
+            "được {7}{8}.").format(cd["tu"], cd["den"], cd["tao"], cd["ra_goi"],
+                                  " ({0:.0%} đề cử đã có kết cục)".format(cd["ti_le"]) if cd.get("ti_le") is not None
+                                  else "", cd["dang_chay"], cd["dang_mo"], cd["khong_thuc_hien"],
+                                  " — " + ly if ly else "")
+
+
+def ghi_chuyen_doi(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Dict[str, Any]:
+    """Ghi một dòng/ngày (lần ghi cuối trong ngày thay dòng cùng ngày) vào `nao/nhat-ky/ep-chon-chuyen-doi.jsonl`:
+    cả cửa sổ 14 ngày lẫn riêng đề cử tạo hôm qua. Hỏng → {} (có cảnh báo), không ném."""
+    try:
+        bg = bay_gio or _dt.datetime.now()
+        ds = doc_hanh_dong(goc)
+        cd = chuyen_doi_ep_chon(goc, 14, ds=ds, bay_gio=bg)
+        hom_qua = (bg.date() - _dt.timedelta(days=1)).isoformat()
+        dong = {"ngay": bg.date().isoformat(), "luc": bg.replace(microsecond=0).isoformat(),
+                "cua_so_14": {k: v for k, v in cd.items() if k != "theo_ngay"},
+                "hom_qua": cd.get("theo_ngay", {}).get(hom_qua, {"tao": 0, "ra_goi": 0})}
+        p = os.path.join(duong_nao(goc), "nhat-ky", TEP_CHUYEN_DOI)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        cu: List[str] = []
+        try:
+            with open(p, "r", encoding="utf-8") as tep:
+                cu = [x for x in tep.read().splitlines()
+                      if x.strip() and (json.loads(x) or {}).get("ngay") != dong["ngay"]]
+        except (OSError, ValueError):
+            pass
+        _ghi_nguyen_tu(p, "\n".join(cu[-400:] + [json.dumps(dong, ensure_ascii=False)]) + "\n")
+        return cd
+    except Exception as loi:  # noqa: BLE001
+        _canh_bao(goc, "nao.ghi_chuyen_doi", loi)
+        return {}
 
 
 def ghi_ban_giao(goc: str, kenh: str, ma_goi: str, link: str, bay_gio: Optional[_dt.datetime] = None) -> List[str]:
@@ -956,11 +1123,12 @@ def bao_cao_hanh_dong(goc: str, bay_gio: Optional[_dt.datetime] = None, chi_can_
     hom_nay = _hom_nay(bay_gio)
     ds = doc_hanh_dong(goc)
     don_het_han(goc, ds, bay_gio)
-    dung, tong = ti_le_dung(ds)
+    dung, tong = ti_le_dung(ds, goc)
     da = sum(1 for d in ds if str(d.get("luc") or "")[:10] == hom_nay and not d.get("khong_tinh")
              and not d.get("ngoai_han_muc") and d.get("trang_thai") != "huy")
-    dong = ["Hành động của não: {0} tổng; đã chấm {1} (đúng {2}); hôm nay dùng {3}/{4} hành động.".format(
-        len(ds), tong, dung, da, han_muc_ngay(ds))]
+    dong = ["Hành động của não: {0} tổng; đã chấm {1} (đúng {2}, chỉ hành động đã ra sản phẩm); hôm nay dùng {3}/{4} "
+            "hành động.".format(len(ds), tong, dung, da, han_muc_ngay(ds, goc)),
+            dong_chuyen_doi(chuyen_doi_ep_chon(goc, ds=ds, bay_gio=bay_gio))]
     hien = []
     for d in ds:
         toi_han = d.get("trang_thai") in ("mo", "xong") and not d.get("cham") and not d.get("khong_tinh") \
@@ -979,7 +1147,8 @@ def bao_cao_hanh_dong(goc: str, bay_gio: Optional[_dt.datetime] = None, chi_can_
             # 12/10/2026: "n0xx → TLx-00yy → kết quả" — chỉ gói bàn giao dùng ĐÚNG link đề cử (`ghi_ban_giao`).
             kq = ket_qua_goi(goc, str(ts.get("kenh") or ""), ts.get("goi"))
             hien += ["    ↳ {0} → {1}".format(d.get("id"), x) for x in kq] or (
-                ["    ↳ {0} → chưa có video nào làm từ đúng link này — chấm `sai`/huỷ kèm lý do".format(d.get("id"))]
+                ["    ↳ {0} → chưa có video nào làm từ đúng link này — KHÔNG chấm `sai` (chưa thực hiện): `cham` tự ghi "
+                 "không thực hiện được".format(d.get("id"))]
                 if toi_han else [])
     if not hien:
         dong.append("  (không có hành động mở / tới hạn kiểm)" if chi_can_chu_y else "  (chưa có hành động nào)")
@@ -1318,6 +1487,14 @@ def _cham_g(goc: str, id_: str, ket: str, ghi_chu: str) -> Dict[str, Any]:
                 raise TuChoi("{0} là ghi cộng/trừ bài học, không có dự đoán để chấm".format(id_))
             if d.get("trang_thai") == "huy":
                 raise TuChoi("{0} đã huỷ".format(id_))
+            if not da_thuc_hien(d):
+                # 20/10/2026: đề cử chưa từng ra gói không có video để đúng/sai — ghi "không thực hiện được", không
+                # vào tỉ lệ đúng (n012/n016 từng bị chấm "sai" chỉ vì dây chuyền không sản xuất nguồn đó).
+                _khong_thuc_hien(d, "chưa có gói nào làm từ nguồn này (não định chấm {0}: {1})".format(
+                    ket, ghi_chu.strip()[:200]))
+                ghi_hanh_dong(goc, ds)
+                return dict(d, canh_bao="{0} chưa thực hiện (chưa ra gói) — đã ghi KHÔNG THỰC HIỆN ĐƯỢC, không chấm "
+                                        "đúng/sai".format(id_))
             d["cham"], d["ghi_chu_cham"] = ket, ghi_chu.strip()
             d["cham_luc"] = _dt.datetime.now().replace(microsecond=0).isoformat()
             if d.get("trang_thai") == "mo":
@@ -1956,7 +2133,7 @@ def chay_lenh(ns: argparse.Namespace, goc: str = GOC, bay_gio: Optional[_dt.date
         hd = huy(goc, ns.id)
     else:
         raise TuChoi("lệnh lạ")
-    return "ĐÃ GHI: " + dong_hanh_dong(hd)
+    return "ĐÃ GHI: " + dong_hanh_dong(hd) + ("\n  ⚠ " + hd["canh_bao"] if hd.get("canh_bao") else "")
 
 
 def main(argv: Optional[List[str]] = None, goc: str = GOC) -> int:

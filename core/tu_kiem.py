@@ -310,7 +310,7 @@ def _co_ab(goc: str, kenh: str, vid: str) -> bool:
     try:
         from . import ab_tieu_de as ab  # noqa: PLC0415
         m = ab.muc_cua(goc, kenh, vid)
-        return bool(m and m.get("trang_thai") in (ab.TT_DA_DAT, ab.TT_DA_CO))
+        return bool(m and m.get("trang_thai") in (ab.TT_DA_DAT, ab.TT_DA_CO, ab.TT_XONG))
     except Exception:  # noqa: BLE001
         return False
 

@@ -500,6 +500,14 @@ def dieu_kien_test(goc: str, kenh: str) -> Tuple[bool, str]:
     from . import giam_doc  # noqa: PLC0415
     ds = viec_mo(goc, giam_doc.LOAI_TEST_COMPARE, kenh) + viec_mo(goc, giam_doc.LOAI_AB_TIEU_DE, kenh)
     if not ds:
+        # 20/10/2026: không có việc đặt nhưng có thử nghiệm đang chạy đủ tuổi chưa đọc kết quả → cùng phiên D13 đọc lại
+        try:
+            from . import ab_tieu_de  # noqa: PLC0415
+            doc = ab_tieu_de.can_doc_ket_qua(goc, kenh)
+        except Exception:  # noqa: BLE001
+            doc = []
+        if doc:
+            return True, "đọc kết quả {0} thử nghiệm A/B tiêu đề đang chạy".format(len(doc))
         return False, "không có việc Thử nghiệm A/B"
     return True, "{0} việc Thử nghiệm A/B ({1} video)".format(len(ds), sum(len(m.get("video_ids") or []) for m in ds))
 
