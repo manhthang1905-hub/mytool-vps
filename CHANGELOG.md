@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.217.1** — 2026-10-20 — `vps-jp1` — fix(bia_lo): kenh moi muon bia thang kenh goc khac nhan vat - giam khao chi hoc bo cuc/chu/mau, nhan vat so nv1, san ngang bia giau
 - **2.217.0** — 2026-10-20 — `vps-jp1` — feat(kho): kho Chrome + kenh tra kho khong tinh + tu phat hien kenh khong phat va tu thay (D20)
 - **2.216.14** — 2026-10-20 — `vps-jp1` — fix(dang): cho Studio tai xong sau doi hl; hop xac minh dien thoai khi dat bia -> giu goi + viec nguoi
 - **2.216.13** — 2026-10-20 — `vps-jp1` — fix(bia-lo): kenh moi chua co mau bia thang thi lay mau cua kenh goc (workspace/mo-kenh/trang-thai.json kenh_goc) - TL4-T7-K3 bi giu khau bia
