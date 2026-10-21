@@ -10,7 +10,8 @@
     "sua": "https://studio.youtube.com/video/{id}/edit",
     "xem": "https://www.youtube.com/watch?v={id}",
     "cmt_video": "https://studio.youtube.com/video/{id}/comments",
-    "cmt_chua_phan_hoi": "https://studio.youtube.com/channel/{uc}/comments/inbox?filter=%5B%7B%22isDisabled%22%3Afalse%2C%22isPinned%22%3Atrue%2C%22name%22%3A%22SORT_BY%22%2C%22value%22%3A%22SORT_BY_NEWEST%22%7D%2C%7B%22name%22%3A%22ENGAGED_STATUS%22%2C%22value%22%3A%5B%22COMMENT_CATEGORY_NOT_ENGAGED%22%5D%7D%2C%7B%22name%22%3A%22PARENT_ENTITY_CONTENT_TYPE%22%2C%22value%22%3A%5B%22PARENT_ENTITY_CONTENT_TYPE_WATCH%22%2C%22PARENT_ENTITY_CONTENT_TYPE_SHORT%22%5D%7D%5D"
+    "cmt_chua_phan_hoi": "https://studio.youtube.com/channel/{uc}/comments/inbox?filter=%5B%7B%22isDisabled%22%3Afalse%2C%22isPinned%22%3Atrue%2C%22name%22%3A%22SORT_BY%22%2C%22value%22%3A%22SORT_BY_NEWEST%22%7D%2C%7B%22name%22%3A%22ENGAGED_STATUS%22%2C%22value%22%3A%5B%22COMMENT_CATEGORY_NOT_ENGAGED%22%5D%7D%2C%7B%22name%22%3A%22PARENT_ENTITY_CONTENT_TYPE%22%2C%22value%22%3A%5B%22PARENT_ENTITY_CONTENT_TYPE_WATCH%22%2C%22PARENT_ENTITY_CONTENT_TYPE_SHORT%22%5D%7D%5D",
+    "cs_loi_moi": "https://studio.youtube.com/channel/{uc}/videos/collaboration"
   },
   "phan_tu": {
     "hop_upload": {
@@ -1113,6 +1114,147 @@
         "ytcp-video-title-experiment"
       ],
       "ghi_chu": "16/10/2026: video đang chạy A/B tiêu đề — Studio thay ô tiêu đề bằng khối này (chỉ dùng để biết trang sửa đã dựng xong)"
+    },
+    "cs_khoi": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo TL3/TL6 trang sửa sau «Hiện thêm»: khối «Cộng tác» (div#collaboration-container của ytcp-video-metadata-editor-advanced)",
+      "chon": [
+        "ytcp-video-metadata-editor-advanced div#collaboration-container",
+        "div#collaboration-container"
+      ]
+    },
+    "cs_nut_mo": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: ytcp-button#collaboration-button — aria «Mời cộng sự» khi chưa có cộng sự, «Quản lý cộng tác viên» khi đã có",
+      "chon": [
+        "ytcp-video-metadata-editor-advanced ytcp-button#collaboration-button button",
+        "ytcp-button#collaboration-button",
+        "button[aria-label='Mời cộng sự']",
+        "button[aria-label='Quản lý cộng tác viên']",
+        "button[aria-label='Invite collaborators']",
+        "button[aria-label='Manage collaborators']"
+      ],
+      "chu": [
+        "Mời cộng sự",
+        "Quản lý cộng tác viên",
+        "Invite collaborators",
+        "Manage collaborators"
+      ]
+    },
+    "cs_hop": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: hộp «Mời cộng sự» = tp-yt-paper-dialog#dialog trong ytcp-video-collaborators-dialog; Esc KHÔNG đóng",
+      "chon": [
+        "ytcp-video-collaborators-dialog tp-yt-paper-dialog#dialog",
+        "ytcp-video-collaborators-dialog"
+      ]
+    },
+    "cs_o_tim": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: input#search-input aria «Tìm kênh» — tìm theo TÊN/@handle (link kênh, UC: «Không tìm thấy người dùng phù hợp»)",
+      "chon": [
+        "ytcp-video-collaborators-dialog ytcp-channel-picker-search-bar input#search-input",
+        "ytcp-channel-picker-search-bar input#search-input",
+        "input#search-input[aria-label='Tìm kênh']"
+      ]
+    },
+    "cs_goi_y": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: mỗi kết quả tp-yt-paper-item.channel > ytcp-channel-picker-list-item (#display-name, #channel-info «@handle • N người đăng ký»); không có UC trong DOM",
+      "chon": [
+        "ytcp-channel-picker-list tp-yt-paper-item.channel",
+        "ytcp-channel-picker-list-item"
+      ]
+    },
+    "cs_het_cho": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: tp-yt-paper-item#limit-reached-message «Bạn đã đạt đến giới hạn tạo lời mời» (ẩn khi còn chỗ)",
+      "chon": [
+        "ytcp-channel-picker-list tp-yt-paper-item#limit-reached-message"
+      ],
+      "phu": true
+    },
+    "cs_khong_thay": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: tp-yt-paper-item#not-found-message «Không tìm thấy người dùng phù hợp»",
+      "chon": [
+        "ytcp-channel-picker-list tp-yt-paper-item#not-found-message"
+      ],
+      "phu": true
+    },
+    "cs_hop_xong": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: nút Lưu của hộp (ytcp-button#save-button, tắt khi chưa chọn kênh)",
+      "chon": [
+        "ytcp-video-collaborators-dialog ytcp-button#save-button button",
+        "ytcp-video-collaborators-dialog ytcp-button#save-button"
+      ],
+      "chu": [
+        "Lưu",
+        "Save",
+        "保存"
+      ]
+    },
+    "cs_hop_huy": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo: nút Hủy của hộp (ytcp-button#cancel-button)",
+      "chon": [
+        "ytcp-video-collaborators-dialog ytcp-button#cancel-button button",
+        "ytcp-video-collaborators-dialog ytcp-button#cancel-button"
+      ],
+      "chu": [
+        "Hủy",
+        "Huỷ",
+        "Cancel",
+        "キャンセル"
+      ]
+    },
+    "cs_hang": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo video TL4 có 4 cộng sự: hàng nằm TRONG hộp — div.collaborator: [test-id=channel-name] (tên kênh, không @handle/UC) + ytcp-badge[test-id=collaborator-badge] state=\"complete\" «Cộng sự đang hoạt động» + nút ⋮ «Tuỳ chọn khác» (KHÔNG bấm)",
+      "chon": [
+        "ytcp-video-collaborators-dialog div.collaborator",
+        "ytcp-video-collaborators-dialog .collaborator"
+      ]
+    },
+    "cs_hang_tab": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): đo TL2: tab «Video cộng tác» (…/videos/collaboration) — mỗi video một ytcp-video-row (chip kênh chủ)",
+      "chon": [
+        "ytcp-video-section-content ytcp-video-row",
+        "ytcp-video-row"
+      ]
+    },
+    "cs_nut_nhan": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): CHƯA đo (chưa có lời mời đang chờ) — chỉ bấm nút có chữ KHỚP NGUYÊN VĂN trong hàng của đúng video",
+      "chon": [
+        "ytcp-video-row ytcp-button#accept-button",
+        "ytcp-video-row button[aria-label='Chấp nhận']",
+        "ytcp-button#accept-button",
+        "button[aria-label='Chấp nhận']"
+      ],
+      "chu": [
+        "Chấp nhận",
+        "Chấp nhận lời mời",
+        "Accept",
+        "Accept invite",
+        "承認",
+        "承諾",
+        "同意する"
+      ]
+    },
+    "cs_canh_bao": {
+      "ghi_chu": "21/10/2026 cộng sự (vm/cong_su_dom.py): hộp cảnh báo/hạn chế của YouTube về cộng tác → dừng cả tính năng (core.cong_su.dat_dung)",
+      "chon": [
+        "tp-yt-paper-dialog",
+        "ytcp-dialog",
+        "ytcp-confirmation-dialog",
+        "yt-confirm-dialog-renderer",
+        "[role=alertdialog]"
+      ],
+      "chu": [
+        "bị hạn chế",
+        "tạm thời bị chặn",
+        "vi phạm",
+        "không thể mời",
+        "đã bị tạm ngưng",
+        "restricted",
+        "temporarily",
+        "violat",
+        "suspend",
+        "制限",
+        "一時的に",
+        "違反"
+      ]
     }
   },
   "cam_bam_binh_luan": {

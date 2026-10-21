@@ -128,7 +128,7 @@ def test_do_thi_nut_day_va_dong_kich_hoat(tmp_path):
     for l in du["day"]:
         assert {"source", "target", "loai", "trong_so"} <= set(l) and l["source"] in nut and l["target"] in nut, l
     loai = Counter(l["loai"] for l in du["day"])
-    assert loai["goc"] == 15 and loai["the"] >= 3
+    assert loai["goc"] == len(C.BO_PHAN) and loai["the"] >= 3
     assert loai["thuoc"] == sum(1 for n in du["nut"] if n["nhom"] in ("loi", "canh-bao", "bai-hoc"))
     assert {(l["source"], l["target"]) for l in du["day"] if l["loai"] == "noi"} == {(ids["L2"], ids["L"])}
     # cùng cháy thì nối: X–Y chung 2 gói, L (bằng chứng = X ở gói 1, 2) chung 2 với X và Y; Z chỉ chung 1 → không nối
@@ -168,11 +168,12 @@ def test_do_thi_truong_cho_ban_3d(tmp_path):
 
 def test_do_thi_tran_nut_va_dong(tmp_path, monkeypatch):
     goc, ids = _nao(tmp_path)
-    monkeypatch.setattr(do_thi, "TRAN_NUT", 20)
+    tran = len(C.BO_PHAN) + 5          # trung tâm + bộ phận + 3 nơ-ron + 1 thực thể (21/10: 16 bộ phận)
+    monkeypatch.setattr(do_thi, "TRAN_NUT", tran)
     monkeypatch.setattr(do_thi, "TRAN_THE", 1)
     monkeypatch.setattr(do_thi, "TRAN_DONG", 1)
     du = do_thi.do_thi(goc)
-    assert len(du["nut"]) <= 20
+    assert len(du["nut"]) <= tran
     giu = {n["id"] for n in du["nut"] if n["nhom"] in ("loi", "canh-bao", "bai-hoc")}
     assert giu == {ids["X"], ids["Y"], ids["Z"]}                        # giữ nơ-ron sôi động nhất
     assert len(_dong(du)) == 1 and sum(1 for n in du["nut"] if n["nhom"] == "thuc-the") <= 1
@@ -184,7 +185,7 @@ def test_do_thi_tran_nut_va_dong(tmp_path, monkeypatch):
 def test_khong_co_kho_va_chi_doc(tmp_path):
     trong = str(tmp_path / "trong")
     du = do_thi.do_thi(trong)
-    assert not du["co_kho"] and len(du["nut"]) == 16 and len(du["day"]) == 15
+    assert not du["co_kho"] and len(du["nut"]) == len(C.BO_PHAN) + 1 and len(du["day"]) == len(C.BO_PHAN)
     assert do_thi.song(trong)["xung"] == [] and not os.path.exists(C.duong_db(trong))
     goc, ids = _nao(tmp_path / "nao-gia")
     with open(C.duong_db(goc), "rb") as tep:

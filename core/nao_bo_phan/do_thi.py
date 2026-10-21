@@ -5,7 +5,7 @@ vault chỉ đọc; không LLM, không ghi gì.
     song(goc, tu, dung, ngu)    -> {luc, xung, con_tro: {tu, dung, ngu}, dem}   xung thần kinh mới hơn con trỏ
     no_ron(goc, id)             -> {id, dau, than} | None                  chữ một nốt, đường khoá trong `nao/bo-phan/`
 
-NÚT: `nao-trung-tam` · 15 bộ phận (hub) · nơ-ron lỗi / cảnh báo / bài học (bỏ `nghi` và `da-het` im quá 14 ngày) ·
+NÚT: `nao-trung-tam` · 16 bộ phận (hub) · nơ-ron lỗi / cảnh báo / bài học (bỏ `nghi` và `da-het` im quá 14 ngày) ·
 thực thể (`thuc-the/*`) nối ≥ 2 nơ-ron. Quá `TRAN_NUT` nút thì giữ nơ-ron sôi động nhất (to nhất, gặp gần nhất).
 Trường cho bản 3D (13/10/2026, chỉ THÊM — bản 2D và session shopapi.vn đọc hợp đồng cũ): `vung` = số thứ tự bộ phận
 (0–14, màu + thuỳ não; -1 = trung tâm / thực thể) · `so_lan` = số lần não gặp/học (lỗi: số lần 7 ngày; bài học: số

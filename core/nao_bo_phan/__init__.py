@@ -1,4 +1,4 @@
-"""NÃO BỘ PHẬN — MỘT thư viện chung cho 15 bộ phận: ghi ký ức, chắt thành nơ-ron, truy xuất nhanh (13/10/2026).
+"""NÃO BỘ PHẬN — MỘT thư viện chung cho 16 bộ phận: ghi ký ức, chắt thành nơ-ron, truy xuất nhanh (13/10/2026).
 
 Thiết kế đã duyệt: `workspace/chan-doan/thiet-ke-nao-bo-phan.md`. ĐỢT 1: lõi + gom + nơ-ron lỗi + bản chiếu bài học
 + chỉ mục + `nho()` + sổ tay dựng từ số (không LLM, chỉ thư viện chuẩn — sqlite3 FTS5). ĐỢT 2: cảnh báo tách khỏi lỗi,
@@ -8,7 +8,7 @@ thuê bao Claude Max), khối bài học vào lời nhắc của khâu viết (`
 ═══ LƯU TRỮ ═══ (dưới gốc tool; `nao/` là vault Obsidian — mở thư mục này là thấy đồ thị; KHÔNG lên git)
 
     nao/bo-phan.db                 su_kien (ký ức thô, không xoá) · con_tro · dung · giac_ngu · meta · chỉ mục
-    nao/bo-phan/_ban-do.md         mục lục 15 bộ phận + số nơ-ron
+    nao/bo-phan/_ban-do.md         mục lục 16 bộ phận + số nơ-ron
     nao/bo-phan/<bộ phận>/so-tay.md            sổ tay ≤ 40 dòng: lỗi đang xảy ra · bài tự rút · cảnh báo · vừa hết · bản chiếu
     nao/bo-phan/<bộ phận>/nhat-ky.md           nhật ký thay đổi (chỉ nối thêm): gom · ngủ · soát
     nao/bo-phan/<bộ phận>/loi/<chữ ký>.md      nơ-ron LỖI (hoặc CẢNH BÁO — `muc: canh-bao`)

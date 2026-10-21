@@ -13,13 +13,14 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 GOC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-#: 15 bộ phận: mã → tên đọc. Mọi sự kiện / nơ-ron thuộc đúng MỘT bộ phận.
+#: 16 bộ phận: mã → tên đọc. Mọi sự kiện / nơ-ron thuộc đúng MỘT bộ phận.
 BO_PHAN: Dict[str, str] = {
     "chon-content": "Chọn content", "kich-ban": "Kịch bản", "tieu-de": "Tiêu đề / SEO", "bia": "Bìa",
     "giong-doc": "Giọng đọc", "anh-clip": "Ảnh / clip", "dung-video": "Dựng video",
     "kiem-chat-luong": "Kiểm chất lượng", "ban-giao": "Bàn giao / lịch", "dang-video": "Đăng video (máy ảo)",
     "binh-luan": "Bình luận / ghim", "chi-so-studio": "Chỉ số Studio", "doi-thu": "Đối thủ",
     "dieu-phoi": "Điều phối / phục hồi", "suc-khoe-may": "Sức khoẻ máy",
+    "tang-truong": "Tăng trưởng (cộng sự / kéo chéo)",
 }
 LOAI = ("chon", "loi", "sua", "ket_qua", "do")
 

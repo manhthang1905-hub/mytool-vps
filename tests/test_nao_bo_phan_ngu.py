@@ -586,7 +586,8 @@ def test_panel_nao_bo_phan_8790(tmp_path, monkeypatch):
     try:
         url = "http://127.0.0.1:{0}".format(sv.server_address[1])
         du = json.loads(urllib.request.urlopen(url + "/nao-bo-phan.json?bo_phan=anh-clip", timeout=20).read())
-        assert du["co_kho"] and len(du["bo_phan"]) == 15 and du["loi_dang_tang"][0]["bo_phan"] == "anh-clip"
+        from core.nao_bo_phan._chung import BO_PHAN as _BP  # số bộ phận lấy theo danh sách, không gõ cứng
+        assert du["co_kho"] and len(du["bo_phan"]) == len(_BP) and du["loi_dang_tang"][0]["bo_phan"] == "anh-clip"
         ac = next(x for x in du["bo_phan"] if x["ma"] == "anh-clip")
         assert ac["su_kien_7"] == 20 and ac["loi"] == {C.DANG: 1}
         assert du["chi_tiet"]["so_tay"].startswith("---\nloai: so-tay") and "# Sổ tay — Ảnh / clip" in \

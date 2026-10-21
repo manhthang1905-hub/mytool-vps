@@ -18,6 +18,8 @@ STARTED không, danh sách phát có đủ video không (bộ đọc từng báo
   van_hanh   `workspace/van-hanh/trang-thai.json` tươi ≤ 20 phút và mọi thành phần sống
   nhip       kênh tự chạy: sau 21:00 phải có video hẹn cho ngày mai; 3 ngày qua ngày nào cũng có video lên sóng;
              mỗi ngày trống một mục `nhip:khe` kèm NGUYÊN NHÂN (xếp lịch muộn / gói bị giữ / tải hỏng / thiếu gói)
+  cong_su    lô cộng sự (`workspace/cong-su/hang.json`): lời mời chờ nhận > 48 giờ → máy DOM nhận lại MỘT lần rồi báo;
+             kênh đã nhận → trang xem CÔNG KHAI phải ghi công kênh đó; dừng khẩn (hộp cảnh báo YouTube) = việc người
 API `ghi_ky_vong(goc, loai, kenh, khoa, viec, han, ...)` cho bộ chạy nào muốn khai thẳng kỳ vọng của mình.
 
 ═══ HỎNG THÌ ═══ (1) thử lại qua ĐÚNG bộ chạy, tối đa `SO_THU_LAI` lần: mở lại mục hàng sửa (máy DOM `--sua-video`),
@@ -488,6 +490,18 @@ def kiem_ghim(K: BoiCanh) -> List[Dict[str, Any]]:
     return ra
 
 
+def kiem_cong_su(K: BoiCanh) -> List[Dict[str, Any]]:
+    """Cộng sự (`core/cong_su.py`, 21/10/2026): lời mời chờ nhận > 48 giờ (thử nhận lại MỘT lần qua máy DOM rồi báo),
+    kênh đã nhận phải được trang xem CÔNG KHAI ghi công, dừng khẩn / kênh thiếu tính năng = việc người."""
+    from . import cong_su  # noqa: PLC0415
+    ra = []
+    for x in cong_su.muc_tu_kiem(K.goc, K.bay, tai=K.tai, ghi=not K.thu):
+        them = {k: x[k] for k in ("thu_lai", "id_muc", "kenh_moi", "nguoi", "can_lam") if x.get(k)}
+        ra.append(_muc("cong_su", x.get("kenh") or "", x["khoa"], x["viec"], None,
+                       {"dat": DAT, "hong": HONG}.get(x["tt"], CHO), x.get("bang_chung") or "", **them))
+    return ra
+
+
 # ── 7) bộ não / giấc ngủ / skill · 8) vận hành ────────────────────────────────
 
 def kiem_nao(K: BoiCanh) -> List[Dict[str, Any]]:
@@ -835,7 +849,8 @@ def kiem_cong_suat(K: BoiCanh) -> List[Dict[str, Any]]:
 
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
-        ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat))
+        ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat),
+        ("cong_su", kiem_cong_su))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────
@@ -903,9 +918,17 @@ def _thu_lai_nao_ngu(K: BoiCanh, m: Dict[str, Any]) -> Tuple[bool, str]:
     return _sinh(K, [van_hanh._pythonw(K.goc), "-X", "utf8", "-m", "core.nao_bo_phan", "ngu"], "nao-ngu")  # noqa: SLF001
 
 
+def _thu_lai_cong_su(K: BoiCanh, m: Dict[str, Any]) -> Tuple[bool, str]:
+    from . import cong_su  # noqa: PLC0415
+    try:
+        return cong_su.thu_lai_nhan(K.goc, str(m.get("id_muc") or ""), str(m.get("kenh_moi") or ""))
+    except RuntimeError as loi:
+        return False, str(loi)
+
+
 THU_LAI_BO_CHAY: Dict[str, Callable[[BoiCanh, Dict[str, Any]], Tuple[bool, str]]] = {
     "hang_sua": _thu_lai_hang_sua, "viec_may": _thu_lai_viec_may, "dsp": _thu_lai_dsp, "van_hanh": _thu_lai_van_hanh,
-    "nao_ngu": _thu_lai_nao_ngu}
+    "nao_ngu": _thu_lai_nao_ngu, "cong_su": _thu_lai_cong_su}
 
 
 # ── phân loại nguyên nhân + sửa ────────────────────────────────────────────────

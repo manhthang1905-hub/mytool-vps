@@ -1108,6 +1108,36 @@ def d_nhan_nghia(goc, kenh):
     return nhan_nghia.can_chay(goc)
 
 
+# D25 / D26 · Cộng sự (21/10/2026) — `core/cong_su.py` (quét + lập lô + đo) · `vm/cong_su_dom.py` (mời + nhận) ──────
+
+def k_cong_su(goc, kenh):
+    from core import cong_su  # noqa: PLC0415
+    d = cong_su.dang_dung(goc)
+    if d:
+        return LOI, "DỪNG (YouTube cảnh báo/hạn chế): " + str(d.get("ly_do") or "")[:100]
+    ds = [m for m in cong_su.doc_hang(goc) if m.get("loai") == cong_su.LOAI and (not kenh or kenh in
+          [m.get("kenh_nguon")] + [n.get("kenh") for n in m.get("nguoi_moi") or []])]
+    if not ds:
+        return CHO, "chưa video nào > {0:,} lượt xem trong {1} giờ đầu".format(
+            int(cong_su.doc_cai(goc)["nguong_view"]), cong_su.doc_cai(goc)["gio_cua_so"])
+    dem: Dict[str, int] = {}
+    for m in ds:
+        for n in m.get("nguoi_moi") or []:
+            dem[n.get("trang_thai") or "?"] = dem.get(n.get("trang_thai") or "?", 0) + 1
+    hong = dem.get(cong_su.TT_LOI, 0)
+    return (LOI if hong else DAT), "{0} lô · {1}".format(len(ds), ", ".join("{0} {1}".format(v, k) for k, v in sorted(dem.items())))
+
+
+def d_cong_su_quet(goc, kenh):
+    from core import cong_su  # noqa: PLC0415
+    return cong_su.can_quet(goc, _gio())
+
+
+def d_cong_su_dom(goc, kenh):
+    from core import cong_su  # noqa: PLC0415
+    return cong_su.can_dom(goc, _gio())
+
+
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1337,6 +1367,23 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.nhan_nghia gan --toi-da 6000", k_nhan_nghia, [], dieu_kien=d_nhan_nghia,
            chay=lambda goc, kenh: _py("-m", "core.nhan_nghia", "gan", "--toi-da", "6000"), nhip_gio=20, tu_ap=True, toan_may=True,
            han_phut=40),
+    KyNang("D25", "Cộng sự: quét video đang lên", "dinh_ky",
+           "Mỗi giờ (khi có video ≤ 48 giờ tuổi hoặc lô chờ đo): đọc lượt xem TRANG XEM CÔNG KHAI của video ≤ 48 giờ; "
+           "video > 20.000 lượt xem trong 48 giờ đầu → MỘT lô mời mọi kênh ta khác làm cộng sự (cùng vùng đề tài → kênh "
+           "mới / xa 1.000 đăng ký → còn lại; trần cộng sự của YouTube), chia ngẫu nhiên có định hai đợt A (ngay) / B "
+           "(+24 giờ) để đo nhân quả; một lô mỗi kênh nguồn mỗi ngày. Đo sau 7 + 2 ngày: view/đăng ký/hiển thị của kênh "
+           "cộng sự so 7 ngày trước + A so B → workspace/cong-su/ + não «tang-truong». Cài: workspace/cai-dat.json cong_su.",
+           "python -X utf8 -m core.cong_su quet [--thu]", k_cong_su, ["D01"], dieu_kien=d_cong_su_quet,
+           chay=lambda goc, kenh: _py("-m", "core.cong_su", "quet"), nhip_gio=0.9, tu_ap=True, toan_may=True,
+           han_phut=10),
+    KyNang("D26", "Cộng sự: mời + nhận (DOM)", "dinh_ky",
+           "Kích hoạt: lô cộng sự có lời mời tới hạn hoặc lời mời chờ nhận (ngoài 02:10–06:00, 04:00–05:00, 19:00–20:00; "
+           "không dừng khẩn). Chrome kênh nguồn: trang sửa video → Cộng tác → mời từng kênh (link kênh từ UC ghim), đọc lại "
+           "lời mời đang chờ; Chrome từng kênh được mời (đúng UC ghim): mở lời mời → Chấp nhận → đọc lại. Tối đa 30 lời "
+           "mời mới/ngày, nghỉ như người; hộp cảnh báo/hạn chế → dừng cả tính năng + Việc của bạn. Không đụng tiêu đề/bìa.",
+           "python vm/cong_su_dom.py --ke-hoach [--thu]", k_cong_su, ["D25", "K01"], dieu_kien=d_cong_su_dom,
+           chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "cong_su_dom.py"), "--ke-hoach"), nhip_gio=1, tu_ap=True,
+           nang=True, toan_may=True, han_phut=50),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "
