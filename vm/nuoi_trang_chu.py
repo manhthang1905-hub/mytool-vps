@@ -1302,6 +1302,9 @@ def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
             "Phật pháp/tâm linh, truyện đọc, học ngoại ngữ, video không phải tiếng Nhật, ...).\n"
             "QUAN TRỌNG: video của QUỐC GIA/NGÔN NGỮ KHÁC (tiếng Việt, Anh, Hàn, Trung…) luôn là lac_de, kể cả khi "
             "cũng nói về tâm lý.\n"
+            "QUAN TRỌNG (21/10): khán giả của kênh là NGƯỜI LỚN TRUNG NIÊN–CAO TUỔI. Video mà đối tượng/bối cảnh chính "
+            "là học sinh, sinh viên, trẻ em hay người trẻ (trường học, lớp học, スクールカースト, tuổi teen, yêu đương "
+            "tuổi 20, đi làm năm đầu, nuôi con nhỏ) là lac_de, kể cả khi nói về tâm lý (tam_ly vẫn true).\n"
             "Thêm trường \"tam_ly\": true nếu video NÓI VỀ tâm lý học / hiểu người / não bộ (bất kể ngách hay ngôn ngữ), "
             "false nếu hoàn toàn không phải (nấu ăn, game, tin tức, nhạc…).\n"
             "Danh sách (số|tiêu đề|kênh):\n{1}\n"
@@ -1988,8 +1991,13 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         tl_ngach = TI_LE_NGACH_NUOI_LAI if nuoi_lai else TI_LE_NGACH
         cam_id, cam_ten = id_video_cua_minh(), ten_kenh_cua_minh()
         chon = chon_video(ung, so["da_xem"], cam_id, cam_ten, so_video * 2, hom, rng, tl_ngach)
-        nh = phan_loai(goi, mo_ta, chon, so["cache"])                # LLM loại ô lạc đề theo nghĩa
-        chon = [v for v in chon if nh.get(v["id"]) in ("dung_ngach", "dung_chu_de")]
+        # 21/10/2026 (chủ thấy kênh xem video スクールカースト "sai nội dung"): video ĐEM XEM để nuôi phải ĐÚNG NGÁCH
+        # của kênh — "tâm lý học chung" (dung_chu_de) đẩy trang chủ ra khỏi tệp khán giả. Chấm 2 lượt + phân xử
+        # (model ví rẻ, một lượt lệch ~18%). `chi_xem_dung_ngach: false` (vm config) trả lại luật cũ.
+        nh = phan_loai_bau(goi, mo_ta, chon, so["cache"])[0]         # LLM loại ô lạc đề theo nghĩa
+        chi_ngach = (ch.get("chi_xem_dung_ngach", True) if isinstance(ch, dict) else True) is not False
+        nhan_xem = ("dung_ngach",) if chi_ngach else ("dung_ngach", "dung_chu_de")
+        chon = [v for v in chon if nh.get(v["id"]) in nhan_xem]
         chon = chon_video([dict(v, ngach=(nh[v["id"]] == "dung_ngach")) for v in chon], (), (), (), so_video, hom, rng,
                           tl_ngach)
         ghi("đã chọn {0} video ({1} đúng ngách{2}) từ {3} ứng viên".format(
