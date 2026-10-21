@@ -2880,7 +2880,7 @@ def nap_kenh_moi(cau_hinh: dict, cac_kenh: list, hieu_luc: dict, doc=None) -> li
     phien = che_do_phien_bat(cau_hinh, hieu_luc.get(cac_kenh[0]))
     for kenh in them:
         cac_kenh.append(kenh)
-        _VI_TRI_KENH[kenh] = len(cac_kenh) - 1
+        _VI_TRI_KENH[kenh] = max(0, len(kenh_lich(cac_kenh)) - 1)   # giờ quét theo vị trí trong kênh đang chạy
         hieu_luc[kenh] = cau_hinh_kenh(cau_hinh, kenh)
         chrome = tim_chrome(hieu_luc[kenh])
         ghi("NẠP NÓNG kênh mới {0} (vị trí {1}, cổng {2}) — Chrome: {3}".format(
@@ -4054,7 +4054,10 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
     cac_kenh = danh_sach_kenh(cau_hinh) or [cau_hinh.get("kenh") or "kenh"]
     kenh_chinh = cac_kenh[0]
     _VI_TRI_KENH.clear()
-    _VI_TRI_KENH.update({k: i for i, k in enumerate(cac_kenh)})
+    # 21/10/2026 (chủ: "kênh trả kho không cần theo dõi"): giờ QUÉT NGÀY xếp theo vị trí trong các kênh ĐANG CHẠY —
+    # kênh trả kho không giữ ô trống trong lịch (dồn lại: quét xong sớm hơn). Kênh trả kho xếp sau cùng (không quét).
+    _dang = kenh_lich(cac_kenh)
+    _VI_TRI_KENH.update({k: i for i, k in enumerate(_dang + [k for k in cac_kenh if k not in _dang])})
     _don_kenh_cu_khoi_cai_dat_tool(cac_kenh)
     if len(cac_kenh) > 1:
         ghi("agent {0} kênh ({1}), máy {2}".format(
@@ -4107,8 +4110,8 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
         if phien:
             ghi("QUÉT NGÀY: {0} — mắt cào chỉ quét trong lượt này; Chrome mở để đăng/bình luận "
                 "thì cổng quét CHẶN".format(", ".join(
-                    "{0} {1}".format(k, gio_quet_ngay_kenh(hieu_luc[k], i))
-                    for i, k in enumerate(cac_kenh))))
+                    "{0} {1}".format(k, gio_quet_ngay_kenh(hieu_luc[k], vi_tri_kenh(k, i)))
+                    for i, k in enumerate(kenh_lich(cac_kenh)))))
     hong_lien_tiep = 0
     bo_lich = None
     while True:

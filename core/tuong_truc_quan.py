@@ -496,8 +496,12 @@ def day_du(goc: Optional[str] = None, bay_gio: Optional[_dt.datetime] = None) ->
     def _keo():
         d = _json(os.path.join(goc, "workspace", "keo-cheo", "da-them.json")) or {}
         out = []
+        from .tra_kho import da_tra_kho  # noqa: PLC0415
         for x in (d.get("muc") or [])[-40:]:
             if not isinstance(x, dict):
+                continue
+            # 21/10/2026 (chủ): kênh trả kho không theo dõi — bỏ dòng kéo chéo dính kênh trả kho (giữ trên đĩa)
+            if any(x.get(t) and da_tra_kho(goc, str(x.get(t))) for t in ("kenh_chu", "kenh_video")):
                 continue
             do = x.get("do_sau") or {}
             dd = x.get("du_doan") or {}

@@ -127,6 +127,9 @@ def tinh(goc: str) -> Dict[str, Any]:
     ra["so_sanh"] = (truoc or {}).get("ngay")
     try:
         qd = luat.doc_quyet_dinh(goc, NGAY_QUYET_DINH)
+        # 21/10/2026 (chủ): kênh trả kho không theo dõi — dòng quyết định cũ của chúng không hiện (giữ trên đĩa).
+        from ..tra_kho import da_tra_kho  # noqa: PLC0415
+        qd = [x for x in qd if not (isinstance(x, dict) and x.get("kenh") and da_tra_kho(goc, str(x["kenh"])))]
         ra["quyet_dinh"] = list(reversed(qd))
     except Exception as loi:  # noqa: BLE001
         ra["quyet_dinh"] = {"loi": str(loi)[:200]}
