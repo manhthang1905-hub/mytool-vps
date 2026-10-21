@@ -1866,6 +1866,16 @@ def xep_doi_bia(goc: str, kenh: str, ma: str, anh: str, *, ly_do: str = "", ghi:
             cong_chu.ghi_nao(goc, "loi", kenh=kenh, ma_goi=ma, noi_dung="không đổi bìa video đang thắng: " + thang,
                              khoa="xep-doi-bia-thang:{0}".format(ma))
             raise RuntimeError("video đang THẮNG — không đổi bìa: " + thang)
+    # 21/10/2026 (G4): video đang Thử nghiệm A/B 3 bìa của máy (`core.bia_ab`) — YouTube đang chia bìa, đổi bìa giữa
+    # chừng là phá ván; YouTube tự áp bìa thắng khi xong.
+    try:
+        from . import bia_ab  # noqa: PLC0415
+        vid_ab = str((ho_so_video.doc_ho_so(goc, kenh, ma) or {}).get("video_id") or "")
+        dang_ab = bool(vid_ab) and bia_ab.dang_chay(goc, kenh, vid_ab)
+    except Exception:  # noqa: BLE001
+        dang_ab = False
+    if dang_ab:
+        raise RuntimeError("video đang Thử nghiệm A/B bìa — không đổi bìa giữa chừng (YouTube tự áp bìa thắng)")
     # 16/10/2026 — CỔNG CHỮ (chủ: "bìa sai chữ là tối kỵ"): chỉ tệp có DẤU cổng chữ đúng sha1 mới được lên YouTube.
     ly_chu = cong_chu.kiem_dau(anh)
     if ly_chu:

@@ -1128,6 +1128,19 @@ def k_cong_su(goc, kenh):
     return (LOI if hong else DAT), "{0} lô · {1}".format(len(ds), ", ".join("{0} {1}".format(v, k) for k, v in sorted(dem.items())))
 
 
+# D27 · Bìa A/B «tự chơi» (G4, 21/10/2026) — `core/bia_ab.py` (kế hoạch + sổ + học) · `vm/bia_ab_dom.py` (bước phiên) ─
+
+def k_bia_ab(goc, kenh):
+    from core import bia_ab  # noqa: PLC0415
+    dem: Dict[str, int] = {}
+    for k in ([kenh] if kenh else _cac_kenh(goc)):
+        for m in bia_ab.doc_so(goc, k):
+            dem[m.get("trang_thai") or "?"] = dem.get(m.get("trang_thai") or "?", 0) + 1
+    if not dem:
+        return CHO, "chưa video nào được đặt Thử nghiệm A/B bìa"
+    return (LOI if dem.get(bia_ab.TT_LOI) else DAT), ", ".join("{0} {1}".format(v, k) for k, v in sorted(dem.items()))
+
+
 def d_cong_su_quet(goc, kenh):
     from core import cong_su  # noqa: PLC0415
     return cong_su.can_quet(goc, _gio())
@@ -1380,6 +1393,17 @@ DANH_MUC: List[KyNang] = [
            "đúng kênh → Lưu → đọc lại hàng trong hộp). Tối đa 30 lời mời/ngày, nghỉ như người; hộp cảnh báo → dừng cả "
            "tính năng + Việc của bạn. Không việc thì không nối Chrome. Tắt: vm config phien_cong_su=false.",
            "agent phiên kênh · tay: python vm/cong_su_dom.py --phien --kenh K", k_cong_su, ["D25", "K01"]),
+    KyNang("D27", "Bìa A/B: bước trong phiên kênh", "dinh_ky",
+           "G4 «tự chơi» (21/10/2026): KHÔNG phiên Chrome riêng — bước «bìa A/B» trong PHIÊN ngày của kênh (vm/agent.py, "
+           "sau cộng sự, trước đóng Chrome): video do tool đăng, công khai ≤ 72 giờ, không đang thắng, chưa có thử nghiệm "
+           "→ «Thử nghiệm A/B» chỉ-hình-thu-nhỏ: bìa đang chạy + 2 bìa nhì/ba của lô đã qua cổng đọc được + cổng chữ (1 "
+           "tấm qua → 2 bìa; 0 → không thử) → đọc lại STARTED. Thử nghiệm ≥ 2 ngày → đọc kết quả (phần thời gian xem, "
+           "nhánh thắng, bìa YouTube áp → hồ sơ theo), quá 21 ngày → không kết luận. Học: não «bia», họ kiểu chữ "
+           "(bia_du_lieu), giám khảo ↔ người xem (hieu_chuan bia_lo_ab). A/B tiêu đề nhường video thử bìa được. Video "
+           "hẹn lịch chỉ thăm dò nút (đọc). Kênh chưa bật bia_ab (kenh.yaml, mặc định theo giam_doc_studio) bỏ qua. Tắt "
+           "bước: vm config phien_bia_ab=false; cài: workspace/cai-dat.json bia_ab.",
+           "agent phiên kênh · tay: python vm/bia_ab_dom.py --phien --kenh K [--thu] · dự báo: python -X utf8 -m "
+           "core.bia_ab du-bao", k_bia_ab, ["K01"]),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "

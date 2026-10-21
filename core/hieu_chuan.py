@@ -112,7 +112,11 @@ BO_CHAM_MO_HINH = ("gia_tri_tieu_de", "gia_tri_de_tai")
 #: Chuỗi lùi khi bộ chấm chưa đủ mẫu (kênh → gộp → bộ chấm cùng lượt chấm). KHÔNG lùi bìa lô về giám khảo bìa đời cũ
 #: (`bia`): khác lời nhắc, khác cách so (tờ điện thoại cạnh bìa thắng) — đo 20/10: `bia` gộp rho −0,39 (n 45) mà
 #: `bia_lo` gộp +0,68 (n 6); mượn số của dụng cụ khác để tước quyền là phạt oan.
-LUI = {"bia_lo_bam": ("bia_lo",)}
+#: 21/10/2026 (G4): bìa lô chưa đủ mẫu CTR → lùi về số đo giám khảo ↔ NGƯỜI XEM THẬT trên Thử nghiệm A/B 3 bìa của
+#: chính lô (`bia_lo_ab`, `core.bia_ab.do_giam_khao`: Kendall τ điểm giám khảo ↔ phần thời gian xem) — đúng việc trọng số
+#: bìa lô quyết (xếp hạng TRONG lô), nên là bằng chứng sát nhất khi có.
+LUI = {"bia_lo_bam": ("bia_lo", "bia_lo_ab"), "bia_lo": ("bia_lo_ab",)}
+BO_CHAM_AB = "bia_lo_ab"
 TEN_MUC = {"khong_du_bao": "không dự báo", "yeu": "yếu", "du_bao": "dự báo được", "chua_du": "chưa đủ mẫu",
            "mac_dinh": "mặc định"}
 _RE_GOI = re.compile(r"^(.+)-(\d{3,5})$")
@@ -1001,6 +1005,33 @@ def _ghi_nao_hook(goc: str, hk: Dict[str, Any], bay: _dt.datetime) -> int:
     return n
 
 
+def them_bia_ab(goc: str, ts: Dict[str, Any], kenh_ds: Sequence[str]) -> Dict[str, Any]:
+    """21/10/2026 (G4): giám khảo bìa lô ↔ người xem thật trên Thử nghiệm A/B 3 bìa (`core.bia_ab.do_giam_khao`) → mục
+    `bia_lo_ab` của trọng số (gộp + kênh; n = số thử nghiệm có cặp dùng được, rho = Kendall τ) theo cùng luật `_muc`.
+    Không có thử nghiệm nào xong → không thêm gì (hành vi cũ). Trả số đo (báo cáo)."""
+    try:
+        from . import bia_ab  # noqa: PLC0415
+        do = bia_ab.do_giam_khao(goc, kenh_ds)
+    except Exception as loi:  # noqa: BLE001
+        return {"loi": str(loi)[:160]}
+    c = do.get("chung") or {}
+    if int(c.get("n") or 0):
+        muc, w = _muc(c.get("tau"), int(c["n"]))
+        ts.setdefault("chung", {})[BO_CHAM_AB] = {"w": w, "muc": muc, "rho": c.get("tau"), "n": int(c["n"]),
+                                                  "ket": "ab_thoi_gian_xem", "top1": c.get("top1"),
+                                                  "ngau_nhien": c.get("ngau_nhien"), "nguon": "chung"}
+    for k, x in (do.get("kenh") or {}).items():
+        if not int(x.get("n") or 0):
+            continue
+        muc, w = _muc(x.get("tau"), int(x["n"]))
+        g = (ts.get("chung") or {}).get(BO_CHAM_AB) or {}
+        ts.setdefault("kenh", {}).setdefault(k, {})[BO_CHAM_AB] = (
+            dict(g, n_kenh=int(x["n"]), rho_kenh=x.get("tau")) if muc == "chua_du" and g else
+            {"w": w, "muc": muc, "rho": x.get("tau"), "n": int(x["n"]), "ket": "ab_thoi_gian_xem",
+             "top1": x.get("top1"), "nguon": "kenh"})
+    return do
+
+
 def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
          kenh_ds: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """Một lượt: bù sổ cái → kết quả thật → bảng + trọng số → hook → bài học. `thu=True`: CHỈ ĐỌC."""
@@ -1009,6 +1040,7 @@ def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
     dong, n_moi = gom(goc, kenh_ds, ghi_dia=not thu)
     kq = {k: ket_qua_kenh(goc, k, bay) for k in kenh_ds}
     hc = hieu_chuan(goc, dong, kq, kenh_ds)
+    ab = them_bia_ab(goc, hc["trong_so"], kenh_ds)
     hk = do_hook(goc, kq, kenh_ds)
     ub = bai_hoc_uplift(goc, kq, kenh_ds)
     bc: Dict[str, Any] = {"phien_ban": PHIEN_BAN, "luc": bay.strftime("%Y-%m-%d %H:%M:%S"), "ngay": bay.date().isoformat(),
@@ -1016,7 +1048,7 @@ def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
                           "luat": {"n_toi_thieu": N_TOI_THIEU, "rho_khong": RHO_KHONG, "rho_du": RHO_DU,
                                    "w_phu_quyet": W_PHU_QUYET, "n_bai_hoc": N_BAI_HOC},
                           "bang": hc["bang"], "trong_so": hc["trong_so"], "chuan": hc["chuan"], "hook": hk,
-                          "bai_hoc": ub, "da_nghi": []}
+                          "bai_hoc": ub, "da_nghi": [], "bia_ab": ab}
     bc["tom_tat"] = tom_tat(bc)
     if not thu:
         _ghi_json(duong_trong_so(goc), dict(hc["trong_so"], luc=bc["luc"], phien_ban=PHIEN_BAN))
@@ -1058,6 +1090,11 @@ def tom_tat(bc: Dict[str, Any]) -> str:
         N_BAI_HOC)))
     if bc.get("da_nghi"):
         phan.append("đã nghỉ {0} bài không giúp".format(len(bc["da_nghi"])))
+    ab = (bc.get("bia_ab") or {}).get("chung") or {}
+    if ab.get("n") or ab.get("co_thang"):
+        phan.append("A/B 3 bìa: {0} thử nghiệm, giám khảo xếp nhất đúng {1} (ngẫu nhiên {2}), τ {3}".format(
+            ab.get("n"), "-" if ab.get("top1") is None else "{0:.0%}".format(ab["top1"]),
+            "-" if ab.get("ngau_nhien") is None else "{0:.0%}".format(ab["ngau_nhien"]), ab.get("tau")))
     return "Hiệu chuẩn bộ chấm ({0}): {1}".format(bc.get("ngay"), " · ".join(phan))
 
 

@@ -21,6 +21,8 @@ Phần THUẦN + sổ (không mạng, không Chrome). Bộ chạy DOM: `vm/studi
 
 Trần: mỗi kênh ≤ `TOI_DA_LAP_NGAY_KENH` lượt lập / ngày (cả hai cò); mỗi video MỘT thử nghiệm (đang chạy → không đụng);
 mỗi lượt bộ tự kích hoạt chạy MỘT kênh (D13).
+21/10/2026 (G4): Studio chỉ cho MỘT thử nghiệm mỗi video → BÌA ƯU TIÊN: video có / sắp có Thử nghiệm A/B 3 bìa
+(`core.bia_ab.uu_tien_bia`) thì cò (a) nhường; A/B tiêu đề chỉ còn ở video không thử bìa được.
 """
 
 from __future__ import annotations
@@ -380,6 +382,14 @@ def ung_vien_moi(bs: Any, ds: List[Dict[str, Any]], tuoi_gio: float = TUOI_MOI_G
     return sorted(ra, key=lambda v: float(v["tuoi_gio"]))
 
 
+def _uu_tien_bia(goc: str, ma: str, v: Dict[str, Any], bay: Optional[_dt.datetime]) -> str:
+    try:
+        from .bia_ab import uu_tien_bia  # noqa: PLC0415
+        return uu_tien_bia(goc, ma, str(v.get("id") or ""), str(v.get("ma_goi") or ""), bay)
+    except Exception:  # noqa: BLE001 — không đọc được sổ bìa A/B thì không chặn A/B tiêu đề
+        return ""
+
+
 def xu_ly_moi(goc: str, ma: str, bs: Any, goi_chat: Optional[Callable[..., str]], *, viet: bool = True,
               ghi: Optional[Callable[[str], None]] = None,
               viet_tieu_de: Optional[Callable[..., Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
@@ -399,6 +409,12 @@ def xu_ly_moi(goc: str, ma: str, bs: Any, goi_chat: Optional[Callable[..., str]]
         from .giam_doc.cuu_ctr import viet_tieu_de_ab as viet_tieu_de  # noqa: PLC0415
     ra: List[Dict[str, Any]] = []
     for v in ung_vien_moi(bs, ds):
+        # 21/10/2026 (G4): MỘT thử nghiệm mỗi video — video có / sắp có thử nghiệm BÌA A/B (3 bìa, `core.bia_ab`) thì
+        # A/B tiêu đề nhường; chỉ lập ở video không thử bìa được.
+        nhuong = _uu_tien_bia(goc, ma, v, bay)
+        if nhuong:
+            ghi("  [A/B tiêu đề] {0}: nhường — {1}".format(v["id"], nhuong))
+            continue
         if so_lap_hom_nay(ds, bay) >= TOI_DA_LAP_NGAY_KENH:
             ghi("  [A/B tiêu đề] {0}: đủ {1} lượt lập hôm nay — video còn lại để mai".format(ma, TOI_DA_LAP_NGAY_KENH))
             break
@@ -526,6 +542,24 @@ def doc_ket_thu_nghiem(exp: Any) -> Dict[str, Any]:
     khong_kl = bool(xong and _RE_KHONG_KL.search(s))
     nhanh = [_nhanh(d) for d in (max(ds_nhanh, key=len) if ds_nhanh else [])]
     thang: Optional[int] = next((i for i, n in enumerate(nhanh) if n["thang"] is True), None)
+    # 21/10/2026 — KHUÔN THẬT (đo TL1: `state`, `result.resultState`, `result.winnerArm`, `result.armResults[]
+    # {arm, watchtimeFraction}`): `state` STARTED nghĩa là CÒN CHẠY dù `resultState` đã là NOT_ENOUGH_DATA (trước đây
+    # đóng nhầm «không kết luận» một thử nghiệm đang chạy); nhánh thắng = `winnerArm` ARM_N; phần thời gian xem gắn
+    # vào đúng nhánh theo ARM_N.
+    try:
+        from .bia_ab import doc_thu_nghiem  # noqa: PLC0415
+        kt = doc_thu_nghiem(exp)
+    except Exception:  # noqa: BLE001
+        kt = {}
+    if kt.get("khuon"):
+        xong = bool(kt.get("xong"))
+        khong_kl = bool(xong and _RE_KHONG_KL.search(s))
+        if kt.get("thang") is not None and kt["thang"] < max(len(nhanh), int(kt.get("so_nhanh") or 0)):
+            thang = kt["thang"]
+            khong_kl = False
+        for i, f in (kt.get("ti_phan") or {}).items():
+            if i < len(nhanh):
+                nhanh[i]["so"]["watchtimeFraction"] = f
     if thang is None and tham_chieu:
         thang = next((i for i, n in enumerate(nhanh) if any(t and t in n["chu"] for t in tham_chieu)), None)
     suy_ra = False

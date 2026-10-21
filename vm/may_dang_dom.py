@@ -997,6 +997,20 @@ def video_dang_thang_vm(goc_tool: str, kenh: str, ma_goi: str) -> str:
         return ""
 
 
+def bia_ab_dang_chay_vm(goc_tool: str, kenh: str, video_id: str) -> str:
+    """21/10/2026 (G4): '' = được đổi bìa; khác → lý do (video đang Thử nghiệm A/B 3 bìa của máy — `core.bia_ab`;
+    YouTube tự áp bìa thắng khi xong). Không nạp được → '' (không chặn việc sửa)."""
+    goc_tool = goc_tool or os.path.dirname(GOC)
+    try:
+        if goc_tool not in sys.path:
+            sys.path.append(goc_tool)
+        from core import bia_ab  # noqa: PLC0415
+        return ("video đang Thử nghiệm A/B bìa — không đổi bìa giữa chừng" if video_id
+                and bia_ab.dang_chay(goc_tool, kenh, video_id) else "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def hang_sua_kenh(hang: list, kenh: str, hom_nay: str = "", toi_da: int = SUA_TOI_DA_DEM,
                   toi_da_loi: int = SUA_TOI_DA_LOI) -> list:
     """Hàm THUẦN: việc sửa của `kenh` còn phải làm (chờ, hoặc hỏng chưa quá `toi_da_loi` lần và chưa thử
@@ -1875,6 +1889,36 @@ class MayDangDom:
         except OSError:
             pass
 
+    def _tham_do_ab_upload(self, ta, ma: str) -> None:
+        """21/10/2026 (G4 — CHỈ ĐỌC, không bấm): hộp tải lên (bước Chi tiết) có nút «Thử nghiệm A/B» không, có bật không
+        → `logs/bia-ab-upload.json` {kênh: {luc, ma, co, tat, chu}} — bằng chứng để quyết đặt thử nghiệm 3 bìa ngay lúc
+        tải (hiện đặt ở bước «bìa A/B» của phiên, trên video đã công khai). Hỏng thì thôi."""
+        try:
+            du = ta.js_tho(
+                "(() => { const Y = window.__yd; const ds = (Y ? Y.qsa(Y.goc(), 'ytcp-button#ab-test-button') : "
+                "Array.from(document.querySelectorAll('ytcp-button#ab-test-button'))).filter(e => e.offsetParent !== null);"
+                " const b = ds[0]; return {co: !!b, so: ds.length, tat: b ? (b.hasAttribute('disabled') || "
+                "b.getAttribute('aria-disabled') === 'true') : null, chu: b ? String(b.innerText || '').trim().slice(0, 60)"
+                " : ''}; })()")
+            if not isinstance(du, dict):
+                return
+            p = os.path.join(THU_MUC_LOG, "bia-ab-upload.json")
+            try:
+                with open(p, encoding="utf-8") as f:
+                    so = json.load(f)
+            except (OSError, ValueError):
+                so = {}
+            so = so if isinstance(so, dict) else {}
+            so[self.kenh] = dict({k: du.get(k) for k in ("co", "so", "tat", "chu")}, ma=ma,
+                                 luc=time.strftime("%Y-%m-%d %H:%M:%S"))
+            with open(p + ".tam", "w", encoding="utf-8") as f:
+                json.dump(so, f, ensure_ascii=False, indent=1)
+            os.replace(p + ".tam", p)
+            self.nk("{0}: hộp tải lên — nút «Thử nghiệm A/B» {1}".format(
+                ma, "KHÔNG có" if not du.get("co") else ("có (TẮT)" if du.get("tat") else "có (bật)")))
+        except Exception:  # noqa: BLE001 — thăm dò phụ, không bao giờ làm hỏng lượt đăng
+            pass
+
     def _chi_tiet(self, ta, d: dict, tep: dict) -> None:
         ta.go("tieu_de", d["tieu_de"])
         ta.go("mo_ta", d["mo_ta"])
@@ -1884,6 +1928,7 @@ class MayDangDom:
                     ta.ghi_bang_chung("chi-tiet-" + d["ma"])   # để chốt chon#1 nút thumbnail
                 ta.dat_tep("nut_thumbnail", tep["anh"])
                 self._ghi_xac_minh_dt(d["ma"], False)
+                self._tham_do_ab_upload(ta, d["ma"])
             except Exception as loi:  # noqa: BLE001 — thumbnail hỏng: cảnh báo, đi tiếp
                 if self._doi_xac_minh_dt(ta):
                     # Không đăng video thiếu bìa: giữ gói (nháp còn đó), báo chủ 1 mục; lượt sau tự làm nốt.
@@ -2707,9 +2752,14 @@ class MayDangDom:
             thang = "" if (str(v.get("buoc") or "").startswith("quay_lui")
                            or str(v.get("id") or "").startswith("khoi-phuc")) else video_dang_thang_vm(
                 getattr(self, "goc_tool", None), self.kenh, v.get("ma_goi") or "")
+            ab = "" if thang or not v.get("anh") else bia_ab_dang_chay_vm(getattr(self, "goc_tool", None), self.kenh,
+                                                                          str(v.get("video_id") or ""))
             if thang:
                 self.nk("sửa video {0}/{1} BỎ — video đang THẮNG: {2}".format(v.get("ma_goi"), v["video_id"], thang))
                 kq = {"ket": "khong-the", "ly_do": "video đang THẮNG lúc làm — bỏ lệnh: " + thang}
+            elif ab:
+                self.nk("sửa video {0}/{1} BỎ đổi bìa — {2}".format(v.get("ma_goi"), v["video_id"], ab))
+                kq = {"ket": "khong-the", "ly_do": ab}
             else:
                 kq = self.sua_video_mot("{0}/{1}".format(self.kenh, v.get("ma_goi") or ""), str(v["video_id"]),
                                         tieu_de=v.get("tieu_de") or None, anh=v.get("anh") or None,

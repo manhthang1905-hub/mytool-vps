@@ -333,13 +333,23 @@ def hau_nghiem(tk: Dict[str, Any], co: Sequence[str]) -> Dict[str, Tuple[float, 
     s0 = max(0.5, float(tk.get("do_lech_ctr") or 0.0))
     tv_imp = float(tk.get("trung_vi_imp") or 0.0)
     ra = {}
+    ab = tk.get("ab") if isinstance(tk.get("ab"), dict) else {}
     for h in co:
         x = (tk.get("ho") or {}).get(h) or {}
         n = float(x.get("n") or 0)
         if n and tv_imp > 0:
             n = min(n, float(x.get("imp") or 0) / tv_imp)
         xb = float(x.get("ctr") or m0) if n else m0
-        ra[h] = ((n * xb + m0) / (n + 1.0), s0 / math.sqrt(n + 1.0))
+        # 21/10/2026 (G4): cặp thắng/thua THẬT từ Thử nghiệm A/B 3 bìa (`core.bia_ab.thong_ke_ho_ab`, chỉ cặp khác
+        # họ) dịch trung bình — tối đa ±½ độ lệch CTR kênh khi đủ `bia_ab.N_AB_DU` cặp.
+        dich = 0.0
+        if ab:
+            try:
+                from .bia_ab import dich_hau_nghiem  # noqa: PLC0415
+                dich = dich_hau_nghiem(ab, h, s0)
+            except Exception:  # noqa: BLE001
+                dich = 0.0
+        ra[h] = ((n * xb + m0) / (n + 1.0) + dich, s0 / math.sqrt(n + 1.0))
     return ra
 
 
@@ -763,6 +773,12 @@ def chay_kenh(goc: str, kenh: str, *, thu: bool = False, goi: Optional[Callable[
     cu_tk = doc_thong_ke(goc, kenh)
     tk.update(tuong_quan=tq, tv_thang=tv_thang, tut=tut, canh_bao=cu_tk.get("canh_bao") or {},
               ep_doi_kieu=cu_tk.get("ep_doi_kieu") or None)
+    try:    # 21/10/2026 (G4): bằng chứng A/B 3 bìa theo họ kiểu chữ → `hau_nghiem`
+        from .bia_ab import thong_ke_ho_ab  # noqa: PLC0415
+        tk["ab"] = thong_ke_ho_ab(goc, kenh)
+    except Exception:  # noqa: BLE001
+        tk["ab"] = {}
+    bc["ab"] = tk["ab"]
     bc.update(ket_qua_moi=len(kq_moi), tuong_quan=tq, tut=tut, tv_thang=tv_thang,
               bia_may=[{"video_id": r["video_id"], "ngay": r["ngay"], "imp": r["imp"], "ctr": r["ctr"],
                         "tuoi": r.get("tuoi"), "kieu": (nhan.get(r["video_id"]) or {}).get("kieu") or "?"}

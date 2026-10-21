@@ -310,6 +310,14 @@ def ly_do_hoan(agent, cfg: dict, kenh: str, luc: float, du_kien: float, bo_qua_k
     return chrome_dang_mo(agent, cfg, kenh, cdp_mod)
 
 
+def bo_cho_luu(bo: Dict[str, Any]) -> Dict[str, Any]:
+    """Bộ chọn cho luồng ĐƯỢC bấm Lưu trang sửa: `cam_bam_sua_video` (hoặc `cam_bam` bỏ `#save`) thay `cam_bam`.
+    Dùng chung với bước «bìa A/B» trong phiên kênh (`vm/bia_ab_dom.py`)."""
+    cam = dict(bo.get("cam_bam_sua_video") or {}) or dict(bo.get("cam_bam") or {}, chon=[
+        s for s in (bo.get("cam_bam") or {}).get("chon") or [] if "#save" not in s])
+    return dict(bo, cam_bam={k: x for k, x in cam.items() if k != "ghi_chu"})
+
+
 def chay_phien(kenh: str, ghi, lam: Callable[..., Any], che_do: str, bo_qua_khung: bool = False, cho_luu: bool = False,
                rng=None) -> Tuple[int, Any]:
     """Khung chung (như `thiet_lap_kenh_dom.chay_thuong_hieu`): bảo vệ → khoá → Chrome kênh (máy này tự mở, đóng cuối
@@ -361,9 +369,7 @@ def chay_phien(kenh: str, ghi, lam: Callable[..., Any], che_do: str, bo_qua_khun
         nuoi.canh_tien_trien.bat_canh(lambda: (cdp_mod.dong_trinh_duyet(cdp) if cdp.tu_mo else cdp.dong()), ghi=ghi)
         bo = cdp_studio.doc_bo_chon()
         if cho_luu:     # nút Lưu của trang sửa nằm trong `cam_bam` cho mọi luồng khác — riêng luồng này được bấm
-            cam = dict(bo.get("cam_bam_sua_video") or {}) or dict(bo.get("cam_bam") or {}, chon=[
-                s for s in (bo.get("cam_bam") or {}).get("chon") or [] if "#save" not in s])
-            bo = dict(bo, cam_bam={k: x for k, x in cam.items() if k != "ghi_chu"})
+            bo = bo_cho_luu(bo)
         thu_muc_anh = os.path.join(thu_muc_so(), kenh)
         md = mdd.MayDangDom(kenh, bo, lambda: cdp_studio.TrangStudio.mo_tab_moi(cdp, bo, nhat_ky=ghi, thu_muc_dom=thu_muc_anh, rng=rng),
                             mdd.SoVideoId(), bao=None, thu_muc_done="", nhat_ky=ghi)

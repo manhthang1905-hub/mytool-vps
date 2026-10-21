@@ -847,10 +847,26 @@ def kiem_cong_suat(K: BoiCanh) -> List[Dict[str, Any]]:
                           "lo_khe": lo, "chua_len": chua_len})]
 
 
+def kiem_bia_ab(K: BoiCanh) -> List[Dict[str, Any]]:
+    """Thử nghiệm A/B 3 bìa (`core/bia_ab.py`, G4 21/10/2026): kẹt «đang chạy» > 30 ngày, đặt hỏng, video mới đủ bìa mà
+    quá 30 giờ chưa đặt, bìa thắng YouTube áp phải trùng tấm thắng; kênh thiếu tính năng nâng cao = việc người."""
+    from . import bia_ab  # noqa: PLC0415
+    ra = []
+    for x in bia_ab.muc_tu_kiem(K.goc, K.bay, K.kenh_ds, ghi=not K.thu, bia_song=K.bia_song, van_tay=van_tay,
+                                can_kiem=K.can_kiem):
+        if x.get("giu"):                       # chưa tới lượt so lại bìa đang chạy (mạng): mang trạng thái cũ
+            ra.append(_giu_cu(K, "bia_ab", x.get("kenh") or "", x["khoa"], x["viec"], None))
+            continue
+        them = {k: x[k] for k in ("nguoi", "can_lam") if x.get(k)}
+        ra.append(_muc("bia_ab", x.get("kenh") or "", x["khoa"], x["viec"], None,
+                       {"dat": DAT, "hong": HONG}.get(x["tt"], CHO), x.get("bang_chung") or "", **them))
+    return ra
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
         ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat),
-        ("cong_su", kiem_cong_su))
+        ("cong_su", kiem_cong_su), ("bia_ab", kiem_bia_ab))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────

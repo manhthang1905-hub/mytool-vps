@@ -2512,6 +2512,20 @@ def chay_mot_phien(cau_hinh: dict, cau_hinh_kenh: dict, kenh: str) -> dict:
             msg_cs = "cộng sự: lỗi {0}".format(loi)
         ket_qua["cong_su"] = msg_cs
         ghi("phiên kênh {0}: {1}".format(kenh, msg_cs))
+    # Bìa A/B (21/10/2026, G4 «tự chơi»): video mới công khai của kênh → «Thử nghiệm A/B» 3 bìa (bìa đang chạy + bìa
+    # nhì/ba của lô đã qua cổng chữ) + đọc kết quả thử nghiệm đang chạy (`core.bia_ab`). Cùng Chrome của phiên, sau
+    # cộng sự; không có việc thì tiến trình con thoát ngay, không nối Chrome. `--trong-phien`: khoá máy phiên đang giữ.
+    if os.path.isfile(os.path.join(GOC, "bia_ab_dom.py")) and cau_hinh.get("phien_bia_ab", True) is not False:
+        doi_viec_khoa_may("bia_ab")
+        try:
+            msg_ab, _ma_ab = _chay_mot_lan(
+                os.path.join(GOC, "bia_ab_dom.py"), kenh, "bìa A/B (DOM)",
+                han_giay=float(cau_hinh.get("phien_han_bia_ab_giay") or 20 * 60),
+                co_gi_them=("--phien", "--trong-phien"))
+        except Exception as loi:  # noqa: BLE001 — bước phụ hỏng không chặn đóng Chrome
+            msg_ab = "bìa A/B: lỗi {0}".format(loi)
+        ket_qua["bia_ab"] = msg_ab
+        ghi("phiên kênh {0}: {1}".format(kenh, msg_ab))
     dong_chrome_kenh(cau_hinh_kenh)
     ket_qua["ket_thuc"] = time.strftime("%Y-%m-%d %H:%M:%S")
     ghi("── PHIÊN kênh {0} xong ──".format(kenh))
