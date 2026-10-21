@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.228.0** — 2026-10-22 — `vps-jp1` — feat(hoi-sinh): mo lai dong kenh tra kho bang Chrome moi trong kho - nhan ban giu nguyen + giong moi (kho/giong-moi.txt, do ky_tu_moi_phut), D20 xu ly toi 3/ngay sau thay that
 - **2.227.0** — 2026-10-21 — `vps-jp1` — fix(nhan-vat): kenh moi doi nhan vat phai viet lai MOI cho mo ta (kiem tu cu = 0); thay kenh vi khong phan phoi = nhan ban giu nguyen tat ca; tu kiem nhat quan hang ngay; giam khao canh so nhan vat voi anh nv1
 - **2.226.2** — 2026-10-21 — `vps-jp1` — fix(tra-kho): kenh tra kho khong theo doi - lich quet ngay don lai (xong 05:40), bang 8790 bo dong keo cheo/quyet dinh cua kenh tra kho
 - **2.226.1** — 2026-10-21 — `vps-jp1` — feat(bia-ab): o C cua A/B = bia tot nhat ho chu hang nhi (lo ve them bo phu nho) - moi thu nghiem day ca ho chu thang; bia phu khong bao gio len song; fix so cai ghi ho that
