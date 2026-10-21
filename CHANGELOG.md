@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.226.2** — 2026-10-21 — `vps-jp1` — fix(tra-kho): kenh tra kho khong theo doi - lich quet ngay don lai (xong 05:40), bang 8790 bo dong keo cheo/quyet dinh cua kenh tra kho
 - **2.226.1** — 2026-10-21 — `vps-jp1` — feat(bia-ab): o C cua A/B = bia tot nhat ho chu hang nhi (lo ve them bo phu nho) - moi thu nghiem day ca ho chu thang; bia phu khong bao gio len song; fix so cai ghi ho that
 - **2.226.0** — 2026-10-21 — `vps-jp1` — feat(bia-ab): G4 tu choi - A/B 3 bia (Thu nghiem va so sanh) moi video moi trong phien kenh hang ngay, doc ket qua, hoc ho chu + hieu chuan giam khao, tu kiem; fix doc A/B tieu de
 - **2.225.3** — 2026-10-21 — `vps-jp1` — fix(kiem-ngach): khan gia la dieu kien cung - kenh hoc sinh/nguoi tre (truong hoc, school caste) = bo
