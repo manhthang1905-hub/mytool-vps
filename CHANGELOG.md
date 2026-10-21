@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.225.3** — 2026-10-21 — `vps-jp1` — fix(kiem-ngach): khan gia la dieu kien cung - kenh hoc sinh/nguoi tre (truong hoc, school caste) = bo
 - **2.225.2** — 2026-10-21 — `vps-jp1` — fix(nuoi-trang-chu): chi xem video DUNG NGACH (2 luot + phan xu), noi dung hoc sinh/nguoi tre = lac de - het xem video lac tep
 - **2.225.1** — 2026-10-21 — `vps-jp1` — feat(agent): ma vm/*.py doi thi tu thoat em o diem ranh de nap ban moi (giao dien/gac van hanh mo lai)
 - **2.225.0** — 2026-10-21 — `vps-jp1` — feat(cong-su): top 5 video ca nhom theo view 48h, ke hoach 1 lan/ngay, buoc cong su ghep vao phien kenh hang ngay (khong mo Chrome rieng)
