@@ -4255,10 +4255,35 @@ def chay(cau_hinh: dict, mot_vong: bool = False) -> None:
                 ghi("giữ tool đăng hỏng: {0}".format(loi))
         if mot_vong:
             return
+        # 21/10/2026 — MÃ MÁY ĐĂNG ĐÃ ĐỔI (git kéo bản mới): tiến trình này vẫn chạy mã nạp lúc khởi động, bước
+        # mới (vd "cộng sự" trong phiên kênh) không bao giờ chạy tới khi máy khởi động lại. Ở ĐÚNG điểm rảnh này
+        # (đã xong mọi phiên/quét của vòng) thì thoát êm — giao diện / gác vận hành mở lại agent bằng mã mới.
+        if ma_vm_da_doi():
+            ghi("agent: mã vm/*.py đã đổi từ lúc khởi động — thoát êm ở điểm rảnh để nạp bản mới")
+            nhip_tim("bước: thoát để nạp mã mới", ep=True)
+            return
         # Chờ giãn dần khi trạm im ắng lâu (tối đa 5 phút) — máy nhà tắt tool
         # qua đêm thì agent không việc gì phải hỏi đều 30 giây suốt đêm.
         nhip_tim("bước: ngủ giữa nhịp", ep=True)
         time.sleep(min(NHIP_GIAY * max(1, hong_lien_tiep // 10 + 1), 300))
+
+
+def _dau_ma_vm() -> float:
+    """Mốc sửa mới nhất của các tệp `vm/*.py` (0 nếu không đọc được)."""
+    try:
+        return max(os.path.getmtime(os.path.join(GOC, t)) for t in os.listdir(GOC) if t.endswith(".py"))
+    except (OSError, ValueError):
+        return 0.0
+
+
+#: Mốc mã lúc tiến trình nạp — so ở điểm rảnh của vòng chính (`ma_vm_da_doi`).
+_DAU_MA_LUC_NAP = _dau_ma_vm()
+
+
+def ma_vm_da_doi() -> bool:
+    """Mã máy đăng đổi sau lúc nạp, và đã yên ≥ 2 phút (git đang ghi dở thì chờ nhịp sau)."""
+    moi = _dau_ma_vm()
+    return bool(_DAU_MA_LUC_NAP and moi > _DAU_MA_LUC_NAP + 1 and time.time() - moi >= 120)
 
 
 #: Lưới ngoài cùng của vòng chính (06/10/2026). Trước đây một ngoại lệ lọt khỏi

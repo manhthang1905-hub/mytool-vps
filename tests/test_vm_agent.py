@@ -1542,3 +1542,18 @@ class TestKhongGietViecDangChay:
         json.dump({"id": 2, "loai": "quet-trang-chu", "tu": time.time() - 3600}, open(dang, "w", encoding="utf-8"))
         assert agent.viec_dang_lam(dang) == {}
         assert agent.viec_dang_lam(str(tmp_path / "khong-co.json")) == {}
+
+
+def test_ma_vm_doi_thi_thoat_em_o_diem_ranh(monkeypatch):
+    """21/10: mã vm/*.py đổi sau lúc nạp (và đã yên ≥ 2 phút) → agent thoát êm để nạp bản mới."""
+    ag = _nap_agent()
+    bay = time.time()
+    monkeypatch.setattr(ag, "_DAU_MA_LUC_NAP", bay - 3600)
+    monkeypatch.setattr(ag, "_dau_ma_vm", lambda: bay - 3600)
+    assert ag.ma_vm_da_doi() is False                      # chưa đổi
+    monkeypatch.setattr(ag, "_dau_ma_vm", lambda: bay - 30)
+    assert ag.ma_vm_da_doi() is False                      # vừa đổi < 2 phút: git có thể đang ghi dở
+    monkeypatch.setattr(ag, "_dau_ma_vm", lambda: bay - 300)
+    assert ag.ma_vm_da_doi() is True
+    monkeypatch.setattr(ag, "_DAU_MA_LUC_NAP", 0.0)
+    assert ag.ma_vm_da_doi() is False                      # không đọc được mốc lúc nạp: không thoát
