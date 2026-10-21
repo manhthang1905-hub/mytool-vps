@@ -33,7 +33,16 @@ Máy dùng: `core/cong_su.py` (quét, lập lô, đo — skill D25) + `vm/cong_s
 
 ## Luật chạy (chủ duyệt 21/10/2026)
 
-Kích hoạt khi video > 20.000 lượt xem trong 48 giờ đầu → mời mọi kênh ta đang chạy, ưu tiên theo thứ tự: cùng vùng → kênh
-mới / kênh xa mốc 1.000 đăng ký nhất → các kênh còn lại. Chia hai đợt A (mời ngay) và B (sau 24 giờ) để so nhân quả.
-Mỗi ngày tối đa 30 lời mời, mỗi kênh nguồn tối đa 1 lô mỗi ngày. Nếu YouTube hiện hộp cảnh báo, máy dừng hẳn
-(`workspace/cong-su/dung.json`) và báo vào Việc của bạn. Cài đặt nằm ở `workspace/cai-dat.json`, khoá `cong_su`.
+- **Mỗi ngày một lần**, sau QUÉT NGÀY, không mở Chrome (skill D25): chọn 5 video tăng lượt xem trong 48 giờ qua nhiều
+  nhất của cả nhóm. Video > 20.000 lượt xem trong 48 giờ đầu luôn đứng đầu. Sàn là 300 lượt/48 giờ.
+- Nguồn số tăng 48 giờ, theo thứ tự: thẻ «48 giờ qua» của Studio (chỉ top 3 mỗi kênh) → mốc chụp từng video của quét
+  ngày (video ≤ ~31 ngày tuổi) → mẫu lượt xem công khai máy tự lấy mỗi ngày (tab Video của kênh; số ≥ 1万 thì đọc trang
+  xem để có số chính xác). Video chỉ có một mẫu thì đợi mẫu hôm sau, không lùi về tổng trọn đời.
+- Mỗi video thành một lô mời các kênh ta khác, ưu tiên theo thứ tự: cùng vùng → kênh mới / kênh xa mốc 1.000 đăng ký
+  nhất → các kênh còn lại. Trần 5 kênh/video, tính cả cộng sự đã có. Kênh đã là cộng sự thì bỏ qua. Video đã có lô mà
+  hôm sau vẫn trong top 5 thì chỉ thêm kênh còn thiếu.
+- **Không phiên Chrome riêng.** Việc mời và nhận chạy trong bước «cộng sự» của phiên ngày từng kênh (sau bình luận,
+  trước khi đóng Chrome), các kênh làm lần lượt. Đợt A gửi ở phiên kế của kênh nguồn, đợt B ở phiên hôm sau. Kênh được
+  mời nhận lời ở phiên kế của nó.
+- Mỗi ngày tối đa 30 lời mời, mỗi kênh nguồn tối đa 2 lô mỗi ngày. Nếu YouTube hiện hộp cảnh báo, máy dừng hẳn
+  (`workspace/cong-su/dung.json`) và báo vào Việc của bạn. Cài đặt nằm ở `workspace/cai-dat.json`, khoá `cong_su`.

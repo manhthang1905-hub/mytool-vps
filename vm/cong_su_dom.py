@@ -6,10 +6,14 @@ Kế hoạch (video nào, mời ai, đợt A/B, trần, đo): `core/cong_su.py`.
          ghim) → chọn ĐÚNG kênh trong gợi ý → Mời/Thêm → Lưu → đọc lại hàng «đang chờ» (+ link mời nếu có)
     NHẬN (Chrome kênh được mời, ĐÚNG UC ghim): mở link mời / trang lời mời trong Studio → Chấp nhận → đọc lại
 
-Cách chạy:
+Cách chạy (chủ 21/10/2026: «không mở Chrome thêm — tích hợp vào cùng lúc, các kênh làm lần lượt»):
 
-    python vm/cong_su_dom.py --ke-hoach [--thu]          # việc tới hạn trong workspace/cong-su/hang.json (skill D26)
+    python vm/cong_su_dom.py --phien --kenh K --trong-phien   # BƯỚC «cộng sự» trong PHIÊN ngày của kênh K (agent gọi,
+                                                             # Chrome kênh đang mở sẵn, khoá máy agent đang giữ):
+                                                             # nhận lời mời gửi tới K, rồi gửi lời mời của K
+    python vm/cong_su_dom.py --phien --kenh K [--thu]         # cùng việc, chạy tay một kênh (tự giữ khoá máy)
     python vm/cong_su_dom.py --tham-do --kenh K --video V   # CHỈ ĐỌC: mở khối + hộp Cộng tác, đọc, Hủy — không lưu
+    python vm/cong_su_dom.py --ke-hoach [--thu]          # (tay) mọi việc tới hạn, lần lượt từng kênh
 
     --thu      mở trang, dò khối/hộp, đọc trạng thái — KHÔNG gõ, KHÔNG mời, KHÔNG nhận
 
@@ -739,6 +743,7 @@ def chay_ke_hoach(che_do: str = "that", tu_giu: bool = True, ngu=None, chay=None
 def _doc_lenh(argv):
     ap = argparse.ArgumentParser(prog="cong_su_dom.py")
     ap.add_argument("--ke-hoach", action="store_true", help="chạy việc tới hạn trong workspace/cong-su/hang.json")
+    ap.add_argument("--phien", action="store_true", help="với --kenh: bước cộng sự của MỘT kênh (nhận rồi mời)")
     ap.add_argument("--thu", action="store_true", help="dò khối/hộp/nút, đọc trạng thái — KHÔNG gõ, mời, nhận")
     ap.add_argument("--tham-do", action="store_true", help="với --kenh --video: mở khối + hộp Cộng tác, đọc, Hủy (chỉ đọc)")
     ap.add_argument("--kenh", default="")
@@ -751,13 +756,24 @@ def main(argv=None) -> int:
     a = _doc_lenh(sys.argv[1:] if argv is None else argv)
     _cai_nhat_ky()
     che_do = "thu" if a.thu else "that"
-    if not (a.ke_hoach or (a.tham_do and a.kenh and re.fullmatch(r"[A-Za-z0-9_-]{11}", a.video or ""))):
-        log.error("cần --ke-hoach, hoặc --tham-do --kenh K --video <videoId>")
+    if not (a.ke_hoach or (a.phien and a.kenh)
+            or (a.tham_do and a.kenh and re.fullmatch(r"[A-Za-z0-9_-]{11}", a.video or ""))):
+        log.error("cần --phien --kenh K, --ke-hoach, hoặc --tham-do --kenh K --video <videoId>")
         return MA_HONG
+    if a.phien:
+        cs = _cs()
+        ok, ly = cs.can_dom(GOC_TOOL, kenh=a.kenh)
+        if not ok:
+            log.info("cộng sự %s: %s — bỏ qua bước", a.kenh, ly)    # không việc → KHÔNG nối/mở Chrome
+            return MA_XONG
     if not _khoa_mot_minh():
         log.error("đã có một máy cộng sự khác đang chạy (cổng %d) — thoát", CONG_KHOA)
         return MA_CHAN
-    if a.tham_do:
+    if a.phien:
+        viec = cs.viec_dom(GOC_TOOL, kenh=a.kenh)
+        log.info("cộng sự %s: %s", a.kenh, ly)
+        ma, tat_ca = chay_kenh(a.kenh, viec, che_do, tu_giu=not a.trong_phien)
+    elif a.tham_do:
         che_do = "thu"
         ma, tat_ca = chay_kenh(a.kenh, [{"viec": "moi", "id": "", "kenh": a.kenh, "video_id": a.video, "nguoi": []}],
                                "thu", tu_giu=not a.trong_phien)

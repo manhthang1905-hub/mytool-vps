@@ -7,18 +7,22 @@ kênh cộng sự thấy nó trên trang chủ/đăng ký). Video của ta đang
 em: kênh em được ghi công trên một video đang chạy, người xem bấm đăng ký kênh em ngay trên trang xem.
 
 Luật của chủ (mặc định `CAI_DAT_MAC_DINH`, đè bằng `workspace/cai-dat.json` khoá `cong_su: {...}`):
-* Kích hoạt: video của ta > `nguong_view` (20.000) lượt xem trong `gio_cua_so` (48) giờ đầu. Số lượt xem đọc từ TRANG
-  XEM CÔNG KHAI (`"viewCount"` của videoDetails — rẻ, mỗi giờ, không Chrome), chỉ cho video ≤ 48 giờ tuổi; lùi về
-  `bang-tom-tat.csv` khi mạng hỏng. Giờ đăng: sổ máy đăng (`vm/logs/so-video-id.json` `lich`) → `publishDate` của
-  trang xem → ngày của bảng tóm tắt (coi 00:00 — phía SỚM, để không lỡ cửa sổ).
+* NHỊP (chủ 21/10: «1 ngày 1 lần… không mở Chrome thêm, các kênh làm lần lượt»): kế hoạch MỘT lần/ngày sau QUÉT NGÀY
+  (skill D25, `quet`, không Chrome); việc trên YouTube chạy trong BƯỚC «cộng sự» của PHIÊN ngày từng kênh
+  (`vm/agent.py chay_mot_phien` → `vm/cong_su_dom.py --phien`): nhận lời mời gửi tới kênh, rồi gửi lời mời của kênh.
+* Nguồn (chủ 21/10: «ALL các kênh chọn 5 video — dùng 5 video top 5 của ngày hôm nay để kéo»): 5 video tăng lượt xem
+  48 GIỜ QUA nhiều nhất của CẢ nhóm (`core/cong_su_top.py`; sàn `top_toi_thieu_view_48h`) — chế độ `top5_nhom_48h`;
+  video NÓNG (> `nguong_view` 20.000 trong `gio_cua_so` 48 giờ đầu, trang xem công khai) luôn đứng đầu — `nong_48h`.
+  Video đã có lô mà hôm sau vẫn trong top → chỉ thêm kênh còn thiếu.
 * Mời: MỌI kênh ta đang chạy (`core.kenh.liet_ke_kenh` — bỏ kênh trả kho, kênh mẫu, kênh không có UC ghim hay không có
   Chrome trên máy này), trừ kênh nguồn, tới trần `toi_da_moi_video` của YouTube.
 * Thứ tự trong trần và trong đợt (chủ 21/10): kênh CÙNG VÙNG đề tài với video (`workspace/chien-truong/chu-quyen-vung.json`
   chủ/chia sẻ vùng → có video thắng trong vùng) trước; rồi kênh MỚI (≤ `ngay_kenh_moi` = 14 ngày tuổi — khởi động lạnh) và
   kênh XA mốc 1.000 đăng ký YPP nhất (đăng ký là nút thắt YPP); rồi phần còn lại.
 * HAI ĐỢT để đo nhân quả mà không bỏ ai: chia ngẫu nhiên có định (băm video+kênh, phân tầng theo cặp thứ tự ưu tiên) —
-  đợt A mời ngay, đợt B mời sau `gio_dot_b` (24) giờ. Cửa sổ 24 giờ ấy, kênh đợt B là ĐỐI CHỨNG của đợt A.
-* An toàn: tối đa `toi_da_moi_ngay` (30) lời mời mới mỗi ngày toàn máy; tối đa MỘT lô mỗi kênh nguồn mỗi ngày; nghỉ
+  đợt A ở phiên kế của kênh nguồn, đợt B ở phiên NGÀY HÔM SAU (viec_dom chặn). Ngày ấy, kênh đợt B là ĐỐI CHỨNG.
+* Kênh ĐÃ là cộng sự của video (trang xem công khai, vd video TL4 chủ đã thêm tay) → không mời, vẫn chiếm chỗ trần.
+* An toàn: tối đa `toi_da_moi_ngay` (30) lời mời mới mỗi ngày toàn máy; tối đa 2 lô mỗi kênh nguồn mỗi ngày; nghỉ
   `nghi_giay` giữa hai thao tác như người; hộp cảnh báo/hạn chế của YouTube về cộng tác → DỪNG cả tính năng
   (`dung.json`) + Việc của bạn, tới khi người gỡ. Không đụng tiêu đề/bìa (khiên video thắng giữ nguyên), không xoá gì.
 
@@ -29,7 +33,8 @@ Mỗi lô là MỘT mục `loai: moi_cong_su` = {id, kenh_nguon, video_id, view_
 `cho` (chờ tới hạn mời) → `da_moi` (đã gửi, `link` mời nếu Studio đưa) → `da_nhan` (kênh kia đã nhận) → `xac_minh`
 (trang xem công khai ghi công kênh đó) · `loi` (lan_loi, ly_do — thử lại có hạn) · `bo_qua` (ly_do: vượt trần, kênh
 không có tính năng…). Mục chạy lại được, không trùng: một video chỉ một lô; một kênh chỉ mời một lần.
-Máy DOM thực thi: `vm/cong_su_dom.py` (skill D26). Quét + lập lô + đo: `python -m core.cong_su quet` (skill D25).
+Máy DOM thực thi: `vm/cong_su_dom.py --phien` (bước trong phiên kênh; D26 chỉ còn là mục danh mục). Kế hoạch ngày +
+lập lô + đo: `python -m core.cong_su quet` (skill D25). Việc từng kênh hôm nay: `workspace/cong-su/viec-hom-nay.json`.
 
 ═══ ĐO ═══ (`do_hieu_qua`, sau `ngay_do` + `ngay_tre_studio` ngày)
 Mỗi kênh cộng sự và kênh nguồn: view/ngày, đăng ký mới/ngày, hiển thị/ngày (chuỗi ngày Studio `core.chi_so_kenh`) trong
@@ -58,6 +63,7 @@ TEP_HANG = "hang.json"
 TEP_SO = "so.jsonl"
 TEP_DUNG = "dung.json"
 TEP_QUET = "quet-cuoi.json"
+TEP_VIEC = "viec-hom-nay.json"
 KHOA_CAI = "cong_su"
 BO_PHAN_NAO = "tang-truong"
 LOAI = "moi_cong_su"
@@ -70,9 +76,15 @@ CAI_DAT_MAC_DINH: Dict[str, Any] = {
     #: lại trần trong hộp mỗi lượt và không bao giờ vượt.
     "toi_da_moi_video": 5,
     "toi_da_moi_ngay": 30,
-    "lo_moi_kenh_nguon_ngay": 1,
+    "lo_moi_kenh_nguon_ngay": 2,
+    #: Nguồn «top 5 nhóm» (chủ 21/10/2026): mỗi ngày MỘT lần, 5 video tăng view 48 giờ nhiều nhất của CẢ nhóm kênh.
+    "top_so_video": 5,
+    "top_toi_thieu_view_48h": 300,
+    #: Lập kế hoạch ngày sau khi QUÉT NGÀY của mọi kênh đã về (hoặc muộn nhất giờ này).
+    "gio_lap_ke_hoach": "07:30",
+    "gio_lay_mau": 20,
     "gio_dot_b": 24,
-    "gio_cho_nhan": 48,
+    "gio_cho_nhan": 50,
     "so_thu_lai": 1,
     "toi_da_loi": 3,
     "phut_thu_lai": 90,
@@ -659,14 +671,45 @@ def da_moi_hom_nay(ds: Sequence[Dict[str, Any]], ngay: str) -> int:
                if str(n.get("luc_moi") or "").startswith(ngay))
 
 
+CHE_DO_NONG, CHE_DO_TOP = "nong_48h", "top5_nhom_48h"
+
+
+def _han_dot(bay: _dt.datetime, dot: str) -> str:
+    """Hạn mời: đợt A ngay (phiên kế của kênh nguồn); đợt B sớm nhất 00:00 NGÀY HÔM SAU (= phiên hôm sau) — viec_dom
+    còn chặn thêm: B chỉ khi đợt A đã gửi ở một ngày trước."""
+    if dot != "B":
+        return _luc(bay)
+    return _luc(_dt.datetime.combine(bay.date() + _dt.timedelta(days=1), _dt.time(0, 0)))
+
+
+def cong_su_san(vid: str, uc_nguon: str, tai: Optional[Tai] = None) -> Tuple[List[str], int]:
+    """(UC các kênh ĐÃ là cộng sự của video — trang xem công khai, bỏ chủ; mã HTTP). Mạng hỏng → ([], 0)."""
+    ma, du = (tai or tai_that)("https://www.youtube.com/watch?v={0}&hl=en".format(vid))
+    if ma != 200 or not du:
+        return [], ma
+    return [u for u in uc_ghi_cong(du.decode("utf-8", "replace")) if u != uc_nguon], ma
+
+
+def _nguoi_moi(goc: str, k: str, x: Dict[str, Any], kenh: Dict[str, Dict[str, Any]], ho_so: Dict[str, Any],
+               thu_tu: int) -> Dict[str, Any]:
+    return {"kenh": k, "uc": kenh[k]["uc"], "link_kenh": link_kenh(kenh[k]["uc"]), "thu_tu": thu_tu,
+            "ly_do_chon": x["ly_do"], "sub_luc_kich": (ho_so.get(k) or {}).get("sub"), "lan_loi": 0,
+            "trang_chu_truoc": ti_le_trang_chu(goc, k)}
+
+
 def tao_lo(goc: str, v: Dict[str, Any], view: int, bay: _dt.datetime, cai: Dict[str, Any],
-           kenh: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
-    """MỘT mục `moi_cong_su` cho video `v` (chưa ghi). Kênh không mời được → `bo_qua` kèm lý do (vẫn ghi để đọc)."""
+           kenh: Optional[Dict[str, Dict[str, Any]]] = None, che_do: str = CHE_DO_NONG,
+           tang_48h: Optional[int] = None, tai: Optional[Tai] = None) -> Dict[str, Any]:
+    """MỘT mục `moi_cong_su` cho video `v` (chưa ghi). Kênh ĐÃ là cộng sự (trang xem công khai) → `xac_minh`,
+    `co_san` (không mời, chiếm chỗ trong trần YouTube). Kênh không mời được → `bo_qua` kèm lý do.
+    Đợt A mời ở phiên kế của kênh nguồn; đợt B ở phiên của kênh nguồn NGÀY HÔM SAU (viec_dom chặn)."""
     kenh = kenh if kenh is not None else kenh_hoat_dong(goc)
     nguon = v["kenh"]
+    uc_nguon = (kenh.get(nguon) or {}).get("uc") or uc_ghim(goc).get(nguon, "")
+    san, ma_san = cong_su_san(v["video_id"], uc_nguon, tai)
     vung = vung_video(goc, v["video_id"], v.get("tieu_de") or "", list(kenh))
     diem = diem_vung(goc, vung)
-    ung = [k for k, x in kenh.items() if k != nguon and not x["ly_do_bo"]]
+    ung = [k for k, x in kenh.items() if k != nguon and not x["ly_do_bo"] and x["uc"] not in san]
     nguon_vung = "chien_truong" if diem else ""
     if not diem:
         diem = diem_nghia(goc, v.get("tieu_de") or "", ung)
@@ -674,45 +717,96 @@ def tao_lo(goc: str, v: Dict[str, Any], view: int, bay: _dt.datetime, cai: Dict[
     ho_so = {k: ho_so_kenh(goc, k, bay) for k in ung}
     xep = xep_uu_tien(ung, diem, ho_so, int(cai.get("ngay_kenh_moi") or 14))
     tran = int(cai.get("toi_da_moi_video") or 5)
-    trong = [x["kenh"] for x in xep[:tran]]
+    cho = max(0, tran - len(san))
+    trong = [x["kenh"] for x in xep[:cho]]
     dot = chia_dot(trong, v["video_id"])
-    han_b = bay + _dt.timedelta(hours=float(cai.get("gio_dot_b") or 24))
     nguoi = []
     for i, x in enumerate(xep):
         k = x["kenh"]
-        n = {"kenh": k, "uc": kenh[k]["uc"], "link_kenh": link_kenh(kenh[k]["uc"]), "thu_tu": i + 1,
-             "ly_do_chon": x["ly_do"], "sub_luc_kich": (ho_so.get(k) or {}).get("sub"), "lan_loi": 0,
-             "trang_chu_truoc": ti_le_trang_chu(goc, k)}
+        n = _nguoi_moi(goc, k, x, kenh, ho_so, i + 1)
         if k in dot:
-            n.update(dot=dot[k], trang_thai=TT_CHO, han_moi=_luc(bay if dot[k] == "A" else han_b))
+            n.update(dot=dot[k], trang_thai=TT_CHO, han_moi=_han_dot(bay, dot[k]))
         else:
-            n.update(dot="", trang_thai=TT_BO_QUA, ly_do="vượt trần {0} cộng sự/video".format(tran))
+            n.update(dot="", trang_thai=TT_BO_QUA, ly_do="vượt trần {0} cộng sự/video ({1} đã có)".format(tran, len(san)))
         nguoi.append(n)
     for k, x in kenh.items():
-        if k != nguon and x["ly_do_bo"]:
+        if k == nguon:
+            continue
+        if x["uc"] and x["uc"] in san:
+            nguoi.append({"kenh": k, "uc": x["uc"], "trang_thai": TT_XAC_MINH, "co_san": True, "dot": "",
+                          "ly_do": "đã là cộng sự từ trước (trang xem công khai)", "luc_xac_minh": _luc(bay)})
+        elif x["ly_do_bo"]:
             nguoi.append({"kenh": k, "uc": x["uc"], "trang_thai": TT_BO_QUA, "ly_do": x["ly_do_bo"], "dot": ""})
     return {"id": "{0}:{1}".format(LOAI, v["video_id"]), "loai": LOAI, "kenh_nguon": nguon, "video_id": v["video_id"],
+            "che_do": che_do, "tang_48h_luc_kich": tang_48h,
             "tieu_de": (v.get("tieu_de") or "")[:200], "dang_luc": v.get("dang_luc"), "nguon_gio": v.get("nguon"),
             "view_luc_kich": view, "luc_kich": _luc(bay), "ngay": bay.date().isoformat(), "vung": vung,
-            "nguon_vung": nguon_vung,
+            "nguon_vung": nguon_vung, "cong_su_san": len(san), "ma_trang_xem": ma_san,
             "trang_thai": "mo", "tran_youtube": tran, "nguoi_moi": nguoi,
             "moc": {"sub_nguon": ho_so_kenh(goc, nguon, bay).get("sub")}}
 
 
+def bo_sung_lo(goc: str, lo: Dict[str, Any], bay: _dt.datetime, cai: Dict[str, Any],
+               kenh: Dict[str, Dict[str, Any]], tai: Optional[Tai] = None) -> List[str]:
+    """Video đã có lô mà hôm nay vẫn trong top 5 nhóm: CHỈ thêm kênh còn thiếu (kênh mới mở, kênh trước đó bị bỏ vì
+    thiếu Chrome/UC) tới trần, kênh đã là cộng sự thì bỏ qua. Sửa `lo` tại chỗ, trả kênh vừa thêm."""
+    co = {n["kenh"] for n in lo.get("nguoi_moi") or [] if n.get("trang_thai") != TT_BO_QUA or n.get("co_san")}
+    uc_nguon = (kenh.get(lo["kenh_nguon"]) or {}).get("uc") or ""
+    san, _ma = cong_su_san(lo["video_id"], uc_nguon, tai)
+    dang = sum(1 for n in lo.get("nguoi_moi") or [] if n.get("trang_thai") in (TT_CHO, TT_DA_MOI, TT_DA_NHAN, TT_LOI))
+    da_co = set(san) | {n.get("uc") for n in lo.get("nguoi_moi") or [] if n.get("co_san") and n.get("uc")}
+    cho = max(0, int(cai.get("toi_da_moi_video") or 5) - len(da_co) - dang)
+    ung = [k for k, x in kenh.items() if k != lo["kenh_nguon"] and not x["ly_do_bo"] and k not in co
+           and x["uc"] not in san]
+    if not ung or not cho:
+        return []
+    ho_so = {k: ho_so_kenh(goc, k, bay) for k in ung}
+    xep = xep_uu_tien(ung, {}, ho_so, int(cai.get("ngay_kenh_moi") or 14))[:cho]
+    dot = chia_dot([x["kenh"] for x in xep], lo["video_id"])
+    lo["nguoi_moi"] = [n for n in lo.get("nguoi_moi") or [] if n["kenh"] not in {x["kenh"] for x in xep}]
+    for i, x in enumerate(xep):
+        n = _nguoi_moi(goc, x["kenh"], x, kenh, ho_so, len(lo["nguoi_moi"]) + 1)
+        n.update(dot=dot[x["kenh"]], trang_thai=TT_CHO, han_moi=_han_dot(bay, dot[x["kenh"]]), bo_sung=bay.date().isoformat())
+        lo["nguoi_moi"].append(n)
+    return [x["kenh"] for x in xep]
+
+
+def _hom_nay_da_lap(goc: str, bay: _dt.datetime) -> Dict[str, Any]:
+    q = _doc_json(os.path.join(thu_muc(goc), TEP_QUET))
+    return q if isinstance(q, dict) and str(q.get("ngay_ke_hoach") or "") == bay.date().isoformat() else {}
+
+
 def quet(goc: str, bay: Optional[_dt.datetime] = None, tai: Optional[Tai] = None, thu: bool = False,
          cai_de: Optional[Dict[str, Any]] = None, nk: Callable[[str], None] = lambda s: None) -> Dict[str, Any]:
-    """MỘT lượt (skill D25, mỗi giờ): đọc lượt xem công khai video ≤ 48 giờ → lập lô cho video đạt ngưỡng → đo các lô
-    đã đủ ngày. `thu`: không ghi gì (trả các lô SẼ lập)."""
+    """KẾ HOẠCH NGÀY (skill D25, MỘT lần/ngày sau QUÉT NGÀY — chủ 21/10/2026: «1 ngày 1 lần»), không Chrome:
+    1. mẫu lượt xem công khai mỗi kênh (cho video cũ quá ~31 ngày mà quét ngày không còn chụp mốc);
+    2. video NÓNG: > `nguong_view` trong `gio_cua_so` giờ đầu → lô `nong_48h`;
+    3. TOP 5 NHÓM: 5 video tăng view 48 giờ nhiều nhất của CẢ nhóm (≥ `top_toi_thieu_view_48h`; nóng đứng đầu) →
+       lô `top5_nhom_48h`; video đã có lô mà vẫn trong top → chỉ thêm kênh còn thiếu;
+    4. việc từng kênh cho bước «cộng sự» trong PHIÊN ngày của kênh đó (`viec-hom-nay.json`); 5. đo các lô đủ ngày.
+    `thu`: không ghi gì."""
+    from . import cong_su_top as ct  # noqa: PLC0415
     bay = bay or _dt.datetime.now()
     cai = doc_cai(goc, cai_de)
-    kq: Dict[str, Any] = {"luc": _luc(bay), "thu": thu, "video": [], "lo_moi": [], "bo": [], "do": []}
+    kq: Dict[str, Any] = {"luc": _luc(bay), "thu": thu, "video": [], "lo_moi": [], "bo_sung": {}, "bo": [], "do": [],
+                          "top5": [], "mau": []}
     if not cai.get("bat", True):
         kq["ly_do"] = "cài đặt cong_su.bat = false"
         return kq
     kenh = kenh_hoat_dong(goc)
     ds_cu = doc_hang(goc)
-    co_lo = {m.get("video_id") for m in ds_cu}
+    theo_vid = {m.get("video_id"): m for m in ds_cu}
+    ngay = bay.date().isoformat()
+    # 1) mẫu công khai
+    mau = ct.doc_mau(goc)
+    for k, x in kenh.items():
+        if x.get("uc") and ct.can_lay_mau(mau, k, bay, float(cai.get("gio_lay_mau") or 20)):
+            kq["mau"].append(ct.lay_mau(goc, k, x["uc"], bay, tai, mau))
+    if not thu and kq["mau"]:
+        _ghi_json(os.path.join(thu_muc(goc), ct.TEP_MAU), mau)
+    # 2) nóng
     nguong, cua_so = float(cai["nguong_view"]), float(cai["gio_cua_so"])
+    nong: Dict[str, Dict[str, Any]] = {}
     for v in video_gan_day(goc, bay, cua_so, list(kenh)):
         r = view_cong_khai(v["video_id"], tai)
         view, nguon_view = r["view"], "trang_xem"
@@ -722,47 +816,92 @@ def quet(goc: str, bay: Optional[_dt.datetime] = None, tai: Optional[Tai] = None
         if r.get("dang_luc") and v.get("nguon") != "so_may_dang":
             v["dang_luc"], v["nguon"] = _luc(r["dang_luc"]), "trang_xem"
         tuoi = (bay - dang).total_seconds() / 3600.0 if dang else None
-        dong = {"kenh": v["kenh"], "video_id": v["video_id"], "view": view, "nguon_view": nguon_view,
-                "tuoi_gio": None if tuoi is None else round(tuoi, 1), "ma_http": r.get("ma")}
-        kq["video"].append(dong)
-        if view is None or tuoi is None or tuoi > cua_so or tuoi < 0 or view <= nguong:
+        kq["video"].append({"kenh": v["kenh"], "video_id": v["video_id"], "view": view, "nguon_view": nguon_view,
+                            "tuoi_gio": None if tuoi is None else round(tuoi, 1), "ma_http": r.get("ma")})
+        if view is not None and tuoi is not None and 0 <= tuoi <= cua_so and view > nguong:
+            nong[v["video_id"]] = dict(v, view=int(view))
+    # 3) top 5 nhóm theo đà 48 giờ
+    bang = ct.top5(goc, bay, list(kenh), san=float(cai.get("top_toi_thieu_view_48h") or 300),
+                   so_luong=int(cai.get("top_so_video") or 5), mau=mau)
+    tat_ca = []
+    for k, b in bang["kenh"].items():
+        for x in b["cao_nhat"] + b["top"]:
+            tat_ca.append(dict(x, kenh=k))
+    uniq = {}
+    for x in tat_ca:
+        uniq.setdefault(x["video_id"], x)
+    for vid, v in nong.items():          # nóng luôn đứng đầu (tăng 48 giờ = mọi lượt xem)
+        uniq[vid] = dict(uniq.get(vid) or {}, video_id=vid, kenh=v["kenh"], tang=max(int(v["view"]),
+                         int((uniq.get(vid) or {}).get("tang") or 0)), nguon=(uniq.get(vid) or {}).get("nguon") or "trang_xem",
+                         nong=True)
+    xep = sorted(uniq.values(), key=lambda x: (not x.get("nong"), -int(x.get("tang") or 0)))
+    san = float(cai.get("top_toi_thieu_view_48h") or 300)
+    chon = [x for x in xep if x.get("nong") or int(x.get("tang") or 0) >= san][:max(int(cai.get("top_so_video") or 5),
+                                                                                       len(nong))]
+    kq["top5"] = chon
+    kq["phan_bo_48h"] = bang["phan_bo"]
+    kq["kenh_top"] = {k: {"du": b["du"], "do_duoc": b["do_duoc"], "cho_mau": b["cho_mau"]} for k, b in bang["kenh"].items()}
+    bt = {k: bang_tom_tat(goc, k) for k in kenh}
+    lo_hom_nay = {}
+    for m in ds_cu:
+        if m.get("ngay") == ngay:
+            lo_hom_nay[m.get("kenh_nguon")] = lo_hom_nay.get(m.get("kenh_nguon"), 0) + 1
+    tran_nguon = int(cai.get("lo_moi_kenh_nguon_ngay") or 2)
+    for x in chon:
+        vid, k = x["video_id"], x["kenh"]
+        if vid in theo_vid:
+            them = bo_sung_lo(goc, theo_vid[vid], bay, cai, kenh, tai)
+            if them:
+                kq["bo_sung"][vid] = them
             continue
-        if v["video_id"] in co_lo:
+        if lo_hom_nay.get(k, 0) >= tran_nguon:
+            kq["bo"].append(dict(x, ly_do="kênh nguồn đã có {0} lô hôm nay".format(tran_nguon)))
             continue
-        ngay = bay.date().isoformat()
-        if sum(1 for m in ds_cu + kq["lo_moi"] if m.get("kenh_nguon") == v["kenh"] and m.get("ngay") == ngay) \
-                >= int(cai.get("lo_moi_kenh_nguon_ngay") or 1):
-            kq["bo"].append(dict(dong, ly_do="kênh nguồn đã có một lô cộng sự hôm nay"))
-            continue
-        lo = tao_lo(goc, v, int(view), bay, cai, kenh)
+        d = bt.get(k, {}).get(vid) or {}
+        v = dict(nong.get(vid) or {"kenh": k, "video_id": vid}, tieu_de=str(d.get("Tiêu đề") or (nong.get(vid) or {}).get(
+            "tieu_de") or ""))
+        che = CHE_DO_NONG if x.get("nong") else CHE_DO_TOP
+        lo = tao_lo(goc, v, int((nong.get(vid) or {}).get("view") or x.get("view") or _so(d.get("Lượt xem")) or 0), bay,
+                    cai, kenh, che_do=che, tang_48h=int(x.get("tang") or 0), tai=tai)
+        lo["nguon_tang"] = x.get("nguon")
         kq["lo_moi"].append(lo)
-        nk("video {0}/{1}: {2:,} lượt xem ở {3:.0f} giờ > {4:,.0f} → lô cộng sự {5} kênh (A {6}, B {7})".format(
-            v["kenh"], v["video_id"], view, tuoi, nguong, sum(1 for n in lo["nguoi_moi"] if n.get("dot")),
-            sum(1 for n in lo["nguoi_moi"] if n.get("dot") == "A"), sum(1 for n in lo["nguoi_moi"] if n.get("dot") == "B")))
+        lo_hom_nay[k] = lo_hom_nay.get(k, 0) + 1
+        nk("{0} {1}/{2}: +{3:,} lượt xem/48 giờ ({4}) → lô {5} kênh (A {6}, B {7}, đã có {8})".format(
+            che, k, vid, int(x.get("tang") or 0), x.get("nguon"), sum(1 for n in lo["nguoi_moi"] if n.get("dot")),
+            sum(1 for n in lo["nguoi_moi"] if n.get("dot") == "A"), sum(1 for n in lo["nguoi_moi"] if n.get("dot") == "B"),
+            lo["cong_su_san"]))
     if not thu:
         ghi_kien_thuc(goc)
-        if kq["lo_moi"]:
-            def them(ds):
-                co = {m.get("video_id") for m in ds}
-                ds.extend(m for m in kq["lo_moi"] if m["video_id"] not in co)
+        moi = {m["video_id"]: m for m in kq["lo_moi"]}
+        bo_sung = {vid: theo_vid[vid] for vid in kq["bo_sung"]}
+
+        def them(ds):
+            co = {m.get("video_id") for m in ds}
+            for i, m in enumerate(ds):
+                if m.get("video_id") in bo_sung:
+                    ds[i] = bo_sung[m["video_id"]]
+            ds.extend(m for vid, m in moi.items() if vid not in co)
+        if moi or bo_sung:
             sua_hang(goc, them)
-            for lo in kq["lo_moi"]:
-                ghi_su_kien(goc, "lap_lo", kenh=lo["kenh_nguon"], video_id=lo["video_id"], nao_loai="chon",
-                            noi_dung="video {0} đạt {1:,} lượt xem trong {2} giờ đầu → mời {3} kênh cộng sự (đợt A: {4}; "
-                                     "đợt B sau {5} giờ: {6}); vùng «{7}»".format(
-                                         lo["video_id"], lo["view_luc_kich"], int(cua_so),
-                                         sum(1 for n in lo["nguoi_moi"] if n.get("dot")),
-                                         ", ".join(n["kenh"] for n in lo["nguoi_moi"] if n.get("dot") == "A"),
-                                         int(cai.get("gio_dot_b") or 24),
-                                         ", ".join(n["kenh"] for n in lo["nguoi_moi"] if n.get("dot") == "B"),
-                                         lo["vung"] or "?"),
-                            so={"view": lo["view_luc_kich"], "nguong": nguong})
+        for lo in kq["lo_moi"]:
+            ghi_su_kien(goc, "lap_lo", kenh=lo["kenh_nguon"], video_id=lo["video_id"], nao_loai="chon",
+                        che_do=lo["che_do"], noi_dung="[{0}] video {1} +{2:,} lượt xem/48 giờ → mời {3} kênh cộng sự (đợt A: "
+                        "{4}; đợt B phiên hôm sau: {5}; đã có sẵn {6}); vùng «{7}»".format(
+                            lo["che_do"], lo["video_id"], int(lo.get("tang_48h_luc_kich") or 0),
+                            sum(1 for n in lo["nguoi_moi"] if n.get("dot")),
+                            ", ".join(n["kenh"] for n in lo["nguoi_moi"] if n.get("dot") == "A"),
+                            ", ".join(n["kenh"] for n in lo["nguoi_moi"] if n.get("dot") == "B"),
+                            lo["cong_su_san"], lo["vung"] or "?"),
+                        so={"tang_48h": lo.get("tang_48h_luc_kich"), "view": lo["view_luc_kich"], "che_do": lo["che_do"]})
         try:
             kq["do"] = do_hieu_qua(goc, bay)
         except Exception as loi:  # noqa: BLE001
             kq["loi_do"] = str(loi)[:200]
+        viec = viec_dom(goc, bay, cai)
+        _ghi_json(os.path.join(thu_muc(goc), TEP_VIEC), {"luc": _luc(bay), "viec": viec})
         _ghi_json(os.path.join(thu_muc(goc), TEP_QUET), dict({k: v for k, v in kq.items() if k != "lo_moi"},
-                                                                  lo_moi=[m["id"] for m in kq["lo_moi"]]))
+                                                                  lo_moi=[m["id"] for m in kq["lo_moi"]],
+                                                                  ngay_ke_hoach=ngay))
     return kq
 
 
@@ -774,40 +913,61 @@ def _han_qua(n: Dict[str, Any], khoa: str, bay: _dt.datetime) -> bool:
 
 
 def viec_dom(goc: str, bay: Optional[_dt.datetime] = None, cai: Optional[Dict[str, Any]] = None,
-             ds: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-    """Việc tới hạn (thuần trên `ds`): `{"viec": "moi", "kenh": nguồn, id, video_id, nguoi: [...]}` — mời các kênh
-    tới hạn (trong ngân sách ngày còn lại); `{"viec": "nhan", "kenh": kênh được mời, id, video_id, link, kenh_nguon}`."""
+             ds: Optional[List[Dict[str, Any]]] = None, kenh: str = "") -> List[Dict[str, Any]]:
+    """Việc tới hạn (thuần trên `ds`) cho bước «cộng sự» trong PHIÊN ngày của kênh (`kenh` = chỉ việc của kênh đó):
+    `{"viec": "nhan", "kenh": kênh được mời, …}` — nhận lời mời gửi tới kênh; `{"viec": "moi", "kenh": nguồn, id,
+    video_id, nguoi: [...]}` — kênh nguồn gửi lời mời (trong ngân sách ngày; lô NÓNG trước). Đợt B chỉ tới hạn khi
+    đợt A của lô đã gửi ở một NGÀY TRƯỚC (= phiên hôm sau của kênh nguồn). Mỗi kênh nguồn tối đa
+    `lo_moi_kenh_nguon_ngay` lô mời mỗi phiên."""
     bay = bay or _dt.datetime.now()
     cai = cai or doc_cai(goc)
     ds = doc_hang(goc) if ds is None else ds
-    con = max(0, int(cai.get("toi_da_moi_ngay") or 30) - da_moi_hom_nay(ds, bay.date().isoformat()))
+    hom_nay = bay.date().isoformat()
+    con = max(0, int(cai.get("toi_da_moi_ngay") or 30) - da_moi_hom_nay(ds, hom_nay))
     toi_da_loi = int(cai.get("toi_da_loi") or 3)
+    tran_nguon = int(cai.get("lo_moi_kenh_nguon_ngay") or 2)
     ra: List[Dict[str, Any]] = []
-    for m in ds:
-        if m.get("loai") != LOAI or m.get("trang_thai") != "mo":
-            continue
+    so_lo_nguon: Dict[str, int] = {}
+    ghim = uc_ghim(goc)
+    thu_tu = sorted((m for m in ds if m.get("loai") == LOAI and m.get("trang_thai") == "mo"),
+                    key=lambda m: (m.get("che_do") == CHE_DO_TOP, str(m.get("luc_kich") or "")))
+    for m in thu_tu:
+        nguoi = m.get("nguoi_moi") or []
+        a_ngay = [str(n.get("luc_moi") or "")[:10] for n in nguoi if n.get("dot") == "A" and n.get("luc_moi")]
+        a_con = [n for n in nguoi if n.get("dot") == "A" and n.get("trang_thai") == TT_CHO]
+        b_duoc = not a_con and bool(a_ngay) and min(a_ngay) < hom_nay
+        if not a_ngay and not any(n.get("dot") == "A" and n.get("trang_thai") in (TT_CHO, TT_LOI) for n in nguoi):
+            b_duoc = True                                    # đợt A không còn ai mời được → B khỏi chờ
         moi = []
-        for n in m.get("nguoi_moi") or []:
+        for n in nguoi:
             tt = n.get("trang_thai")
+            if n.get("dot") == "B" and not b_duoc:
+                continue
             if tt == TT_CHO and _han_qua(n, "han_moi", bay) and _han_qua(n, "thu_lai_luc", bay):
                 moi.append(n)
             elif tt == TT_LOI and n.get("buoc_loi") == "moi" and int(n.get("lan_loi") or 0) < toi_da_loi \
                     and _han_qua(n, "thu_lai_luc", bay):
                 moi.append(n)
-        moi = moi[:con]
-        con -= len(moi)
-        if moi:
-            ra.append({"viec": "moi", "kenh": m["kenh_nguon"], "id": m["id"], "video_id": m["video_id"],
-                       "nguoi": [{"kenh": n["kenh"], "uc": n.get("uc"), "link_kenh": n.get("link_kenh") or
-                                  link_kenh(n.get("uc") or "")} for n in moi]})
-        for n in m.get("nguoi_moi") or []:
+        if moi and (not kenh or m["kenh_nguon"] == kenh) and so_lo_nguon.get(m["kenh_nguon"], 0) < tran_nguon:
+            moi = moi[:con]
+            con -= len(moi)
+            if moi:
+                so_lo_nguon[m["kenh_nguon"]] = so_lo_nguon.get(m["kenh_nguon"], 0) + 1
+                ra.append({"viec": "moi", "kenh": m["kenh_nguon"], "id": m["id"], "video_id": m["video_id"],
+                           "che_do": m.get("che_do") or CHE_DO_NONG,
+                           "nguoi": [{"kenh": n["kenh"], "uc": n.get("uc"), "dot": n.get("dot"),
+                                      "link_kenh": n.get("link_kenh") or link_kenh(n.get("uc") or "")} for n in moi]})
+        for n in nguoi:
+            if kenh and n["kenh"] != kenh:
+                continue
             tt = n.get("trang_thai")
             if (tt == TT_DA_MOI and _han_qua(n, "thu_lai_luc", bay)) or (
                     tt == TT_LOI and n.get("buoc_loi") == "nhan" and int(n.get("lan_loi") or 0) < toi_da_loi
                     and _han_qua(n, "thu_lai_luc", bay)):
                 ra.append({"viec": "nhan", "kenh": n["kenh"], "id": m["id"], "video_id": m["video_id"],
                            "link": n.get("link") or "", "kenh_nguon": m["kenh_nguon"],
-                           "uc_nguon": (uc_ghim(goc).get(m["kenh_nguon"]) or "")})
+                           "uc_nguon": ghim.get(m["kenh_nguon"]) or ""})
+    ra.sort(key=lambda v: v["viec"] != "nhan")               # nhận trước, mời sau (trong một phiên)
     return ra
 
 
@@ -874,7 +1034,7 @@ def do_hieu_qua(goc: str, bay: Optional[_dt.datetime] = None, cai: Optional[Dict
         kich = _doc_luc(m.get("luc_kich"))
         if not kich or (bay - kich).days < can:
             continue
-        nguoi = [n for n in m.get("nguoi_moi") or [] if n.get("dot")]
+        nguoi = [n for n in m.get("nguoi_moi") or [] if n.get("dot") and not n.get("co_san")]
         dot_a = [n for n in nguoi if n.get("dot") == "A" and n.get("trang_thai") in TT_DANG_DO]
         dot_b = [n for n in nguoi if n.get("dot") == "B"]
         moc_a = min((d for d in (_ngay_studio(n.get("luc_nhan")) for n in dot_a) if d), default=None)
@@ -917,12 +1077,15 @@ def do_hieu_qua(goc: str, bay: Optional[_dt.datetime] = None, cai: Optional[Dict
                  "chua_thay": "chưa thấy nâng — giữ ngưỡng, xem lại sau 3 lô",
                  "khong_du_so": "chưa đủ số Studio (kênh chưa nhận / thiếu chuỗi ngày)"}[ket]
         do = {"luc": _luc(bay), "ket": ket, "goi_y": goi_y, "a_b": ab, "kenh": kq_kenh, "nguon": nguon,
+              "che_do": m.get("che_do") or CHE_DO_NONG,
               "view_video_sau": view_sau, "view_video_luc_kich": m.get("view_luc_kich")}
         m["do_sau"] = do
         vua.append(m)
         ghi_su_kien(goc, "do", kenh=m["kenh_nguon"], video_id=m["video_id"], nao_loai="do",
-                    noi_dung="cộng sự video {0}: {1} — A–B view ngày 1 nâng {2}, đăng ký nâng {3}; {4}".format(
-                        m["video_id"], ket, nang_v, (ab.get("dang_ky") or {}).get("nang"), goi_y),
+                    che_do=m.get("che_do") or CHE_DO_NONG,
+                    noi_dung="[{5}] cộng sự video {0}: {1} — A–B view ngày 1 nâng {2}, đăng ký nâng {3}; {4}".format(
+                        m["video_id"], ket, nang_v, (ab.get("dang_ky") or {}).get("nang"), goi_y,
+                        m.get("che_do") or CHE_DO_NONG),
                     so={"nang_view": nang_v, "nang_dk": (ab.get("dang_ky") or {}).get("nang")})
     if vua:
         def ghi(ds2):
@@ -1021,6 +1184,8 @@ def muc_tu_kiem(goc: str, bay: _dt.datetime, tai: Optional[Tai] = None, ghi: boo
                                "bang_chung": "đã mời {0}, chờ nhận".format(n.get("luc_moi") or "")})
             elif tt == TT_DA_NHAN:
                 cho_xm.append(n)
+            elif tt == TT_XAC_MINH and n.get("co_san"):
+                continue
             elif tt == TT_XAC_MINH:
                 ra.append({"khoa": khoa, "kenh": n["kenh"], "tt": "dat", "viec": viec,
                            "bang_chung": "trang xem ghi công từ {0}".format(n.get("luc_xac_minh") or "")})
@@ -1077,25 +1242,35 @@ def thu_lai_nhan(goc: str, id_muc: str, kenh: str, cai: Optional[Dict[str, Any]]
 # ── điều kiện skill (chỉ đọc đĩa) ───────────────────────────────────────────
 
 def can_quet(goc: str, bay: Optional[_dt.datetime] = None) -> Tuple[bool, str]:
-    """D25: có video ≤ 48 giờ tuổi (sổ máy đăng) hoặc lô chờ đo — và lượt quét cuối đã cũ ≥ 50 phút."""
+    """D25: MỘT lần/ngày — chưa lập kế hoạch hôm nay và (QUÉT NGÀY mọi kênh đã về hôm nay, hoặc đã qua
+    `gio_lap_ke_hoach`)."""
     bay = bay or _dt.datetime.now()
     cai = doc_cai(goc)
     if not cai.get("bat", True):
         return False, "cài đặt cong_su.bat = false"
-    q = _doc_json(os.path.join(thu_muc(goc), TEP_QUET)) or {}
-    cuoi = _doc_luc(q.get("luc")) if isinstance(q, dict) else None
-    if cuoi and (bay - cuoi).total_seconds() < 50 * 60:
-        return False, "vừa quét {0}".format(q.get("luc"))
+    if _hom_nay_da_lap(goc, bay):
+        return False, "đã lập kế hoạch cộng sự hôm nay"
     kenh = list(kenh_hoat_dong(goc))
-    moi = [v for v in video_gan_day(goc, bay, float(cai["gio_cua_so"]), kenh) if v.get("nguon") == "so_may_dang"]
-    cho_do = [m for m in doc_hang(goc) if m.get("loai") == LOAI and not m.get("do_sau")]
-    if not moi and not cho_do:
-        return False, "không có video ≤ {0} giờ tuổi, không lô chờ đo".format(cai["gio_cua_so"])
-    return True, "{0} video ≤ {1} giờ tuổi · {2} lô chờ đo".format(len(moi), cai["gio_cua_so"], len(cho_do))
+    hom_nay = bay.date()
+    chua = []
+    for k in kenh:
+        p = os.path.join(goc, "CHANNEL", k, "chi-so", "bang-tom-tat.csv")
+        try:
+            t = _dt.datetime.fromtimestamp(os.path.getmtime(p))
+        except OSError:
+            t = None
+        if t is None or t.date() != hom_nay or t.hour < 2:
+            chua.append(k)
+    gio = str(cai.get("gio_lap_ke_hoach") or "07:30")
+    qua_gio = (bay.hour, bay.minute) >= (int(gio[:2]), int(gio[3:5]))
+    if chua and not qua_gio:
+        return False, "chờ QUÉT NGÀY: {0}".format(", ".join(chua))
+    return True, "lập kế hoạch ngày ({0})".format("quét ngày đã về đủ" if not chua else "quá {0}, thiếu {1}".format(
+        gio, ", ".join(chua)))
 
 
-def can_dom(goc: str, bay: Optional[_dt.datetime] = None) -> Tuple[bool, str]:
-    """D26: có việc mời/nhận tới hạn, không dừng khẩn, ngoài khung giờ cấm."""
+def can_dom(goc: str, bay: Optional[_dt.datetime] = None, kenh: str = "") -> Tuple[bool, str]:
+    """Bước «cộng sự» trong phiên kênh: có việc mời/nhận tới hạn cho kênh, không dừng khẩn."""
     bay = bay or _dt.datetime.now()
     cai = doc_cai(goc)
     if not cai.get("bat", True):
@@ -1103,10 +1278,7 @@ def can_dom(goc: str, bay: Optional[_dt.datetime] = None) -> Tuple[bool, str]:
     d = dang_dung(goc)
     if d:
         return False, "DỪNG: " + str(d.get("ly_do") or "")[:100]
-    cam = trong_gio_cam(bay, cai)
-    if cam:
-        return False, cam
-    v = viec_dom(goc, bay, cai)
+    v = viec_dom(goc, bay, cai, kenh=kenh)
     if not v:
         return False, "không có lời mời/nhận tới hạn"
     return True, "{0} việc mời · {1} việc nhận".format(sum(1 for x in v if x["viec"] == "moi"),
@@ -1130,6 +1302,18 @@ def _in_quet(kq: Dict[str, Any]) -> None:
                                                        n.get("ly_do_chon") or n.get("ly_do") or ""))
     if not kq["video"]:
         print("  (không có video ≤ cửa sổ)")
+    print("TOP {0} NHÓM theo lượt xem tăng 48 giờ:".format(len(kq.get("top5") or [])))
+    for x in kq.get("top5") or []:
+        print("  {0:<10} {1} +{2:,} ({3}){4}".format(x["kenh"], x["video_id"], int(x.get("tang") or 0), x.get("nguon"),
+                                                     " NÓNG" if x.get("nong") else ""))
+    for vid, ds in (kq.get("bo_sung") or {}).items():
+        print("  BỔ SUNG {0}: {1}".format(vid, ", ".join(ds)))
+    pb = kq.get("phan_bo_48h") or []
+    if pb:
+        print("phân bố tăng 48 giờ ({0} video đo được): max {1}, top10 {2}, ≥300: {3}, ≥1000: {4}".format(
+            len(pb), pb[0], pb[:10], sum(1 for x in pb if x >= 300), sum(1 for x in pb if x >= 1000)))
+    for k, b in (kq.get("kenh_top") or {}).items():
+        print("  {0:<10} đo được {1}, đạt sàn {2}, chờ mẫu {3}".format(k, b["do_duoc"], b["du"], b["cho_mau"]))
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

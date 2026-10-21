@@ -2498,6 +2498,20 @@ def chay_mot_phien(cau_hinh: dict, cau_hinh_kenh: dict, kenh: str) -> dict:
             han_giay=float(cau_hinh.get("phien_han_cmt_giay") or 30 * 60))
     ket_qua["cmt"] = msg_cmt
     ghi("phiên kênh {0}: {1}".format(kenh, ket_qua["cmt"]))
+    # Cộng sự (21/10/2026, chủ: «không mở Chrome thêm — tích hợp vào cùng lúc, các kênh làm lần lượt»): bước nhận lời
+    # mời gửi tới kênh này + gửi lời mời của kênh này (kế hoạch ngày `core.cong_su`, skill D25). Không có việc thì tiến
+    # trình con thoát ngay, không nối Chrome. `--trong-phien`: dùng khoá máy phiên đang giữ.
+    if os.path.isfile(os.path.join(GOC, "cong_su_dom.py")) and cau_hinh.get("phien_cong_su", True) is not False:
+        doi_viec_khoa_may("cong_su")
+        try:
+            msg_cs, _ma_cs = _chay_mot_lan(
+                os.path.join(GOC, "cong_su_dom.py"), kenh, "cộng sự (DOM)",
+                han_giay=float(cau_hinh.get("phien_han_cong_su_giay") or 25 * 60),
+                co_gi_them=("--phien", "--trong-phien"))
+        except Exception as loi:  # noqa: BLE001 — bước phụ hỏng không chặn đóng Chrome
+            msg_cs = "cộng sự: lỗi {0}".format(loi)
+        ket_qua["cong_su"] = msg_cs
+        ghi("phiên kênh {0}: {1}".format(kenh, msg_cs))
     dong_chrome_kenh(cau_hinh_kenh)
     ket_qua["ket_thuc"] = time.strftime("%Y-%m-%d %H:%M:%S")
     ghi("── PHIÊN kênh {0} xong ──".format(kenh))

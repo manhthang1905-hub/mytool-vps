@@ -245,3 +245,34 @@ def test_ke_hoach_dung_khan_khong_lam(tmp_path, monkeypatch):
     cs.dat_dung(str(tmp_path), "thử")
     ma, ra = csd.chay_ke_hoach("that", tu_giu=False, chay=lambda *a, **k: pytest.fail("không được chạy"))
     assert ma == csd.MA_CHAN and ra == []
+
+
+def test_phien_agent_co_buoc_cong_su_truoc_khi_dong_chrome(monkeypatch):
+    """Chủ 21/10: KHÔNG mở Chrome thêm — bước cộng sự nằm TRONG phiên ngày của kênh, sau bình luận, trước đóng Chrome."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("vm_agent_cong_su", GOC / "vm" / "agent.py")
+    ag = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ag)
+    goi = []
+    monkeypatch.setattr(ag, "GOC", str(GOC / "vm"))
+    monkeypatch.setattr(ag, "_mo_chrome_viec_dang", lambda ch: True)
+    monkeypatch.setattr(ag, "dong_chrome_kenh", lambda ch: goi.append("dong"))
+    monkeypatch.setattr(ag, "doi_viec_khoa_may", lambda v: None)
+    monkeypatch.setattr(ag, "_doc_trang_thai", lambda c: {})
+    monkeypatch.setattr(ag, "co_token_oauth", lambda k: False)
+    monkeypatch.setattr(ag, "_chay_mot_lan", lambda duong, kenh, nhan, han_giay, co_gi_them=("--mot-lan",):
+                        goi.append((Path(duong).name, tuple(co_gi_them))) or ("ok", 0))
+    ag.chay_mot_phien({}, {"kenh": "K", "cach_dang": "anh", "tu_dang": True}, "K")
+    ten = [g[0] if isinstance(g, tuple) else g for g in goi]
+    assert ("cong_su_dom.py", ("--phien", "--trong-phien")) in goi
+    assert ten.index("cong_su_dom.py") > ten.index("may_cmt_dom.py") and ten[-1] == "dong"
+    goi.clear()
+    ag.chay_mot_phien({"phien_cong_su": False}, {"kenh": "K", "cach_dang": "anh", "tu_dang": True}, "K")
+    assert "cong_su_dom.py" not in [g[0] if isinstance(g, tuple) else g for g in goi]
+
+
+def test_phien_khong_viec_khong_noi_chrome(tmp_path, monkeypatch):
+    monkeypatch.setattr(csd, "GOC_TOOL", str(tmp_path))
+    monkeypatch.setattr(csd, "chay_kenh", lambda *a, **k: pytest.fail("không việc thì không được nối Chrome"))
+    monkeypatch.setattr(csd, "_cai_nhat_ky", lambda: None)
+    assert csd.main(["--phien", "--kenh", "KA", "--trong-phien"]) == csd.MA_XONG

@@ -1133,11 +1133,6 @@ def d_cong_su_quet(goc, kenh):
     return cong_su.can_quet(goc, _gio())
 
 
-def d_cong_su_dom(goc, kenh):
-    from core import cong_su  # noqa: PLC0415
-    return cong_su.can_dom(goc, _gio())
-
-
 # D20 · Thay kênh không được phát (20/10/2026) — `core/thay_kenh.py` ─────────────────────────────────────────────
 
 def k_thay_kenh(goc, kenh):
@@ -1367,23 +1362,24 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.nhan_nghia gan --toi-da 6000", k_nhan_nghia, [], dieu_kien=d_nhan_nghia,
            chay=lambda goc, kenh: _py("-m", "core.nhan_nghia", "gan", "--toi-da", "6000"), nhip_gio=20, tu_ap=True, toan_may=True,
            han_phut=40),
-    KyNang("D25", "Cộng sự: quét video đang lên", "dinh_ky",
-           "Mỗi giờ (khi có video ≤ 48 giờ tuổi hoặc lô chờ đo): đọc lượt xem TRANG XEM CÔNG KHAI của video ≤ 48 giờ; "
-           "video > 20.000 lượt xem trong 48 giờ đầu → MỘT lô mời mọi kênh ta khác làm cộng sự (cùng vùng đề tài → kênh "
-           "mới / xa 1.000 đăng ký → còn lại; trần cộng sự của YouTube), chia ngẫu nhiên có định hai đợt A (ngay) / B "
-           "(+24 giờ) để đo nhân quả; một lô mỗi kênh nguồn mỗi ngày. Đo sau 7 + 2 ngày: view/đăng ký/hiển thị của kênh "
-           "cộng sự so 7 ngày trước + A so B → workspace/cong-su/ + não «tang-truong». Cài: workspace/cai-dat.json cong_su.",
+    KyNang("D25", "Cộng sự: kế hoạch ngày", "dinh_ky",
+           "MỘT lần/ngày sau QUÉT NGÀY (mọi kênh đã về, muộn nhất 07:30), không Chrome: chọn 5 video tăng view 48 giờ "
+           "nhiều nhất của CẢ nhóm (thẻ 48 giờ Studio → mốc chụp từng video → mẫu lượt xem công khai tự lấy; video > 20.000 "
+           "lượt xem trong 48 giờ đầu luôn đứng đầu; sàn 300/48 giờ) → mỗi video một lô mời các kênh ta khác làm cộng sự "
+           "(cùng vùng → kênh mới / xa 1.000 đăng ký → còn lại; trần 5/video tính cả cộng sự đã có; video đã có lô chỉ "
+           "thêm kênh thiếu), hai đợt A (phiên kế của kênh nguồn) / B (phiên hôm sau); tối đa 2 lô mỗi kênh nguồn/ngày. "
+           "Đo sau 7 + 2 ngày, gắn chế độ nong_48h / top5_nhom_48h → workspace/cong-su/ + não «tang-truong». "
+           "Cài: workspace/cai-dat.json cong_su.",
            "python -X utf8 -m core.cong_su quet [--thu]", k_cong_su, ["D01"], dieu_kien=d_cong_su_quet,
-           chay=lambda goc, kenh: _py("-m", "core.cong_su", "quet"), nhip_gio=0.9, tu_ap=True, toan_may=True,
-           han_phut=10),
-    KyNang("D26", "Cộng sự: mời + nhận (DOM)", "dinh_ky",
-           "Kích hoạt: lô cộng sự có lời mời tới hạn hoặc lời mời chờ nhận (ngoài 02:10–06:00, 04:00–05:00, 19:00–20:00; "
-           "không dừng khẩn). Chrome kênh nguồn: trang sửa video → Cộng tác → mời từng kênh (link kênh từ UC ghim), đọc lại "
-           "lời mời đang chờ; Chrome từng kênh được mời (đúng UC ghim): mở lời mời → Chấp nhận → đọc lại. Tối đa 30 lời "
-           "mời mới/ngày, nghỉ như người; hộp cảnh báo/hạn chế → dừng cả tính năng + Việc của bạn. Không đụng tiêu đề/bìa.",
-           "python vm/cong_su_dom.py --ke-hoach [--thu]", k_cong_su, ["D25", "K01"], dieu_kien=d_cong_su_dom,
-           chay=lambda goc, kenh: _py(os.path.join(goc, "vm", "cong_su_dom.py"), "--ke-hoach"), nhip_gio=1, tu_ap=True,
-           nang=True, toan_may=True, han_phut=50),
+           chay=lambda goc, kenh: _py("-m", "core.cong_su", "quet"), nhip_gio=20, tu_ap=True, toan_may=True,
+           han_phut=15),
+    KyNang("D26", "Cộng sự: bước trong phiên kênh", "dinh_ky",
+           "KHÔNG phiên Chrome riêng (chủ 21/10: «không mở Chrome thêm, các kênh làm lần lượt»): bước «cộng sự» trong PHIÊN "
+           "ngày của mỗi kênh (vm/agent.py, sau bình luận, trước đóng Chrome, khoá máy của phiên): nhận lời mời gửi tới "
+           "kênh (tab Video cộng tác → Chấp nhận → đọc lại), rồi gửi lời mời của kênh (trang sửa → Cộng tác → @handle → "
+           "đúng kênh → Lưu → đọc lại hàng trong hộp). Tối đa 30 lời mời/ngày, nghỉ như người; hộp cảnh báo → dừng cả "
+           "tính năng + Việc của bạn. Không việc thì không nối Chrome. Tắt: vm config phien_cong_su=false.",
+           "agent phiên kênh · tay: python vm/cong_su_dom.py --phien --kenh K", k_cong_su, ["D25", "K01"]),
     KyNang("D20", "Thay kênh không được phát", "sua_chua",
            "Mỗi ngày xét bảng tóm tắt Studio: ≥ 10 video đăng ≥ 72 giờ, trung vị hiển thị < 100 và không video nào > 500 "
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "

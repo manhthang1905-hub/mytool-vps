@@ -36,7 +36,7 @@ LUAT = (
 SO_CHAY = ("workspace", "ky-nang", "so-chay.jsonl")
 HONG_LIEN_TOI_DA, GIO_TAM_DUNG = 3, 24
 HAN_NANG_PHUT, HAN_NHE_PHUT = 60, 15
-UU_TIEN_NANG = ("S03", "S04", "D26", "D09", "K20", "D15", "D14", "D13")   # việc nặng gấp trước: bìa sắp lên sóng, bàn giao
+UU_TIEN_NANG = ("S03", "S04", "D09", "K20", "D15", "D14", "D13")   # việc nặng gấp trước: bìa sắp lên sóng, bàn giao
 #                         kẹt, thương hiệu; việc máy Studio (sức khoẻ trước thử nghiệm bìa). D18 (19/10) hết nặng: đo từ lần quét
 MA_XONG, MA_HOAN = (0, 30), (10, 4)
 TEN_TAC_VU = "ShopAPI-KyNang"
@@ -45,7 +45,7 @@ BO_PHAN = {"S02": "dieu-phoi", "S03": "bia", "S04": "ban-giao", "S05": "bia", "D
            "D10": "kich-ban", "D11": "bia", "D12": "suc-khoe-may", "D13": "bia", "D14": "chi-so-studio",
            "D15": "tieu-de", "D16": "chi-so-studio", "D17": "anh-clip", "S06": "bia", "D18": "doi-thu", "D19": "bia",
            "D20": "dieu-phoi", "D21": "bia", "D22": "dieu-phoi", "D23": "chon-content",
-           "D24": "chon-content", "D25": "tang-truong", "D26": "tang-truong"}
+           "D24": "chon-content", "D25": "tang-truong"}
 NHAN = {"se_chay": "sẽ chạy", "nen_chay": "nên chạy — chờ chủ", "cho_nhip": "đã chạy, chờ nhịp", "tam_dung": "tạm dừng",
         "cong_tac_tat": "công tắc chung tắt", "tat_kenh": "tắt ở kênh này", "khong": "chưa cần", "xong": "xong",
         "hong": "hỏng", "hoan": "hoãn", "bo_qua": "để lượt sau"}
