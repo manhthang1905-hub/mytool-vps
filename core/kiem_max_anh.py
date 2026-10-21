@@ -246,8 +246,11 @@ class KiemMax:
                 " ".join(str(m.get("khoanh_khac") or "").split())[:200] or "(not given)",
                 ", ".join("S{0}-{1}".format(so, _NHAN[i]) for i in range(len(m["tep"])))))
             anh += [self._anh(t, 640, nhan="S{0}-{1}".format(so, _NHAN[i])) for i, t in enumerate(m["tep"])]
-        ln = LOI_NHAC_LO.format(ta_ref='The first image (label "REF") is the channel\'s reference character. '
-                                if ref else "", phong=" ".join(str(self.phong or "").split())[:500] or "(none)",
+        ln = LOI_NHAC_LO.format(ta_ref='The first image (label "REF") is the channel\'s reference character and the '
+                                'ONLY truth for how the main character looks - if the style note describes it '
+                                'differently, follow the REF; a candidate whose main character is a different figure '
+                                'from the REF (mascot vs person, other hair, other age or gender, clothing of a '
+                                'different colour) gets style 2 at most. ' if ref else "", phong=" ".join(str(self.phong or "").split())[:500] or "(none)",
                                 ds="\n".join(dong))
         tin = [{"role": "user", "content": [{"type": "text", "text": ln}]
                 + [{"type": "image_url", "image_url": {"url": a}} for a in anh]}]

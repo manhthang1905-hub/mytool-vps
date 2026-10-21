@@ -286,9 +286,24 @@ def test_kho_het_chrome_van_tra_kho_va_bao_mot_viec(goc, monkeypatch):
     assert thay_kenh.doc_so(goc)["luot"]["TLx-T7-K2"]["chrome_kho"] == "da-dn"
 
 
-def test_het_giong_chua_dung_thi_viec_nguoi(goc):
+def test_kenh_thay_dung_lai_giong_kenh_cu_khong_can_giong_kho(goc):
+    """21/10: kênh thay giữ NGUYÊN giọng kênh cũ (kênh cũ trả kho → giọng rảnh) — kho giọng hết cũng không chặn."""
     _dung_may(goc, so_giong=2)
     (Path(goc) / "CHANNEL" / "_NHOM" / "g1" / "kho-giong.json").write_text(      # giọng duy nhất đang có kênh chạy dùng
+        json.dumps({"giong": [{"voice_id": "V-TLa-T7", "ky_tu_moi_phut": 270}]}), encoding="utf-8")
+    _chrome(Path(goc).parent / "kho", "gmail-moi", dang_nhap=(".google.com", "SID"))
+    _chay(goc)
+    l = thay_kenh.doc_so(goc)["luot"]["TLx-T7-K2"]
+    assert l["buoc"] == "thuong_hieu" and not thay_kenh.viec_cua_ban(goc)
+    d = mo_kenh.doc_trang_thai(goc)["kenh"]["TLx-T7-K3"]
+    assert d["giu_nguyen"] and not d.get("giong_rieng") and mo_kenh.la_giu_nguyen(d)
+
+
+def test_kenh_cu_khong_co_giong_va_kho_het_thi_viec_nguoi(goc):
+    _dung_may(goc, so_giong=2)
+    p = Path(goc) / "CHANNEL" / "TLx-T7-K2" / "kenh.yaml"
+    p.write_text(p.read_text(encoding="utf-8").replace('voice_id: "V-TLx-T7-K2"', 'voice_id: ""'), encoding="utf-8")
+    (Path(goc) / "CHANNEL" / "_NHOM" / "g1" / "kho-giong.json").write_text(
         json.dumps({"giong": [{"voice_id": "V-TLa-T7", "ky_tu_moi_phut": 270}]}), encoding="utf-8")
     _chrome(Path(goc).parent / "kho", "gmail-moi", dang_nhap=(".google.com", "SID"))
     _chay(goc)

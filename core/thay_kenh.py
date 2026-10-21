@@ -19,9 +19,12 @@ không bao giờ tạo đôi):
   chon_chrome  Chrome MỚI trong kho đã đăng nhập (`core/kho_chrome.py`), ghi sổ `kho/_da-dung.json` trước khi dời.
                Kho hết → MỘT việc người "kho hết Chrome mới đã đăng nhập — cần thêm" (kênh cũ vẫn đã trả kho).
   dat_chrome   dời + đổi tên → `<cha>\\<MỚI>\\<MỚI>.exe`. Mã mới = hậu tố kế của cùng dòng (TL5-T7-K2 → TL5-T7-K3).
-  giong        còn giọng (kho giọng của nhóm) KHÁC MỌI kênh đang chạy không — hết thì việc người, không dùng lại giọng.
-  dang_ky      đăng ký vào luồng mở kênh (`workspace/mo-kenh/trang-thai.json`, loai `thay_kenh_tu_dong`, khuôn từ kênh
-               cũ) → `core/mo_kenh` tự chuẩn bị (góc/tên/hồ sơ/ảnh/giọng, `tu_chay: false`).
+  giong        21/10: kênh thay DÙNG LẠI giọng của kênh cũ (kênh cũ đã trả kho → giọng rảnh). Kênh cũ không có giọng
+               mới cần giọng kho KHÁC MỌI kênh đang chạy — hết thì việc người.
+  dang_ky      đăng ký vào luồng mở kênh (`workspace/mo-kenh/trang-thai.json`, loai `thay_kenh_tu_dong`, `giu_nguyen`)
+               → `core/mo_kenh` dựng BẢN SAO NGUYÊN kênh cũ (`mo_kenh.nhan_ban_giu_nguyen`, chủ 21/10/2026: lỗi ở tài
+               khoản, không ở nội dung — giữ kenh.yaml, style.yaml, prompt/, nv/, giọng, nhịp, hồ sơ thiết lập, bài học
+               nội dung; chỉ đổi mã, Chrome, tài khoản, UC/handle; KHÔNG tạo nhân vật/góc mới), `tu_chay: false`.
   thuong_hieu  sau khi chuẩn bị xong: `vm/tao_kenh_thuong_hieu.py` (đọc danh sách kênh của tài khoản trước — không tạo
                trùng; làm sạch tên; chọn kênh mới trong Studio + ghim UC) dưới khoá máy `nang`.
   cho_mo_kenh  `mo_kenh.kich_hoat`: ghép máy đăng (nối ĐUÔI `cac_kenh`, agent nạp nóng) → thiết lập kênh 11/11 → UC ghim
@@ -403,7 +406,8 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
         return "tiep"
     if b == "giong":
         nhom = str(_kenh_yaml(goc, cu).get("nhom") or "")
-        con = giong_con_trong(goc, nhom, tru=moi)
+        # 21/10/2026: kênh thay giữ NGUYÊN giọng kênh cũ (kênh cũ đã trả kho nên giọng ấy rảnh)
+        con = [v for v in [str(_kenh_yaml(goc, cu).get("voice_id") or "").strip()] if v] or giong_con_trong(goc, nhom, tru=moi)
         if not con:
             _cho_nguoi(l, "thay-kenh:het-giong:{0}".format(moi),
                        "Thay kênh {0}: kho giọng nhóm {1} hết giọng chưa kênh nào dùng".format(moi, nhom or "?"),
@@ -421,7 +425,7 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
                                "loai": LOAI_MO_KENH, "nhom": str(y.get("nhom") or ""), "kenh_goc": cu,
                                "ly_do": "tự thay kênh không được phân phối {0}: {1}".format(cu, l.get("ly_do") or ""),
                                "ngay_de_xuat": bay_gio.strftime("%Y-%m-%d"), "kiem_cuoi": 0, "loi": "",
-                               "tu_dong": True, "giong_rieng": True, "can_thuong_hieu": True,
+                               "tu_dong": True, "giu_nguyen": True, "can_thuong_hieu": True,
                                "chrome_kho": l.get("chrome_kho") or ""}
             mo_kenh.luu_trang_thai(goc, st)
             _nhat_ky(goc, "đăng ký mở kênh thay {0} (khuôn {1})".format(moi, cu))

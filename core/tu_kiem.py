@@ -20,6 +20,8 @@ STARTED không, danh sách phát có đủ video không (bộ đọc từng báo
              mỗi ngày trống một mục `nhip:khe` kèm NGUYÊN NHÂN (xếp lịch muộn / gói bị giữ / tải hỏng / thiếu gói)
   cong_su    lô cộng sự (`workspace/cong-su/hang.json`): lời mời chờ nhận > 48 giờ → máy DOM nhận lại MỘT lần rồi báo;
              kênh đã nhận → trang xem CÔNG KHAI phải ghi công kênh đó; dừng khẩn (hộp cảnh báo YouTube) = việc người
+  nhan_vat   (21/10) style.yaml + prompt/*.md không còn chữ tả nhân vật của KÊNH GỐC mà kênh lấy khuôn
+             (`core/nhan_vat_nhat_quan.kiem_kenh`, mỗi ngày một mục/kênh); hỏng → máy tự viết lại (AI ví) rồi kiểm lại
 API `ghi_ky_vong(goc, loai, kenh, khoa, viec, han, ...)` cho bộ chạy nào muốn khai thẳng kỳ vọng của mình.
 
 ═══ HỎNG THÌ ═══ (1) thử lại qua ĐÚNG bộ chạy, tối đa `SO_THU_LAI` lần: mở lại mục hàng sửa (máy DOM `--sua-video`),
@@ -863,10 +865,40 @@ def kiem_bia_ab(K: BoiCanh) -> List[Dict[str, Any]]:
     return ra
 
 
+# ── 11) nhân vật nhất quán (21/10/2026) ────────────────────────────────────────
+#
+# Chủ 21/10: kênh mở mới lấy khuôn kênh gốc chỉ thay `default_character_*` — `image_style`, `palette`, đoạn nhân vật của
+# 7-canh.md… vẫn tả nhân vật CŨ, nên ảnh cảnh vẽ nhầm nhân vật (đầu mochi thay vì người thật). `mo_kenh.dung_kenh` giờ
+# viết lại lúc dựng; mục này canh hằng ngày cho mọi kênh (kể cả kênh dựng trước bản vá, hay bị sửa tay sau này).
+
+def kiem_nhan_vat(K: BoiCanh) -> List[Dict[str, Any]]:
+    """Mỗi kênh một mục/ngày: chữ tả nhân vật trong style.yaml + prompt/*.md khớp nhân vật của chính kênh (không còn
+    từ tả nhân vật của kênh gốc). Kênh không có kênh gốc để so → bỏ. Hỏng → thử lại qua bộ chạy `nhan_vat` (tự viết lại).
+    Chỉ đọc đĩa."""
+    from . import nhan_vat_nhat_quan as nv  # noqa: PLC0415
+    ra = []
+    viec = "chữ tả nhân vật trong style.yaml/prompt khớp nhân vật của kênh (nv/nv1.png)"
+    for kenh in K.kenh_ds:
+        if _dang_o_may_khac(K.goc, kenh):
+            continue
+        khoa = "nhan_vat:{0}:{1}".format(kenh, K.bay.date().isoformat())
+        if not K.can_kiem(khoa):
+            if K.cu(khoa):
+                ra.append(_giu_cu(K, "nhan_vat", kenh, khoa, viec, K.bay))
+            continue
+        kq = nv.kiem_kenh(K.goc, kenh)
+        if kq["tt"] == "bo_qua":
+            continue
+        hong = kq["tt"] == "hong"
+        ra.append(_muc("nhan_vat", kenh, khoa, viec, K.bay, HONG if hong else DAT, kq["ly_do"],
+                       **({"thu_lai": "nhan_vat", "kenh_goc": kq["kenh_goc"]} if hong else {})))
+    return ra
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
         ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat),
-        ("cong_su", kiem_cong_su), ("bia_ab", kiem_bia_ab))
+        ("cong_su", kiem_cong_su), ("bia_ab", kiem_bia_ab), ("nhan_vat", kiem_nhan_vat))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────
@@ -942,9 +974,18 @@ def _thu_lai_cong_su(K: BoiCanh, m: Dict[str, Any]) -> Tuple[bool, str]:
         return False, str(loi)
 
 
+def _thu_lai_nhan_vat(K: BoiCanh, m: Dict[str, Any]) -> Tuple[bool, str]:
+    """Viết lại chữ tả nhân vật cũ ở tiến trình tách (AI đi ví, sao lưu trước) — lượt kiểm sau đọc lại."""
+    from . import van_hanh  # noqa: PLC0415
+    lenh = [van_hanh._pythonw(K.goc), "-X", "utf8", "-m", "core.nhan_vat_nhat_quan", "sua", str(m["kenh"])]  # noqa: SLF001
+    if m.get("kenh_goc"):
+        lenh += ["--goc-kenh", str(m["kenh_goc"])]
+    return _sinh(K, lenh, "nhan-vat-" + str(m["kenh"]))
+
+
 THU_LAI_BO_CHAY: Dict[str, Callable[[BoiCanh, Dict[str, Any]], Tuple[bool, str]]] = {
     "hang_sua": _thu_lai_hang_sua, "viec_may": _thu_lai_viec_may, "dsp": _thu_lai_dsp, "van_hanh": _thu_lai_van_hanh,
-    "nao_ngu": _thu_lai_nao_ngu, "cong_su": _thu_lai_cong_su}
+    "nao_ngu": _thu_lai_nao_ngu, "cong_su": _thu_lai_cong_su, "nhan_vat": _thu_lai_nhan_vat}
 
 
 # ── phân loại nguyên nhân + sửa ────────────────────────────────────────────────
@@ -1101,7 +1142,8 @@ def _bao_gop(K: BoiCanh, ds: List[Dict[str, Any]]) -> Optional[str]:
     try:
         from . import nao_bo_phan  # noqa: PLC0415
         bp = {"dang": "dang-video", "doi_bia": "bia", "tieu_de": "tieu-de", "ab": "bia", "dsp": "tieu-de",
-              "ghim": "binh-luan", "nao": "suc-khoe-may", "van_hanh": "suc-khoe-may", "nhip": "dieu-phoi"}
+              "ghim": "binh-luan", "nao": "suc-khoe-may", "van_hanh": "suc-khoe-may", "nhip": "dieu-phoi",
+              "nhan_vat": "anh-clip"}
         for m in mo:
             nao_bo_phan.ghi(K.goc, bp.get(m["loai"], "dieu-phoi"), "loi", kenh=m["kenh"], ma_goi=m.get("ma_goi") or "",
                             noi_dung="tự kiểm: {0} — {1}".format(m["viec"], m["bang_chung"]), nguon="tu_kiem",

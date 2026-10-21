@@ -76,6 +76,16 @@ GIONG_KHOI_DAU = (
 #: thắng trong tuyến) giữ nguyên.
 KHOA_STYLE_NHAN_VAT = ("default_character_prompt", "default_character_lock", "reference_lock", "engagement_rules")
 
+#: Luồng THAY KÊNH vì tài khoản không được phân phối ("mail hỏng", chủ 21/10/2026): lỗi ở TÀI KHOẢN, không ở nội dung →
+#: kênh thay GIỮ NGUYÊN mọi thứ của kênh cũ (kenh.yaml nội dung/nhịp/danh sách phát, style.yaml, prompt/*, nv/, giọng,
+#: hồ sơ thiết lập, bài học nội dung). Chỉ đổi DANH TÍNH: mã kênh, Chrome, tài khoản, UC/handle. Không chạy bước tạo
+#: nhân vật/góc mới, không viết lại chữ tả nhân vật.
+LOAI_GIU_NGUYEN = ("thay_kenh", "thay_kenh_tu_dong")
+#: Thư mục/tệp chép NGUYÊN từ kênh cũ sang kênh thay (bài học cấp NỘI DUNG; số liệu/lượt chạy của kênh cũ thì không).
+THU_MUC_GIU_NGUYEN = ("prompt", "nv", "thiet-lap", "tu-hoc")
+TEP_GIU_NGUYEN = (("style.yaml",), ("giam-doc", "bai-hoc.jsonl"), ("nghien-cuu", "BAI-HOC-SAN-XUAT.md"),
+                  ("nghien-cuu", "bai-hoc-san-xuat.json"))
+
 _QUOC_GIA_THEO_NGON_NGU = {"ja": "JP", "vi": "VN", "ko": "KR", "th": "TH", "id": "ID", "pt": "BR", "es": "ES",
                            "de": "DE", "fr": "FR", "en": "US", "zh": "TW"}
 
@@ -603,9 +613,15 @@ def _dem_giong_nhom(goc: str, nhom: str, tru: str = "") -> Dict[str, int]:
 
 # ── dựng CHANNEL/<TÊN> ────────────────────────────────────────────────────────
 def dung_kenh(goc: str, ma: str, kenh_goc: str, hang: Dict[str, Any], du: Dict[str, Any], giong: Dict[str, Any],
-              ctx: Dict[str, Any], bay_gio: Optional[_dt.datetime] = None) -> str:
+              ctx: Dict[str, Any], bay_gio: Optional[_dt.datetime] = None, *, goi: Optional[Callable[..., str]] = None,
+              log: Callable[[str], None] = print) -> str:
     """Chép KHUÔN từ kênh gốc (kenh.yaml, style.yaml, prompt/*.md — KHÔNG chép số liệu/lượt chạy của kênh gốc), đặt góc +
-    giọng + nhịp mới, `tu_chay: false`. Ghi nguyên tử qua thư mục tạm. Trả đường kênh mới."""
+    giọng + nhịp mới, `tu_chay: false`. Ghi nguyên tử qua thư mục tạm. Trả đường kênh mới.
+
+    21/10/2026: nhân vật mới KHÁC nhân vật kênh gốc → MỌI chữ tả nhân vật/kiểu hình cũ trong style.yaml + prompt/*.md
+    được viết lại cho nhân vật mới (`core/nhan_vat_nhat_quan`, AI đi ví) và MÃ kiểm không còn từ cũ nào; chưa đạt → ném
+    (không dựng kênh nửa vời — `tiep_tuc` thử lại nhịp sau). Trước đây chỉ thay `default_character_*`, nên ảnh cảnh của
+    kênh mới vẽ nhân vật kênh gốc."""
     from .dong_bo_kenh import dat_khoa_yaml  # noqa: PLC0415
     from .khoi_tao_ngach import _dat_khoa  # noqa: PLC0415,SLF001
     from .kenh import TEP_KENH, TEP_STYLE, THU_MUC_PROMPT, duong_kenh, kiem_ma_kenh_moi  # noqa: PLC0415
@@ -659,11 +675,134 @@ def dung_kenh(goc: str, ma: str, kenh_goc: str, hang: Dict[str, Any], du: Dict[s
         for ten in sorted(os.listdir(tp)) if os.path.isdir(tp) else []:
             if ten.endswith(".md"):
                 shutil.copyfile(os.path.join(tp, ten), os.path.join(tam, THU_MUC_PROMPT, ten))
+        viet_lai_nhan_vat_cu(nguon, tam, goi, log)
         os.rename(tam, dich)
     except Exception:
         shutil.rmtree(tam, ignore_errors=True)
         raise
     return dich
+
+
+def viet_lai_nhan_vat_cu(nguon: str, dich: str, goi: Optional[Callable[..., str]],
+                         log: Callable[[str], None] = print) -> Dict[str, Any]:
+    """Thư mục kênh `dich` (vừa lấy khuôn từ `nguon`) còn chữ tả nhân vật của kênh gốc → AI viết lại (ví ShopAPI, ép
+    `qua_vi` — đây là lời nhắc ảnh) + mã kiểm hết từ cũ. Từ cũ = so lock nhân vật kênh gốc với lock + prompt mới.
+    Nhân vật y hệt (không có từ cũ) → không làm gì. Cần viết mà không có `goi` / viết chưa đạt → ném."""
+    from . import nhan_vat_nhat_quan as nv  # noqa: PLC0415
+    from .goi_van_ban import qua_vi  # noqa: PLC0415
+    from .kenh import TEP_STYLE, doc_yaml  # noqa: PLC0415
+
+    sg = doc_yaml(os.path.join(nguon, TEP_STYLE)) or {}
+    sm = doc_yaml(os.path.join(dich, TEP_STYLE)) or {}
+    lg, _pg, rg = nv.nhan_vat(sg)
+    lm, pm, _rm = nv.nhan_vat(sm)
+    tu = nv.tu_cu([lg, rg], [lm, pm]) if lg and lm else []
+    cham = nv.quet_thu_muc(dich, tu)
+    if not cham:
+        return {"sua": [], "tu": tu}
+    log("  nhân vật mới khác kênh gốc — {0} chỗ còn tả nhân vật cũ ({1}) → AI viết lại".format(
+        len(cham), ", ".join(tu[:8])))
+    if goi is None:
+        raise RuntimeError("cần AI viết lại {0} chỗ tả nhân vật kênh gốc nhưng không có hàm gọi AI".format(len(cham)))
+    with qua_vi():
+        kq = nv.viet_lai_thu_muc(dich, tu, goi, lock=lm, prompt=pm, log=log)
+    log("  nhân vật: đã viết lại {0} khoá style + {1} đoạn prompt, mã kiểm không còn từ cũ".format(
+        len(kq.get("khoa") or []), len(kq.get("doan") or [])))
+    kq["tu"] = tu
+    return kq
+
+
+def la_giu_nguyen(hang: Dict[str, Any]) -> bool:
+    """Lượt mở kênh là THAY kênh không được phân phối (giữ nguyên nội dung/nhân vật của kênh cũ)."""
+    return str((hang or {}).get("loai") or "") in LOAI_GIU_NGUYEN
+
+
+def cong_tac_cu(goc: str, cu: str) -> Dict[str, Any]:
+    """Công tắc kênh cũ TRƯỚC khi trả kho (`CHANNEL/<cũ>/tra-kho.json`: {kenh: {...}, may_ao: {...}}); {} nếu không có."""
+    du = _doc_json(os.path.join(goc, "CHANNEL", cu, "tra-kho.json"))
+    return du if isinstance(du, dict) else {}
+
+
+def nhan_ban_giu_nguyen(goc: str, ma: str, cu: str, hang: Dict[str, Any], bay_gio: Optional[_dt.datetime] = None) -> str:
+    """Dựng CHANNEL/<ma> là BẢN SAO NGUYÊN của kênh cũ `cu` (luồng thay kênh không được phân phối, chủ 21/10/2026).
+
+    Chép y nguyên: kenh.yaml (mọi thiết lập nội dung, giọng, nhịp/khe đăng, danh sách phát, thư mục bìa mẫu…),
+    style.yaml, prompt/, nv/, thiet-lap/ (tên, mô tả, logo, banner, danh sách phát), tu-hoc/, bài học nội dung
+    (`TEP_GIU_NGUYEN`); may-ao.json khi kênh thay tự động (bật tự đăng sau cùng ở `kich_hoat`). KHÔNG chép số liệu,
+    hồ sơ video, lượt chạy của kênh cũ. Chỉ đổi danh tính: `ma`, `thu_muc_done`, `ngay_bat_dau`, công tắc chạy tắt cho
+    tới `kich_hoat`, xoá dấu trả kho, ghi `thay_cho`. Ghi nguyên tử qua thư mục tạm. Trả đường kênh mới."""
+    from .khoi_tao_ngach import _dat_khoa  # noqa: PLC0415,SLF001
+    from .kenh import TEP_KENH, duong_kenh, kiem_ma_kenh_moi  # noqa: PLC0415
+
+    loi = kiem_ma_kenh_moi(goc, ma)
+    if loi:
+        raise RuntimeError(loi)
+    nguon = duong_kenh(goc, cu)
+    if not os.path.isfile(os.path.join(nguon, TEP_KENH)):
+        raise RuntimeError("không thấy kênh cũ {0} để chép nguyên".format(cu))
+    dich = duong_kenh(goc, ma)
+    tam = duong_kenh(goc, "_tao-" + ma)
+    shutil.rmtree(tam, ignore_errors=True)
+    os.makedirs(tam)
+    try:
+        today = _bay_gio(bay_gio).strftime("%Y-%m-%d")
+        chu = _doc(os.path.join(nguon, TEP_KENH))
+        khoa: Dict[str, Any] = {
+            "ma": ma, "ngay_bat_dau": today, "thu_muc_done": "DONE/" + ma, "thay_cho": cu,
+            "tu_chay": False, "nuoi_trang_chu": False, "thiet_lap_kenh": False,   # bật lại ở `kich_hoat`
+            "tra_kho": "", "thay_boi": "",
+        }
+        for k, v in khoa.items():
+            chu = _dat_khoa(chu, k, v)
+        _ghi(os.path.join(tam, TEP_KENH), (
+            "# KÊNH {0} — THAY kênh {1} (tài khoản không được phân phối) ngày {2}: `core.mo_kenh` chép NGUYÊN nội dung, "
+            "nhân vật, giọng, nhịp của {1}; chỉ đổi danh tính (mã, Chrome, tài khoản, UC/handle).\n").format(ma, cu, today) + chu)
+        for tm in THU_MUC_GIU_NGUYEN:
+            if os.path.isdir(os.path.join(nguon, tm)):
+                shutil.copytree(os.path.join(nguon, tm), os.path.join(tam, tm))
+        for phan in TEP_GIU_NGUYEN:
+            p = os.path.join(nguon, *phan)
+            if os.path.isfile(p):
+                os.makedirs(os.path.dirname(os.path.join(tam, *phan)), exist_ok=True)
+                shutil.copy2(p, os.path.join(tam, *phan))
+        if hang.get("can_thuong_hieu"):
+            from . import vm_cai_dat  # noqa: PLC0415
+
+            ma_ao = dict(_doc_json(os.path.join(nguon, vm_cai_dat.TEP)) or {})
+            ma_ao.update({k: v for k, v in (cong_tac_cu(goc, cu).get("may_ao") or {}).items() if k in vm_cai_dat.KHOA_DIEU_KHIEN})
+            ma_ao["tu_dang"] = False                            # bật ở `kich_hoat` khi thiết lập 11/11 + UC ghim
+            _ghi_json(os.path.join(tam, vm_cai_dat.TEP), ma_ao)
+        os.rename(tam, dich)
+    except Exception:
+        shutil.rmtree(tam, ignore_errors=True)
+        raise
+    return dich
+
+
+def _goc_giu_nguyen(goc: str, cu: str) -> Dict[str, Any]:
+    """"Góc" của kênh thay = góc của kênh cũ (không hỏi AI)."""
+    y = _kenh_yaml(goc, cu)
+    ten = str(y.get("ten") or "")
+    try:
+        from . import thiet_lap_kenh as tl  # noqa: PLC0415
+
+        ten = str((tl.doc_ho_so(cu, goc) or {}).get("ten") or "") or ten
+    except Exception:  # noqa: BLE001
+        pass
+    return {"goc": "giữ nguyên kênh {0} (thay vì tài khoản không được phân phối)".format(cu), "giu_nguyen": cu,
+            "ten_goi_y": ten, "giong_van": str(y.get("giong_van") or ""), "luat_chon": str(y.get("luat_chon") or ""),
+            "danh_sach_phat_kenh": [x.strip() for x in str(y.get("danh_sach_phat_kenh") or "").split("|") if x.strip()]}
+
+
+def _giong_giu_nguyen(goc: str, cu: str) -> Optional[Dict[str, Any]]:
+    """Giọng của kênh cũ (kênh cũ đã trả kho nên giọng ấy rảnh — chủ 21/10/2026)."""
+    y = _kenh_yaml(goc, cu)
+    v = str(y.get("voice_id") or "").strip()
+    try:
+        kt = int(float(y.get("ky_tu_moi_phut") or 0))
+    except (TypeError, ValueError):
+        kt = 0
+    return {"voice_id": v, "ky_tu_moi_phut": kt or 270, "ghi_chu": "giọng của kênh cũ " + cu} if v else None
 
 
 def ngon_ngu_dich_bat_cho(goc: str, ma_ngon_ngu: str) -> bool:
@@ -882,22 +1021,30 @@ def chuan_bi(goc: str, ma: str, *, hang: Optional[Dict[str, Any]] = None, goi: O
     tien_trinh = _tm(goc, ma)
     os.makedirs(tien_trinh, exist_ok=True)
 
-    # 1) góc (nhớ lại để lần chạy lại không hỏi LLM nữa)
+    giu = la_giu_nguyen(hang)
+    # 1) góc (nhớ lại để lần chạy lại không hỏi LLM nữa). Kênh THAY (mail hỏng): góc của kênh cũ, không hỏi AI.
     duong_goc = os.path.join(tien_trinh, "goc.json")
     du = _doc_json(duong_goc)
-    if not isinstance(du, dict) or kiem_goc(du, anh_em):
+    if giu:
+        if not isinstance(du, dict) or du.get("giu_nguyen") != kenh_goc:
+            du = _goc_giu_nguyen(goc, kenh_goc)
+            _ghi_json(duong_goc, du)
+    elif not isinstance(du, dict) or kiem_goc(du, anh_em):
         du = chon_goc(goc, ma, hang, ctx, anh_em, goi, log)
         _ghi_json(duong_goc, du)
     log("  góc: {0}".format(_sach(du.get("goc"), 160)))
 
-    # 2) giọng từ kho — KHÔNG trùng kênh cùng tệp (kênh thay tự động 20/10: KHÔNG trùng MỌI kênh đang chạy)
-    kho = doc_kho_giong(goc, nhom)
-    cam = [a["voice_id"] for a in anh_em]
-    if hang.get("giong_rieng"):
-        from .thay_kenh import giong_dang_dung  # noqa: PLC0415
+    # 2) giọng từ kho — KHÔNG trùng kênh cùng tệp (kênh thay tự động 20/10: KHÔNG trùng MỌI kênh đang chạy).
+    #    Kênh THAY (21/10): dùng lại giọng của kênh cũ — kênh cũ đã trả kho nên giọng ấy rảnh.
+    giong = _giong_giu_nguyen(goc, kenh_goc) if giu else None
+    if giong is None:
+        kho = doc_kho_giong(goc, nhom)
+        cam = [a["voice_id"] for a in anh_em]
+        if hang.get("giong_rieng"):
+            from .thay_kenh import giong_dang_dung  # noqa: PLC0415
 
-        cam += giong_dang_dung(goc, tru=ma)
-    giong = chon_giong(kho, cam, _dem_giong_nhom(goc, nhom, tru=ma))
+            cam += giong_dang_dung(goc, tru=ma)
+        giong = chon_giong(kho, cam, _dem_giong_nhom(goc, nhom, tru=ma))
     if giong is None:
         raise RuntimeError("kho giọng {0} hết giọng {1} — thêm voice_id đã duyệt (kèm ky_tu_moi_phut đã đo) vào {2}".format(
             nhom, "chưa kênh nào dùng" if hang.get("giong_rieng") else "khác tệp", duong_kho_giong(goc, nhom)))
@@ -906,8 +1053,12 @@ def chuan_bi(goc: str, ma: str, *, hang: Optional[Dict[str, Any]] = None, goi: O
     # 3) CHANNEL/<TÊN>
     dich = duong_kenh(goc, ma)
     if not os.path.isfile(os.path.join(dich, TEP_KENH)):
-        dung_kenh(goc, ma, kenh_goc, hang, du, giong, ctx, bay_gio)
-        log("  đã dựng " + dich)
+        if giu:
+            nhan_ban_giu_nguyen(goc, ma, kenh_goc, hang, bay_gio)
+            log("  đã dựng {0} — bản sao NGUYÊN của {1} (nhân vật, kiểu hình, prompt, giọng, nhịp)".format(dich, kenh_goc))
+        else:
+            dung_kenh(goc, ma, kenh_goc, hang, du, giong, ctx, bay_gio, goi=goi, log=log)
+            log("  đã dựng " + dich)
     else:
         log("  CHANNEL/{0} đã có — dùng lại".format(ma))
     from .trung_tam import ghi_cai_kenh  # noqa: PLC0415
@@ -1056,6 +1207,11 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
                 vm_cai_dat.luu(goc, ma, tu_dang=False, cach_dang="tu_dong")
         (them_vao_vm or them_kenh_vao_vm)(thu_muc_vm(goc), ma, chrome=exe)
         khoa: Dict[str, Any] = {"thiet_lap_kenh": True, "nuoi_trang_chu": True}
+        if la_giu_nguyen(d) and d.get("kenh_goc"):
+            # kênh THAY giữ đúng công tắc nuôi trang chủ chủ đã chọn cho kênh cũ (trước khi trả kho)
+            cu_tt = (cong_tac_cu(goc, str(d["kenh_goc"])).get("kenh") or {})
+            if "nuoi_trang_chu" in cu_tt:
+                khoa["nuoi_trang_chu"] = bool(cu_tt["nuoi_trang_chu"])
         ngon = str(_kenh_yaml(goc, ma).get("ngon_ngu") or "")
         if ngon and ngon_ngu_dich_bat_cho(goc, ngon):
             khoa["ngon_ngu_tai_khoan_dich"] = ngon
