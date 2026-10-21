@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.225.0** — 2026-10-21 — `vps-jp1` — feat(cong-su): top 5 video ca nhom theo view 48h, ke hoach 1 lan/ngay, buoc cong su ghep vao phien kenh hang ngay (khong mo Chrome rieng)
 - **2.224.0** — 2026-10-21 — `vps-jp1` — feat(cong-su): tu moi cong su YouTube giua kenh ta khi video >20k view/48h (D25 quet + do 2 dot, D26 DOM moi/nhan), nao tang-truong, tu kiem
 - **2.223.0** — 2026-10-21 — `vps-jp1` — feat(gia-tri): nhan nghia tieu de bang LLM ShopAPI (D24) + ham gia tri v2 + khoi tin hieu thi truong cho viet tieu de; fix cham tieu de hong thi giu doi chung
 - **2.222.0** — 2026-10-20 — `vps-jp1` — feat(top10): bang diem thang (hang, khoang cach top10, muc tieu tuan, bao thi phan dung yen) + ham gia tri v1 hoc tu video doi thu (D23, chi theo doi)
