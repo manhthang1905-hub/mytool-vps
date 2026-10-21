@@ -453,6 +453,32 @@ def chon_ho(goc: str, kenh: str, *, co: Sequence[str], luot: str = "", ghi: bool
     return kq
 
 
+def ho_phu(goc: str, kenh: str, *, co: Sequence[str], ho_chinh: str, kieu: str = "tran",
+           cai: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """21/10/2026 (G4 — mỗi ván A/B dạy cả HỌ): họ HẠNG NHÌ cho bộ bìa phụ của lô → `{ho, ly_do}` ({} = không vẽ phụ).
+    Chỉ khi thư mục bìa thắng có ≥ 2 họ (`co` = `ho_trong_thu_muc`) và chủ không ghim kiểu (`bia_lo_kieu_ghim`). Tất
+    định (không rút ngẫu nhiên — họ của LÔ vẫn là bản ghi `chon_ho` của lượt): họ khác `ho_chinh` có CTR hậu nghiệm
+    cao nhất; chưa có thống kê → họ khác đầu tiên của thư mục (thứ tự `HO`). Kênh vẽ kiểu hộp:
+    "dai"/"hop" cùng nhà (cùng bộ vẽ) → không tính là họ khác."""
+    cai = cai if cai is not None else _kenh_yaml(goc, kenh)
+    if cai.get("bia_lo_kieu_ghim") is True:
+        return {}
+    co = [h for h in dict.fromkeys(co or ()) if h in HO]
+    if len(co) < 2:
+        return {}
+    cung_nha = (lambda a, b: kieu == "hop" and {a, b} <= {"dai", "hop"})
+    khac = [h for h in co if h != ho_chinh and not cung_nha(h, ho_chinh)]
+    if not khac:
+        return {}
+    tk = doc_thong_ke(goc, kenh)
+    if tk and any(int(((tk.get("ho") or {}).get(h) or {}).get("n") or 0) for h in co):
+        hn = hau_nghiem(tk, khac)
+        h = max(khac, key=lambda x: (hn[x][0], -HO.index(x)))
+        return {"ho": h, "ly_do": "họ hạng nhì theo CTR hậu nghiệm ({0:.2f}%) — bìa phụ cho A/B".format(hn[h][0])}
+    return {"ho": khac[0], "ly_do": "thư mục bìa thắng có họ {0} — bìa phụ cho A/B (chưa có thống kê CTR)".format(
+        khac[0])}
+
+
 # ── 4) Vòng phản hồi CTR ─────────────────────────────────────────────────────
 
 

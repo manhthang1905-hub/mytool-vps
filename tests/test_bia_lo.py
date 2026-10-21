@@ -955,3 +955,95 @@ def test_kieu_dai_theo_bia_thang_dong_duoi_cuc_to_va_bo_khoang_trang():
     t2 = bia_lo.doc_chu_bia_tran("人が少ない駅に 自分が来ると混みだす人は", hs,
                                  cach_ai=["人が少ない駅に|自分が {来ると} 混みだす人は"])
     assert all(" " not in p["chu"] for x in t2 for p in x["phan_mau"]), "không vẽ khoảng trắng AI chèn giữa chữ Nhật"
+
+
+# ── 21/10/2026 (G4): bộ bìa PHỤ họ hạng nhì — mỗi ván A/B dạy cả HỌ kiểu chữ ─────────────────────────────────────
+
+
+def _goc_hai_ho(tmp_path, bia_ab: bool = True) -> tuple:
+    """Kênh KH (kiểu hộp, chưa có khuôn) + thư mục bìa thắng gắn nhãn HAI họ (hop, tran) + bật A/B bìa."""
+    goc = _goc_gia(tmp_path)
+    with io.open(os.path.join(duong_kenh(goc, "KH"), TEP_KENH), "w", encoding="utf-8") as tep:
+        tep.write('ma: "KH"\nbia_lo_mau: "mau-thang"\n' + ("giam_doc_studio: true\n" if bia_ab else ""))
+    tm = os.path.join(goc, "mau-thang")
+    os.makedirs(tm, exist_ok=True)
+    bia = []
+    for i, ho in enumerate(("hop", "tran", "hop"), 1):
+        Image.new("RGB", (1280, 720), (240, 220, 200 - 10 * i)).save(os.path.join(tm, "t{0}.jpg".format(i)))
+        bia.append({"tep": "t{0}.jpg".format(i), "video_id": "VIDGIA000{0}".format(i), "imp": 9000, "ctr": 6.0,
+                    "kieu": ho})
+    with io.open(os.path.join(tm, "thang.json"), "w", encoding="utf-8") as tep:
+        json.dump({"bia": bia}, tep)
+    return goc, [os.path.join(tm, "t{0}.jpg".format(i)) for i in (1, 2, 3)]
+
+
+def test_lo_phu_ho_hang_nhi_giao_o_c_va_khong_bao_gio_thanh_bia_chay(tmp_path, monkeypatch):
+    _can_font()
+    goc, mau = _goc_hai_ho(tmp_path)
+    monkeypatch.setattr(bia_lo, "san_mau", lambda thang: {})
+    luot = os.path.join(goc, "PROJECTS", "AUTO", "KH", "0001")
+    ra = str(tmp_path / "ra")
+    ve, goi = _ve_gia(), _goi_gia(xep=[2, 1, 3])
+    kq = bia_lo.chay(goc, "KH", thu_muc_luot=luot, ra=ra, so_y=3, moi_y=2, goi=goi, ve=ve, mau=mau,
+                     log=lambda s: None)
+    assert kq["ho_kieu"] == "hop" and all(t["ho"] == "hop" for t in kq["top"])
+    ph = kq["phu"]
+    assert ph["ho"] == "tran" and ph["chon"] and ph["chon"]["ma"].startswith("ptran-"), ph.get("bo")
+    assert ph["chi_phi"]["anh_dat_moi"] == ph["chi_phi"]["anh_tong"] <= bia_lo.TRAN_ANH_PHU
+    assert len(ph["y"]) <= bia_lo.SO_Y_PHU and set(ph["y"]) <= {t["y"] for t in kq["top"]}, "cùng ý tốt nhất lô chính"
+    assert [g["ho"] for g in kq["giao"]] == ["hop", "hop", "tran", "hop"] and kq["giao"][2]["phu_ab"]
+    assert kq["giao"][0]["ma"] == kq["top"][0]["ma"], "ô A = tấm nhất họ chính (như cũ)"
+    # sổ họ của LƯỢT vẫn là họ chính (bản ghi tất định), có ghi bìa phụ
+    from core import bia_du_lieu
+    sc = bia_du_lieu.doc_so_cai(goc, "KH")["0001"]
+    assert sc["ho"] == "hop" and sc["phu"]["ho"] == "tran"
+    # chạy lại: không vẽ, không gọi LLM (cả lô chính lẫn bộ phụ)
+    ve2, goi2 = _ve_gia(), _goi_gia()
+    kq2 = bia_lo.chay(goc, "KH", thu_muc_luot=luot, ra=ra, so_y=3, moi_y=2, goi=goi2, ve=ve2, mau=mau,
+                      log=lambda s: None)
+    # Lượt 2: không vẽ ảnh nào (nền trên đĩa). Bộ phụ chữ TRẦN có thể chấm lại MỘT lần: mục tiêu bố cục bìa thắng
+    # (`bo_cuc_thang`) đo ở lượt 1 rồi mới vào cache → chữ vẽ lại (như lô chính chữ trần). Lượt 3: dùng lại hết.
+    assert ve2.st["goi"] == [] and kq2["van_tay"] == kq["van_tay"]
+    ve3, goi3 = _ve_gia(), _goi_gia()
+    kq3 = bia_lo.chay(goc, "KH", thu_muc_luot=luot, ra=ra, so_y=3, moi_y=2, goi=goi3, ve=ve3, mau=mau,
+                      log=lambda s: None)
+    cham_lai = [x for x in goi3.lan if ":cham" in x[1] or "doc-nen" in x[1] or "dao-dien" in x[1]]
+    assert ve3.st["goi"] == [] and cham_lai == [] and kq3["phu"]["van_tay"] == kq2["phu"]["van_tay"], goi3.lan
+    kq = kq3
+    # xuất: thumb_001/002 họ chính, thumb_003 họ phụ (chi_ab), thumb_004 = tấm ba họ chính
+    from core import auto_khau, chon_bia, ho_so_video
+    tm = os.path.join(luot, "7-thumbnail")
+    chon = bia_lo.xuat_goi(kq, tm)
+    assert chon["tep"] == "CHON-thumb_001.jpg"
+    uv = chon_bia.doc_chon_bia(tm)["ung_vien"]
+    assert [u["so"] for u in uv] == [1, 2, 3, 4] and [u.get("chi_ab", False) for u in uv] == [False, False, True, False]
+    assert [u["ho"] for u in uv] == ["hop", "hop", "tran", "hop"]
+    assert all(os.path.isfile(os.path.join(tm, "thumb_00{0}.jpg".format(i))) for i in (1, 2, 3, 4))
+    b2 = ho_so_video._sao_luu_bia_2(goc, "KH", "KH-0001", os.path.join(tm, "CHON-thumb_001.jpg"))  # noqa: SLF001
+    assert b2["tep"] == "thumb_002.jpg" and b2["bia_3"]["tep"] == "thumb_003.jpg", "-bia-3 = tấm họ phụ (ô C)"
+    # cổng chữ loại tấm 1 rồi tấm 2 → tấm thay thế là thumb_004 (họ chính), KHÔNG BAO GIỜ thumb_003 (họ phụ)
+    bc = SimpleNamespace(ghi=lambda s: None)
+    moi = auto_khau._loai_tam_giao(bc, tm, 1, os.path.join(tm, "CHON-thumb_001.jpg"), "sai chữ")  # noqa: SLF001
+    assert moi == "CHON-thumb_002.jpg"
+    moi = auto_khau._loai_tam_giao(bc, tm, 2, os.path.join(tm, moi), "sai chữ")  # noqa: SLF001
+    assert moi == "CHON-thumb_004.jpg"
+    assert auto_khau._loai_tam_giao(bc, tm, 4, os.path.join(tm, moi), "sai chữ") == ""  # noqa: SLF001
+
+
+def test_lo_phu_chi_ve_khi_kenh_chay_ab_va_co_hai_ho(tmp_path, monkeypatch):
+    _can_font()
+    monkeypatch.setattr(bia_lo, "san_mau", lambda thang: {})
+    goc, mau = _goc_hai_ho(tmp_path, bia_ab=False)                       # kênh tắt A/B bìa → không tốn ảnh phụ
+    luot = os.path.join(goc, "PROJECTS", "AUTO", "KH", "0001")
+    ve = _ve_gia()
+    kq = bia_lo.chay(goc, "KH", thu_muc_luot=luot, ra=str(tmp_path / "ra"), so_y=3, moi_y=2, goi=_goi_gia(), ve=ve,
+                     mau=mau, log=lambda s: None)
+    assert "phu" not in kq and sum(n for _k, n, _p in ve.st["goi"]) == 6
+    assert [g["ma"] for g in kq["giao"]] == [t["ma"] for t in kq["top"]][:3]
+    from core import bia_du_lieu
+    hs = {"ho": "hop", "kieu": "hop", "thu_muc_mau": os.path.dirname(mau[0])}
+    assert bia_du_lieu.ho_phu(goc, "KH", co=["hop"], ho_chinh="hop") == {}
+    assert bia_du_lieu.ho_phu(goc, "KH", co=["dai", "hop"], ho_chinh="hop", kieu="hop") == {}, "dai/hop cùng nhà"
+    assert bia_du_lieu.ho_phu(goc, "KH", co=["tran", "dai"], ho_chinh="tran", kieu="tran")["ho"] == "dai"
+    assert bia_du_lieu.ho_phu(goc, "KH", co=["tran", "dai"], ho_chinh="tran", cai={"bia_lo_kieu_ghim": True}) == {}
+    assert "kiểm vàng" in bia_lo._ho_phu_lo(goc, "KH", hs, ghi_so=False)["bo"]  # noqa: SLF001

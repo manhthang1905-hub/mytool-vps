@@ -38,8 +38,8 @@ kiểm dấu lần cuối.
 bìa thắng → bìa đang chạy ≠ A thì hồ sơ đổi theo (`ap_ban_thang`: `anh/<mã>.jpg` = tấm thắng có dấu, bản cũ vào
 `_truoc-do-bia/`, `lich_su_sua` loại bia, `thumbnail.chu_khop`). Học: não «bia», cặp thắng/thua theo họ kiểu chữ
 (`thong_ke_ho_ab` → `bia_du_lieu.hau_nghiem`), giám khảo ↔ người xem thật (`do_giam_khao` → `hieu_chuan`). Đo 21/10:
-3 bìa của MỘT lô hầu như cùng họ (lô vẽ theo một họ đã chọn) → cặp họ hiếm khi có; nhãn ván vẫn dạy giám khảo + ghi ý /
-biến (`ma`) của từng bìa cho hàm giá trị bìa (G2). Muốn học họ thì lô phải trộn họ (đề xuất, chưa làm).
+3 bìa của MỘT lô cùng họ → không có cặp họ. Từ 21/10 (bản sau): lô vẽ thêm bộ phụ họ HẠNG NHÌ (`bia_lo._lo_phu`), ô C =
+tấm họ phụ (cùng ý với tấm A) → cặp A/C, B/C là bằng chứng họ; họ từng ô đọc từ `_lo/xep-hang.json: giao`.
 
 Sổ: `CHANNEL/<k>/nghien-cuu/bia-ab.json` {kenh, meta, muc: [...]}. Không mạng, không Chrome, không LLM trong tệp này.
 """
@@ -280,10 +280,14 @@ def bien_the_goi(goc: str, kenh: str, ma_goi: str) -> List[Dict[str, Any]]:
     anh = os.path.join(goc, "CHANNEL", kenh, "ho-so-video", "anh")
     luot = str(hs.get("luot") or _luot(kenh, ma_goi))
     xh = _doc_json(os.path.join(goc, "PROJECTS", "AUTO", kenh, luot, "7-thumbnail", "_lo", "xep-hang.json"))
-    top = [u for u in ((xh or {}).get("top") or [] if isinstance(xh, dict) else []) if isinstance(u, dict)]
+    # 21/10/2026: `giao` = thứ tự tấm ĐÃ XUẤT (thumb_00N) — lô có bộ phụ họ hạng nhì thì ô 3 là tấm họ phụ, không phải
+    # `top[2]`; lô cũ không có `giao` → `top`.
+    xh = xh if isinstance(xh, dict) else {}
+    top = [u for u in (xh.get("giao") or xh.get("top") or []) if isinstance(u, dict)]
     sc = _doc_json(os.path.join(os.path.dirname(duong_so(goc, kenh)), "bia-so-cai.json"))
     sc = (sc.get(luot) if isinstance(sc, dict) else None) or {}
-    ho_lo = str(sc.get("kieu_chu") or sc.get("ho") or "")
+    # HỌ của lô (tran / dai / hop) — `kieu_chu` chỉ là bộ vẽ (dai vẽ bằng bộ chữ trần) nên đứng sau
+    ho_lo = str(xh.get("ho_kieu") or sc.get("ho") or sc.get("kieu_chu") or "")
     th = hs.get("thumbnail") if isinstance(hs.get("thumbnail"), dict) else {}
     b2 = hs.get("bia_2") if isinstance(hs.get("bia_2"), dict) else {}
     b3 = b2.get("bia_3") if isinstance(b2.get("bia_3"), dict) else {}
@@ -304,7 +308,7 @@ def _meta_so(top: Sequence[Dict[str, Any]], so: Any, ho_lo: str) -> Dict[str, An
         u = top[int(so) - 1] if so is not None and 1 <= int(so) <= len(top) else {}
     except (TypeError, ValueError):
         u = {}
-    return {"ma": str(u.get("ma") or ""), "ho": str(u.get("kieu_chu") or ho_lo or ""),
+    return {"ma": str(u.get("ma") or ""), "ho": str(u.get("ho") or ho_lo or u.get("kieu_chu") or ""),
             "diem_bam": _so((u.get("diem") or {}).get("bam_nhu_thang")) if isinstance(u.get("diem"), dict) else None,
             "diem_lo": _so(u.get("tong"))}
 

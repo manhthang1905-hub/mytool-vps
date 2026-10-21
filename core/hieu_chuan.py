@@ -347,6 +347,11 @@ def _bu_mot(goc: str, kenh: str, ma: str, hs: Dict[str, Any],
     if isinstance(xh, dict) and xh.get("top"):
         m = _RE_THUMB.search(str(th.get("tep") or ""))
         i_chon = int(m.group(1)) - 1 if m else 0
+        # 21/10/2026: lô có bộ phụ họ hạng nhì — `giao` (thứ tự thumb_00N) khác `top`: tấm chọn tra theo mã
+        giao = [g for g in xh.get("giao") or [] if isinstance(g, dict)]
+        if giao and 0 <= i_chon < len(giao):
+            i_chon = next((i for i, u in enumerate(xh.get("top") or []) if isinstance(u, dict)
+                           and u.get("ma") == giao[i_chon].get("ma")), -1)
         for i, u in enumerate(xh.get("top") or []):
             if not isinstance(u, dict):
                 continue

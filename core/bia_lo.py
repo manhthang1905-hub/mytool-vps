@@ -1181,7 +1181,7 @@ def kiem_bo_cuc(do: Dict[str, Any], mt: Dict[str, Any], *, cot: bool = True) -> 
 
 def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None, log: Callable[[str], None] = print,
                dem: Optional[Dict[str, int]] = None, mau: Sequence[str] = (), luot: str = "",
-               ghi_so: bool = True) -> Dict[str, Any]:
+               ghi_so: bool = True, ep_ho: str = "") -> Dict[str, Any]:
     """Hồ sơ KIỂU bìa thắng của kênh cho cả lô: `kieu` ("hop"/"tran", `kieu_chu` của khuôn), `kc` (khuôn vẽ chữ),
     `bo_cuc` (bên/dải chữ), màu chữ trần, `uu_tien` (kiểu `do_bia`), `nhan_vat` (style.yaml), `nv` + `mau_dau`
     (nv1.png), `mau` (few-shot riêng kênh — cache `mau_thang`; lùi `MAU_THANG` cho kiểu hộp), `nen` (nền bìa thắng),
@@ -1214,13 +1214,18 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         kieu = str(cai["bia_lo_kieu"]).strip()
     tm = thu_muc_mau(goc, kenh, mau)
     # 20/10/2026 — họ kiểu chữ theo DỮ LIỆU của kênh (xem docstring)
-    try:
-        from . import bia_du_lieu  # noqa: PLC0415
-        ho = bia_du_lieu.chon_ho(goc, kenh, co=bia_du_lieu.ho_trong_thu_muc(tm), luot=luot, ghi=ghi_so and bool(luot),
-                                 cai=cai)
-    except Exception as loi:  # noqa: BLE001 — dữ liệu hỏng: theo cấu hình như cũ
-        log("  (bìa lô: chọn họ kiểu chữ theo dữ liệu hỏng: {0})".format(str(loi)[:160]))
-        ho = {}
+    # 21/10/2026 (G4) — `ep_ho`: hồ sơ cho bộ bìa PHỤ họ hạng nhì (`bia_du_lieu.ho_phu`) — KHÔNG gọi `chon_ho`, không
+    # ghi sổ: họ của lô vẫn là bản ghi của lượt.
+    if ep_ho:
+        ho = {"ho": ep_ho, "cach": "phu-ab", "ly_do": "bìa phụ họ hạng nhì cho Thử nghiệm A/B"}
+    else:
+        try:
+            from . import bia_du_lieu  # noqa: PLC0415
+            ho = bia_du_lieu.chon_ho(goc, kenh, co=bia_du_lieu.ho_trong_thu_muc(tm), luot=luot,
+                                     ghi=ghi_so and bool(luot), cai=cai)
+        except Exception as loi:  # noqa: BLE001 — dữ liệu hỏng: theo cấu hình như cũ
+            log("  (bìa lô: chọn họ kiểu chữ theo dữ liệu hỏng: {0})".format(str(loi)[:160]))
+            ho = {}
     if ho.get("ho"):
         kieu = "hop" if ho["ho"] == "hop" or (ho["ho"] == "dai" and kieu == "hop") else "tran"
     # `san_nv` (19/10/2026): lời nhắc ảnh có câu khoá nhân vật kênh + màu đậm (hồ sơ dựng tay của bài kiểm cũ: không)
@@ -2684,8 +2689,13 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
 
     20/10/2026 — họ kiểu chữ của lô theo dữ liệu (`ho_so_kieu(luot=…)`, `core/bia_du_lieu`); `ghi_so` (mặc định) ghi
     họ + điểm giám khảo top vào sổ `nghien-cuu/bia-so-cai.json` cho vòng phản hồi CTR. Kiểm vàng: `ghi_so=False` (họ tốt
-    nhất, không ghi sổ)."""
+    nhất, không ghi sổ).
+
+    21/10/2026 (G4) — BỘ PHỤ HỌ HẠNG NHÌ (`_lo_phu`): kênh chạy A/B bìa + thư mục bìa thắng ≥ 2 họ → thêm ≤
+    `TRAN_ANH_PHU` ảnh ở họ hạng nhì (`bia_du_lieu.ho_phu`), cùng lọc/cổng/sàn/giám khảo; kết quả `phu` + thứ tự giao
+    `giao` (ô C = tấm họ phụ). Ô A, xếp hạng lô chính và sổ họ của lượt không đổi."""
     t0 = time.time()
+    mau_goc = list(mau)
     lu = _doc_luot(thu_muc_luot)
     chu = str(chu or lu["chu_bia"]).strip()
     if not chu:
@@ -2752,10 +2762,30 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
                    *(("tran", PHIEN_BAN_VE_TRAN, json.dumps(tang, ensure_ascii=False, sort_keys=True)) if tran else ()),
                    *(("san", json.dumps(san, sort_keys=True)) if hs.get("san_nv") else ()))
     cu = _doc_json(os.path.join(ra, "xep-hang.json")) or {}
+
+    def gan_phu(ket: Dict[str, Any]) -> Dict[str, Any]:
+        """21/10/2026 (G4): bộ bìa PHỤ họ hạng nhì (`_lo_phu`) gắn vào kết quả lô + thứ tự giao (`giao`). Hỏng → lô như
+        cũ (ô C = hạng ba họ chính)."""
+        try:
+            phu = _lo_phu(goc, kenh, hs=hs, top=ket.get("top") or [], yt=yt, lu=lu, chu=chu, hook=hook, mau_goc=mau_goc,
+                          mau=mau, san=san, giau=giau or "", ra=ra, khoa=khoa, goi=goi, ve=ve, moi_y=moi_y, log=log,
+                          ngon_ngu=ngon_ngu, ghi_so=ghi_so)
+        except Exception as loi:  # noqa: BLE001
+            log("  (bìa lô: bộ bìa phụ họ hạng nhì hỏng: {0} — giao như cũ)".format(str(loi)[:160]))
+            phu = {"bo": "lỗi: " + str(loi)[:160]}
+        if phu.get("ho") or (ket.get("phu") or {}).get("ho"):
+            ket["phu"] = {k: v for k, v in phu.items() if k != "ung_vien"}
+        ket["giao"] = [{k: t.get(k) for k in ("ma", "y", "ho", "tong", "diem", "phu_ab")} for t in giao_lo(ket)]
+        return ket
     if cu.get("van_tay") == van_tay and cu.get("top") and all(os.path.isfile(t["tep"]) for t in cu["top"]):
         log("  bìa lô: đã xếp hạng đúng bộ ứng viên này — dùng lại")
+        truoc = json.dumps(cu.get("phu"), sort_keys=True, default=str)
+        cu = gan_phu(cu)
+        if json.dumps(cu.get("phu"), sort_keys=True, default=str) != truoc:
+            _ghi_json(os.path.join(ra, "xep-hang.json"), cu)
         return cu
     for u in uv:
+        u["ho"] = hs.get("ho") or ""
         dung_bia(u, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs)
         # Chữ do mã vẽ = chữ đã soát (bảo đảm ở trên): cổng chữ trước giám khảo không cần lượt đọc; dấu đóng ở tấm giao.
         u["chu_khop"] = {"ok": True, "cach": "ma", "chu": chu_dong}
@@ -2803,6 +2833,7 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
            "so_qua_loc": sum(1 for u in uv if not u.get("loai")),
            "top": [dict(u, hang=i) for i, u in enumerate(top, 1)], "ung_vien": xh, "y_tuong": yt["y_tuong"],
            "to_lien": to_lien([u for u in xh if not u.get("loai")][:6] or xh[:6], os.path.join(ra, "to-lien.jpg"))}
+    gan_phu(ket)
     _ghi_json(os.path.join(ra, "xep-hang.json"), ket)
     log("  bìa lô: xong — {0} ảnh mới, {1} lượt LLM, top: {2}{3}".format(
         dem["anh"], dem["llm"], ", ".join("{0} {1:.0f}".format(u["ma"], u["tong"]) for u in top) or "(không có)",
@@ -2816,10 +2847,168 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
                 "ho": ket["ho_kieu"], "cach": ket["ho_cach"], "ly_do": ket["ho_ly_do"], "kieu_chu": ket["kieu_chu"],
                 "bo_cuc": ket["bo_cuc"], "luc": ket["luc"], "san_truot": san_truot,
                 "top": [{"ma": u.get("ma"), "tong": u.get("tong"), "diem": u.get("diem") or {}}
-                        for u in (top or du_phong)[:SO_TOP]]})
+                        for u in (top or du_phong)[:SO_TOP]],
+                "phu": ({"ho": ket["phu"].get("ho"), "ma": (ket["phu"].get("chon") or {}).get("ma"),
+                         "tong": (ket["phu"].get("chon") or {}).get("tong")} if (ket.get("phu") or {}).get("ho")
+                        else None)})
         except Exception:  # noqa: BLE001
             pass
     return ket
+
+
+# ── Bộ bìa PHỤ họ hạng nhì (21/10/2026, G4) — mỗi ván A/B dạy cả HỌ kiểu chữ ─────────────────────────────────────
+#
+# 3 bìa của một lô cùng một họ → Thử nghiệm A/B 3 bìa (`core/bia_ab`) không nói gì về họ. Giờ: ngoài lô chính (họ do
+# `bia_du_lieu.chon_ho` chọn — bản ghi tất định của lượt, KHÔNG đổi), lô vẽ thêm MỘT bộ nhỏ ở họ hạng nhì
+# (`bia_du_lieu.ho_phu`): `SO_Y_PHU` ý tốt nhất của lô chính × `moi_y` ảnh, trần `TRAN_ANH_PHU` — CÙNG lọc cứng, cổng chữ
+# (`bao_dam_ma` + dấu ở tấm giao), sàn, giám khảo (chấm riêng, cùng thước). Giao: ô A = tấm nhất họ chính (bìa chạy,
+# như cũ), ô B = tấm nhì họ chính, ô C = tấm tốt nhất QUA SÀN của họ phụ (không có → tấm ba họ chính), tấm ba họ chính
+# vẫn xuất làm `thumb_004` (tấm thay thế của cổng chữ). Tấm họ phụ mang `chi_ab` trong `chon-bia.json` — cổng chữ lúc
+# giao (`auto_khau._loai_tam_giao`) KHÔNG BAO GIỜ lấy nó làm bìa chạy. Chỉ vẽ khi kênh chạy A/B bìa được (`bia_ab`) và
+# thư mục bìa thắng có ≥ 2 họ.
+
+SO_Y_PHU = 2
+TRAN_ANH_PHU = 8
+
+
+def _ho_phu_lo(goc: str, kenh: str, hs: Dict[str, Any], ghi_so: bool = True) -> Dict[str, Any]:
+    """{ho, ly_do} = vẽ bộ phụ họ ấy; {bo: lý do} = không vẽ."""
+    if not ghi_so:
+        return {"bo": "kiểm vàng / không ghi sổ"}
+    try:
+        from . import bia_ab, bia_du_lieu  # noqa: PLC0415
+        from .kenh import TEP_KENH, doc_yaml, duong_kenh as _dk  # noqa: PLC0415
+        cai = doc_yaml(os.path.join(_dk(goc, kenh), TEP_KENH)) or {}
+        if not bia_ab.doc_cai(goc).get("bat", True) or not bia_ab.bat(cai):
+            return {"bo": "kênh không chạy Thử nghiệm A/B bìa (bia_ab)"}
+        q = bia_ab.thieu_quyen(goc, kenh, _dt_now())
+        if q:
+            return {"bo": "kênh chưa dùng được A/B: " + q[:120]}
+        co = bia_du_lieu.ho_trong_thu_muc(str(hs.get("thu_muc_mau") or ""))
+        r = bia_du_lieu.ho_phu(goc, kenh, co=co, ho_chinh=str(hs.get("ho") or ""), kieu=str(hs.get("kieu") or ""),
+                               cai=cai)
+    except Exception as loi:  # noqa: BLE001
+        return {"bo": "không xét được họ phụ: " + str(loi)[:120]}
+    return r if r.get("ho") else {"bo": "thư mục bìa thắng có {0} họ ({1}) — cần ≥ 2".format(
+        len(co), ", ".join(co) or "-") if len(co) < 2 else "không có họ phụ khác nhà / chủ ghim kiểu"}
+
+
+def _dt_now():
+    import datetime as _dt  # noqa: PLC0415
+    return _dt.datetime.now()
+
+
+def giao_lo(kq: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Thứ tự GIAO các tấm của lô (`thumb_001..`): [nhất họ chính, nhì họ chính, tấm họ phụ (`phu_ab`), ba họ chính]
+    khi có tấm họ phụ qua sàn; không thì top như cũ. Ô A luôn là tấm nhất họ chính."""
+    top = [t for t in kq.get("top") or [] if isinstance(t, dict)]
+    p = (kq.get("phu") or {}).get("chon")
+    if top and isinstance(p, dict) and p.get("tep") and os.path.isfile(str(p["tep"])):
+        ph = kq.get("phu") or {}
+        return top[:2] + [dict(p, phu_ab=True, ho=p.get("ho") or ph.get("ho"),
+                               chu_tang=p.get("chu_tang") or ph.get("chu_tang"),
+                               chu_dong=p.get("chu_dong") or ph.get("chu_dong"))] + top[2:3]
+    return top[:SO_TOP]
+
+
+def _lo_phu(goc: str, kenh: str, *, hs: Dict[str, Any], top: Sequence[Dict[str, Any]], yt: Dict[str, Any],
+            lu: Dict[str, Any], chu: str, hook: str, mau_goc: Sequence[str], mau: Sequence[str], san: Dict[str, Any],
+            giau: str, ra: str, khoa: str, goi: Callable[..., str], ve: Callable[..., List[str]], moi_y: int,
+            log: Callable[[str], None], ngon_ngu: str = "ja", ghi_so: bool = True) -> Dict[str, Any]:
+    """Bộ bìa phụ họ hạng nhì của MỘT lô → {ho, ly_do, chon (tấm tốt nhất qua sàn | None), ung_vien, chi_phi, giay,
+    van_tay, …} hoặc {bo: lý do} (không vẽ gì). Cache `<ra>/phu-<họ>/xep-hang-phu.json` (chạy lại không trả tiền)."""
+    if not top:
+        return {"bo": "lô chính chưa có tấm qua sàn"}
+    g = _ho_phu_lo(goc, kenh, hs, ghi_so)
+    if not g.get("ho"):
+        return g
+    ho = g["ho"]
+    t0 = time.time()
+    dem: Dict[str, int] = {"anh": 0, "llm": 0}
+
+    def goi_dem(loi_nhac: str, **kw) -> str:
+        dem["llm"] += 1
+        return goi(loi_nhac, **kw)
+    tm = str(hs.get("thu_muc_mau") or "")
+    nguon_mau = [tm] if tm and os.path.isdir(tm) else list(mau_goc)       # CÙNG thư mục bìa thắng với lô chính
+    hs2 = ho_so_kieu(goc, kenh, goi=goi_dem, log=log, dem=dem, mau=nguon_mau, luot="", ghi_so=False, ep_ho=ho)
+    if hs2.get("ho") != ho:
+        return {"bo": "hồ sơ họ {0} không dựng được".format(ho)}
+    if hs.get("dan"):
+        hs2["dan"] = hs["dan"]
+    if giau:
+        for k in ("bia_mau", "bia_so"):
+            hs2[k] = [t for t in hs2.get(k) or [] if os.path.abspath(t) != os.path.abspath(giau)]
+    mau2 = [t for t in mau_cua_kenh(goc, kenh, nguon_mau, ho_so=hs2)
+            if not giau or os.path.abspath(t) != os.path.abspath(giau)] or list(mau)
+    tran2 = hs2["kieu"] == "tran"
+    if tran2 and hs2.get("muc_tieu"):
+        hs2["muc_tieu"] = muc_tieu_theo_chu(hs2["muc_tieu"], hook)
+    tang = (doc_chu_bia_tran(chu, hs2, cach_ai=yt.get("chu") or ()) if tran2
+            else doc_chu_bia(chu, hs2["kc"], cach_ai=yt.get("chu") or ()))
+    chu_ve = "".join(btk.chu_cua_tang(t) for t in tang)
+    chu_dong = " ".join(btk.chu_cua_tang(t) for t in tang)
+    from . import cong_chu  # noqa: PLC0415
+    loi_chu = cong_chu.bao_dam_ma(chu_ve, hook, goc=goc, ngon_ngu=ngon_ngu, kieu_phong="" if tran2 else "hop")
+    if loi_chu:
+        return dict(g, bo="họ {0}: bộ vẽ không bảo đảm chữ — {1}".format(ho, loi_chu[:120]))
+    # ý: các ý của tấm tốt nhất lô chính (cùng ý, khác họ → so được họ), tối đa `SO_Y_PHU`
+    ds_y_so: List[int] = []
+    for t in top:
+        try:
+            y = int(t.get("y") or 0)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= y <= len(yt.get("y_tuong") or []) and y not in ds_y_so:
+            ds_y_so.append(y)
+    ds_y_so = ds_y_so[:SO_Y_PHU]
+    if not ds_y_so:
+        return dict(g, bo="không biết ý của tấm lô chính")
+    nen = "" if tran2 else str(btk.cau_hinh_kenh(goc, kenh).get("bia_hop_nen") or hs2.get("nen") or "")
+    thu = os.path.join(ra, "phu-" + ho)
+    uv = sinh_hang_loat(ve, [yt["y_tuong"][y - 1] for y in ds_y_so], moi_y, os.path.join(thu, "ung-vien"), kc=hs2["kc"],
+                        nen=nen, tran=TRAN_ANH_PHU, khoa="{0}:phu:{1}".format(khoa, ho), log=log, dem=dem, ho_so=hs2)
+    for u in uv:
+        u.update(ma="p{0}-{1}".format(ho, u["ma"]), y=ds_y_so[int(u["y"]) - 1], ho=ho)
+    if not uv:
+        return dict(g, bo="họ {0}: không vẽ được ảnh nền nào".format(ho), chi_phi={"anh_dat_moi": dem["anh"]})
+    van_tay = _bam(chu_ve, ho, *sorted("{0}:{1}".format(u["ma"], os.path.getsize(u["nen"])) for u in uv),
+                   json.dumps(tang, ensure_ascii=False, sort_keys=True), json.dumps(san, sort_keys=True))
+    tep_kq = os.path.join(thu, "xep-hang-phu.json")
+    cu = _doc_json(tep_kq) or {}
+    if cu.get("van_tay") == van_tay and (cu.get("chon") is None or os.path.isfile(str((cu.get("chon") or {}).get("tep")))):
+        log("  bìa lô: bộ phụ họ {0} đã chấm — dùng lại".format(ho))
+        return cu
+    for u in uv:
+        dung_bia(u, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs2)
+        u["chu_khop"] = {"ok": True, "cach": "ma", "chu": chu_dong}
+        u["chu_dong"] = chu_dong
+        loc_san(u, san)
+    xh = cham(goi, uv, mau=mau2, tieu_de=lu["tieu_de"], chu_bia=chu_ve, mo_dau=lu["kich_ban"][:800], thu_muc=thu,
+              khoa="{0}:phu:{1}:{2}".format(khoa, ho, van_tay[:6]), log=log, dem=dem, ho_so=hs2, giau=giau)
+    da = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
+    hc = hieu_chuan_lo(goc, kenh)
+    san_chon = san if hc["w"] >= 1.0 else dict(san, phu_quyet_bam=_hc().SAN_BAM_PHU_QUYET)
+    for u in da:
+        u["duoi_san"] = kiem_san(u, san_chon)
+    try:
+        if hc["w"] < 1.0:
+            da = _hc().xep_bia(da, hc["w"], tien_nghiem_lo(hs2, mau2))
+    except Exception:  # noqa: BLE001
+        pass
+    chon = next((u for u in da if not u["duoi_san"]), None)
+    if chon is not None:
+        shutil.copy2(chon["tep"], os.path.join(thu, "top-phu.jpg"))
+    kq = dict(g, van_tay=van_tay, kieu_chu=hs2["kieu"], bo_cuc=hs2.get("bo_cuc"), chu_ve=chu_ve, chu_dong=chu_dong,
+              chu_tang=tang, y=ds_y_so, chon=dict(chon) if chon else None, ung_vien=xh,
+              so_qua_loc=sum(1 for u in uv if not u.get("loai")), luc=time.strftime("%Y-%m-%d %H:%M:%S"),
+              giay=round(time.time() - t0), chi_phi={"anh_dat_moi": dem["anh"], "vnd_anh_uoc": dem["anh"] * 100,
+                                                     "anh_tong": len(uv), "llm": dem["llm"]},
+              bo="" if chon else "họ {0}: không tấm nào qua lọc + sàn ({1} ảnh)".format(ho, len(uv)))
+    _ghi_json(tep_kq, kq)
+    log("  bìa lô: bộ phụ họ {0} — {1} ảnh mới, {2} lượt LLM, {3}s → {4}".format(
+        ho, dem["anh"], dem["llm"], kq["giay"], "{0} {1:.0f}".format(chon["ma"], chon["tong"]) if chon else kq["bo"]))
+    return kq
 
 
 # ── Hiệu chuẩn giám khảo bìa (20/10/2026) — `core/hieu_chuan` ───────────────
@@ -2973,8 +3162,10 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
     top = list(kq.get("top") or [])
     if not top:
         raise RuntimeError("bìa lô: không có tấm nào qua mọi lọc")
+    # 21/10/2026 (G4): thứ tự giao — ô A/B họ chính, ô C tấm họ phụ (`chi_ab`: không bao giờ thành bìa chạy), tấm ba họ
+    # chính thành `thumb_004` (tấm thay thế cổng chữ). Không có bộ phụ → như cũ.
     uv, muc, truoc = [], [], 101.0
-    for i, t in enumerate(top, 1):
+    for i, t in enumerate(giao_lo(kq) if not kq.get("duoi_san") else top, 1):
         tep = os.path.join(thu_muc_thumb, "thumb_{0:03d}.jpg".format(i))
         chon_bia._xuat_jpg(t["tep"], tep)  # noqa: SLF001
         shutil.copy2(t["nen"], os.path.join(thu_muc_thumb, "znen-thumb_{0:03d}.png".format(i)))
@@ -2984,10 +3175,12 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
         truoc = min(float(t["tong"]), truoc - 0.1)
         uv.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "tong_diem": round(truoc, 1), "diem": t.get("diem"),
                    "loai": "", "ly_do": (t.get("ly_do_2") or t.get("ly_do") or "")[:300], "ma_lo": t["ma"],
-                   "mau_do": t.get("mau_do"), "nv": t.get("nv"), "nguoi_khac": t.get("nguoi_khac")})
+                   "mau_do": t.get("mau_do"), "nv": t.get("nv"), "nguoi_khac": t.get("nguoi_khac"),
+                   "ho": t.get("ho") or kq.get("ho_kieu") or "", **({"chi_ab": True} if t.get("phu_ab") else {})})
         muc.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "ve_chu": "ma",
                     "chu_tang": t.get("chu_tang") or kq.get("chu_tang"),
-                    "chu_du_kien": kq.get("chu_dong") or kq.get("chu_ve", "")})
+                    "chu_du_kien": (t.get("chu_dong") if t.get("phu_ab") else "") or kq.get("chu_dong")
+                    or kq.get("chu_ve", "")})
     chon_bia._xuat_jpg(os.path.join(thu_muc_thumb, "thumb_001.jpg"),  # noqa: SLF001
                        os.path.join(thu_muc_thumb, "CHON-thumb_001.jpg"))
     chon = {"so": 1, "kieu": "bia_lo", "tong_diem": uv[0]["tong_diem"], "chon_boi": "ai", "tep": "CHON-thumb_001.jpg",

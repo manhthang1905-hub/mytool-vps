@@ -10831,8 +10831,9 @@ def _cong_doc_duoc_bia(bc: BoiCanh, luot: LuotChay, thu_muc: str, chu_bia: str) 
 
     # 2) Tấm hợp lệ khác của giám khảo đã ĐẠT sẵn.
     du = _cb.doc_chon_bia(thu_muc) or {}
-    uv = sorted([u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")],
-                key=lambda u: -(u.get("tong_diem") or 0))
+    # 21/10/2026 (G4): tấm họ phụ (`chi_ab`) chỉ để A/B — không đổi bìa chạy sang nó.
+    uv = sorted([u for u in du.get("ung_vien") or [] if isinstance(u, dict) and not u.get("loai")
+                 and not u.get("chi_ab")], key=lambda u: -(u.get("tong_diem") or 0))
     khac: List[Tuple[int, str, Dict[str, Any]]] = []
     for u in uv:
         so = int(u.get("so") or 0)
@@ -10970,7 +10971,8 @@ def _loai_tam_giao(bc: BoiCanh, thu_muc: str, so: int, tep: str, ly_do: str) -> 
     for u in uv:
         if int(u.get("so") or 0) == so:
             u["loai"] = ("cổng chữ bìa: " + ly_do)[:300]
-    con = sorted([u for u in uv if not u.get("loai") and str(u.get("so")) not in bi_loai
+    # 21/10/2026 (G4): tấm họ PHỤ của bìa lô (`chi_ab`) chỉ để Thử nghiệm A/B — KHÔNG BAO GIỜ thành bìa chạy lúc giao.
+    con = sorted([u for u in uv if not u.get("loai") and not u.get("chi_ab") and str(u.get("so")) not in bi_loai
                   and os.path.isfile(_tep_bia_co(thu_muc, int(u.get("so") or 0)))],
                  key=lambda u: (-(u.get("tong_diem") or 0), int(u.get("so") or 0)))
     c = du.get("chon") if isinstance(du.get("chon"), dict) else {}
@@ -11141,10 +11143,11 @@ def _xac_minh_chu_so(bc: BoiCanh, luot: LuotChay, thu_muc: str, tep: str, chu_mo
 
 
 def _dau_du_phong(bc: BoiCanh, luot: LuotChay, thu_muc: str, so_chon: int, chu_bia: str, tieu_de: str = "",
-                  toi_da: int = 2) -> None:
-    """Bìa đã giao đạt cổng chữ → đóng dấu thêm ≤ 2 tấm hợp lệ kế tiếp (hạng nhì/ba: `-bia-2/-bia-3` của hồ sơ —
-    giám đốc kênh đổi bìa, thử nghiệm A/B chỉ được tải tấm có dấu). Tấm trượt không bị loại khỏi lô (chỉ không có
-    dấu → không bao giờ lên YouTube). Hỏng / AI lỗi → bỏ qua (tấm giao không bị ảnh hưởng)."""
+                  toi_da: int = 3) -> None:
+    """Bìa đã giao đạt cổng chữ → đóng dấu thêm ≤ 3 tấm hợp lệ kế tiếp (hạng nhì/ba: `-bia-2/-bia-3` của hồ sơ —
+    giám đốc kênh đổi bìa, thử nghiệm A/B chỉ được tải tấm có dấu; 21/10/2026: lô có bộ phụ họ hạng nhì thì tấm ba họ
+    chính là `thumb_004` — ô C dự phòng của A/B). Lô cũ chỉ có 3 tấm → như trước (2 tấm). Tấm trượt không bị loại khỏi
+    lô (chỉ không có dấu → không bao giờ lên YouTube). Hỏng / AI lỗi → bỏ qua (tấm giao không bị ảnh hưởng)."""
     from . import chon_bia as _cb  # noqa: PLC0415
     try:
         du = _cb.doc_chon_bia(thu_muc) or {}
