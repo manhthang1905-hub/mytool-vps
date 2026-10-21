@@ -33,7 +33,23 @@ không bao giờ tạo đôi):
 Công tắc: `workspace/cai-dat.json: thay_kenh_tu_dong: false` tắt hẳn; `kenh.yaml: thay_kenh_tu_dong: false` miễn một kênh.
 Máy KHÔNG gõ mật khẩu/2FA, không tự đăng nhập Google, không xoá gì trên YouTube.
 
+═══ HỒI SINH (chủ 22/10/2026) ═══
+
+Kênh TRẢ KHO chủ đánh dấu `kenh.yaml: hoi_sinh: true` (lỗi ở tài khoản, không ở nội dung) = hàng đợi hồi sinh: mỗi
+kênh thành MỘT kênh MỚI (mã kế cùng dòng, vd TL5-T7 → TL5-T7-K3), BẢN SAO NGUYÊN kênh cũ (`mo_kenh.nhan_ban_giu_nguyen`)
+nhưng giọng ElevenLabs MỚI (giọng cũ nay kênh khác dùng). Kênh thay khác nhân vật đã có của dòng ấy vẫn chạy — hồi
+sinh là kênh THÊM. Chỉ chạy khi kho có Chrome mới đã đăng nhập; lượt thay thật (kênh đang chạy hỏng) được ưu tiên Chrome.
+Tối đa `HOI_SINH_MOI_NGAY` lượt mở/ngày (mỗi Chrome một lượt), lần lượt, chạy lại an toàn. Các bước (`BUOC_HOI_SINH`):
+  giong        `core/giong_moi.cap`: voice_id kế trong `kho\\giong-moi.txt` chưa kênh nào dùng (sổ `_giong-da-dung.json`).
+               Hết → MỘT việc người "cần giọng ElevenLabs mới"; KHÔNG dùng lại giọng kênh khác, KHÔNG lấy Chrome.
+  do_giong     đo `ky_tu_moi_phut` (đoạn mẫu đọc bằng giọng mới + giọng tham chiếu, cách chọn giọng 15/10).
+  chon_chrome · dat_chrome · dang_ky (`hoi_sinh: true` + `giong`) · thuong_hieu · cho_mo_kenh — như lượt thay.
+  xong         kênh cũ ghi `hoi_sinh: false`, `hoi_sinh_thanh: <mã mới>` (không đụng khoá khác) + MỘT tin báo chủ.
+Tạo kênh thương hiệu: tên giữ y kênh cũ; hộp Tạo kênh không nhận 2 lần liền → handle kế, rồi tên biến thể tối thiểu.
+Mỗi nhịp tối đa MỘT lượt chạy DOM tạo kênh thương hiệu (không vượt hạn skill).
+
     python -m core.thay_kenh xet [--goc G]     # CHỈ ĐỌC: kênh nào hỏng theo luật (cả kênh trả kho, để đối chiếu)
+    python -m core.thay_kenh hoi-sinh          # CHỈ ĐỌC: kế hoạch hồi sinh (mã, Chrome, giọng)
     python -m core.thay_kenh chay              # một nhịp (skill D20 gọi mỗi giờ khi có việc)
     python -m core.thay_kenh xem               # sổ các lượt thay
 """
@@ -66,6 +82,17 @@ GIO_THU_LAI_CAN_NGUOI = 6.0
 HAN_TAO_KENH_GIAY = 25 * 60
 MA_XONG, MA_HOAN, MA_LOI = 0, 10, 1
 MUC_THIET_LAP = 11
+#: Hồi sinh (22/10/2026): loại lượt, các bước, trần lượt MỞ mỗi ngày (một Chrome kho mỗi lượt).
+LOAI_HOI_SINH = "hoi_sinh"
+BUOC_HOI_SINH = ("giong", "do_giong", "chon_chrome", "dat_chrome", "dang_ky", "thuong_hieu", "cho_mo_kenh", "xong")
+HOI_SINH_MOI_NGAY = 3
+#: Đo giọng hỏng ngần này lần liền → báo chủ một lần, sau đó thử lại mỗi `GIO_THU_LAI_CAN_NGUOI` giờ.
+SO_LAN_DO_GIONG_BAO = 3
+KHOA_KHO_HET = "thay-kenh:kho-het"
+KHOA_CAN_GIONG = "thay-kenh:can-giong-moi"
+#: Hộp Tạo kênh không nhận ngần này lần liền → biến thể kế (tối đa `BIEN_THE_TOI_DA`: handle, rồi tên + handle).
+SO_LAN_TRUOC_BIEN_THE = 2
+BIEN_THE_TOI_DA = 2
 
 COT_VID, COT_NGAY, COT_MOC, COT_HIEN_THI = "Mã video", "Ngày đăng", "Mốc mới nhất", "Lượt hiển thị"
 
@@ -332,8 +359,17 @@ def _dau_kho(goc: str) -> str:
     from .tra_kho import thu_muc_kho  # noqa: PLC0415
 
     k = thu_muc_kho(goc)
+
+    def moc(t: str) -> str:
+        ra = "{0}:{1:.0f}".format(t, os.path.getmtime(os.path.join(k, t)))
+        for p in (("Data", "profile", "Default", "Network", "Cookies"), ("Data", "profile", "Default", "Cookies")):
+            try:
+                return ra + ":{0:.0f}".format(os.path.getmtime(os.path.join(k, t, *p)))
+            except OSError:
+                continue
+        return ra
     try:
-        return "|".join("{0}:{1:.0f}".format(t, os.path.getmtime(os.path.join(k, t))) for t in sorted(os.listdir(k)))
+        return "|".join(moc(t) for t in sorted(os.listdir(k)))
     except OSError:
         return ""
 
@@ -354,14 +390,58 @@ def _cho_nguoi(l: Dict[str, Any], khoa: str, chu: str, goi_y: str, dau: str) -> 
 
 def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.datetime, log: Callable[[str], None],
          tra: Optional[Callable[..., Any]] = None, quet: Optional[Callable[..., Any]] = None,
-         chay_tao_kenh: Optional[Callable[[str, str], int]] = None) -> str:
+         chay_tao_kenh: Optional[Callable[[str, str], int]] = None,
+         do_giong: Optional[Callable[..., Dict[str, Any]]] = None) -> str:
     """Đi tiếp MỘT bước của lượt `l` (sửa tại chỗ). Trả: 'tiep' (làm bước kế ngay) | 'cho' (đợi bộ máy khác / người)
     | 'hoan' (bận — nhịp sau) | 'loi'."""
     from . import kho_chrome, mo_kenh  # noqa: PLC0415
     from . import tra_kho as tk  # noqa: PLC0415
 
     cu, moi, b = l["cu"], l["moi"], l.get("buoc")
+    hoi = l.get("loai") == LOAI_HOI_SINH
     l["cap_nhat"] = bay_gio.strftime("%Y-%m-%d %H:%M")
+    if hoi and b == "giong":
+        from . import giong_moi  # noqa: PLC0415
+
+        g = giong_moi.cap(goc, moi, bay_gio)
+        if not g:
+            _cho_nguoi(l, KHOA_CAN_GIONG, "Cần giọng ElevenLabs mới (chưa kênh nào dùng) cho kênh hồi sinh {0} (dòng {1})".format(
+                moi, cu), "→ ghi voice_id vào {0} — mỗi dòng một giọng, ghi chú sau dấu # (tuỳ ý) — hoặc nhắn voice_id cho "
+                "người điều phối; máy tự lấy lần lượt, tự đo ky_tu_moi_phut, không dùng lại giọng kênh khác".format(
+                    giong_moi.duong_ds(goc)), giong_moi.dau(goc))
+            return "cho"
+        l.pop("cho_nguoi", None)
+        l["giong"] = {"voice_id": g["voice_id"]}
+        if int(g.get("ky_tu_moi_phut") or 0) > 0:                   # sổ giọng đã có số đo (chạy lại)
+            l["giong"]["ky_tu_moi_phut"] = int(g["ky_tu_moi_phut"])
+        log("{0}: giọng mới {1}… (sổ giọng kho)".format(moi, g["voice_id"][:4]))
+        _nhat_ky(goc, "hồi sinh {0}: giao giọng mới {1}…".format(moi, g["voice_id"][:4]))
+        l["buoc"] = "chon_chrome" if l["giong"].get("ky_tu_moi_phut") else "do_giong"
+        return "tiep"
+    if b == "do_giong":
+        from . import giong_moi  # noqa: PLC0415
+
+        v = str((l.get("giong") or {}).get("voice_id") or "")
+        if not v:
+            l["buoc"] = "giong"
+            return "tiep"
+        l["do_giong_luc"] = l["cap_nhat"]
+        l["do_giong_lan"] = int(l.get("do_giong_lan") or 0) + 1
+        try:
+            kq = (do_giong or giong_moi.do_ky_tu_moi_phut)(goc, v, cu, ma=moi, log=log)
+        except Exception as loi:  # noqa: BLE001 — ví/mạng/FFmpeg: nhịp sau đo lại
+            l["loi"] = "đo giọng mới: {0}".format(str(loi)[:160])
+            if l["do_giong_lan"] == SO_LAN_DO_GIONG_BAO:
+                _bao(goc, "do_giong_hong", "Hồi sinh {0}: đo giọng mới hỏng {1} lần".format(moi, SO_LAN_DO_GIONG_BAO),
+                     "{0} — máy thử lại mỗi {1:.0f} giờ.".format(l["loi"], GIO_THU_LAI_CAN_NGUOI), kenh=moi)
+            return "loi"
+        l["giong"]["ky_tu_moi_phut"] = int(kq["ky_tu_moi_phut"])
+        l["do_giong"] = {k: kq[k] for k in ("ky_tu_moi_phut", "cpm_moi", "cpm_tham_chieu", "kenh_tham_chieu", "luc") if k in kq}
+        giong_moi.ghi_do(goc, v, int(kq["ky_tu_moi_phut"]), l["do_giong"])
+        _nhat_ky(goc, "hồi sinh {0}: đo giọng mới → ky_tu_moi_phut {1}".format(moi, kq["ky_tu_moi_phut"]))
+        l["loi"] = ""
+        l["buoc"] = "chon_chrome"
+        return "tiep"
     if b == "tra_kho":
         kq = (tra or tk.tra)(goc, cu, thay=moi, bay_gio=bay_gio)
         l["chrome_cu"] = kq.get("chrome")
@@ -375,11 +455,14 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
             ds = (quet or kho_chrome.quet)(goc)
             so["kho_quet"] = {"luc": l["cap_nhat"], "ds": ds}
             moi_ds = [x for x in ds if x["loai"] == "moi"]
+            if hoi:
+                moi_ds = moi_ds[_cho_chrome(so)[0]:]                  # lượt thay thật (kênh đang chạy hỏng) lấy trước
             if not moi_ds:
-                _cho_nguoi(l, "thay-kenh:kho-het", "Kho hết Chrome mới đã đăng nhập — cần thêm (đang chờ thay {0} → {1})".format(cu, moi),
+                _cho_nguoi(l, KHOA_KHO_HET, "Kho hết Chrome mới đã đăng nhập — cần thêm (đang chờ {0} {1} → {2})".format(
+                               "hồi sinh" if hoi else "thay", cu, moi),
                            "→ chép Chrome Portable mới vào {0}\\<tên tuỳ ý>\\ (có <tên>.exe), mở nó, đăng nhập Gmail tay; máy tự "
                            "nhận ở nhịp sau".format(tk.thu_muc_kho(goc)), _dau_kho(goc))
-                if not so.get("da_bao_kho_het"):
+                if not hoi and not so.get("da_bao_kho_het"):
                     so["da_bao_kho_het"] = l["cap_nhat"]
                     _bao(goc, "kho_chrome_het", "Kho hết Chrome mới đã đăng nhập — cần thêm",
                          "Kênh {0} đã trả kho (không được phân phối); kênh thay {1} chờ một Chrome Portable mới đã đăng "
@@ -402,7 +485,7 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
             return "loi"
         _nhat_ky(goc, "đặt Chrome {0}: {1}".format(moi, gc))
         l["loi"] = ""
-        l["buoc"] = "giong"
+        l["buoc"] = "dang_ky" if hoi else "giong"
         return "tiep"
     if b == "giong":
         nhom = str(_kenh_yaml(goc, cu).get("nhom") or "")
@@ -418,17 +501,24 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
         l["buoc"] = "dang_ky"
         return "tiep"
     if b == "dang_ky":
+        if hoi and not int((l.get("giong") or {}).get("ky_tu_moi_phut") or 0):
+            l["buoc"] = "giong"                                       # chưa có giọng mới đã đo: không đăng ký
+            return "tiep"
         st = mo_kenh.doc_trang_thai(goc)
         if moi not in st["kenh"]:
             y = _kenh_yaml(goc, cu)
             st["kenh"][moi] = {"trang_thai": "de_xuat", "tep": str(y.get("tep") or ""), "ten_tep": str(y.get("tep") or ""),
                                "loai": LOAI_MO_KENH, "nhom": str(y.get("nhom") or ""), "kenh_goc": cu,
-                               "ly_do": "tự thay kênh không được phân phối {0}: {1}".format(cu, l.get("ly_do") or ""),
+                               "ly_do": ("hồi sinh dòng {0} (tài khoản cũ không được phân phối; nội dung giữ nguyên, giọng "
+                                         "mới)".format(cu) if hoi else
+                                         "tự thay kênh không được phân phối {0}: {1}".format(cu, l.get("ly_do") or "")),
                                "ngay_de_xuat": bay_gio.strftime("%Y-%m-%d"), "kiem_cuoi": 0, "loi": "",
                                "tu_dong": True, "giu_nguyen": True, "can_thuong_hieu": True,
                                "chrome_kho": l.get("chrome_kho") or ""}
+            if hoi:
+                st["kenh"][moi].update(hoi_sinh=True, giong=dict(l["giong"], ghi_chu="giọng mới (hồi sinh {0})".format(cu)))
             mo_kenh.luu_trang_thai(goc, st)
-            _nhat_ky(goc, "đăng ký mở kênh thay {0} (khuôn {1})".format(moi, cu))
+            _nhat_ky(goc, "đăng ký mở kênh {0} {1} (khuôn {2})".format("hồi sinh" if hoi else "thay", moi, cu))
         l["buoc"] = "thuong_hieu"
         return "cho"
     if b == "thuong_hieu":
@@ -445,6 +535,9 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
                 if ma == MA_HOAN:
                     return "hoan"
                 ket = _doc_json(_vm(goc, "logs", "tao-kenh", moi + ".json"))
+                if _bien_the_thuong_hieu(goc, l, moi, ket, log):
+                    l["loi"] = "hộp Tạo kênh không nhận — đổi sang biến thể {0}, nhịp sau thử lại".format(l.get("bien_the"))
+                    return "loi"
                 if ma == 20 or ket.get("ket_qua") == "can_nguoi":
                     _cho_nguoi(l, "thay-kenh:tao-kenh:{0}".format(moi),
                                "Thay kênh {0}: tạo kênh thương hiệu cần người — {1}".format(moi, str(ket.get("ly_do") or ly)[:120]),
@@ -455,6 +548,7 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
                 return "loi"
         l.pop("cho_nguoi", None)
         l["loi"] = ""
+        l["tao_kenh_hong"] = 0
         _dong_bo_ten_ho_so(goc, moi)
         log("{0}: kênh thương hiệu xong + UC đã ghim".format(moi))
         _nhat_ky(goc, "kênh thương hiệu {0} xong, UC ghim".format(moi))
@@ -468,6 +562,19 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
         l["ngay_xong"] = bay_gio.strftime("%Y-%m-%d")
         ten = str(d.get("ten_goi_y") or "")
         _, uc = thuong_hieu_xong(goc, moi)
+        if hoi:
+            from .trung_tam import ghi_cai_kenh  # noqa: PLC0415
+
+            ghi_cai_kenh(goc, cu, hoi_sinh=False, hoi_sinh_thanh=moi)  # CHỈ hai khoá hàng đợi; kênh cũ giữ nguyên
+            _bao(goc, "hoi_sinh_xong", "Đã hồi sinh dòng {0} → {1}".format(cu, moi),
+                 "Kênh mới {0}{1} là bản sao nguyên {2} (nhân vật, kiểu hình, prompt, nhịp, bài học) với giọng ElevenLabs "
+                 "mới ({3} ký tự/phút đã đo): Chrome kho «{4}», kênh thương hiệu {5}, thiết lập 11/11, đã bật tự chạy/tự "
+                 "duyệt/tự đăng.".format(moi, " «{0}»".format(ten) if ten else "", cu,
+                                          (l.get("giong") or {}).get("ky_tu_moi_phut") or "?", l.get("chrome_kho") or "?",
+                                          uc or "?"), kenh=moi)
+            _nhat_ky(goc, "XONG hồi sinh {0} → {1}".format(cu, moi))
+            log("XONG hồi sinh {0} → {1}".format(cu, moi))
+            return "cho"
         _bao(goc, "thay_kenh_xong", "Đã tự thay kênh {0} → {1}".format(cu, moi),
              "{0} không được phân phối ({1}) → đã trả kho. Kênh thay {2}{3}: Chrome kho «{4}», kênh thương hiệu {5}, "
              "thiết lập 11/11, đã bật tự chạy/tự duyệt/tự đăng.".format(
@@ -480,7 +587,148 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
 
 
 def _dang_mo(so: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return sorted((l for l in so["luot"].values() if l.get("buoc") != "xong"), key=lambda l: l.get("ngay") or "")
+    """Lượt chưa xong — lượt THAY thật trước (ưu tiên Chrome kho), hồi sinh sau; cùng loại thì cũ trước."""
+    return sorted((l for l in so["luot"].values() if l.get("buoc") != "xong"),
+                  key=lambda l: (l.get("loai") == LOAI_HOI_SINH, l.get("ngay") or ""))
+
+
+def _cho_chrome(so: Dict[str, Any]) -> Tuple[int, int]:
+    """(lượt thay thật, lượt hồi sinh) đang cần một Chrome kho mà chưa giữ Chrome nào."""
+    thay = hoi = 0
+    for l in _dang_mo(so):
+        if l.get("chrome_kho"):
+            continue
+        if l.get("loai") == LOAI_HOI_SINH:
+            hoi += l.get("buoc") in ("giong", "do_giong", "chon_chrome")
+        else:
+            thay += l.get("buoc") in ("tra_kho", "chon_chrome")
+    return thay, hoi
+
+
+# ═══════════════════════════ HỒI SINH: hàng đợi + mở lượt ══════════════════════
+def _co(v: Any) -> bool:
+    return str(v if v is not None else "").strip().lower() in ("true", "1", "yes", "co", "bat", "on")
+
+
+def hang_hoi_sinh(goc: str, so: Optional[Dict[str, Any]] = None) -> List[str]:
+    """Kênh TRẢ KHO chủ đánh dấu `hoi_sinh: true`, chưa có lượt hồi sinh — trả kho sớm nhất trước (rồi theo mã)."""
+    from .kenh import liet_ke_kenh  # noqa: PLC0415
+
+    so = so if so is not None else doc_so(goc)
+    co_luot = {l.get("cu") for l in so["luot"].values() if l.get("loai") == LOAI_HOI_SINH}
+    ds = []
+    for m in liet_ke_kenh(goc, ca_tra_kho=True):
+        y = _kenh_yaml(goc, m)
+        if _co(y.get("hoi_sinh")) and str(y.get("tra_kho") or "").strip() and m not in co_luot:
+            ds.append((str(y.get("tra_kho")), m))
+    return [m for _, m in sorted(ds)]
+
+
+def _hoi_sinh_hom_nay(so: Dict[str, Any], hom: str) -> int:
+    return sum(1 for l in so["luot"].values() if l.get("loai") == LOAI_HOI_SINH and l.get("ngay") == hom)
+
+
+def mo_hoi_sinh(goc: str, so: Dict[str, Any], bay_gio: _dt.datetime, log: Callable[[str], None],
+                quet: Optional[Callable[..., Any]] = None) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Mở MỘT lượt hồi sinh nếu hàng đợi có kênh, hôm nay chưa đủ `HOI_SINH_MOI_NGAY` lượt và kho còn Chrome mới đã
+    đăng nhập DƯ (sau mọi lượt đang chờ Chrome — lượt thay thật trước). (lượt | None, lý do dừng)."""
+    from . import kho_chrome  # noqa: PLC0415
+
+    hang = hang_hoi_sinh(goc, so)
+    hom = bay_gio.strftime("%Y-%m-%d")
+    if not hang:
+        so.pop("hoi_sinh_cho", None)
+        return None, "hang_rong"
+    if _hoi_sinh_hom_nay(so, hom) >= HOI_SINH_MOI_NGAY:
+        return None, "gioi_han_ngay"
+    ds = (quet or kho_chrome.quet)(goc)
+    so["kho_quet"] = {"luc": bay_gio.strftime("%Y-%m-%d %H:%M"), "ds": ds}
+    du = sum(1 for x in ds if x["loai"] == "moi") - sum(_cho_chrome(so))
+    if du <= 0:
+        so["hoi_sinh_cho"] = {"ds": hang, "luc": bay_gio.strftime("%Y-%m-%d %H:%M")}
+        return None, "het_chrome"
+    so.pop("hoi_sinh_cho", None)
+    cu = hang[0]
+    moi = ma_moi(goc, cu, [x["moi"] for x in so["luot"].values()])
+    l = {"loai": LOAI_HOI_SINH, "cu": cu, "moi": moi, "buoc": BUOC_HOI_SINH[0], "ngay": hom, "loi": "",
+         "ly_do": "hồi sinh dòng {0} (chủ đánh dấu hoi_sinh; tài khoản cũ không được phân phối)".format(cu)}
+    so["luot"]["hoi_sinh:" + cu] = l
+    log("hồi sinh {0} → {1} (kho còn {2} Chrome mới dư)".format(cu, moi, du))
+    _nhat_ky(goc, "mở lượt hồi sinh {0} → {1}".format(cu, moi))
+    return l, ""
+
+
+def _do_giong_cho(l: Dict[str, Any], bay_gio: _dt.datetime) -> bool:
+    """Đo giọng đã hỏng ≥ `SO_LAN_DO_GIONG_BAO` lần → chỉ thử lại mỗi `GIO_THU_LAI_CAN_NGUOI` giờ."""
+    if int(l.get("do_giong_lan") or 0) < SO_LAN_DO_GIONG_BAO:
+        return False
+    try:
+        t = _dt.datetime.strptime(str(l.get("do_giong_luc") or ""), "%Y-%m-%d %H:%M")
+    except ValueError:
+        return False
+    return (bay_gio - t).total_seconds() < GIO_THU_LAI_CAN_NGUOI * 3600
+
+
+# ═══════════════════════════ biến thể tên/handle khi hộp Tạo kênh không nhận ═══
+def bien_the_ten(ten: Any, ngon_ngu: str = "") -> str:
+    """Biến thể TỐI THIỂU của tên kênh: tiếng Nhật thêm «ch» (nếp tên kênh Nhật), tiếng khác thêm « 2»."""
+    t = str(ten or "").strip()
+    hau = "ch" if str(ngon_ngu or "").lower().startswith("ja") else " 2"
+    return t if not t or t.endswith(hau) else t + hau
+
+
+def bien_the_handle(handle: Any) -> str:
+    """@abc → @abc-2 → @abc-3 … (≤ 30 ký tự)."""
+    h = str(handle or "").strip().lstrip("@")
+    m = re.match(r"^(.*?)-(\d+)$", h)
+    h = "{0}-{1}".format(m.group(1), int(m.group(2)) + 1) if m else h[:27] + "-2"
+    return "@" + h[:30]
+
+
+def _bien_the_thuong_hieu(goc: str, l: Dict[str, Any], moi: str, ket: Dict[str, Any], log: Callable[[str], None]) -> bool:
+    """Hộp Tạo kênh KHÔNG nhận (chưa bấm Tạo được — không có dấu `da_bam_tao`, nên đổi tên/handle không thể đẻ kênh
+    trùng) `SO_LAN_TRUOC_BIEN_THE` lần liền → biến thể kế: lần 1 handle kế, lần 2 thêm tên biến thể tối thiểu (bộ làm
+    sạch tên của `vm/tao_kenh_thuong_hieu` vẫn chạy). Trả True nếu vừa đổi."""
+    if ket.get("ket_qua") != "hong" or ket.get("da_bam_tao") or "hộp thoại" not in str(ket.get("ly_do") or ""):
+        return False
+    l["tao_kenh_hong"] = int(l.get("tao_kenh_hong") or 0) + 1
+    cap = int(l.get("bien_the") or 0)
+    if l["tao_kenh_hong"] < SO_LAN_TRUOC_BIEN_THE:
+        return False
+    if cap >= BIEN_THE_TOI_DA:                                        # hết biến thể → việc người, thử lại thưa
+        _cho_nguoi(l, "thay-kenh:tao-kenh:{0}".format(moi),
+                   "Tạo kênh thương hiệu {0}: hộp Tạo kênh không nhận cả tên/handle biến thể".format(moi),
+                   "→ mở Chrome {0}, thử tạo kênh bằng tay xem YouTube báo gì rồi đóng Chrome; máy thử lại sau {1:.0f} "
+                   "giờ".format(moi, GIO_THU_LAI_CAN_NGUOI), str(l.get("tao_kenh_luc") or ""))
+        return False
+    from . import mo_kenh  # noqa: PLC0415
+
+    st = mo_kenh.doc_trang_thai(goc)
+    d = st["kenh"].get(moi)
+    if not d:
+        return False
+    cap += 1
+    d["handle"] = bien_the_handle(d.get("handle") or "")
+    if cap >= 2:
+        d["ten_goi_y"] = bien_the_ten(d.get("ten_goi_y"), str(_kenh_yaml(goc, moi).get("ngon_ngu") or ""))
+    mo_kenh.luu_trang_thai(goc, st)
+    try:
+        from . import thiet_lap_kenh as tl  # noqa: PLC0415
+
+        hs = tl.doc_ho_so(moi, goc)
+        if hs:
+            hs["handle"] = d["handle"]
+            if cap >= 2:
+                hs["ten"] = d["ten_goi_y"]
+            tl.ghi_ho_so(moi, hs, goc)
+    except Exception:  # noqa: BLE001 — phụ: sổ mở kênh là nguồn cho bước tạo kênh
+        pass
+    l["bien_the"] = cap
+    l["tao_kenh_hong"] = 0
+    log("{0}: hộp Tạo kênh không nhận {1} lần → biến thể {2}: handle {3}{4}".format(
+        moi, SO_LAN_TRUOC_BIEN_THE, cap, d["handle"], ", tên «{0}»".format(d["ten_goi_y"]) if cap >= 2 else ""))
+    _nhat_ky(goc, "biến thể kênh thương hiệu {0}: cấp {1}".format(moi, cap))
+    return True
 
 
 def phat_hien(goc: str, so: Dict[str, Any], bay_gio: _dt.datetime, log: Callable[[str], None]) -> Optional[Dict[str, Any]]:
@@ -527,7 +775,12 @@ def can_lam(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Tuple[bool, str
         if cn:
             if b == "chon_chrome" and cn.get("dau") != _dau_kho(goc):
                 return True, "kho Chrome đổi — xét lại (thay {0})".format(l["cu"])
-            if b == "giong" and cn.get("dau") != _dau_giong(goc, str(_kenh_yaml(goc, l["cu"]).get("nhom") or "")):
+            if b == "giong" and l.get("loai") == LOAI_HOI_SINH:
+                from .giong_moi import dau as _dau_giong_moi  # noqa: PLC0415
+
+                if cn.get("dau") != _dau_giong_moi(goc):
+                    return True, "tệp giọng mới đổi — xét lại (hồi sinh {0})".format(l["cu"])
+            elif b == "giong" and cn.get("dau") != _dau_giong(goc, str(_kenh_yaml(goc, l["cu"]).get("nhom") or "")):
                 return True, "kho giọng đổi — xét lại (thay {0})".format(l["cu"])
             if b == "thuong_hieu":
                 try:
@@ -537,8 +790,11 @@ def can_lam(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Tuple[bool, str
                 if t is None or (bay_gio - t).total_seconds() >= GIO_THU_LAI_CAN_NGUOI * 3600:
                     return True, "thử lại tạo kênh thương hiệu {0}".format(l["moi"])
             continue
-        if b in ("tra_kho", "chon_chrome", "dat_chrome", "giong", "dang_ky"):
-            return True, "thay {0} → {1}: bước {2}".format(l["cu"], l["moi"], b)
+        if b == "do_giong" and _do_giong_cho(l, bay_gio):
+            continue
+        if b in ("tra_kho", "chon_chrome", "dat_chrome", "giong", "do_giong", "dang_ky"):
+            return True, "{0} {1} → {2}: bước {3}".format("hồi sinh" if l.get("loai") == LOAI_HOI_SINH else "thay",
+                                                         l["cu"], l["moi"], b)
         if b == "thuong_hieu":
             from .mo_kenh import doc_trang_thai  # noqa: PLC0415
 
@@ -552,14 +808,23 @@ def can_lam(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Tuple[bool, str
                 return True, "kênh {0} đã chạy — báo chủ".format(l["moi"])
     if so.get("ngay_xet") != bay_gio.strftime("%Y-%m-%d"):
         return True, "xét luật kênh hỏng hôm nay"
+    hs = hang_hoi_sinh(goc, so)
+    if hs:
+        x = so.get("hoi_sinh_xet") or {}
+        if x.get("dau") != _dau_kho(goc):
+            return True, "hồi sinh {0}: kho Chrome đổi — xét".format(", ".join(hs))
+        if x.get("dung") == "gioi_han_ngay" and x.get("ngay") != bay_gio.strftime("%Y-%m-%d"):
+            return True, "hồi sinh {0}: ngày mới".format(", ".join(hs))
     return False, "không có việc thay kênh"
 
 
 def chay(goc: str, *, bay_gio: Optional[_dt.datetime] = None, log: Callable[[str], None] = print,
          tra: Optional[Callable[..., Any]] = None, quet: Optional[Callable[..., Any]] = None,
          chay_tao_kenh: Optional[Callable[[str, str], int]] = None,
-         nhip_chrome: Optional[Callable[[str], Dict[str, Any]]] = None) -> int:
-    """MỘT nhịp: dời Chrome kênh trả kho còn sót → xét luật (1 lần/ngày) → đi tiếp mọi lượt tới khi phải chờ.
+         nhip_chrome: Optional[Callable[[str], Dict[str, Any]]] = None,
+         do_giong: Optional[Callable[..., Dict[str, Any]]] = None) -> int:
+    """MỘT nhịp: dời Chrome kênh trả kho còn sót → xét luật (1 lần/ngày) → đi tiếp mọi lượt tới khi phải chờ (lượt thay
+    thật trước) → mở + đi lượt hồi sinh khi kho còn Chrome dư. Tối đa MỘT lượt DOM tạo kênh thương hiệu mỗi nhịp.
     Mã thoát: 0 xong · 10 hoãn (bận, nhịp sau) · 1 lỗi."""
     if not bat(goc):
         log("thay kênh tự động: tắt")
@@ -578,10 +843,20 @@ def chay(goc: str, *, bay_gio: Optional[_dt.datetime] = None, log: Callable[[str
     so = doc_so(goc)
     phat_hien(goc, so, bay_gio, log)
     luu_so(goc, so)
-    for l in _dang_mo(so):
-        for _ in range(len(BUOC) + 1):
+    da_dom = []
+
+    def tao_kenh_mot_lan(g: str, m: str) -> int:
+        if da_dom:                                                    # DOM nặng: một lượt mỗi nhịp (hạn skill)
+            return MA_HOAN
+        da_dom.append(m)
+        return (chay_tao_kenh or _chay_tao_kenh)(g, m)
+
+    def di(l: Dict[str, Any]) -> None:
+        nonlocal ma_ra
+        for _ in range(len(BUOC) + 2):
             try:
-                kq = buoc(goc, l, so, bay_gio=bay_gio, log=log, tra=tra, quet=quet, chay_tao_kenh=chay_tao_kenh)
+                kq = buoc(goc, l, so, bay_gio=bay_gio, log=log, tra=tra, quet=quet, chay_tao_kenh=tao_kenh_mot_lan,
+                          do_giong=do_giong)
             except Exception as loi:  # noqa: BLE001 — một lượt hỏng không chặn lượt khác; nhịp sau thử lại
                 l["loi"] = "{0}: {1}".format(type(loi).__name__, str(loi)[:200])
                 kq = "loi"
@@ -589,11 +864,32 @@ def chay(goc: str, *, bay_gio: Optional[_dt.datetime] = None, log: Callable[[str
             if kq == "hoan" and ma_ra == MA_XONG:
                 ma_ra = MA_HOAN
             if kq == "loi":
-                log("thay {0} → {1}: LỖI bước {2}: {3}".format(l["cu"], l["moi"], l.get("buoc"), l.get("loi")))
+                log("{0} {1} → {2}: LỖI bước {3}: {4}".format("hồi sinh" if l.get("loai") == LOAI_HOI_SINH else "thay",
+                                                             l["cu"], l["moi"], l.get("buoc"), l.get("loi")))
                 _nhat_ky(goc, "lỗi bước {0} ({1}→{2}): {3}".format(l.get("buoc"), l["cu"], l["moi"], l.get("loi")))
                 ma_ra = MA_LOI
             if kq != "tiep":
                 break
+
+    for l in _dang_mo(so):
+        if l.get("buoc") == "do_giong" and _do_giong_cho(l, bay_gio):
+            continue
+        di(l)
+    # HỒI SINH: mở lần lượt (mỗi Chrome dư một lượt, tối đa HOI_SINH_MOI_NGAY/ngày), đi mỗi lượt tới khi phải chờ
+    dung = "hang_rong"
+    for _ in range(HOI_SINH_MOI_NGAY + 1):                            # +1: lần cuối ghi lý do dừng (trần ngày)
+        try:
+            l, dung = mo_hoi_sinh(goc, so, bay_gio, log, quet=quet)
+        except Exception as loi:  # noqa: BLE001
+            log("mở lượt hồi sinh hỏng: {0}".format(str(loi)[:150]))
+            l, dung = None, "loi"
+        luu_so(goc, so)
+        if l is None:
+            break
+        di(l)
+    if hang_hoi_sinh(goc, so) or so.get("hoi_sinh_xet"):
+        so["hoi_sinh_xet"] = {"dau": _dau_kho(goc), "ngay": bay_gio.strftime("%Y-%m-%d"), "dung": dung}
+        luu_so(goc, so)
     return ma_ra
 
 
@@ -607,12 +903,72 @@ def viec_cua_ban(goc: str) -> List[Dict[str, str]]:
         cn = l.get("cho_nguoi") or {}
         if cn.get("khoa") and cn["khoa"] not in ra:
             ra[cn["khoa"]] = {"khoa": cn["khoa"], "kenh": l["moi"], "chu": cn.get("chu") or "", "goi_y": cn.get("goi_y") or ""}
+    hs = (so.get("hoi_sinh_cho") or {}).get("ds") or []
+    if hs and hang_hoi_sinh(goc, so):
+        ra.setdefault(KHOA_KHO_HET, {"khoa": KHOA_KHO_HET, "kenh": "", "chu": "Kho hết Chrome mới đã đăng nhập — {0} kênh chờ "
+                                     "hồi sinh ({1})".format(len(hs), ", ".join(hs)),
+                                     "goi_y": "→ chép mỗi kênh một Chrome Portable mới vào {0}\\<tên tuỳ ý>\\ (có <tên>.exe), mở "
+                                     "nó, đăng nhập Gmail tay; máy tự nhận ở nhịp sau (tối đa {1} kênh/ngày)".format(
+                                         _thu_muc_kho(goc), HOI_SINH_MOI_NGAY)})
     for x in ((so.get("kho_quet") or {}).get("ds") or []):
         if x.get("loai") == "chua_dang_nhap":
             k = "kho-chrome:chua-dang-nhap:{0}".format(x.get("ten"))
             ra.setdefault(k, {"khoa": k, "kenh": "", "chu": "Chrome «{0}» trong kho chưa đăng nhập Gmail — máy bỏ qua".format(x.get("ten")),
                               "goi_y": "→ mở {0}.exe trong kho, đăng nhập Gmail bằng tay rồi đóng (máy không tự đăng nhập)".format(x.get("ten"))})
     return list(ra.values())
+
+
+def _thu_muc_kho(goc: str) -> str:
+    from .tra_kho import thu_muc_kho  # noqa: PLC0415
+
+    return thu_muc_kho(goc)
+
+
+def ke_hoach_hoi_sinh(goc: str, quet: Optional[Callable[..., Any]] = None) -> List[str]:
+    """CHỈ ĐỌC (không ghi sổ nào, không mở Chrome): hàng đợi hồi sinh → mã sẽ đặt, Chrome kho, giọng, đoạn mẫu đo giọng."""
+    from . import giong_moi, kho_chrome  # noqa: PLC0415
+
+    so = doc_so(goc)
+    hang = hang_hoi_sinh(goc, so)
+    dang = [l for l in _dang_mo(so) if l.get("loai") == LOAI_HOI_SINH]
+    ds = (quet or kho_chrome.quet)(goc)
+    moi_ds = [x["ten"] for x in ds if x["loai"] == "moi"]
+    thay, hoi = _cho_chrome(so)
+    gx = giong_moi.xet(goc)
+    con = [x for x in gx if x["tt"] == "con"]
+    d = ["HỒI SINH — hàng đợi {0} kênh, lượt đang mở {1}; tối đa {2} lượt mở/ngày".format(len(hang), len(dang), HOI_SINH_MOI_NGAY),
+         "  kho Chrome {0}: {1} Chrome mới đã đăng nhập{2}; lượt thay thật chờ Chrome: {3}, hồi sinh chờ: {4}".format(
+             _thu_muc_kho(goc), len(moi_ds), " ({0})".format(", ".join(moi_ds)) if moi_ds else "", thay, hoi),
+         "  tệp giọng {0}: {1}; {2} giọng còn dùng được{3}".format(
+             giong_moi.duong_ds(goc), "có" if os.path.isfile(giong_moi.duong_ds(goc)) else "CHƯA CÓ", len(con),
+             "".join("; {0}… {1}{2}".format(x["voice_id"][:4], x["tt"], " ({0})".format(x["kenh"]) if x["kenh"] else "")
+                     for x in gx if x["tt"] != "con"))]
+    for l in dang:
+        d.append("  lượt {0} → {1}: bước {2}{3}".format(l["cu"], l["moi"], l.get("buoc"),
+                                                     " · " + (l.get("loi") or (l.get("cho_nguoi") or {}).get("chu") or "")
+                                                     if (l.get("loi") or l.get("cho_nguoi")) else ""))
+    giu = [x["moi"] for x in so["luot"].values()]
+    chrome_con = list(moi_ds[thay + hoi:])
+    giong_con = [x["voice_id"] for x in con]
+    for cu in hang:
+        moi = ma_moi(goc, cu, giu)
+        giu.append(moi)
+        ch = chrome_con.pop(0) if chrome_con else ""
+        gi = giong_con.pop(0) if giong_con else ""
+        try:
+            ref = giong_moi.giong_tham_chieu(goc, cu)
+            mau = giong_moi.doan_mau(goc, cu)
+            do = "đo theo giọng {0} ({1} ký tự/phút), đoạn mẫu {2} ký tự".format(ref["kenh"], ref["ky"], giong_moi.so_ky_tu(mau))
+        except Exception as loi:  # noqa: BLE001
+            do = "CHƯA ĐO ĐƯỢC: {0}".format(str(loi)[:100])
+        y = _kenh_yaml(goc, cu)
+        d.append("  {0} (trả kho {1}) → {2}: Chrome {3} · giọng {4} · {5}".format(
+            cu, y.get("tra_kho"), moi, "«{0}»".format(ch) if ch else "CẦN Chrome mới đã đăng nhập trong kho",
+            "{0}…".format(gi[:4]) if gi else "CẦN giọng mới (kho\\giong-moi.txt)", do))
+    if not hang and not dang:
+        tk = [m for m in xet_tat_ca(goc, ca_tra_kho=True) if _kenh_yaml(goc, m).get("tra_kho")]
+        d.append("  (chưa kênh nào `hoi_sinh: true`; kênh trả kho: {0})".format(", ".join(tk) or "không có"))
+    return d
 
 
 def tom_tat(goc: str) -> List[str]:
@@ -643,6 +999,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         for k, v in xet_tat_ca(goc, bay, ca_tra_kho=True).items():
             print("{0:<11} {1:<9}{2} {3}".format(k, v["ket"], " (trả kho)" if _kenh_yaml(goc, k).get("tra_kho") else "",
                                                v["ly_do"]))
+        return 0
+    if a[0] == "hoi-sinh":
+        print("\n".join(ke_hoach_hoi_sinh(goc)))
         return 0
     if a[0] == "chay":
         def log(dong: str) -> None:

@@ -1154,7 +1154,8 @@ def k_thay_kenh(goc, kenh):
     x = (so.get("ket_xet") or {}).get(kenh)
     l = next((l for l in so["luot"].values() if l.get("moi") == kenh and l.get("buoc") != "xong"), None)
     if l:
-        return CHO, "kênh thay cho {0} — bước {1}".format(l["cu"], l.get("buoc"))
+        return CHO, "kênh {0} {1} — bước {2}".format("hồi sinh" if l.get("loai") == "hoi_sinh" else "thay cho", l["cu"],
+                                                    l.get("buoc"))
     if not x:
         return CHO, "chưa xét luật kênh hỏng (xét mỗi ngày)"
     if x.get("ket") == "hong":
@@ -1409,7 +1410,9 @@ DANH_MUC: List[KyNang] = [
            "(thiếu/cũ > 3 ngày = không kết luận) → kênh HỎNG (mail không được phân phối) → trả kho (dời Chrome vào kho) → "
            "Chrome mới đã đăng nhập trong kho (sổ _da-dung.json) → mã kế cùng dòng → mở kênh (khuôn kênh cũ, giọng chưa "
            "kênh nào dùng) → kênh thương hiệu (không tạo trùng) + ghim UC → thiết lập 11/11 → bật tự chạy/duyệt/đăng → "
-           "một tin báo chủ. Tối đa một lượt thay mới mỗi ngày; kho hết Chrome / hết giọng → Việc của bạn.",
+           "một tin báo chủ. Tối đa một lượt thay mới mỗi ngày; kho hết Chrome / hết giọng → Việc của bạn. 22/10: HỒI SINH "
+           "kênh trả kho `hoi_sinh: true` (bản sao nguyên, mã kế cùng dòng, giọng ElevenLabs MỚI từ kho\\giong-moi.txt đã đo "
+           "ký tự/phút) khi kho dư Chrome mới — lượt thay thật ưu tiên, tối đa 3 lượt mở/ngày.",
            "python -X utf8 -m core.thay_kenh chay", k_thay_kenh, ["D01"], dieu_kien=d_thay_kenh,
            chay=lambda goc, kenh: _py("-m", "core.thay_kenh", "chay"), nhip_gio=1, tu_ap=True, toan_may=True,
            han_phut=40),

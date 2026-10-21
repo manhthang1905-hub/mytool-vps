@@ -752,11 +752,19 @@ def nhan_ban_giu_nguyen(goc: str, ma: str, cu: str, hang: Dict[str, Any], bay_gi
             "tu_chay": False, "nuoi_trang_chu": False, "thiet_lap_kenh": False,   # bật lại ở `kich_hoat`
             "tra_kho": "", "thay_boi": "",
         }
+        giong = giong_cua_hang(hang)
+        if giong:
+            # 22/10/2026 HỒI SINH (core/thay_kenh): giọng cũ nay kênh khác đang dùng → giọng ElevenLabs MỚI + số đã đo
+            khoa.update(voice_id=giong["voice_id"], ky_tu_moi_phut=int(giong["ky_tu_moi_phut"]))
+        for k in ("hoi_sinh", "hoi_sinh_thanh"):                      # dấu hàng đợi hồi sinh của kênh cũ: không chép
+            if re.search(r"(?m)^{0}\s*:".format(k), chu):
+                khoa[k] = False if k == "hoi_sinh" else ""
         for k, v in khoa.items():
             chu = _dat_khoa(chu, k, v)
         _ghi(os.path.join(tam, TEP_KENH), (
-            "# KÊNH {0} — THAY kênh {1} (tài khoản không được phân phối) ngày {2}: `core.mo_kenh` chép NGUYÊN nội dung, "
-            "nhân vật, giọng, nhịp của {1}; chỉ đổi danh tính (mã, Chrome, tài khoản, UC/handle).\n").format(ma, cu, today) + chu)
+            "# KÊNH {0} — {3} kênh {1} (tài khoản không được phân phối) ngày {2}: `core.mo_kenh` chép NGUYÊN nội dung, "
+            "nhân vật, nhịp của {1}{4}; chỉ đổi danh tính (mã, Chrome, tài khoản, UC/handle).\n").format(
+                ma, cu, today, "HỒI SINH" if hang.get("hoi_sinh") else "THAY", " (giọng MỚI)" if giong else ", giọng") + chu)
         for tm in THU_MUC_GIU_NGUYEN:
             if os.path.isdir(os.path.join(nguon, tm)):
                 shutil.copytree(os.path.join(nguon, tm), os.path.join(tam, tm))
@@ -777,6 +785,20 @@ def nhan_ban_giu_nguyen(goc: str, ma: str, cu: str, hang: Dict[str, Any], bay_gi
         shutil.rmtree(tam, ignore_errors=True)
         raise
     return dich
+
+
+def giong_cua_hang(hang: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Giọng ĐÃ CHỌN SẴN trong lượt mở kênh (`hang["giong"]` = {voice_id, ky_tu_moi_phut} — kênh hồi sinh, giọng mới đã
+    đo, core/thay_kenh 22/10/2026); None nếu không có/thiếu số đo."""
+    g = (hang or {}).get("giong")
+    if not isinstance(g, dict) or not str(g.get("voice_id") or "").strip():
+        return None
+    try:
+        kt = int(float(g.get("ky_tu_moi_phut") or 0))
+    except (TypeError, ValueError):
+        kt = 0
+    return {"voice_id": str(g["voice_id"]).strip(), "ky_tu_moi_phut": kt,
+            "ghi_chu": str(g.get("ghi_chu") or "giọng mới (hồi sinh)")} if kt > 0 else None
 
 
 def _goc_giu_nguyen(goc: str, cu: str) -> Dict[str, Any]:
@@ -1036,7 +1058,10 @@ def chuan_bi(goc: str, ma: str, *, hang: Optional[Dict[str, Any]] = None, goi: O
 
     # 2) giọng từ kho — KHÔNG trùng kênh cùng tệp (kênh thay tự động 20/10: KHÔNG trùng MỌI kênh đang chạy).
     #    Kênh THAY (21/10): dùng lại giọng của kênh cũ — kênh cũ đã trả kho nên giọng ấy rảnh.
-    giong = _giong_giu_nguyen(goc, kenh_goc) if giu else None
+    #    HỒI SINH (22/10): giọng MỚI đã đo trong `hang["giong"]` — không bao giờ lùi về giọng kênh cũ (kênh khác đang dùng).
+    giong = giong_cua_hang(hang) or (_giong_giu_nguyen(goc, kenh_goc) if giu and not hang.get("hoi_sinh") else None)
+    if giong is None and hang.get("hoi_sinh"):
+        raise RuntimeError("{0}: kênh hồi sinh chưa có giọng mới đã đo (core/thay_kenh bước giong/do_giong)".format(ma))
     if giong is None:
         kho = doc_kho_giong(goc, nhom)
         cam = [a["voice_id"] for a in anh_em]
