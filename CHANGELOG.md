@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.0** — 2026-10-22 — `vps-jp1` — feat(vps-moi): khoi tao VPS ngach moi 1 lenh (D28: kho Chrome + giong + doi thu + ngach -> nuoi trang chu -> doi thu -> tuyen -> chia kenh -> mo kenh), loi nhac theo ho so ngach (bia ban dia hoa), goi ban sach + tai lieu
 - **2.229.0** — 2026-10-22 — `vps-jp1` — feat(bia-adn): hoc ADN phong cach tu bia thang (sac mau, nen toi/sang, goc nghieng chu/dai, nhan vat) - dua vao loi nhac nen + ve chu xoay + san ADN; vong hoc ADN theo CTR/A/B
 - **2.228.2** — 2026-10-22 — `vps-jp1` — fix(cong-su): hop con 'Moi nguoi cong tac' sau khi chon kenh - bam 'Tao duong lien ket', doc link moi, dong hop; ben duoc moi mo link de nhan (do that 22/10)
 - **2.228.1** — 2026-10-22 — `vps-jp1` — fix(hoi-sinh): giu giong kenh cu (chu 22/10), Chrome kho dat dung ten ma kenh = cua ma do (khong nhay hau to), launcher sai ten van nhan + tu doi ten khi lap
