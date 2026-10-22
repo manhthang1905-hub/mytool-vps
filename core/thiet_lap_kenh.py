@@ -515,17 +515,34 @@ def tao_anh_that(client: Any) -> Callable[..., str]:
     from .khoi_tao_ngach import _tao_anh_nv, tao_va_tai_job  # noqa: PLC0415,SLF001
     import hashlib  # noqa: PLC0415
 
+    def _khoa_moi_khi_hong(lam: Callable[[str], str], khoa: str) -> str:
+        """22/10/2026: job hỏng phía máy chủ / xếp hàng quá lâu / khoá trùng nội dung khác → chạy lại với CÙNG khoá là nhận
+        lại đúng cái hỏng mãi (TL8: «chạy không thành công … hoàn tiền») → khoá mới theo giờ, MỘT lần."""
+        try:
+            return lam(khoa)
+        except Exception as loi:  # noqa: BLE001
+            chu = str(loi)
+            if not any(x in chu for x in ("Idempotency", "khoá mới", "chưa xong", "không thành công", "hoàn lại")):
+                raise
+            import time as _t  # noqa: PLC0415
+            return lam(khoa + ":" + _t.strftime("%Y%m%d%H%M"))
+
     def tao(prompt: str, dich: str, tham_chieu: Sequence[str] = ()) -> str:
         khoa = "thiet-lap-kenh:" + hashlib.sha1((prompt + "|" + ",".join(tham_chieu)).encode("utf-8")).hexdigest()[:16]
         if not tham_chieu:
-            return _tao_anh_nv(client, prompt, dich, khoa)
+            return _khoa_moi_khi_hong(lambda k: _tao_anh_nv(client, prompt, dich, k), khoa)
         url = [anh_len.tai_len(client, p) for p in tham_chieu]
-        # `/download` báo kết quả không còn (400/404/410) → đặt lại bằng khoá mới, hai nấc — `tao_va_tai_job`.
-        return tao_va_tai_job(
-            client, lambda k: client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9",
-                                                            idempotency_key=k, timeout=900,
-                                                            reference_images=[u for u in url if u] or None),
-            khoa, dich, "ảnh")
+
+        def mot(k0: str) -> str:
+            # `/download` báo kết quả không còn (400/404/410) → đặt lại bằng khoá mới, hai nấc — `tao_va_tai_job`.
+            return tao_va_tai_job(
+                client, lambda k: client.images.create_and_wait(prompt=prompt, n=1, aspect_ratio="16:9",
+                                                                idempotency_key=k, timeout=900,
+                                                                reference_images=[u for u in url if u] or None),
+                k0, dich, "ảnh")
+        # TL7 22/10: lần trước job xếp hàng quá 900s; chạy lại thì ảnh tham chiếu tải lên thành LINK MỚI → cùng khoá, khác
+        # nội dung → cổng từ chối ("Idempotency-Key … nội dung khác") → khoá mới (xem `_khoa_moi_khi_hong`).
+        return _khoa_moi_khi_hong(mot, khoa)
 
     return tao
 
