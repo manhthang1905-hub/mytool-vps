@@ -118,11 +118,12 @@ def quet(goc: str, kiem: Optional[Callable[[str], Tuple[Optional[bool], str]]] =
         d = os.path.join(kho, t)
         if t.startswith((".", "_")) or not os.path.isdir(d):
             continue
-        exe = os.path.join(d, t + ".exe")
+        exe = _launcher(d, t)
         x: Dict[str, Any] = {"ten": t, "loai": "moi", "ly_do": ""}
         if t in kenh:
             x.update(loai="kenh", ly_do="Chrome của kênh {0} (trả kho) — giữ để lấy lại".format(t))
-        elif t in so:
+        elif t in so and (so.get(t) or {}).get("kenh") != t:
+            # 22/10/2026: thư mục kho mang ĐÚNG tên mã kênh sắp mở và sổ giao cho chính mã ấy = Chrome dành sẵn → vẫn "moi"
             x.update(loai="da_dung", ly_do="đã giao cho kênh {0}".format((so.get(t) or {}).get("kenh") or "?"))
         elif not os.path.isfile(exe):
             x.update(loai="thieu_launcher", ly_do="thiếu {0}.exe (launcher phải trùng tên thư mục)".format(t))
@@ -138,6 +139,19 @@ def quet(goc: str, kiem: Optional[Callable[[str], Tuple[Optional[bool], str]]] =
                 x["ly_do"] = ly
         ra.append(x)
     return ra
+
+
+def _launcher(d: str, ten: str) -> str:
+    """Launcher của thư mục Chrome kho: `<ten>.exe`; không có mà thư mục có ĐÚNG MỘT .exe ở gốc (chủ chép thư mục quên đổi
+    tên launcher, 22/10/2026) → dùng tệp ấy (lúc lắp đặt sẽ đổi tên cho khớp mã kênh)."""
+    exe = os.path.join(d, ten + ".exe")
+    if os.path.isfile(exe):
+        return exe
+    try:
+        ds = [t for t in os.listdir(d) if t.lower().endswith(".exe") and os.path.isfile(os.path.join(d, t))]
+    except OSError:
+        ds = []
+    return os.path.join(d, ds[0]) if len(ds) == 1 else exe
 
 
 def chrome_cua_kenh(goc: str, ma: str) -> str:
@@ -176,13 +190,14 @@ def lap_dat(goc: str, ten: str, ma: str) -> Tuple[str, str]:
         except OSError as e:
             return "hong", "chưa dời được Chrome {0} ({1}) — lượt sau thử lại".format(ten, str(e)[:100])
     # đã dời (lần này hoặc lần trước sập ngay sau khi dời): đổi tên launcher (+ .ini cùng tên nếu có)
-    cu = os.path.join(dich, ten + ".exe")
+    cu = _launcher(dich, ten)
     if not os.path.isfile(cu):
         return "hong", "thư mục {0} đã có nhưng thiếu cả {1}.exe lẫn {2}.exe — không đè, người kiểm tra".format(dich, ma, ten)
+    goc_ten = os.path.splitext(os.path.basename(cu))[0]
     try:
         for duoi in (".ini",):
-            if os.path.isfile(os.path.join(dich, ten + duoi)) and not os.path.exists(os.path.join(dich, ma + duoi)):
-                os.rename(os.path.join(dich, ten + duoi), os.path.join(dich, ma + duoi))
+            if os.path.isfile(os.path.join(dich, goc_ten + duoi)) and not os.path.exists(os.path.join(dich, ma + duoi)):
+                os.rename(os.path.join(dich, goc_ten + duoi), os.path.join(dich, ma + duoi))
         os.rename(cu, os.path.join(dich, ma + ".exe"))
     except OSError as e:
         return "hong", "chưa đổi tên launcher ({0}) — lượt sau thử lại".format(str(e)[:100])

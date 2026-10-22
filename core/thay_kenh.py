@@ -203,6 +203,15 @@ def luu_so(goc: str, so: Dict[str, Any]) -> None:
     _ghi_json(os.path.join(goc, *TEP_SO), so)
 
 
+def _hoi_sinh_giu_giong_cu(goc: str) -> bool:
+    """Kênh hồi sinh giữ giọng kênh cũ (mặc định — chủ 22/10/2026); `cai-dat.json: hoi_sinh_giu_giong_cu: false` → giọng mới."""
+    try:
+        with open(os.path.join(goc, "workspace", "cai-dat.json"), encoding="utf-8-sig") as f:
+            return json.load(f).get("hoi_sinh_giu_giong_cu", True) is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
 def _nhat_ky(goc: str, dong: str) -> None:
     try:
         p = os.path.join(goc, *TEP_NHAT_KY)
@@ -257,8 +266,18 @@ def ma_moi(goc: str, cu: str, giu_cho: Optional[List[str]] = None) -> str:
     cha = os.path.dirname(os.path.abspath(goc))
 
     def ton_tai(m: str) -> bool:
-        return (m in (giu_cho or []) or os.path.exists(os.path.join(goc, "CHANNEL", m))
-                or os.path.exists(os.path.join(cha, m)) or os.path.exists(os.path.join(thu_muc_kho(goc), m)))
+        if m in (giu_cho or []) or os.path.exists(os.path.join(goc, "CHANNEL", m)) or os.path.exists(os.path.join(cha, m)):
+            return True
+        if not os.path.exists(os.path.join(thu_muc_kho(goc), m)):
+            return False
+        # 22/10/2026: chủ đặt sẵn Chrome mới trong kho ĐÚNG tên mã kênh sắp mở (vd kho\TL4-T7-K4) → mã đó là của nó,
+        # không nhảy sang hậu tố kế. Chỉ coi là "đã có" khi thư mục kho ấy là Chrome của kênh khác (sổ kho giao mã khác).
+        try:
+            from .kho_chrome import doc_so as _so_kho  # noqa: PLC0415
+            v = _so_kho(goc).get(m)
+            return bool(isinstance(v, dict) and v.get("kenh") and v.get("kenh") != m)
+        except Exception:  # noqa: BLE001
+            return True
     return ma_nhan_ban(_cac_kenh(goc) + list(giu_cho or []), cu, ton_tai)
 
 
@@ -400,6 +419,18 @@ def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.dateti
     cu, moi, b = l["cu"], l["moi"], l.get("buoc")
     hoi = l.get("loai") == LOAI_HOI_SINH
     l["cap_nhat"] = bay_gio.strftime("%Y-%m-%d %H:%M")
+    if hoi and b == "giong" and _hoi_sinh_giu_giong_cu(goc):
+        # 22/10/2026 (chủ): "giọng lấy giọng cũ — lúc trước fail là do mail" → kênh hồi sinh GIỮ giọng + số đo của kênh cũ
+        # (trùng giọng với kênh thay đang chạy là chủ chấp nhận). `cai-dat.json: hoi_sinh_giu_giong_cu: false` → giọng mới.
+        g_cu = mo_kenh._giong_giu_nguyen(goc, cu)  # noqa: SLF001
+        if g_cu:
+            l.pop("cho_nguoi", None)
+            l["giong"] = {"voice_id": g_cu["voice_id"], "ky_tu_moi_phut": int(g_cu["ky_tu_moi_phut"]),
+                          "ghi_chu": g_cu["ghi_chu"]}
+            log("{0}: giữ giọng của kênh cũ {1} ({2}…)".format(moi, cu, g_cu["voice_id"][:4]))
+            _nhat_ky(goc, "hồi sinh {0}: giữ giọng kênh cũ {1}".format(moi, cu))
+            l["buoc"] = "chon_chrome"
+            return "tiep"
     if hoi and b == "giong":
         from . import giong_moi  # noqa: PLC0415
 

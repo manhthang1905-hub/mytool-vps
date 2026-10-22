@@ -31,6 +31,9 @@ CU_VOICE = "FAKEVOICEOLD00000099"
 def goc(tmp_path):
     g = tmp_path / "MyTool"
     (g / "vm").mkdir(parents=True)
+    # các bài dưới kiểm đường GIỌNG MỚI; mặc định thật (chủ 22/10) là giữ giọng cũ — xem bài cuối tệp
+    (g / "workspace").mkdir(parents=True)
+    (g / "workspace" / "cai-dat.json").write_text('{"hoi_sinh_giu_giong_cu": false}', encoding="utf-8")
     return str(g)
 
 
@@ -344,3 +347,18 @@ def test_chuan_bi_kenh_hoi_sinh_giong_moi(goc):
     assert d["voice_id"] == G1 and y["voice_id"] == G1 and int(y["ky_tu_moi_phut"]) == 281
     assert y["thay_cho"] == "TLx-T7" and str(y["hoi_sinh"]).lower() == "false" and d["ten_goi_y"] == "Kênh cũ"
     assert d["handle"] != "@kenhcu"                                                 # handle cũ đã có chủ → biến thể
+
+
+def test_hoi_sinh_mac_dinh_giu_giong_kenh_cu(goc):
+    """22/10 (chủ): "giọng lấy giọng cũ — fail là do mail" → mặc định kênh hồi sinh giữ giọng + số đo kênh cũ, không cần
+    tệp giọng mới."""
+    (Path(goc) / "workspace" / "cai-dat.json").write_text("{}", encoding="utf-8")
+    cha = Path(goc).parent
+    _may(goc)
+    _chrome(cha / "kho", "gmail-moi")
+    _chay(goc)
+    l = thay_kenh.doc_so(goc)["luot"]["hoi_sinh:TLx-T7"]
+    assert l["giong"]["voice_id"] == CU_VOICE and l["giong"]["ky_tu_moi_phut"] > 0
+    assert l["buoc"] not in ("giong", "do_giong")
+    d = mo_kenh.doc_trang_thai(goc)["kenh"]["TLx-T7-K3"]
+    assert mo_kenh.giong_cua_hang(d)["voice_id"] == CU_VOICE
