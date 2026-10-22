@@ -157,6 +157,42 @@ _JS_CANH_BAO = r"""
 """
 
 
+#: Bấm nút có chữ khớp nguyên văn trong hộp thoại đang hiện (hộp mở sau cùng trước) — trả chữ đã bấm hoặc ''.
+_JS_BAM_CHU = r"""
+(function(chu){
+  const Y = window.__yd; if (!Y) return '';
+  const muon = chu.map(Y.chuan);
+  const sau = (r, sel, out) => { try { r.querySelectorAll(sel).forEach(e => out.push(e)); } catch (e) {}
+    try { r.querySelectorAll('*').forEach(e => { if (e.shadowRoot) sau(e.shadowRoot, sel, out); }); } catch (e) {} return out; };
+  const hop = sau(document, 'tp-yt-paper-dialog, ytcp-dialog, [role=dialog]', []).filter(Y.hien).reverse();
+  for (const d of hop) {
+    for (const b of sau(d, 'ytcp-button, button, tp-yt-paper-button, [role=button]', []).filter(Y.hien)) {
+      const t = Y.chuan(b.innerText || b.getAttribute('aria-label') || '');
+      if (muon.indexOf(t) >= 0) { b.click(); return t; }
+    }
+  }
+  return '';
+})(%s)
+"""
+
+#: Link mời cộng tác trong hộp đang hiện (ô chỉ đọc / thẻ a / chữ) — ưu tiên link có invite/collab.
+_JS_LINK_MOI = r"""
+(function(){
+  const Y = window.__yd; if (!Y) return '';
+  const sau = (r, sel, out) => { try { r.querySelectorAll(sel).forEach(e => out.push(e)); } catch (e) {}
+    try { r.querySelectorAll('*').forEach(e => { if (e.shadowRoot) sau(e.shadowRoot, sel, out); }); } catch (e) {} return out; };
+  const re = /https?:\/\/(?:www\.|studio\.|m\.)?(?:youtube\.com|youtu\.be)\/[^\s"'<>]+/g, ds = [];
+  for (const d of sau(document, 'tp-yt-paper-dialog, ytcp-dialog, [role=dialog]', []).filter(Y.hien)) {
+    for (const e of sau(d, 'input, textarea, a[href], [data-link]', [])) {
+      const v = e.value || e.href || e.getAttribute('data-link') || ''; (v.match(re) || []).forEach(x => ds.push(x));
+    }
+    (String(d.innerText || '').match(re) || []).forEach(x => ds.push(x));
+  }
+  const tot = ds.filter(x => /invite|collab|cong|join/i.test(x));
+  return (tot[0] || ds.filter(x => !/support\.google|\/t\/|policies/.test(x))[0] || '');
+})()
+"""
+
 #: Hàng của video `vid` + nút Chấp nhận trong hàng (chữ khớp nguyên văn) — hoặc nút Chấp nhận ở trang đơn (link mời).
 _JS_HANG_VIDEO = r"""
 (function(spec, vid){
@@ -245,6 +281,21 @@ class TrangCongSu:
         try:
             return str(self.tr.js_tho(_JS_CANH_BAO % json.dumps({"chon": s.get("chon") or [], "chu": s.get("chu") or []},
                                                                 ensure_ascii=False)) or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def bam_chu(self, chu: list) -> str:
+        """Bấm nút có chữ KHỚP NGUYÊN VĂN một trong `chu`, nằm trong hộp thoại ĐANG HIỆN (hộp trên cùng trước). Trả chữ
+        đã bấm ('' = không thấy). 22/10/2026: hộp con «Mời người cộng tác» (nút «Tạo đường liên kết») mở sau khi chọn kênh."""
+        try:
+            return str(self.tr.js_tho(_JS_BAM_CHU % json.dumps(list(chu), ensure_ascii=False)) or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def link_moi(self) -> str:
+        """Link mời cộng tác đang hiện trong hộp (ô chỉ đọc / thẻ a / chữ) — '' nếu chưa có."""
+        try:
+            return str(self.tr.js_tho(_JS_LINK_MOI) or "")
         except Exception:  # noqa: BLE001
             return ""
 
@@ -382,13 +433,43 @@ class MayCongSu:
         self.trang.bam(goi[0])
         self.ngu(1.5)
         self.kiem_canh_bao("chon_kenh")
+        link = self.tao_lien_ket()
         nut = self.trang.tim("cs_nut_moi") if (self.bo.get("phan_tu") or {}).get("cs_nut_moi") else None
-        if nut:
+        if nut and not link:
             self.trang.bam(nut)
             self.ngu(1.5)
         self.kiem_canh_bao("moi")
-        return {"ok": True, "ten": goi[0].get("ten", ""),
+        return {"ok": True, "ten": goi[0].get("ten", ""), "link": link,
                 "goi_y": "{0} {1}".format(goi[0].get("ten", ""), goi[0].get("handle", ""))[:120]}
+
+    #: Chữ nút của hộp con «Mời người cộng tác» (đo thật 22/10/2026, ảnh vm/logs/dom/…-cong-su-moi-loi.png).
+    CHU_TAO_LINK = ("Tạo đường liên kết", "Create link", "リンクを作成")
+    CHU_DONG_LINK = ("Xong", "Đóng", "Done", "Close", "完了", "閉じる")
+
+    def tao_lien_ket(self) -> str:
+        """Sau khi chọn kênh, YouTube mở hộp con «Mời người cộng tác» (thẻ kênh + «Cho phép xem số liệu phân tích» +
+        Hủy / «Tạo đường liên kết»). Bấm «Tạo đường liên kết» → đọc LINK MỜI (kênh được mời mở link này để nhận —
+        đúng như chủ làm tay) → đóng hộp link. Không thấy hộp con → '' (luồng cũ)."""
+        if not hasattr(self.trang, "bam_chu"):          # trang giả của bài kiểm cũ
+            return ""
+        bam = ""
+        for _ in range(6):
+            bam = self.trang.bam_chu(list(self.CHU_TAO_LINK))
+            if bam:
+                break
+            self.ngu(1.0)
+        if not bam:
+            return ""
+        self.nk("cộng sự: đã bấm «{0}»".format(bam))
+        link = self._cho(lambda: self.trang.link_moi(), so_lan=20) or ""
+        self.trang.ghi_chan_doan("cong-su-link")
+        if not link:
+            raise LoiCongSu("cs_link", "đã bấm «Tạo đường liên kết» nhưng không đọc được link mời (xem ảnh cong-su-link)")
+        self.nk("cộng sự: link mời {0}".format(link[:80]))
+        if not self.trang.bam_chu(list(self.CHU_DONG_LINK)):
+            self.trang.phim("Escape")
+        self.ngu(1.5)
+        return link
 
     def dong_hop(self) -> None:
         """Đóng hộp KHÔNG lưu (nút Hủy; Esc không đóng hộp này — đo 21/10/2026)."""
@@ -444,7 +525,8 @@ class MayCongSu:
                 self.nghi_nguoi()
             try:
                 kq = self.moi_mot(n)
-                ra.append({"kenh": n["kenh"], "ket": "da_moi", "goi_y": kq.get("goi_y"), "ten": kq.get("ten")})
+                ra.append({"kenh": n["kenh"], "ket": "da_moi", "goi_y": kq.get("goi_y"), "ten": kq.get("ten"),
+                           "link": kq.get("link") or ""})
                 moi_duoc += 1
             except CanhBaoYouTube:
                 raise
@@ -472,7 +554,8 @@ class MayCongSu:
                     r["ket"] = "loi:sau khi Lưu mở lại hộp không thấy hàng của kênh"
                 else:
                     r["trang_thai_hop"] = h.get("nhan") or self.trang_thai_hang(h)
-                    r["link"] = next((l for l in hop2.get("link") or [] if "invite" in l or "collab" in l), "")
+                    r["link"] = r.get("link") or next(
+                        (l for l in hop2.get("link") or [] if "invite" in l or "collab" in l), "")
             self.dong_hop()
         return ra
 
