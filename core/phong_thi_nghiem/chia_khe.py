@@ -139,6 +139,11 @@ def du_dieu_kien(goc: str, kenh: str, bang: Dict[str, Any], *, ngay: str,
         if v == luat.LOAI:
             chan[gt] = "loại ở kênh: " + ly
             continue
+        if tt == "bong" and str((o or {}).get("khoa_chu_den") or "") > str(ngay or ""):
+            # 22/10/2026 — chủ chốt: tạm chỉ chạy thật 4 giả thuyết mạnh (dồn khe để học nhanh), số còn lại CHẠY BÓNG
+            # tới ngày khoá — luật tự động không được mở thử trước ngày ấy.
+            chan[gt] = "chủ cho chạy bóng tới {0}".format((o or {}).get("khoa_chu_den"))
+            continue
         if tt == "bong":
             if v not in (luat.THU, luat.DAN_DAU):
                 chan[gt] = "giả thuyết mới chưa được thử: " + (ly or "chưa có số")

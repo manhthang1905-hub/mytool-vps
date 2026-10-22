@@ -201,9 +201,14 @@ def ap_dung(goc: str, bang: Dict[str, Any], *, ghi: bool = True,
     # Toàn danh mục: loại chung / tốt nghiệp (sửa sổ giả thuyết).
     ch = t2.get("chung") or {}
     reg_tt = {g: (o or {}).get("trang_thai") for g, o in (bang.get("gia_thuyet") or {}).items()}
+    # 22/10/2026: giả thuyết chủ khoá chạy bóng tới ngày X — không tốt nghiệp trước ngày đó.
+    khoa_chu = {g: str((o or {}).get("khoa_chu_den") or "") for g, o in (bang.get("gia_thuyet") or {}).items()}
+    hom = c.hom_nay()
     doi_so: Dict[str, Tuple[str, str]] = {}
     for gt, o in sorted(ch.items()):
         if reg_tt.get(gt) == "loai":
+            continue
+        if reg_tt.get(gt) == "bong" and khoa_chu.get(gt, "") > hom:
             continue
         vai, ly = vai_theo_bang(ch, gt)
         if vai == LOAI:
