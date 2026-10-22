@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.3** — 2026-10-22 — `vps-jp1` — fix(nhan-vat): boc JSON cau tra loi viet lai nhan vat - nguyen khoi {..} truoc (doan prompt .md co rao code lam loc_json cat nham)
 - **2.230.2** — 2026-10-22 — `vps-jp1` — fix(thay-kenh): viec cho nguoi tu xet lai moi 6 gio (ma/luat doi ma dau vet dung yen khong duoc ket mai)
 - **2.230.1** — 2026-10-22 — `vps-jp1` — feat(nhip-thu): thu nang nhip dang co rao - 7 ngay, luot xem/video tut >25% thi tu tra nhip cu (tu kiem hang ngay + nao tang-truong)
 - **2.230.0** — 2026-10-22 — `vps-jp1` — feat(vps-moi): khoi tao VPS ngach moi 1 lenh (D28: kho Chrome + giong + doi thu + ngach -> nuoi trang chu -> doi thu -> tuyen -> chia kenh -> mo kenh), loi nhac theo ho so ngach (bia ban dia hoa), goi ban sach + tai lieu
