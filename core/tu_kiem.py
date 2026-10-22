@@ -895,10 +895,25 @@ def kiem_nhan_vat(K: BoiCanh) -> List[Dict[str, Any]]:
     return ra
 
 
+def kiem_nhip_thu(K: BoiCanh) -> List[Dict[str, Any]]:
+    """22/10/2026 — thử nâng nhịp đăng có rào (`core/nhip_thu`): mỗi ngày đánh giá; tụt > 25% lượt xem/video → tự trả nhịp."""
+    khoa = "nhip_thu:{0}".format(K.bay.date())
+    viec = "thử nhịp đăng (2 video/ngày) không làm tụt lượt xem mỗi video"
+    if not K.can_kiem(khoa):
+        return [_giu_cu(K, "nhip_thu", "", khoa, viec, K.bay)]
+    try:
+        from . import nhip_thu  # noqa: PLC0415
+        kq = nhip_thu.danh_gia(K.goc, K.bay.date())
+    except Exception as loi:  # noqa: BLE001
+        return [_muc("nhip_thu", "", khoa, viec, K.bay, CHO, "đánh giá hỏng: {0}".format(str(loi)[:150]))]
+    return [_muc("nhip_thu", x["kenh"], khoa + ":" + x["kenh"], viec, K.bay,
+                 CHO if x["ket"] == "dang_thu" else DAT, x.get("ly_do") or "") for x in kq]
+
+
 KIEM = (("dang", kiem_dang), ("hang_sua", kiem_hang_sua), ("ab", kiem_ab), ("dsp", kiem_dsp), ("ghim", kiem_ghim),
         ("nao", kiem_nao), ("van_hanh", kiem_van_hanh), ("nhip", kiem_nhip), ("khai", kiem_ky_vong_khai),
         ("max", kiem_duong_max), ("trang_chu", kiem_trang_chu), ("cong_suat", kiem_cong_suat),
-        ("cong_su", kiem_cong_su), ("bia_ab", kiem_bia_ab), ("nhan_vat", kiem_nhan_vat))
+        ("cong_su", kiem_cong_su), ("bia_ab", kiem_bia_ab), ("nhan_vat", kiem_nhan_vat), ("nhip_thu", kiem_nhip_thu))
 
 
 # ── thử lại qua đúng bộ chạy ───────────────────────────────────────────────────
