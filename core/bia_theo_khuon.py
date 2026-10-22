@@ -1897,7 +1897,21 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
     ve = ImageDraw.Draw(lop)
     ve_bong = ImageDraw.Draw(bong)
     for g in hinh:
-        _ve_dong_kieu(ve, ve_bong, g)
+        # 22/10/2026 (`core/adn_bia`): tầng có `nghieng` (độ, + = lên về bên phải — góc ĐO trên bìa thắng của kênh) →
+        # dòng vẽ trên lớp riêng rồi XOAY quanh tâm hộp dòng (bóng xoay cùng). Không có `nghieng`: y như cũ.
+        goc, dy = bo_tri_xoay(g, W, H)
+        if not goc:
+            _ve_dong_kieu(ve, ve_bong, g)
+            continue
+        doi_dong(g, dy)  # dòng sát mép trên/dưới: dời vào trong cho đủ chỗ xoay (báo cáo đo theo hộp đã dời)
+        lop_g, bong_g = Image.new("RGBA", anh.size, (0, 0, 0, 0)), Image.new("RGBA", anh.size, (0, 0, 0, 0))
+        _ve_dong_kieu(ImageDraw.Draw(lop_g), ImageDraw.Draw(bong_g), g)
+        tam = ((g["hop"][0] + g["hop"][2]) / 2.0, (g["hop"][1] + g["hop"][3]) / 2.0)
+        lop = Image.alpha_composite(lop, lop_g.rotate(goc, resample=Image.BICUBIC, center=tam))
+        bong = Image.alpha_composite(bong, bong_g.rotate(goc, resample=Image.BICUBIC, center=tam))
+        ve, ve_bong = ImageDraw.Draw(lop), ImageDraw.Draw(bong)
+        g["nghieng_ve"] = goc
+        g["hop_xoay"] = hop_xoay(g["hop"], goc)
     bong = bong.filter(ImageFilter.GaussianBlur(max(2, W // 320)))
     ket = Image.alpha_composite(Image.alpha_composite(nen_co_khung, bong), lop).convert("RGB")
     os.makedirs(os.path.dirname(dich) or ".", exist_ok=True)
@@ -1913,6 +1927,10 @@ def ve_chu_len_anh(nen: str, dich: str, chu_tang: Sequence[Dict[str, Any]], *,
                                   ten="".join(p["chu"] for p in g["doan"])[:24]) for g in hinh]
         for d, g in zip(ds, hinh):
             d["kieu"] = g["kieu"]["ten"]
+            if g.get("nghieng_ve"):  # dòng đã xoay: góc + hộp bao sau xoay (né đầu/chủ thể đo trên hộp này)
+                d["nghieng"] = g["nghieng_ve"]
+                d["hop_xoay"] = [round(v, 1) for v in g["hop_xoay"]]
+                d["hop_xoay_ds"] = [[round(v, 1) for v in h] for h in hop_xoay_doan(g["hop"], g["nghieng_ve"])]
         bc = do_bia.tong_hop(ds, cach="chinh_xac")
         # 12/10/2026 (TL2-0021: khung tối to đè ngang ảnh): thêm diện tích khung bộ vẽ thêm + phần CHỦ THỂ bị che
         # (đo theo chủ thể, không theo hộp) — `do_bia.bo_cuc_dat` chặn khi quá `KHUNG_DT_TOI_DA` /
@@ -2223,6 +2241,80 @@ def _kieu_hop_khuon(g: Dict[str, Any], H: int) -> Dict[str, Any]:
     return {"ten": "hop_khuon", "vien": hop, "chinh": mau[0] if mau else do_bia.TRANG, "nhan": tuple(mau),
             "mau": mau, "vien_he": 0.0, "bong": 0,
             "khung": {"mau": hop, "alpha": 1.0, "dang": "hop", "rieng": True}}
+
+
+def xoay_diem(x: float, y: float, tam: Sequence[float], goc: float) -> Tuple[float, float]:
+    """Điểm (x, y) (y xuống) sau khi xoay `goc` độ NGƯỢC chiều kim đồng hồ trên màn hình (như `Image.rotate`) quanh
+    `tam` — góc dương: phía phải đi LÊN."""
+    import math  # noqa: PLC0415
+    a = math.radians(float(goc))
+    dx, dy = float(x) - float(tam[0]), float(y) - float(tam[1])
+    return (float(tam[0]) + dx * math.cos(a) + dy * math.sin(a), float(tam[1]) - dx * math.sin(a) + dy * math.cos(a))
+
+
+def hop_xoay(hop: Sequence[float], goc: float) -> Tuple[float, float, float, float]:
+    """Hộp thẳng bao hộp `hop` (x0, y0, x1, y1) sau khi xoay `goc` độ quanh tâm của nó."""
+    x0, y0, x1, y1 = [float(v) for v in hop[:4]]
+    tam = ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+    d = [xoay_diem(x, y, tam, goc) for x, y in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+    return (min(p[0] for p in d), min(p[1] for p in d), max(p[0] for p in d), max(p[1] for p in d))
+
+
+def hop_xoay_doan(hop: Sequence[float], goc: float, k: int = 6) -> List[Tuple[float, float, float, float]]:
+    """Dòng xoay ≈ `k` hộp thẳng nhỏ nối nhau theo chiều dài dòng (mỗi đoạn xoay quanh tâm DÒNG) — hộp bao cả dòng
+    nghiêng phình to (dòng 1000 px nghiêng 8° cao thêm ~140 px), đo né đầu / chủ thể trên các đoạn sát hơn."""
+    x0, y0, x1, y1 = [float(v) for v in hop[:4]]
+    tam = ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+    ra = []
+    for i in range(max(1, int(k))):
+        a, b = x0 + (x1 - x0) * i / k, x0 + (x1 - x0) * (i + 1) / k
+        d = [xoay_diem(x, y, tam, goc) for x, y in ((a, y0), (b, y0), (a, y1), (b, y1))]
+        ra.append((min(p[0] for p in d), min(p[1] for p in d), max(p[0] for p in d), max(p[1] for p in d)))
+    return ra
+
+
+#: Dòng xoay không được ra sát mép khung hơn ngần này phần khung; được dời dọc vào trong tối đa `DOI_XOAY` khung (dòng
+#: sát mép trên/dưới), không đủ thì thu góc dần (75% → 50% → 25% → thẳng).
+LE_XOAY, DOI_XOAY = 0.008, 0.08
+
+
+def bo_tri_xoay(g: Dict[str, Any], W: int, H: int) -> Tuple[float, float]:
+    """(góc XOAY thật — độ, 0 = thẳng; độ dời dọc px) của một dòng: `nghieng` của tầng (`core/adn_bia.goc_ve`), kẹp
+    ±12°; dòng có khung nền của bộ vẽ không xoay (khung vẽ thẳng); hộp dòng sau xoay tràn khung → dời dọc vào trong (≤
+    `DOI_XOAY` khung), vẫn tràn thì thu góc dần, cuối cùng vẽ thẳng."""
+    try:
+        goc = max(-12.0, min(12.0, float(g["t"].get("nghieng") or 0.0)))
+    except (TypeError, ValueError, AttributeError):
+        return 0.0, 0.0
+    if not goc or (g.get("kieu") or {}).get("khung"):
+        return 0.0, 0.0
+    mx, my = LE_XOAY * W, LE_XOAY * H
+    for he in (1.0, 0.75, 0.5, 0.25):
+        x0, y0, x1, y1 = hop_xoay(g["hop"], goc * he)
+        if x0 < mx or x1 > W - mx or (y1 - y0) > H - 2 * my:
+            continue
+        dy = (my - y0) if y0 < my else ((H - my) - y1 if y1 > H - my else 0.0)
+        if abs(dy) <= DOI_XOAY * H:
+            return round(goc * he, 2), round(dy, 1)
+    return 0.0, 0.0
+
+
+def goc_dong_ve(g: Dict[str, Any], W: int, H: int) -> float:
+    """Góc XOAY thật của một dòng (`bo_tri_xoay`, bỏ độ dời)."""
+    return bo_tri_xoay(g, W, H)[0]
+
+
+def doi_dong(g: Dict[str, Any], dy: float) -> None:
+    """Dời cả hình học MỘT dòng (vị trí chữ, hộp dòng, hộp khung) theo chiều dọc `dy` px."""
+    if not dy:
+        return
+    for k in ("y", "top", "day"):
+        if isinstance(g.get(k), (int, float)):
+            g[k] += dy
+    for k in ("hop", "hop_khung"):
+        if g.get(k):
+            h = list(g[k])
+            g[k] = (h[0], h[1] + dy, h[2], h[3] + dy)
 
 
 def _ve_dong_kieu(ve, ve_bong, g: Dict[str, Any]) -> None:

@@ -64,7 +64,7 @@ TEP_KET_QUA = "bia-ket-qua.jsonl"
 TEP_PHAN_LOAI = os.path.join("workspace", "bia-kieu", "phan-loai.json")
 TEP_DS_THANG = "thang.json"
 #: Tệp đệm suy từ bộ bìa thắng — bộ đổi thì bỏ (đã sao lưu) để máy dựng lại theo bộ mới.
-TEP_DEM_BO = ("mau-bia-thang.json", "san-bam.json")
+TEP_DEM_BO = ("mau-bia-thang.json", "san-bam.json", "adn-thang.json")
 TEP_BO_CUC_THANG = "bo-cuc-thang.json"
 PHIEN_BAN = 1
 PHIEN_BAN_PHAN_LOAI = 1
@@ -526,9 +526,11 @@ def doc_ket_qua(goc: str, kenh: str) -> List[Dict[str, Any]]:
 
 
 def dong_ket_qua_moi(rows: Sequence[Dict[str, Any]], may: Dict[str, Dict[str, Any]], nhan: Dict[str, Dict[str, Any]],
-                     so_cai: Dict[str, Any], cu: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+                     so_cai: Dict[str, Any], cu: Sequence[Dict[str, Any]],
+                     adn: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Dòng phản hồi CHƯA ghi cho bìa máy làm: mốc "48h" (số đo 48h của hồ sơ video nếu có, không thì bảng Studio khi
-    video < 7 ngày) và mốc "7d" (bảng Studio khi video ≥ 7 ngày). Mỗi (video, mốc) một lần."""
+    video < 7 ngày) và mốc "7d" (bảng Studio khi video ≥ 7 ngày). Mỗi (video, mốc) một lần. 22/10/2026: `adn`
+    {video_id: bản gọn ADN bìa thật — `core/adn_bia.tom_tat`} vào dòng (mục "adn")."""
     da = {(x.get("video_id"), x.get("moc")) for x in cu}
     ra: List[Dict[str, Any]] = []
     for r in rows:
@@ -546,6 +548,8 @@ def dong_ket_qua_moi(rows: Sequence[Dict[str, Any]], may: Dict[str, Dict[str, An
                  "doi_bia": bool(m["doi_bia"]) or bool(sc.get("ho") and (nhan.get(r["video_id"]) or {}).get("kieu")
                                                      and sc.get("ho") != nhan[r["video_id"]].get("kieu")),
                  "luc": time.strftime("%Y-%m-%d %H:%M:%S")}
+        if adn and adn.get(r["video_id"]):
+            chung["adn"] = adn[r["video_id"]]
         if (r["video_id"], "48h") not in da:
             c48 = (m["chi_so"] or {}).get("48h") or {}
             if c48.get("impressions") is not None and c48.get("ctr") is not None:
@@ -788,10 +792,20 @@ def chay_kenh(goc: str, kenh: str, *, thu: bool = False, goi: Optional[Callable[
           "trung_vi_imp": _trung_vi([float(r["imp"]) for r in cs]),
           "ho": ho, "nguon_thang": bc["nguon_thang"], "thang": bc["thang"],
           "nhan_video": {vid: (nhan.get(vid) or {}).get("kieu") or "" for vid in tep}}
+    # 22/10/2026 — ADN PHONG CÁCH (`core/adn_bia`): đo bìa thật mọi video đủ chín (máy, cache sha1) + AI nhìn bộ bìa
+    # thắng (ví ShopAPI, cache sha1) → đích ADN (bìa thắng, trọng số lượt bấm) + ADN gọn từng video → sổ kết quả,
+    # `nghien-cuu/bia-adn.json` (hiệu chuẩn `core/hieu_chuan.them_adn` đo đặc trưng nào đi cùng CTR).
+    adn_gon: Dict[str, Dict[str, Any]] = {}
+    try:
+        adn_gon, bc["adn"] = _adn_kenh(goc, kenh, tep=tep, rieng=rieng, cu=cu, cs=cs, may=may, goi=goi, thu=thu,
+                                       tam=tam, log=log)
+    except Exception as loi:  # noqa: BLE001 — ADN hỏng không chặn D21
+        log("  (bìa dữ liệu: ADN phong cách hỏng: {0})".format(str(loi)[:160]))
+        bc["adn"] = {}
     # vòng phản hồi
     sc = doc_so_cai(goc, kenh)
     kq_cu = doc_ket_qua(goc, kenh)
-    kq_moi = dong_ket_qua_moi(rows, may, nhan, sc, kq_cu)
+    kq_moi = dong_ket_qua_moi(rows, may, nhan, sc, kq_cu, adn=adn_gon)
     tq = tuong_quan(list(kq_cu) + kq_moi)
     tv_thang = _trung_vi([r["ctr"] for r in rieng]) if len(rieng) >= SO_THANG_TOI_THIEU else _trung_vi(
         [b.get("ctr") for b in cu if isinstance(b.get("ctr"), (int, float))])
@@ -852,6 +866,36 @@ def chay_kenh(goc: str, kenh: str, *, thu: bool = False, goi: Optional[Callable[
     return bc
 
 
+def _adn_kenh(goc: str, kenh: str, *, tep: Dict[str, str], rieng: Sequence[Dict[str, Any]],
+              cu: Sequence[Dict[str, Any]], cs: Sequence[Dict[str, Any]], may: Dict[str, Any],
+              goi: Optional[Callable[..., str]], thu: bool, tam: str, log: Callable[[str], None]
+              ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
+    """(ADN gọn theo video_id, tóm tắt báo cáo). Đích = bìa thắng mới (≥ `SO_THANG_TOI_THIEU` của chính kênh) hoặc bộ
+    đang có. `thu`: cache vào `tam`, không ghi `bia-adn.json`."""
+    from . import adn_bia  # noqa: PLC0415
+    c_may, c_nhin = os.path.join(goc, adn_bia.TEP_CACHE), os.path.join(goc, adn_bia.TEP_NHIN)
+    cache = os.path.join(tam, "adn.json") if thu else c_may
+    cache_nh = os.path.join(tam, "adn-nhin.json") if thu else c_nhin
+    doc_them = [c_may] if thu else []
+    if len(rieng) >= SO_THANG_TOI_THIEU:
+        thang = [(tep[r["video_id"]], luot_bam(r)) for r in rieng if r["video_id"] in tep]
+    else:
+        thang = [(b["_duong"], max(1.0, float(b.get("imp") or 0) * float(b.get("ctr") or 0) / 100.0)) for b in cu]
+    do = adn_bia.adn_tep(list(tep.values()) + [t for t, _w in thang], cache=cache, cache_doc=doc_them)
+    nh = adn_bia.nhin([t for t, _w in thang], goi=goi, cache=cache_nh, cache_doc=[c_nhin] if thu else (), log=log)
+    dich = adn_bia.tong_hop([(do.get(t), w) for t, w in thang if do.get(t)],
+                            [(nh.get(t) or {}, w) for t, w in thang if do.get(t)])
+    gon = {vid: adn_bia.tom_tat(do[p], dich) for vid, p in tep.items() if do.get(p)}
+    video = {r["video_id"]: {"ngay": r["ngay"], "imp": r["imp"], "ctr": r["ctr"], "may": r["video_id"] in may,
+                             "adn": gon[r["video_id"]]} for r in cs if r["video_id"] in gon}
+    if not thu:
+        adn_bia.ghi_adn_kenh(goc, kenh, video, dich)
+    return gon, {"ten_mau": dich.get("ten_mau"), "sang_nen": dich.get("sang_nen"), "toi": dich.get("toi"),
+                 "nguong_hue": dich.get("nguong_hue"), "nguong_sang": dich.get("nguong_sang"),
+                 "goc_chu": dich.get("goc_chu"), "goc_dai": dich.get("goc_dai"), "n": dich.get("n"),
+                 "nhin": bool(dich.get("nhin")), "so_video": len(video)}
+
+
 def in_bao_cao(bc: Dict[str, Any], in_ra: Callable[[str], None] = print) -> None:
     in_ra("== {0}{1}: {2} video, {3} đủ chín (≥48h, ≥1k hiển thị), trung vị CTR {4}%".format(
         bc["kenh"], " (THỬ)" if bc.get("thu") else "", bc["so_video"], bc["so_du_chin"], bc.get("trung_vi_ctr")))
@@ -873,6 +917,12 @@ def in_bao_cao(bc: Dict[str, Any], in_ra: Callable[[str], None] = print) -> None
     in_ra("  tương quan điểm giám khảo ↔ CTR 48h: bấm-như-thắng rho={0} (n={1}), tổng rho={2} (n={3})".format(
         (tq.get("bam_nhu_thang") or {}).get("rho"), (tq.get("bam_nhu_thang") or {}).get("n"),
         (tq.get("tong") or {}).get("rho"), (tq.get("tong") or {}).get("n")))
+    a = bc.get("adn") or {}
+    if a:
+        in_ra("  ADN bìa thắng: màu {0}, nền {1}{2}, góc chữ {3}, góc dải {4} | ngưỡng sắc {5}, nền ≤ {6} | AI nhìn: "
+              "{7} | {8} video đo".format(a.get("ten_mau"), a.get("sang_nen"), " (kênh TỐI)" if a.get("toi") else "",
+                                          a.get("goc_chu"), a.get("goc_dai"), a.get("nguong_hue"), a.get("nguong_sang"),
+                                          "có" if a.get("nhin") else "chưa", a.get("so_video")))
     if bc.get("tut"):
         in_ra("  (!) TỤT: {0} bìa máy mới nhất < {1}% (tránh họ «{2}»){3}".format(
             SO_BIA_TUT, bc["tut"]["nguong"], bc["tut"]["tranh"], " — báo động mới" if bc.get("canh_bao_moi") else ""))

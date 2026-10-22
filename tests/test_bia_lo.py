@@ -981,6 +981,8 @@ def test_lo_phu_ho_hang_nhi_giao_o_c_va_khong_bao_gio_thanh_bia_chay(tmp_path, m
     _can_font()
     goc, mau = _goc_hai_ho(tmp_path)
     monkeypatch.setattr(bia_lo, "san_mau", lambda thang: {})
+    # bìa thắng giả là ảnh một màu: sàn ADN (sắc / nền) thử riêng ở tests/test_adn_bia.py
+    monkeypatch.setattr(bia_lo, "san_adn", lambda hs: {})
     luot = os.path.join(goc, "PROJECTS", "AUTO", "KH", "0001")
     ra = str(tmp_path / "ra")
     ve, goi = _ve_gia(), _goi_gia(xep=[2, 1, 3])

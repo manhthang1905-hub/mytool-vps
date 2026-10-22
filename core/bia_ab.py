@@ -298,8 +298,26 @@ def bien_the_goi(goc: str, kenh: str, ma_goi: str) -> List[Dict[str, Any]]:
     for nhan, tep, so, diem in nguon:
         if nhan != "A" and not os.path.isfile(tep):
             continue
-        ra.append(dict(_meta_so(top, so, ho_lo), nhan=nhan, tep=tep, so=so, diem_gk=_so(diem), **_dau(tep)))
+        ra.append(dict(_meta_so(top, so, ho_lo), nhan=nhan, tep=tep, so=so, diem_gk=_so(diem), **_dau(tep),
+                       **_adn(goc, kenh, tep)))
     return ra
+
+
+def _adn_cua(x: Dict[str, Any]) -> Dict[str, Any]:
+    return {"adn": x["adn"]} if isinstance(x.get("adn"), dict) and x["adn"] else {}
+
+
+def _adn(goc: str, kenh: str, tep: str) -> Dict[str, Any]:
+    """22/10/2026 — ADN phong cách gọn của bìa biến thể (`core/adn_bia.tom_tat`, khoảng cách sắc tới đích ADN của kênh
+    `nghien-cuu/bia-adn.json`) → sổ A/B: `adn_bia.ab_gan_adn` đo nhánh gần ADN có thắng thật không. Máy, không mạng.
+    Hỏng → {}."""
+    try:
+        from . import adn_bia  # noqa: PLC0415
+        if not os.path.isfile(tep):
+            return {}
+        return {"adn": adn_bia.tom_tat(adn_bia.do_adn(tep), adn_bia.doc_adn_kenh(goc, kenh).get("dich") or {})}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _meta_so(top: Sequence[Dict[str, Any]], so: Any, ho_lo: str) -> Dict[str, Any]:
@@ -330,13 +348,14 @@ def meta_ung_vien(bt: Sequence[Dict[str, Any]], u: Dict[str, Any], goc: str = ""
     if m:
         x = next((b for b in bt if b["nhan"] == ("B" if m.group(1) == "2" else "C")), None)
         if x:
-            return {k: x.get(k) for k in ("so", "ma", "ho", "diem_gk", "diem_bam", "diem_lo")}
+            return dict({k: x.get(k) for k in ("so", "ma", "ho", "diem_gk", "diem_bam", "diem_lo")}, **_adn_cua(x))
     so = _so_thumb(u.get("tep_goc") or u.get("tep"))
     x = next((b for b in bt if so is not None and b.get("so") is not None and int(b["so"]) == so), None)
     if x:
-        return {k: x.get(k) for k in ("so", "ma", "ho", "diem_gk", "diem_bam", "diem_lo")}
+        return dict({k: x.get(k) for k in ("so", "ma", "ho", "diem_gk", "diem_bam", "diem_lo")}, **_adn_cua(x))
     ho = next((b.get("ho") for b in bt if b.get("ho")), "")
-    return {"so": so, "ma": "", "ho": ho, "diem_gk": _so(u.get("diem_gk")), "diem_bam": None, "diem_lo": None}
+    return dict({"so": so, "ma": "", "ho": ho, "diem_gk": _so(u.get("diem_gk")), "diem_bam": None, "diem_lo": None},
+                **(_adn(goc, kenh, str(u.get("tep") or "")) if goc else {}))
 
 
 # ── kế hoạch phiên (CHỈ ĐỌC) ────────────────────────────────────────────────
@@ -505,7 +524,7 @@ def ghi_dat(goc: str, kenh: str, vid: str, ma_goi: str, bien_the: Sequence[Dict[
         so["muc"].append(m)
     k = str(kv.get("ket") or "loi")
     m["bien_the"] = [{x: b.get(x) for x in ("nhan", "tep", "sha1", "nguon", "so", "ma", "ho", "diem_gk", "diem_bam",
-                                              "diem_lo") if b.get(x) is not None} for b in bien_the][:TOI_DA_BIEN_THE]
+                                              "diem_lo", "adn") if b.get(x) is not None} for b in bien_the][:TOI_DA_BIEN_THE]
     m["so_bien_the"] = len(m["bien_the"])
     m["ket"] = {x: kv.get(x) for x in ("ket", "ly_do", "che_do", "so_bien_the", "so_bia", "trang_thai", "doc_lai")
                 if kv.get(x) is not None}

@@ -38,6 +38,15 @@ ngang trên điểm ảnh) → MỤC TIÊU cứng (số dòng, diện tích ch�
 `doc_chu_bia_tran` + bộ vẽ; CỔNG BỐ CỤC `kiem_bo_cuc` loại tấm chữ kém xa bìa thắng / khối chữ hở; giám khảo nhìn tờ CỠ
 ĐIỆN THOẠI có hàng bìa thắng (`to_dien_thoai`, mục `bam_nhu_thang`, điểm yếu trừ điểm, nền nhạt đo máy `soi_yeu`).
 
+═══ 22/10/2026 — ADN PHONG CÁCH CỦA BÌA THẮNG (`core/adn_bia`) ═══
+
+Chủ: "bìa thắng rõ ràng có hình thức / tông màu / phong cách, nhưng video mới không học được" (TL3: mọi bìa thắng nền
+TÍM sẫm phát sáng, bìa 14/10 + 21/10 nền hổ phách; TL2: chữ + dải nghiêng ~8°, bìa máy chữ thẳng). `gan_adn` (trong
+`ho_so_kieu`): ADN đo trên bộ bìa thắng → câu ADN vào lời nhắc ảnh nền + đạo diễn + giám khảo (nói thẳng bảng màu / độ
+sáng, không chỉ qua ảnh mẫu); góc nghiêng của HỌ → bộ vẽ chữ trần xoay dòng + dải (`nghieng`, `nghieng_dai`); SÀN ADN
+(`san_adn`, `loc_san`): sắc lệch hơn bìa thắng xa nhất hoặc kênh tối mà nền sáng hơn → `adn_duoi` (không vào top, trừ
+điểm "off-style palette"; ô C khám phá miễn sàn nền). Sàn cũ không đổi.
+
 Dùng: python -X utf8 -m core.bia_lo --kenh TL4-T7 --luot 0001 [--so-y 7 --moi-y 4] [--ra <thư mục>]
       [--chu "同じ車に長く|*乗る人の|ほとんどが"] (tầng "*" = dòng CỰC TO, "^" tách đuôi nhỏ) [--mau <bìa thắng>]
 Khâu ảnh bìa dây chuyền đi đường này khi `kenh.yaml: bia_lo: true` (`auto_khau._bia_lo_luot`).
@@ -275,7 +284,7 @@ Return JSON only: {{"xep_hang": [best number, ..., worst number], "ly_do": {{"<n
 VIETNAMESE"}}}}"""
 
 #: Điểm yếu giám khảo thấy (so bìa thắng) → trừ điểm tổng (0–100); điểm yếu đo bằng MÁY (`soi_yeu`) trừ như nhau.
-YEU_TRU = {"pale background": 6.0, "small text": 6.0, "weak clue": 6.0}
+YEU_TRU = {"pale background": 6.0, "small text": 6.0, "weak clue": 6.0, "off-style palette": 6.0}
 #: Nền "nhạt" so bìa thắng của kênh (đo máy, ảnh thu 160×90): độ bão hoà trung bình / độ tương phản (độ lệch chuẩn độ
 #: sáng) dưới ngần này × trung vị bìa thắng.
 NHAT_BAO_HOA, NHAT_TUONG_PHAN = 0.72, 0.75
@@ -1333,7 +1342,29 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         hs["bia_mau"] = bia_mau[:SO_MAU_TRAN]
         imp = [float(b["imp"]) for b in mt.get("bia") or [] if isinstance(b.get("imp"), (int, float))]
         hs["bang_chung"] = " ({0}-{1} impressions)".format(_k(min(imp)), _k(max(imp))) if imp else ""
+    gan_adn(hs, goc, tm, log=log)
     return hs
+
+
+def gan_adn(hs: Dict[str, Any], goc: str, tm: str, *, log: Callable[[str], None] = print) -> None:
+    """22/10/2026 — ADN PHONG CÁCH của bộ bìa thắng (`core/adn_bia`, chủ: "bìa thắng rõ ràng có tông màu / phong cách mà
+    video mới không học"): `adn_kenh` (cả kênh — sàn ADN của lô), `adn` (của HỌ kiểu chữ của lô khi họ có ≥ 2 bìa thắng,
+    không thì cả kênh — câu ADN `adn_cau` vào lời nhắc ảnh, đạo diễn, giám khảo), `goc_ve` (góc nghiêng chữ / dải của họ
+    cho bộ vẽ chữ trần; kiểu hộp vẽ thẳng). Hỏng → không có ADN (hành vi cũ)."""
+    hs.update(adn_kenh={}, adn={}, adn_cau="", goc_ve={})
+    if not tm or not os.path.isdir(tm):
+        return
+    try:
+        from . import adn_bia  # noqa: PLC0415
+        a = adn_bia.adn_thu_muc(tm, goc=goc)
+        k = dict(a.get("kenh") or {})
+        h = adn_bia.adn_ho(a, str(hs.get("ho") or ""))
+        hs["adn_kenh"] = k
+        hs["adn"] = h if int(h.get("n") or 0) >= 2 else k
+        hs["adn_cau"] = adn_bia.cau_lenh(hs["adn"])
+        hs["goc_ve"] = adn_bia.goc_ve(h, k) if hs.get("kieu") == "tran" else {}
+    except Exception as loi:  # noqa: BLE001
+        log("  (bìa lô: ADN phong cách bìa thắng hỏng: {0})".format(str(loi)[:160]))
 
 
 def _cung_ho(nhan: str, ho: str, kieu: str) -> bool:
@@ -1392,7 +1423,7 @@ def loi_theo_kieu(ho_so: Optional[Dict[str, Any]]) -> Dict[str, str]:
             ra["nhan_vat_cau"] = "the channel's own character ({0})".format(hs["nhan_vat"])
         if hs.get("bang_chung"):
             ra["bang_chung"] = hs["bang_chung"]
-        return ra
+        return _them_adn_loi(ra, hs)
     bo = hs.get("bo_cuc") if hs.get("bo_cuc") in _CHO_CHU_TRAN else "dai"
     ten_do, ten_vang = (btk._ten_mau(m).split(" #")[0] for m in (hs.get("mau_do"), hs.get("mau_vang")))  # noqa: SLF001
     mt = hs.get("muc_tieu") or {}
@@ -1434,6 +1465,21 @@ def loi_theo_kieu(ho_so: Optional[Dict[str, Any]]) -> Dict[str, str]:
         ra.update(o_chu="(huge lettering on solid colour bands)", ngoai_chu="the hook lettering and its colour bands",
                   phong_cach_ta="the same art style, background look and character as the winners, the same huge "
                                 "lettering on solid colour bands, polished")
+    return _them_adn_loi(ra, hs)
+
+
+def _them_adn_loi(ra: Dict[str, str], hs: Dict[str, Any]) -> Dict[str, str]:
+    """22/10/2026 — câu ADN phong cách (`gan_adn`) vào luật cảnh của đạo diễn + mục phong cách của giám khảo. Kênh ADN
+    TỐI: bỏ câu "bright warm daylight, never dark" mặc định của kiểu hộp (mâu thuẫn bìa thắng). Không có ADN → y cũ."""
+    cau = str(hs.get("adn_cau") or "")
+    if not cau:
+        return ra
+    from . import adn_bia  # noqa: PLC0415
+    lc = ra.get("luat_canh") or ""
+    if (hs.get("adn") or {}).get("toi"):
+        lc = lc.replace("bright warm daylight, never dark or gloomy; ", "")
+    ra = dict(ra, luat_canh=lc + "; " + cau.rstrip("."),
+              phong_cach_ta=(ra.get("phong_cach_ta") or "") + adn_bia.ghi_chu_giam_khao(hs.get("adn")))
     return ra
 
 
@@ -1775,6 +1821,13 @@ def _bo_tri_tran(tang: List[Dict[str, Any]], ho_so: Dict[str, Any], to_toi_da: i
             t2["dai"] = ho_so["dai_moi_dong"]
         elif mt.get("dai_tu_khoa") and (t.get("to") or _co_mau(t, "do")):
             t2["dai"] = mt["dai_tu_khoa"]
+        # 22/10/2026 — NGHIÊNG dòng chữ / dải theo góc ĐO trên bìa thắng cùng họ (`core/adn_bia.goc_ve`; bìa thắng #1
+        # TL2 chữ + dải cọ nghiêng ~8°). Bộ vẽ xoay từng dòng quanh tâm hộp dòng, thu góc khi dòng xoay tràn khung.
+        gv = ho_so.get("goc_ve") or {}
+        if gv.get("nghieng"):
+            t2["nghieng"] = float(gv["nghieng"])
+        if gv.get("nghieng_dai") and t2.get("dai"):
+            t2["nghieng_dai"] = float(gv["nghieng_dai"])
         ra.append(t2)
     return ra
 
@@ -1833,6 +1886,9 @@ def loi_nhac_anh(y: Dict[str, str], kc: Dict[str, Any], nen: str = "", ho_so: Op
     trống), cảnh = `canh` + manh mối vẽ to rõ + đối lập. Kênh kiểu chữ TRẦN (`ho_so`) → `loi_nhac_nen_tran`."""
     hs = ho_so or {}
     dan = (" " + str(hs["dan"]).strip()) if hs.get("dan") else ""  # lời dặn lô làm lại (lô trước dưới sàn vì gì)
+    # 22/10/2026: ADN phong cách đo trên bìa thắng (`gan_adn`) — nói THẲNG bảng màu / độ sáng, không chỉ qua ảnh mẫu
+    if hs.get("adn_cau"):
+        dan = " " + str(hs["adn_cau"]).strip() + dan
     if hs.get("kieu") == "tran":
         return loi_nhac_nen_tran(y, hs) + " " + LIEN_MACH + (" " + MAU_DAM + " " + NV_ANH if hs.get("san_nv") else "") \
             + dan
@@ -2060,6 +2116,8 @@ def ve_dai_len(anh, tang: Sequence[Dict[str, Any]], dong: Sequence[Dict[str, Any
     can = {btk.chu_cua_tang(t)[:24]: t["dai"] for t in tang if t.get("dai")}
     if not can:
         return None
+    goc_dai = {btk.chu_cua_tang(t)[:24]: float(t.get("nghieng_dai") or t.get("nghieng") or 0.0)
+               for t in tang if t.get("dai")}
     lop = Image.new("RGBA", anh.size, (0, 0, 0, 0))
     v = ImageDraw.Draw(lop)
     co = False
@@ -2068,12 +2126,22 @@ def ve_dai_len(anh, tang: Sequence[Dict[str, Any]], dong: Sequence[Dict[str, Any
         if not mau or not d.get("hop"):
             continue
         x0, y0, x1, y1 = [float(x) for x in d["hop"]]
+        tam = ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        # 22/10/2026 (`core/adn_bia`): dải xoay CÙNG góc dòng chữ bộ vẽ đã xoay (`nghieng` của dòng báo cáo nháp), không
+        # thì góc dải đo trên bìa thắng (`nghieng_dai`); xoay → dải dày thêm chút để vẫn ôm chữ.
+        goc = float(d.get("nghieng") or goc_dai.get(str(d.get("ten") or "")) or 0.0)
         h = y1 - y0
         x0, x1, y0, y1 = x0 - 0.10 * h, x1 + 0.25 * h, y0 + 0.08 * h, y1 - 0.02 * h
+        if goc:
+            them = 0.04 * h
+            y0, y1 = y0 - them, y1 + them
         lech = 0.12 * h  # nghiêng như vết cọ
         rang = [(x1 + lech * (1 - k / 6.0) + (0.06 * h if k % 2 else -0.04 * h), y0 + (y1 - y0) * k / 6.0)
                 for k in range(7)]
-        v.polygon([(x0 + lech, y0)] + rang + [(x0, y1)], fill=btk._mau_rgb(mau) + (238,))  # noqa: SLF001
+        diem = [(x0 + lech, y0)] + rang + [(x0, y1)]
+        if goc:
+            diem = [btk.xoay_diem(x, y, tam, goc) for x, y in diem]
+        v.polygon(diem, fill=btk._mau_rgb(mau) + (238,))  # noqa: SLF001
         co = True
     if not co:
         return None
@@ -2159,8 +2227,10 @@ def _dung_bia_tran(uv: Dict[str, Any], tang: Sequence[Dict[str, Any]], ho_so: Di
                 uv["loai"] = "không vẽ được chữ (thiếu phông?)"
                 return uv
         hop = [d["hop"] for d in bc.get("dong") or [] if d.get("hop")]
-        che_dau = max([_phan_giao(m, hop) for m in mat] or [0.0])
-        che_mm = do_bia.phan_chu_the_bi_che(chu_the, hop, W, H)
+        # dòng đã xoay (`nghieng`, 22/10/2026): né đầu / chủ thể theo các đoạn hộp SAU xoay; bố cục chữ đo trên hộp gốc
+        hop_che = [h for d in bc.get("dong") or [] if d.get("hop") for h in (d.get("hop_xoay_ds") or [d["hop"]])]
+        che_dau = max([_phan_giao(m, hop_che) for m in mat] or [0.0])
+        che_mm = do_bia.phan_chu_the_bi_che(chu_the, hop_che, W, H)
         do_bc = do_hop_dong(hop, W=W, H=H)
         ly_bc = kiem_bo_cuc(do_bc, mt, cot=bo != "dai")
         if che_dau <= CHE_DAU_TOI_DA and che_mm <= CHE_MANH_MOI_TRAN and not ly_bc:
@@ -2396,7 +2466,7 @@ def kiem_san(u: Dict[str, Any], san: Dict[str, Any]) -> List[str]:
     b = (u.get("diem") or {}).get("bam_nhu_thang")
     if b is None:
         return ["giám khảo không chấm «bấm như bìa thắng»"]
-    ly = [u["mau_duoi"]] if u.get("mau_duoi") else []
+    ly = [u[k] for k in ("mau_duoi", "adn_duoi") if u.get(k)]
     s, nguon = san_cua(u, san)
     if san.get("phu_quyet_bam") is not None:
         # 20/10/2026 — giám khảo không dự báo CTR thật của kênh (`core/hieu_chuan`): sàn «bấm như bìa thắng» chỉ còn
@@ -2525,6 +2595,8 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
                 u["bam_giau"] = bam_giau
             u.update(k)
             may = [e for e in soi_yeu(u["tep"], thang) if e not in u["yeu"]]
+            if u.get("adn_duoi"):  # 22/10/2026: lệch ADN bìa thắng (máy đo, `loc_san`) trừ điểm như điểm yếu
+                may.append("off-style palette")
             if may:
                 u["yeu_may"] = may
                 u["tong"] = round(max(0.0, u["tong"] - sum(YEU_TRU.get(e, 0.0) for e in may)), 1)
@@ -2732,7 +2804,8 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     dau_vao = _bam(lu["tieu_de"], hook, so_y, *(("tran", hs.get("bo_cuc"), hs.get("mau", "")[:200]) if tran else ()),
                    *((json.dumps(hs["muc_tieu"], sort_keys=True),) if tran and hs.get("muc_tieu") else ()),
                    *(("dd", PHIEN_BAN_DAO_DIEN) if hs.get("san_nv") else ()),
-                   *(("ho", hs["dai_moi_dong"]) if hs.get("dai_moi_dong") else ()))
+                   *(("ho", hs["dai_moi_dong"]) if hs.get("dai_moi_dong") else ()),
+                   *(("adn", hs["adn_cau"]) if hs.get("adn_cau") else ()))
     if not (yt.get("y_tuong") and yt.get("dau_vao") == dau_vao):
         log("  bìa lô: đạo diễn viết {0} ý tưởng…".format(so_y))
         yt = dict(dao_dien(goi_dem, tieu_de=lu["tieu_de"], chu_bia=hook, kich_ban=lu["kich_ban"],
@@ -2816,7 +2889,9 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     san_truot = "" if top else ly_do_san_truot(xh, san)
     # 19/10/2026 (chủ): lô hết lượt mà vẫn dưới sàn → DÙNG tấm bấm-như-bìa-thắng cao nhất (đã qua chữ/nhân vật/lọc
     # cứng), không giữ — `du_phong` cho dây chuyền.
-    du_phong = sorted(da_cham, key=lambda u: (-float((u.get("diem") or {}).get("bam_nhu_thang") or 0),
+    # 22/10/2026: tấm đúng ADN bìa thắng (bảng màu / ánh sáng) đứng trước tấm lệch ADN
+    du_phong = sorted(da_cham, key=lambda u: (bool(u.get("adn_duoi")),
+                                              -float((u.get("diem") or {}).get("bam_nhu_thang") or 0),
                                               -float(u.get("tong") or 0)))[:SO_TOP] if not top else []
     for i, u in enumerate(top, 1):
         shutil.copy2(u["tep"], os.path.join(ra, "top-{0}.jpg".format(i)))
@@ -2825,6 +2900,8 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
            "kieu_chu": hs["kieu"], "bo_cuc": hs.get("bo_cuc"), "nguon_mau": hs.get("nguon_mau"),
            "ho_kieu": hs.get("ho") or "", "ho_cach": hs.get("ho_cach") or "", "ho_ly_do": hs.get("ho_ly_do") or "",
            "muc_tieu": hs.get("muc_tieu") or {}, "san": san, "san_truot": san_truot, "hieu_chuan": hc,
+           "adn": {"cau": hs.get("adn_cau") or "", "goc_ve": hs.get("goc_ve") or {},
+                   "so_duoi": sum(1 for u in uv if u.get("adn_duoi"))},
            "du_phong": [dict(u, hang=i) for i, u in enumerate(du_phong, 1)],
            "thu_muc_mau": hs.get("thu_muc_mau") or "",
            "luc": time.strftime("%Y-%m-%d %H:%M:%S"), "giay": round(time.time() - t0),
@@ -2846,7 +2923,8 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
             bia_du_lieu.ghi_so_cai(goc, kenh, ket["luot"], {
                 "ho": ket["ho_kieu"], "cach": ket["ho_cach"], "ly_do": ket["ho_ly_do"], "kieu_chu": ket["kieu_chu"],
                 "bo_cuc": ket["bo_cuc"], "luc": ket["luc"], "san_truot": san_truot,
-                "top": [{"ma": u.get("ma"), "tong": u.get("tong"), "diem": u.get("diem") or {}}
+                "top": [{"ma": u.get("ma"), "tong": u.get("tong"), "diem": u.get("diem") or {},
+                         "adn": u.get("adn") or {}, "adn_duoi": u.get("adn_duoi") or ""}
                         for u in (top or du_phong)[:SO_TOP]],
                 "phu": ({"ho": ket["phu"].get("ho"), "ma": (ket["phu"].get("chon") or {}).get("ma"),
                          "tong": (ket["phu"].get("chon") or {}).get("tong")} if (ket.get("phu") or {}).get("ho")
@@ -2983,7 +3061,7 @@ def _lo_phu(goc: str, kenh: str, *, hs: Dict[str, Any], top: Sequence[Dict[str, 
         dung_bia(u, tang, goc=goc, ngon_ngu=ngon_ngu, ho_so=hs2)
         u["chu_khop"] = {"ok": True, "cach": "ma", "chu": chu_dong}
         u["chu_dong"] = chu_dong
-        loc_san(u, san)
+        loc_san(u, san, kham_pha=True)  # ô C khám phá A/B: miễn sàn nền tối (sàn sắc vẫn giữ)
     xh = cham(goi, uv, mau=mau2, tieu_de=lu["tieu_de"], chu_bia=chu_ve, mo_dau=lu["kich_ban"][:800], thu_muc=thu,
               khoa="{0}:phu:{1}:{2}".format(khoa, ho, van_tay[:6]), log=log, dem=dem, ho_so=hs2, giau=giau)
     da = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
@@ -3090,12 +3168,25 @@ def san_lo(hs: Dict[str, Any], mau: Sequence[str], *, giau: str = "") -> Dict[st
     except Exception:  # noqa: BLE001 — bộ dò hỏng: chỉ còn giám khảo xét nhân vật
         dau = False
     return {"mau": san_mau(thang), "bam": bam, "nguon_bam": nguon, "dau": bool(dau), "so_bia_thang": len(thang),
-            "muon": muon}
+            "muon": muon, "adn": san_adn(hs)}
 
 
-def loc_san(u: Dict[str, Any], san: Dict[str, Any]) -> None:
+def san_adn(hs: Dict[str, Any]) -> Dict[str, Any]:
+    """22/10/2026 — SÀN ADN của lô (`core/adn_bia.kiem`) từ ADN CẢ KÊNH của bộ bìa thắng (`gan_adn`): phân bố sắc +
+    ngưỡng tự hiệu chỉnh (bìa thắng xa nhất, bỏ-một-ra) + ngưỡng nền sáng của kênh tối. Chưa đủ bằng chứng → {}."""
+    k = hs.get("adn_kenh") or {}
+    if not k.get("hue") or (k.get("nguong_hue") is None and k.get("nguong_sang") is None):
+        return {}
+    return {x: k.get(x) for x in ("hue", "nguong_hue", "nguong_sang", "ten_mau", "toi", "sang_nen", "n", "tong_bam")}
+
+
+def loc_san(u: Dict[str, Any], san: Dict[str, Any], *, kham_pha: bool = False) -> None:
     """Sàn MÁY trước giám khảo (tấm đã qua lọc cứng): màu dưới sàn bìa thắng → loại; bộ dò đầu dùng được cho kênh mà
-    không thấy đầu nhân vật → loại. Ghi số đo vào `u["mau_do"]`."""
+    không thấy đầu nhân vật → loại. Ghi số đo vào `u["mau_do"]`.
+
+    22/10/2026 — SÀN ADN (`san["adn"]`, `core/adn_bia.kiem`): bảng màu lệch bìa thắng hơn bìa thắng xa nhất, hoặc kênh
+    thắng bằng nền tối mà tấm sáng hơn bìa thắng sáng nhất → `adn_duoi` (như `mau_duoi`: vẫn chấm, không vào top khi còn
+    tấm đạt). `kham_pha` (ô C khám phá A/B — bộ phụ họ hạng nhì): miễn sàn sáng, vẫn giữ sàn sắc. Số đo → `u["adn"]`."""
     if u.get("loai") or not u.get("tep") or not os.path.isfile(u["tep"]):
         return
     try:
@@ -3109,6 +3200,16 @@ def loc_san(u: Dict[str, Any], san: Dict[str, Any]) -> None:
     ly = kiem_mau(u["tep"], san.get("mau") or {})
     if ly:  # dưới sàn màu: vẫn chấm, không vào top khi còn tấm đạt; lô hết lượt thì vẫn có thể được chọn
         u["mau_duoi"] = "màu nhạt hơn bìa thắng: " + ", ".join(ly)
+    if san.get("adn"):
+        try:
+            from . import adn_bia  # noqa: PLC0415
+            d = adn_bia.do_adn(u["tep"])
+            u["adn"] = adn_bia.tom_tat(d, san["adn"])
+            ly_adn = adn_bia.kiem(d, san["adn"], kham_pha=kham_pha)
+            if ly_adn:
+                u["adn_duoi"] = "lệch ADN bìa thắng: " + "; ".join(ly_adn)
+        except Exception:  # noqa: BLE001 — đo hỏng: không chặn
+            pass
     if san.get("dau"):
         # kiểm vàng thật 19/10 (TL1: 11/28 tấm đúng nhân vật bị loại oan): bộ dò đầu chỉ GHI, giám khảo quyết
         u["dau_may"] = bool(u.get("dau"))
@@ -3119,7 +3220,8 @@ def ly_do_san_truot(xh: Sequence[Dict[str, Any]], san: Dict[str, Any]) -> str:
     da = [u for u in xh if not u.get("loai") and u.get("tong") is not None]
     mau = sum(1 for u in xh if str(u.get("loai") or "").startswith("màu nhạt") or u.get("mau_duoi"))
     nv = sum(1 for u in xh if str(u.get("loai") or "").startswith("nhân vật lệch"))
-    if not da and not mau and not nv:
+    adn = sum(1 for u in xh if u.get("adn_duoi"))
+    if not da and not mau and not nv and not adn:
         return ""
     phan = []
     if da:
@@ -3127,6 +3229,8 @@ def ly_do_san_truot(xh: Sequence[Dict[str, Any]], san: Dict[str, Any]) -> str:
         phan.append("kém bìa thắng — tấm tốt nhất " + "; ".join(kiem_san(tot, san)))
     if mau:
         phan.append("{0} tấm màu nhạt hơn bìa thắng".format(mau))
+    if adn:
+        phan.append("{0} tấm lệch ADN bìa thắng (bảng màu / ánh sáng)".format(adn))
     if nv:
         phan.append("{0} tấm nhân vật lệch kênh".format(nv))
     return "; ".join(phan)
@@ -3175,7 +3279,7 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
         truoc = min(float(t["tong"]), truoc - 0.1)
         uv.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "tong_diem": round(truoc, 1), "diem": t.get("diem"),
                    "loai": "", "ly_do": (t.get("ly_do_2") or t.get("ly_do") or "")[:300], "ma_lo": t["ma"],
-                   "mau_do": t.get("mau_do"), "nv": t.get("nv"), "nguoi_khac": t.get("nguoi_khac"),
+                   "mau_do": t.get("mau_do"), "adn": t.get("adn"), "nv": t.get("nv"), "nguoi_khac": t.get("nguoi_khac"),
                    "ho": t.get("ho") or kq.get("ho_kieu") or "", **({"chi_ab": True} if t.get("phu_ab") else {})})
         muc.append({"so": i, "kieu": "bia_lo", "nhom": "khuon", "ve_chu": "ma",
                     "chu_tang": t.get("chu_tang") or kq.get("chu_tang"),
@@ -3210,7 +3314,8 @@ def xuat_goi(kq: Dict[str, Any], thu_muc_thumb: str) -> Dict[str, Any]:
 
 TEP_TRANG_THAI_VANG = os.path.join("workspace", "kiem-vang", "trang-thai.json")
 #: Mã bìa được theo dõi (vân tay kiểm vàng) — đường tương đối theo thư mục mã của tool.
-TEP_MA_VANG = ("core/bia_lo.py", "core/cong_chu.py", "core/do_bia.py", "core/chon_bia.py", "core/bia_theo_khuon.py")
+TEP_MA_VANG = ("core/bia_lo.py", "core/cong_chu.py", "core/do_bia.py", "core/chon_bia.py", "core/bia_theo_khuon.py",
+               "core/adn_bia.py")
 #: Phần ảnh bìa của `core/auto_khau.py` (hàm/lớp cấp cao nhất).
 HAM_KHAU_BIA = ("HetBiaDat", "DuoiSanBia", "_khau_thumbnail", "_mot_lo_bia", "_bia_lo_luot", "_giu_bia",
                 "_cong_doc_duoc_bia", "_cong_chu_bia", "_loai_tam_giao", "_loi_nhac_vong", "_cat_vong_bia",

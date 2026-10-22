@@ -10237,6 +10237,9 @@ _DAN_LO_SAU = (
     ("nhân vật lệch", "a different main character or other people with detailed faces — the main figure must be "
                       "exactly the channel's character, other people only faded faceless silhouettes"),
     ("kém bìa thắng", "pictures much weaker than the channel's winners — one bolder, more curious idea, drawn bigger"),
+    # 22/10/2026 — sàn ADN phong cách (`core/adn_bia`): bảng màu / độ sáng lệch bìa thắng
+    ("lệch ADN", "colours and light that do not match the channel's winning thumbnails — follow the STYLE DNA palette "
+                 "and brightness exactly"),
 )
 
 

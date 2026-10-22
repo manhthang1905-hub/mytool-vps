@@ -1037,6 +1037,33 @@ def them_bia_ab(goc: str, ts: Dict[str, Any], kenh_ds: Sequence[str]) -> Dict[st
     return do
 
 
+def them_adn(goc: str, ts: Dict[str, Any], kenh_ds: Sequence[str]) -> Dict[str, Any]:
+    """22/10/2026 — ADN PHONG CÁCH bìa ↔ kết quả thật (`core/adn_bia`): mỗi kênh, Spearman (trọng số √hiển thị) giữa
+    từng đặc trưng ADN của bìa thật (khoảng cách sắc tới đích ADN bìa thắng, độ sáng nền, phần tối, |góc chữ|, |góc
+    dải|) và CTR trên video đủ chín (`nghien-cuu/bia-adn.json`, D21) + phần cặp A/B mà nhánh GẦN ADN thắng
+    (`adn_bia.ab_gan_adn`). Ghi `trong_so.adn.<kênh>` (đọc được ở nơi chọn / báo cáo); không đổi cổng nào. Trả số đo."""
+    try:
+        from . import adn_bia  # noqa: PLC0415
+    except Exception as loi:  # noqa: BLE001
+        return {"loi": str(loi)[:160]}
+    ra: Dict[str, Any] = {}
+    for k in kenh_ds:
+        try:
+            du = adn_bia.doc_adn_kenh(goc, k)
+            if not du:
+                continue
+            x = {"ctr": adn_bia.tuong_quan_ctr(du, spearman), "ab": adn_bia.ab_gan_adn(goc, k, du.get("dich") or {})}
+            # đặc trưng có |rho| ≥ RHO_DU trên ≥ N_TOI_THIEU video = "đi cùng CTR" (dấu: + = càng lớn CTR càng cao)
+            x["di_cung_ctr"] = {f: v["rho"] for f, v in x["ctr"].items() if isinstance(v, dict) and v.get("rho")
+                                is not None and int(v.get("n") or 0) >= N_TOI_THIEU and abs(float(v["rho"])) >= RHO_DU}
+            ra[k] = x
+        except Exception as loi:  # noqa: BLE001 — một kênh hỏng không chặn kênh khác
+            ra[k] = {"loi": str(loi)[:160]}
+    if ra:
+        ts["adn"] = ra
+    return ra
+
+
 def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
          kenh_ds: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     """Một lượt: bù sổ cái → kết quả thật → bảng + trọng số → hook → bài học. `thu=True`: CHỈ ĐỌC."""
@@ -1046,6 +1073,7 @@ def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
     kq = {k: ket_qua_kenh(goc, k, bay) for k in kenh_ds}
     hc = hieu_chuan(goc, dong, kq, kenh_ds)
     ab = them_bia_ab(goc, hc["trong_so"], kenh_ds)
+    adn = them_adn(goc, hc["trong_so"], kenh_ds)
     hk = do_hook(goc, kq, kenh_ds)
     ub = bai_hoc_uplift(goc, kq, kenh_ds)
     bc: Dict[str, Any] = {"phien_ban": PHIEN_BAN, "luc": bay.strftime("%Y-%m-%d %H:%M:%S"), "ngay": bay.date().isoformat(),
@@ -1053,7 +1081,7 @@ def chay(goc: str, *, thu: bool = False, bay: Optional[_dt.datetime] = None,
                           "luat": {"n_toi_thieu": N_TOI_THIEU, "rho_khong": RHO_KHONG, "rho_du": RHO_DU,
                                    "w_phu_quyet": W_PHU_QUYET, "n_bai_hoc": N_BAI_HOC},
                           "bang": hc["bang"], "trong_so": hc["trong_so"], "chuan": hc["chuan"], "hook": hk,
-                          "bai_hoc": ub, "da_nghi": [], "bia_ab": ab}
+                          "bai_hoc": ub, "da_nghi": [], "bia_ab": ab, "adn": adn}
     bc["tom_tat"] = tom_tat(bc)
     if not thu:
         _ghi_json(duong_trong_so(goc), dict(hc["trong_so"], luc=bc["luc"], phien_ban=PHIEN_BAN))
@@ -1100,6 +1128,10 @@ def tom_tat(bc: Dict[str, Any]) -> str:
         phan.append("A/B 3 bìa: {0} thử nghiệm, giám khảo xếp nhất đúng {1} (ngẫu nhiên {2}), τ {3}".format(
             ab.get("n"), "-" if ab.get("top1") is None else "{0:.0%}".format(ab["top1"]),
             "-" if ab.get("ngau_nhien") is None else "{0:.0%}".format(ab["ngau_nhien"]), ab.get("tau")))
+    adn = ["{0} {1}".format(k, ", ".join("{0} {1:+.2f}".format(f, r) for f, r in sorted(x["di_cung_ctr"].items())))
+           for k, x in sorted((bc.get("adn") or {}).items()) if isinstance(x, dict) and x.get("di_cung_ctr")]
+    if adn:
+        phan.append("ADN bìa đi cùng CTR: " + "; ".join(adn[:6]))
     return "Hiệu chuẩn bộ chấm ({0}): {1}".format(bc.get("ngay"), " · ".join(phan))
 
 
