@@ -342,7 +342,7 @@ def _mo_ta_ngach(goc: str, ma_kenh: str) -> str:
 #: (`tieu_chi_doi_thu`), thiếu thì dựng từ tiếng + mô tả ngách.
 DE_BAI_NGACH = (
     "Bạn kiểm DANH BẠ ĐỐI THỦ của một nhóm kênh YouTube {tieng} làm theo lối REMAKE (xem video đối thủ "
-    "đã thắng rồi viết lại kịch bản). Một kênh chỉ được là đối thủ khi ĐỦ mọi tiêu chí:\n{tieu_chi}\n\n"
+    "đã thắng rồi viết lại kịch bản). Một kênh chỉ được là đối thủ khi ĐỦ mọi tiêu chí:\n{tieu_chi}\n{khan_gia}\n"
     "NGÁCH CỦA NHÓM:\n{{ngach}}\n\n"
     "Với MỖI kênh, đọc NGHĨA các tiêu đề (không dò từ khoá) và phán:\n"
     "  \"giu\"  = đúng ngách, remake được.\n"
@@ -356,7 +356,7 @@ DE_BAI_NGACH = (
 DE_BAI_SAU_NGACH = (
     "Lượt kiểm trước đã xếp các kênh dưới đây vào loại LƯNG CHỪNG. Giờ bạn phải QUYẾT DỨT KHOÁT, không có "
     "lựa chọn thứ ba. Tiêu chí đối thủ (đủ cả):\n{tieu_chi}\nKênh chỉ thỉnh thoảng có một video đúng ngách "
-    "thì KHÔNG.\n\n"
+    "thì KHÔNG.\n{khan_gia}\n"
     "NGÁCH CỦA NHÓM:\n{{ngach}}\n\n"
     "Đọc KỸ ~30 tiêu đề gần nhất và số hoạt động của từng kênh. Trả về DUY NHẤT một JSON: "
     "{{{{\"1\": {{{{\"k\": \"giu\" hoặc \"bo\", \"ly_do\": \"một câu tiếng Việt ≤ 25 chữ, nói rõ kênh làm gì\"}}}}, …}}}} đủ mọi số."
@@ -372,7 +372,7 @@ def de_bai_cho(goc: str, ma_kenh: str) -> Tuple[str, str]:
         hs = ho_so_ngach.doc_ngach(goc, ma_kenh)
         if ho_so_ngach.la_ngach_mac_dinh(hs):
             return DE_BAI, DE_BAI_SAU
-        tieng = ho_so_ngach.ten_tieng(hs.ngon_ngu()) or "đúng tiếng của nhóm"
+        tieng = ho_so_ngach.ten_tieng(ho_so_ngach.ngon_ngu_cua_kenh(goc, ma_kenh, hs)) or "đúng tiếng của nhóm"
         tieu_chi = [str(x).strip() for x in (hs.tieu_chi_doi_thu or []) if str(x).strip()]
         if not tieu_chi:
             tieu_chi = ["kênh nói/viết {0}".format(tieng),
@@ -383,8 +383,12 @@ def de_bai_cho(goc: str, ma_kenh: str) -> Tuple[str, str]:
         khoi = "\n".join("({0}) {1}".format(i, x.replace("{", "(").replace("}", ")"))
                          for i, x in enumerate(tieu_chi, 1))
         tieng_an = tieng.replace("{", "(").replace("}", ")")
-        return (DE_BAI_NGACH.format(tieng=tieng_an, tieu_chi=khoi),
-                DE_BAI_SAU_NGACH.format(tieng=tieng_an, tieu_chi=khoi))
+        # 22/10/2026: luật KHÁN GIẢ (bản tâm lý Nhật viết cứng câu 21/10 "người lớn trung niên–cao tuổi") — ngách khác đọc
+        # `khan_gia_mo_ta` + `khan_gia_loai_tru` của hồ sơ; không khai → không thêm câu nào.
+        kg = ho_so_ngach.khoi_khan_gia(hs, "\"bo\"").replace("{", "(").replace("}", ")")
+        kg = ("KHÁN GIẢ là điều kiện CỨNG: " + kg + "\n") if kg else ""
+        return (DE_BAI_NGACH.format(tieng=tieng_an, tieu_chi=khoi, khan_gia=kg),
+                DE_BAI_SAU_NGACH.format(tieng=tieng_an, tieu_chi=khoi, khan_gia=kg))
     except Exception:  # noqa: BLE001
         return DE_BAI, DE_BAI_SAU
 

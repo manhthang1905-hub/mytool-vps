@@ -1,0 +1,13 @@
+# Mô tả ngách — mỗi dòng "khoá: giá trị". Dòng không có khoá = mô tả thêm cho AI đọc. Dòng bắt đầu bằng # bỏ qua.
+# Bắt buộc: chu_de, quoc_gia (2 chữ: JP, US, VN, KR...), ngon_ngu (ja, en, vi, ko...).
+chu_de: truyện kể đời người có lời đọc
+quoc_gia: JP
+ngon_ngu: ja
+# Khán giả thật (một câu) và khán giả KHÔNG nhắm (cách nhau bằng ;)
+khan_gia: người Nhật 50+ nghe truyện khi làm việc nhà, xem nhiều trên TV
+khong_nham: học sinh, sinh viên; trẻ em
+# Cụm người xem hay gõ trên YouTube (tuỳ chọn, cách nhau bằng ;)
+tu_khoa: 感動する話; 朗読 人生
+# Tiền tố mã kênh (tuỳ chọn, mặc định K → K1, K2...)
+tien_to: K
+Kênh kể chuyện đời thường có lời đọc ấm, mỗi video 15–25 phút, có cú lật cuối truyện.

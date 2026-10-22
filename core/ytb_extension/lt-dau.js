@@ -10,8 +10,8 @@
 // `TL1-T7/Data/profile/Default/Sessions/Session_13434519629720236` (mtime 10:05:38): nó
 // chứa CẢ HAI địa chỉ cho cùng một video —
 //
-//     https://www.youtube.com/watch?v=i2EAnLd8Duo&shopapi_lt=1
-//     https://www.youtube.com/watch?v=i2EAnLd8Duo
+//     https://www.youtube.com/watch?v=zz3SlBa_3YF&shopapi_lt=1
+//     https://www.youtube.com/watch?v=zz3SlBa_3YF
 //
 // Tức tab ĐÃ mở đúng địa chỉ kèm dấu (đường mở tab của agent không sai một ly), rồi YouTube
 // tự `replaceState` gỡ `&shopapi_lt=1` đi để chuẩn hoá địa chỉ. `loi-thoai.js` chạy ở

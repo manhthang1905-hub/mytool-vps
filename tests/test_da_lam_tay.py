@@ -29,29 +29,29 @@ def _goc(tmp_path, tay="", auto=()):
 
 
 def test_doc_tep_tay_nhan_link_va_ma_tran_bo_qua_chu_thich(tmp_path):
-    goc = _goc(tmp_path, tay="# ghi chú\nhttps://www.youtube.com/watch?v=2kdX8jBx6gY | tay · thể thao\n"
-                              "GJjYlTjNV8g\n\nhttps://youtu.be/WBWa4D9a1R0|V7\nkhông-phải-mã\n")
-    assert da_lam.doc_da_lam_tay(goc, KENH) == {"2kdX8jBx6gY": "tay · thể thao", "GJjYlTjNV8g": "tay",
-                                                "WBWa4D9a1R0": "V7"}
+    goc = _goc(tmp_path, tay="# ghi chú\nhttps://www.youtube.com/watch?v=zzU3fs6wdE6 | tay · thể thao\n"
+                              "zzuErpsMGPA\n\nhttps://youtu.be/zzxFu71CUfZ|V7\nkhông-phải-mã\n")
+    assert da_lam.doc_da_lam_tay(goc, KENH) == {"zzU3fs6wdE6": "tay · thể thao", "zzuErpsMGPA": "tay",
+                                                "zzxFu71CUfZ": "V7"}
 
 
 def test_gop_auto_va_tay_auto_thang_khi_trung(tmp_path):
-    goc = _goc(tmp_path, tay="2kdX8jBx6gY | tay\nP5Qp0OlJSgc | tay-cu\n",
-               auto=[("0004", "P5Qp0OlJSgc"), ("0010", "H1fZAMiOwW0")])
+    goc = _goc(tmp_path, tay="zzU3fs6wdE6 | tay\nzzjwd5Y9yZQ | tay-cu\n",
+               auto=[("0004", "zzjwd5Y9yZQ"), ("0010", "zzlbvEvPm9o")])
     kq = da_lam.doc_ma_da_lam(goc, KENH)
-    assert kq == {"P5Qp0OlJSgc": "0004", "H1fZAMiOwW0": "0010", "2kdX8jBx6gY": "tay"}
+    assert kq == {"zzjwd5Y9yZQ": "0004", "zzlbvEvPm9o": "0010", "zzU3fs6wdE6": "tay"}
 
 
 def test_khong_co_auto_van_doc_duoc_tay(tmp_path):
-    goc = _goc(tmp_path, tay="2kdX8jBx6gY\n")
-    assert da_lam.doc_ma_da_lam(goc, KENH) == {"2kdX8jBx6gY": "tay"}
+    goc = _goc(tmp_path, tay="zzU3fs6wdE6\n")
+    assert da_lam.doc_ma_da_lam(goc, KENH) == {"zzU3fs6wdE6": "tay"}
 
 
 def test_danh_dau_ghi_ca_dong_lam_tay(tmp_path):
-    goc = _goc(tmp_path, tay="2kdX8jBx6gY | tay\n", auto=[("0004", "P5Qp0OlJSgc")])
+    goc = _goc(tmp_path, tay="zzU3fs6wdE6 | tay\n", auto=[("0004", "zzjwd5Y9yZQ")])
     cot = ["Tiêu đề video", "Link video", "Đã làm"]
-    hang = [["a", "https://www.youtube.com/watch?v=2kdX8jBx6gY", ""],
-            ["b", "https://www.youtube.com/watch?v=P5Qp0OlJSgc", "cũ"],
+    hang = [["a", "https://www.youtube.com/watch?v=zzU3fs6wdE6", ""],
+            ["b", "https://www.youtube.com/watch?v=zzjwd5Y9yZQ", "cũ"],
             ["c", "https://www.youtube.com/watch?v=aaaaaaaaaaa", "đã làm?"]]
     assert da_lam.danh_dau_da_lam(cot, hang, da_lam.doc_ma_da_lam(goc, KENH), "Đã làm") == 2
     assert [h[2] for h in hang] == ["tay", "0004", ""], "dòng không khớp phải bị XOÁ ô — không nói dối 'đã làm'"
@@ -59,7 +59,7 @@ def test_danh_dau_ghi_ca_dong_lam_tay(tmp_path):
 
 def test_ghi_da_lam_tay_nguyen_tu_va_khong_trung(tmp_path):
     goc = _goc(tmp_path)
-    link = "https://www.youtube.com/watch?v=2kdX8jBx6gY"
+    link = "https://www.youtube.com/watch?v=zzU3fs6wdE6"
     assert da_lam.ghi_da_lam_tay(goc, KENH, link, "từ bàn Phân tích") is True
     assert da_lam.ghi_da_lam_tay(goc, KENH, link, "lặp") is False
-    assert da_lam.doc_da_lam_tay(goc, KENH) == {"2kdX8jBx6gY": "từ bàn Phân tích"}
+    assert da_lam.doc_da_lam_tay(goc, KENH) == {"zzU3fs6wdE6": "từ bàn Phân tích"}

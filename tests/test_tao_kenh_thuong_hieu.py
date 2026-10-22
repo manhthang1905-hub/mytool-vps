@@ -20,8 +20,8 @@ def test_dang_nhap_lai_bi_nhan_dien():
 
 
 def test_ten_co_trong_danh_sach_bo_khoang_trang():
-    assert tk.ten_co_trong_trang("孤高の脳科学", "Kênh:  孤高の脳科学   \n khác")
-    assert not tk.ten_co_trong_trang("孤高の脳科学", "kênh khác hoàn toàn")
+    assert tk.ten_co_trong_trang("架空の夜話チャンネル", "Kênh:  架空の夜話チャンネル   \n khác")
+    assert not tk.ten_co_trong_trang("架空の夜話チャンネル", "kênh khác hoàn toàn")
     assert not tk.ten_co_trong_trang("", "bất kỳ")
 
 

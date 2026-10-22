@@ -64,6 +64,8 @@ Phiên Claude trên máy mới đọc tệp này trước khi đổi bất cứ 
 - Không bao giờ dừng tiến trình đang đăng, đang dựng hay đang làm phụ đề. Kiểm `.khoa-may` trước.
 - Không gõ mật khẩu hay 2FA thay người. Mật khẩu chỉ nằm trong `bi-mat/` dạng mã hoá DPAPI, không in ra và không ghi log.
 - Không tự bật `tu_chay`, `tu_dang`, `tu_duyet`, `tu_don`, `ngan_sach_ngay`. Chủ kênh tự quyết các công tắc tiền và tự chạy.
+  Ngoại lệ chủ đã duyệt: kênh do luồng tự động mở — thay kênh hỏng (D20, 20/10) và khởi tạo VPS mới (D28, 22/10) — được
+  máy bật `tu_chay`/`tu_duyet`/`tu_dang` SAU khi có kênh thương hiệu + UC ghim + thiết lập 11/11.
 - Không đổi tên, handle hay banner của kênh chính. Không xoá gì trên YouTube nếu không được bảo.
 - Đổi luật cố định (ví dụ gỡ một cổng duyệt) thì phải hỏi chủ rõ từng luật.
 - Ổ đĩa: video đã lên YouTube thì máy tự xoá tệp nặng, và tự xoá Chrome bản cũ. Ổ còn dưới 10 GB thì dừng dựng video mới và báo.

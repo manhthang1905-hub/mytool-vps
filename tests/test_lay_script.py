@@ -363,7 +363,7 @@ class TestNutLayLoiThoai:
         monkeypatch.setattr(ts, "co_the_nghe", lambda: True)
         gia = _AppGia()
         trang = ts.TrangLayScript(gia)
-        trang._o_nhap.setPlainText("https://www.youtube.com/watch?v=NQ-iPBdaKrM")
+        trang._o_nhap.setPlainText("https://www.youtube.com/watch?v=zzrmdiMvUEV")
         return trang, gia, app
 
     def test_bam_nut_khong_nem_loi(self, monkeypatch):

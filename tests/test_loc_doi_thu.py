@@ -571,10 +571,10 @@ class TestDaLam:
 
     def test_doc_duoc_ma_video_goc(self, tmp_path):
         goc = str(tmp_path)
-        self._dung_luot(goc, "K1", "0001", "tpJyno1BKQc")
+        self._dung_luot(goc, "K1", "0001", "zz-ihjHV17v")
         self._dung_luot(goc, "K1", "0002", "rWiEte5r8Vg")
         assert da_lam.doc_ma_da_lam(goc, "K1") == {
-            "tpJyno1BKQc": "0001", "rWiEte5r8Vg": "0002"}
+            "zz-ihjHV17v": "0001", "rWiEte5r8Vg": "0002"}
 
     def test_luot_thieu_tep_nguon_thi_bo_qua(self, tmp_path):
         """Đề tài tự nghĩ (không remake ai) cũng là lượt hợp lệ, không phải lỗi."""
@@ -588,16 +588,16 @@ class TestDaLam:
 
     def test_lam_hai_lan_thi_ghi_luot_SOM_NHAT(self, tmp_path):
         goc = str(tmp_path)
-        self._dung_luot(goc, "K1", "0005", "tpJyno1BKQc")
-        self._dung_luot(goc, "K1", "0001", "tpJyno1BKQc")
-        assert da_lam.doc_ma_da_lam(goc, "K1")["tpJyno1BKQc"] == "0001"
+        self._dung_luot(goc, "K1", "0005", "zz-ihjHV17v")
+        self._dung_luot(goc, "K1", "0001", "zz-ihjHV17v")
+        assert da_lam.doc_ma_da_lam(goc, "K1")["zz-ihjHV17v"] == "0001"
 
     def test_danh_dau_dung_dong(self):
         cot = so.cot_mac_dinh()
         hang = [[""] * len(cot) for _ in range(2)]
-        hang[0][cot.index(so.COT_LINK)] = "https://www.youtube.com/watch?v=tpJyno1BKQc"
+        hang[0][cot.index(so.COT_LINK)] = "https://www.youtube.com/watch?v=zz-ihjHV17v"
         hang[1][cot.index(so.COT_LINK)] = "https://www.youtube.com/watch?v=abc123XYZ_-"
-        n = da_lam.danh_dau_da_lam(cot, hang, {"tpJyno1BKQc": "0001"},
+        n = da_lam.danh_dau_da_lam(cot, hang, {"zz-ihjHV17v": "0001"},
                                    so.COT_DA_LAM)
         assert n == 1
         assert hang[0][cot.index(so.COT_DA_LAM)] == "0001"
@@ -607,7 +607,7 @@ class TestDaLam:
         """Ô vẫn ghi "đã làm" khi lượt đã bị xoá là bỏ sót một content đáng làm."""
         cot = so.cot_mac_dinh()
         hang = [[""] * len(cot)]
-        hang[0][cot.index(so.COT_LINK)] = "https://www.youtube.com/watch?v=tpJyno1BKQc"
+        hang[0][cot.index(so.COT_LINK)] = "https://www.youtube.com/watch?v=zz-ihjHV17v"
         hang[0][cot.index(so.COT_DA_LAM)] = "0001"
         da_lam.danh_dau_da_lam(cot, hang, {}, so.COT_DA_LAM)
         assert hang[0][cot.index(so.COT_DA_LAM)] == ""

@@ -111,3 +111,23 @@ Phải sửa mã cho ngách mới thì sửa tổng quát: đọc giá trị t�
   - Đây là tiên nghiệm yếu nhất, chỉ dùng khi kênh chưa có số riêng trên trục đó.
   - Thứ tự tin: kênh > nhóm > ngoài.
 - **Định dạng:** `{"ma_may", "ngach", "xuat_luc", "bai_hoc": [{"truc", "cum", "cau", "n", "dung_cho"}]}`.
+
+## 6. VPS mới + ngách mới bằng MỘT lệnh (`core/khoi_tao_vps.py`, skill D28 — 22/10/2026)
+Đầu vào: kho Chrome đã đăng nhập Gmail (`<cha của MyTool>\kho\<tên>\<tên>.exe`) + `<cha của MyTool>\khoi-tao\`
+`ngach.txt` (chủ đề, quốc gia, ngôn ngữ, khán giả, khán giả không nhắm), `giong.txt` (voice_id, mỗi kênh một giọng),
+`doi-thu.txt` (kênh đối thủ hạt giống). Mẫu: `docs/ban-sach/khoi-tao-mau/`.
+```
+python -X utf8 -m core.khoi_tao_vps kiem     # chỉ đọc: thiếu gì, việc của người
+python -X utf8 -m core.khoi_tao_vps chay     # lần đầu: kiem → kho → ngach → nuoi (rồi D28 tự đi mỗi giờ)
+python -X utf8 -m core.khoi_tao_vps xem
+```
+Các bước: Chrome kho → K1…Kn · `khoi_tao_ngach` (hồ sơ + kênh đầu + đối thủ hạt giống vào `_NHOM/<nhóm>/doi-thu-them.txt`
++ Một nút) · nuôi trang chủ mọi tài khoản tới ≥ 90 % đúng chủ đề (bản nháp `workspace/chuan-bi-<Kx>/` cho kênh chưa dựng) ·
+ô trang chủ đúng ngách → kênh nguồn → hộp thư đối thủ → Một nút · **tuyến** từ content đối thủ (`core/tuyen_thi_truong.py`:
+LLM chia tuyến theo nghĩa, gán từng tiêu đề, đo nguồn nổ/tháng → `tep_khan_gia` + `workspace/chuan-bi-kenh-moi/thi-truong.json`)
+· chia kênh cho tuyến (mỗi tuyến một kênh trước, rồi theo sức chứa = nguồn nổ/tháng ÷ 15) · `mo_kenh` dựng từng kênh (góc +
+nhân vật mới, giọng riêng) · kênh thương hiệu + UC · 11/11 · tự chạy/đăng. Xong: đo lại thị trường mỗi 25 ngày.
+
+Hồ sơ ngách có thêm 4 khoá cho lời nhắc TỔNG QUÁT (22/10/2026): `chu_de_rong`, `khan_gia_mo_ta`, `khan_gia_loai_tru`,
+`lac_de_vi_du`. Ngách mặc định (tâm lý × Nhật) để trống → lời nhắc giữ nguyên văn; ngách khác → nuôi trang chủ, kiểm ngách
+đối thủ, chấm tiêu đề, mô tả kênh, giám khảo ảnh cảnh, cổng chữ bìa đọc theo hồ sơ (`tests/test_ngach_truyen_khong_lo_tam_ly.py`).

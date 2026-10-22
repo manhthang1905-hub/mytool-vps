@@ -61,7 +61,29 @@ def _insight(goc: str, kenh: str) -> str:
     return " / ".join(ra)
 
 
-def de_bai(ch: Dict, video_minh: Sequence[v7.VideoMinh], insight: str = "") -> str:
+def de_bai(ch: Dict, video_minh: Sequence[v7.VideoMinh], insight: str = "", hs: Any = None) -> str:
+    """Đề bài thẩm định tiêu đề. `hs` (22/10/2026) = hồ sơ ngách của kênh: ngách mặc định / None → nguyên văn bản cũ;
+    ngách khác → ba câu ví dụ của tâm lý Nhật (nhãn 【心理学】, "chân dung … tâm lý", ví dụ tệp chung) đổi theo hồ sơ."""
+    ra = _de_bai_goc(ch, video_minh, insight)
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        if hs is None or ho_so_ngach.la_ngach_mac_dinh(hs):
+            return ra
+        nhan = " ".join(str(hs.nhan_the_loai_mau or "").split())
+        for cu, moi in (
+                ("bỏ qua nhãn thể loại trong ngoặc như 【心理学】【脳科学】【雑学】.",
+                 "bỏ qua nhãn thể loại trong ngoặc" + (" như " + nhan if nhan else " ở đầu/cuối tiêu đề") + "."),
+                ("nói về một KIỂU NGƯỜI — đặc điểm, tâm lý, lý do họ như vậy.",
+                 "nói về một KIỂU NGƯỜI — đặc điểm, lý do họ như vậy."),
+                ("Chủ đề chung (tiền, một mình, trí tuệ) là \"chung\".", "Chủ đề chung là \"chung\".")):
+            ra = ra.replace(cu, moi)
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
+
+
+def _de_bai_goc(ch: Dict, video_minh: Sequence[v7.VideoMinh], insight: str = "") -> str:
     cum = "\n".join("- {0}: {1}".format(ma, c.get("ten", "")) for ma, c in ch["cum"].items())
     minh = "\n".join("- {0}: {1}".format(v.ma, v.tieu_de) for v in video_minh if v.tieu_de) or "(chưa có)"
     return (
@@ -310,7 +332,13 @@ def tham_dinh(client: Any, goc: str, kenh: str, kq: v7.KetQua, *,
     if not minh and not ung:
         return 0
     ma_minh = [v.ma for v in kq.video_minh]
-    de = de_bai(ch, kq.video_minh, _insight(goc, kenh))
+    try:
+        from .ho_so_ngach import doc_ngach  # noqa: PLC0415
+
+        hs_ngach = doc_ngach(goc, kenh)
+    except Exception:  # noqa: BLE001
+        hs_ngach = None
+    de = de_bai(ch, kq.video_minh, _insight(goc, kenh), hs=hs_ngach)
     nho = v7.doc_bo_nho(goc, kenh, ch)
     luc = (bay_gio or _dt.datetime.now()).isoformat(timespec="seconds")
     lo_tat_ca = [minh[i:i + SO_MOI_LO] for i in range(0, len(minh), SO_MOI_LO)]

@@ -1,0 +1,3 @@
+# Mỗi dòng MỘT kênh đối thủ: link kênh hoặc @handle. 3–10 kênh là đủ — máy tự tìm thêm.
+# https://www.youtube.com/@ten_kenh_doi_thu
+# @ten_kenh_khac

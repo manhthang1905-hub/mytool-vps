@@ -128,7 +128,7 @@ def test_du_lieu_that_tl1_bon_ung_vien_trung_de_bi_bat():
     ung_vien = {
         "9zRSyu_aZjU": "【衝撃】朝いつも同じ夢を見る人、実は〇〇です。潜在意識が伝える深層心理【心理学】",
         "XPnByxdqQZc": "【心理学】朝いつも同じ夢を見る人、実は〇〇です。老化ではなく、潜在意識が伝える深層心理",
-        "GsDV2SVF9p4": "【心理学】50代以降で朝いつも同じ夢を見る人、実は〇〇です。潜在意識が伝える深層心理",
+        "zzCrvfO8-pf": "【心理学】50代以降で朝いつも同じ夢を見る人、実は〇〇です。潜在意識が伝える深層心理",
         "Cf4Wl-QZgIw": "朝いつも同じ夢を見る人、実は〇〇です。体内時計が伝える深層心理【心理学】",
     }
     for ma, tieu_de in ung_vien.items():
@@ -137,7 +137,7 @@ def test_du_lieu_that_tl1_bon_ung_vien_trung_de_bi_bat():
 
 
 def test_du_lieu_that_tl3_iq_thap_khong_bat_duoc_bang_so_ky_tu():
-    """GHI NHẬN GIỚI HẠN ĐÃ BIẾT (không phải lỗi): `SL94HyyuLXs`
+    """GHI NHẬN GIỚI HẠN ĐÃ BIẾT (không phải lỗi): `zzJaQ0HCVdY`
     "IQが低い人の頭の中で起きていること" và TL3-T7-0001 "低IQの人の頭の中は
     こんな世界" CÙNG chủ đề nhưng đảo trật tự từ tiếng Nhật ("IQが低い" đối
     "低IQ") — điểm giống (~0,485) THẤP hơn ngưỡng 0,80. Xem "NGƯỠNG 0,80" ở

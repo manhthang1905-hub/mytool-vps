@@ -4837,6 +4837,23 @@ _TIEU_CHI_CHAM_TIEU_DE = (
     "6. KHÔNG NHẮM NGƯỜI GIÀ: kênh này nhắm người trẻ/trung niên; bản nào chêm từ kiểu hưu "
     "trí/cháu/lương hưu/tuổi già thì LOẠI (cùng luật cổng loại của Công thức V7).")
 
+
+def _tieu_chi_cham_tieu_de_cho(goc: str, ma_kenh: str) -> str:
+    """22/10/2026 — tiêu chí chấm tiêu đề theo hồ sơ ngách. Ngách mặc định (tâm lý × Nhật) / hồ sơ hỏng →
+    `_TIEU_CHI_CHAM_TIEU_DE` nguyên văn. Ngách khác: luật 1–5 chung giữ nguyên; luật 6 ("không nhắm người già" — viết cho
+    tệp tâm lý Nhật) thay bằng luật KHÁN GIẢ của hồ sơ (`khan_gia_mo_ta` + `khan_gia_loai_tru`), không khai thì bỏ."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, ma_kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return _TIEU_CHI_CHAM_TIEU_DE
+        chung = _TIEU_CHI_CHAM_TIEU_DE.split("\n6. ")[0]
+        kg = ho_so_ngach.khoi_khan_gia(hs, "LOẠI")
+        return chung + ("\n6. ĐÚNG KHÁN GIẢ: " + kg if kg else "")
+    except Exception:  # noqa: BLE001 — hồ sơ hỏng không được làm vỡ khâu tiêu đề
+        return _TIEU_CHI_CHAM_TIEU_DE
+
 #: Khuôn lời nhắc chấm N BẢN TIÊU ĐỀ. Ô riêng của khuôn này (ngoài các ô chung
 #: `viet_nhieu_ban.cham_va_chon` tự điền — `<<SO_BAN>>`, `<<TIEU_CHI>>`,
 #: `<<SO_DO>>`, `<<CAC_BAN>>`, `<<COMPETITOR_TRANSCRIPT>>`): `<<BANG_CTR>>`,
@@ -5039,7 +5056,7 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
             chung_cham["BANG_CTR"] = str(chung_cham.get("BANG_CTR") or "") + khoi_bai_td
         chon, ly_do, diem, bang = cham_va_chon(
             goi_cham, ban, sach, khuon_cham=khuon_cham_td,
-            tieu_chi=_TIEU_CHI_CHAM_TIEU_DE, chung=chung_cham, muc_tieu=0,
+            tieu_chi=_tieu_chi_cham_tieu_de_cho(bc.goc, k.ma), chung=chung_cham, muc_tieu=0,
             ghi=bc.ghi, ten_ban=ten_ban, sau_cham=sau_cham_td)
     except Exception as loi:  # noqa: BLE001 — chấm hỏng thì giữ đối chứng, không vỡ lượt
         bc.ghi("  (chấm tiêu đề không xong: {0}) — giữ đối chứng.".format(str(loi)[:100]))
@@ -7477,6 +7494,8 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
                       khoa_dung + khoa_dat_lai_ket_qua_mat(lan + 1), ten)
         return tep_ra, dung
 
+    nc_anh = cac.ngu_canh_anh(str(getattr(bc, "goc", "") or ""), luot.ma_kenh or "")   # 22/10: ngách khác → câu tả kênh
+
     def cham(tep_ds: List[str], prompt: str) -> Dict[int, Dict[str, Any]]:
         # Phép đo máy trước (mũi tên đỏ, lưới ô — `core/kiem_anh_cung.py`): lỗi CHẮC đánh 0 thẳng, lỗi NGHI báo
         # giám khảo nhìn kỹ đúng tấm ấy.
@@ -7489,7 +7508,7 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
         ai = ", ".join(x for x in (str(c.get("primary_subject") or "").strip(),
                                    str(c.get("characters_used") or "").strip()) if x) or "(not given)"
         ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=ai, phong_cach=phong, so_tham_chieu=len(refs),
-                               so_ung_vien=len(tep_ds),
+                               so_ung_vien=len(tep_ds), tieng_en=nc_anh[0], kenh_en=nc_anh[1],
                                nghi={i: list(m["loi"]) + list(m["nghi"]) for i, m in may.items() if m["loi"] or m["nghi"]})
         anh = ([cac.anh_data_url(p, 512, nhan="REF") for p in refs]
                + [cac.anh_data_url(p, 768, nhan=str(i)) for i, p in enumerate(tep_ds, 1)])
@@ -7511,7 +7530,7 @@ def _lam_anh_canh_chon(bc: BoiCanh, luot: LuotChay, c: Dict[str, Any], tep: str,
     def viet_lai(prompt: str, ghi_chu: str) -> str:
         than, duoi = cac.tach_than_duoi(prompt, st, them=(DUOI_NOI_CANH,))
         moi = cac.viet_lai_canh(lambda l: goi_vi(l, khoa_viec(luot, "vl-uv", so_canh, prompt, ghi_chu), 1500),
-                                than, loi_doc=loi_doc, ghi_chu=ghi_chu)
+                                than, loi_doc=loi_doc, ghi_chu=ghi_chu, tieng_en=nc_anh[0], kenh_en=nc_anh[1])
         if not moi:
             return ""
         return "{0}, {1}".format(moi.rstrip(" ,."), duoi) if duoi else moi
@@ -7571,7 +7590,10 @@ def _kiem_max_cua_luot(bc: BoiCanh, luot: LuotChay, phong: str):
                                             kiem_dung=bc.kiem_dung, lui_vi=True)
         except Exception:  # noqa: BLE001
             goi = None
-        return kma.KiemMax(goi, goc=goc, phong=phong, ghi=bc.ghi)
+        from . import chon_anh_canh as cac_nc  # noqa: PLC0415 — 22/10/2026: ngách khác → câu tả kênh theo hồ sơ
+
+        tieng_en, kenh_en = cac_nc.ngu_canh_anh(goc, luot.ma_kenh or "")
+        return kma.KiemMax(goi, goc=goc, phong=phong, ghi=bc.ghi, tieng_en=tieng_en, kenh_en=kenh_en)
 
     return kma.cua_luot(luot.thu_muc, tao)
 

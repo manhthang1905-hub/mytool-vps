@@ -1,0 +1,93 @@
+MYTOOL — BẢN SẠCH CHO VPS MỚI, NGÁCH MỚI
+=========================================
+
+Gói này có ĐỦ mọi tính năng của VPS đầu (sản xuất, đăng, bình luận, bìa theo số liệu, A/B bìa, cộng sự, thay kênh
+hỏng bằng Chrome kho, nuôi trang chủ, não từng bộ phận, tự kiểm, tự sửa...). KHÔNG có dữ liệu kênh, không khoá, không
+nhật ký, không số liệu của VPS đầu. Máy mới tự học lại từ đầu cho ngách của nó.
+
+Đầu vào của chủ CHỈ có 4 thứ:
+  1. thư mục kho\ chứa các Chrome Portable ĐÃ ĐĂNG NHẬP Gmail (mỗi Chrome = một kênh);
+  2. giong.txt  — voice_id ElevenLabs, mỗi kênh một giọng KHÁC nhau;
+  3. doi-thu.txt — vài kênh đối thủ (link hoặc @handle);
+  4. ngach.txt  — mô tả ngắn ngách: chủ đề, quốc gia, ngôn ngữ, khán giả.
+Phần còn lại máy tự làm (xem mục 4).
+
+
+1. CHÉP GÓI SANG MÁY MỚI
+------------------------
+- Giải nén TOÀN BỘ tệp zip vào  C:\Users\<tên>\Documents\TL\
+  Sau khi giải nén phải có:
+      Documents\TL\MyTool\            mã + mô hình Whisper + FFmpeg
+      Documents\TL\khoi-tao\          3 tệp mẫu: ngach.txt, giong.txt, doi-thu.txt
+      Documents\TL\HUONG-DAN.txt      tệp này
+      Documents\TL\PROMPT-SESSION-MAY-MOI.md
+      Documents\TL\BAI-HOC-VPS-1.md
+- Chép thư mục kho Chrome vào  Documents\TL\kho\
+  Mỗi Chrome một thư mục:  kho\<tên tuỳ ý>\<tên tuỳ ý>.exe   (Chrome Portable, có App\Chrome-bin\chrome.exe)
+- KHÔNG chạy gì từ bên trong tệp zip (phải giải nén ra trước).
+
+
+2. CÀI ĐẶT MỘT LẦN
+------------------
+a) Cài Python 3.11 (64-bit) từ python.org, tick "Add python.exe to PATH".
+b) Mở thư mục Documents\TL\MyTool, bấm đúp  CAI-DAT-VPS.bat
+   (cài thư viện, tạo vps.json + vm\config.json, đăng ký các lịch Windows tự chạy). Chờ tới khi báo xong.
+c) Kiểm máy:  mở cmd ở MyTool, gõ   python -X utf8 -m core.kiem_may --day-du
+d) Khoá ShopAPI (ví trả tiền mọi lượt AI/giọng/ảnh/video):
+   - cách 1: mở tool (shopapi_studio_qt.py hoặc lối tắt), đăng nhập bằng email ShopAPI;
+   - cách 2: chép config.example.json thành config.json rồi thêm dòng  "api_key": "<khoá của bạn>",
+     lần mở tool đầu tiên khoá được cất mã hoá vào secrets.json và xoá khỏi config.json.
+   Nạp tiền ví trước khi chạy (mức tham khảo VPS đầu: ~200.000đ/video).
+
+
+3. ĐIỀN 3 TỆP ĐẦU VÀO (Documents\TL\khoi-tao\)
+---------------------------------------------
+- ngach.txt   (mỗi dòng "khoá: giá trị"; dòng tự do = mô tả thêm cho AI đọc)
+      chu_de: truyện kể đời người có lời đọc
+      quoc_gia: JP
+      ngon_ngu: ja
+      khan_gia: người Nhật 50+ nghe truyện khi làm việc nhà
+      khong_nham: học sinh; trẻ em
+      tu_khoa: 感動する話; 朗読
+  (quoc_gia 2 chữ: JP, US, VN, KR...; ngon_ngu: ja, en, vi, ko...)
+- giong.txt   mỗi dòng một voice_id, ghi chú sau dấu #   (đủ mỗi kênh một giọng)
+- doi-thu.txt mỗi dòng một kênh đối thủ: https://www.youtube.com/@ten_kenh  hoặc  @ten_kenh
+
+
+4. CHẠY KHỞI TẠO (máy tự làm hết)
+--------------------------------
+Mở VS Code ở thư mục Documents\TL\MyTool, mở Claude, dán nội dung PROMPT-SESSION-MAY-MOI.md.
+Claude sẽ kiểm rồi chạy:
+      python -X utf8 -m core.khoi_tao_vps kiem      (chỉ đọc: thiếu gì, việc của bạn)
+      python -X utf8 -m core.khoi_tao_vps chay      (bắt đầu)
+      python -X utf8 -m core.khoi_tao_vps xem       (xem đang ở bước nào)
+Máy tự đi các bước (sau lần chạy đầu, skill D28 tự chạy mỗi giờ):
+  kho → mỗi Chrome thành một kênh K1, K2... (dời ra Documents\TL\K1\K1.exe ...)
+  ngach → AI viết hồ sơ ngách, dựng kênh đầu, tìm đối thủ từ doi-thu.txt + từ khoá
+  nuoi → cho mọi tài khoản xem video đúng ngách tới khi trang chủ ≥ 90% đúng chủ đề (tối đa ~7 ngày)
+  doi_thu → quét trang chủ ra đối thủ mới, kiểm ngách bằng AI, quét content đối thủ
+  tuyen → từ content đối thủ học ngách có bao nhiêu TUYẾN (mỗi tuyến một nhóm khán giả/lời hứa), đo độ lớn
+  phan_kenh → chia mỗi kênh một tuyến (phủ ngách, không giành view nhau)
+  mo_kenh → mỗi kênh: góc riêng, nhân vật + kiểu hình riêng, giọng riêng, tạo kênh thương hiệu, thiết lập
+            11 mục Studio, rồi tự sản xuất + tự đăng mỗi ngày
+  xong → một tin báo. Sau đó máy tự đo lại thị trường mỗi ~25 ngày và tự đề xuất mở thêm kênh.
+
+
+5. VIỆC CHỈ NGƯỜI LÀM ĐƯỢC
+--------------------------
+(máy không bao giờ tự đăng nhập Google, không gõ mật khẩu/2FA, không nạp tiền)
+- Đăng nhập Gmail TAY trong từng Chrome kho: mở <tên>.exe, đăng nhập, đóng lại.
+- Xác minh điện thoại cho kênh (youtube.com/verify) để có A/B bìa, ghim bình luận, video dài: máy báo khi cần.
+- Nạp ví ShopAPI. Bản quyền Windows, thuê VPS.
+- Khi Chrome gặp CAPTCHA / đăng xuất / hộp tạo kênh cần người: máy ghi ở "Việc của bạn" (Trung tâm:
+  MO-TRUNG-TAM.bat → http://127.0.0.1:8790) — xử lý xong thì đóng Chrome, máy tự làm tiếp.
+- Thêm kênh về sau: chép Chrome mới (đã đăng nhập Gmail) vào kho\ và thêm voice_id vào khoi-tao\giong.txt
+  (kênh hỏng/không được phân phối được máy tự thay bằng Chrome kho — skill D20).
+
+
+6. LƯU Ý
+--------
+- Một VPS = một ngách. Muốn ngách khác thì dùng VPS khác.
+- Máy chạy 24/7; đừng tắt khi đang đăng/dựng. Đóng hết Chrome kho trước khi bấm chạy lần đầu.
+- Gói này không nối GitHub và không tự cập nhật (cap-nhat.json để trống kho). Muốn bản mới thì xin gói mới.
+- Luật của chủ dự án: MyTool\docs\kien-thuc\luat-chu-du-an.md. Bài học VPS đầu: BAI-HOC-VPS-1.md.

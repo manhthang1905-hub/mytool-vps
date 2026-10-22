@@ -677,6 +677,22 @@ def doc_mau_thang(du: Any, bia: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             if isinstance(du, dict) else ""}
 
 
+
+def _ban_dia(goc: str, kenh: str, ham: Optional[Callable[..., Any]]) -> Optional[Callable[..., Any]]:
+    """22/10/2026 (VPS ngách mới): lời nhắc bìa viết cứng "Japanese psychology …" → bản địa theo hồ sơ ngách
+    (`bia_theo_khuon.ban_dia_hoa`; ngách mặc định trả NGUYÊN chữ). Bọc hàm gọi LLM / vẽ: tham số chữ đầu tiên."""
+    if ham is None or getattr(ham, "_da_ban_dia", False):
+        return ham
+    from .bia_theo_khuon import ban_dia_hoa  # noqa: PLC0415
+
+    def boc(*a: Any, **k: Any) -> Any:
+        if a and isinstance(a[0], str):
+            a = (ban_dia_hoa(a[0], goc, kenh),) + tuple(a[1:])
+        return ham(*a, **k)
+    boc._da_ban_dia = True  # type: ignore[attr-defined]
+    return boc
+
+
 def mau_thang(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None, *, goi: Optional[Callable[..., str]] = None,
               log: Callable[[str], None] = print, dem: Optional[Dict[str, int]] = None,
               tai_anh: Optional[Callable[[str], Optional[bytes]]] = None, thu_muc: str = "") -> Dict[str, Any]:
@@ -686,6 +702,7 @@ def mau_thang(goc: str, kenh: str, khuon: Optional[Dict[str, Any]] = None, *, go
 
     16/10/2026 — `thu_muc` (thư mục bìa thắng chủ chọn, `thu_muc_mau`): tả ĐÚNG các bìa ấy theo thứ hạng; cache nằm
     trong chính thư mục (`<thư mục>/mau-bia-thang.json`), làm lại khi tệp trong thư mục đổi."""
+    goi = _ban_dia(goc, kenh, goi)
     from . import khuon_bia  # noqa: PLC0415
     kh = khuon if khuon is not None else (khuon_bia.doc_khuon(goc, kenh) or {})
     bia_tm = bia_thu_muc(thu_muc) if thu_muc else []
@@ -1080,6 +1097,7 @@ def bo_cuc_thang(goc: str, kenh: str, thu_muc: str, *, goi: Optional[Callable[..
 
     20/10/2026 — `kieu` (họ kiểu chữ của lô, nhãn `thang.json`): mục tiêu chỉ tổng hợp từ bìa thắng CÙNG họ (không có
     thì mọi bìa). Số đo cũ có `sha1` ảnh được dùng lại khi bộ bìa thắng đổi (`core/bia_du_lieu`) — chỉ đo bìa mới."""
+    goi = _ban_dia(goc, kenh, goi)
     if not thu_muc or not os.path.isdir(thu_muc):
         return {}
     tay = _doc_json(os.path.join(thu_muc, TEP_BO_CUC_TAY))
@@ -2766,6 +2784,7 @@ def chay(goc: str, kenh: str, *, thu_muc_luot: str, ra: str, chu: str = "", so_y
     21/10/2026 (G4) — BỘ PHỤ HỌ HẠNG NHÌ (`_lo_phu`): kênh chạy A/B bìa + thư mục bìa thắng ≥ 2 họ → thêm ≤
     `TRAN_ANH_PHU` ảnh ở họ hạng nhì (`bia_du_lieu.ho_phu`), cùng lọc/cổng/sàn/giám khảo; kết quả `phu` + thứ tự giao
     `giao` (ô C = tấm họ phụ). Ô A, xếp hạng lô chính và sổ họ của lượt không đổi."""
+    goi, ve = _ban_dia(goc, kenh, goi), _ban_dia(goc, kenh, ve)
     t0 = time.time()
     mau_goc = list(mau)
     lu = _doc_luot(thu_muc_luot)
@@ -3559,6 +3578,7 @@ def kiem_vang(goc: str, kenh: str, *, goi: Callable[..., str], ve: Callable[...,
               luot: str = "", log: Callable[[str], None] = print, tai: bool = True) -> Dict[str, Any]:
     """MỘT lần kiểm vàng cho kênh (xem đầu mục). Ghi `workspace/kiem-vang/trang-thai.json[kenh]` = {dat, ly_do,
     van_tay, to, diem, san_bam, …}; trượt → báo người. Trả mục đó. Lô hỏng giữa chừng (AI/mạng) → trượt có lý do."""
+    goi, ve = _ban_dia(goc, kenh, goi), _ban_dia(goc, kenh, ve)
     vt = van_tay_vang(goc, kenh)
     t0 = time.strftime("%Y%m%d-%H%M")
     thu = os.path.join(ra, kenh)

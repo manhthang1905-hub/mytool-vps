@@ -103,12 +103,14 @@ def _phong(goc: str, kenh: str) -> str:
     return " ".join(str(st.get(k) or "") for k in ("scene_plan_style", "palette")).strip()
 
 
-def cham_mot(goi: Callable[..., str], tep: str, *, loi_doc: str, ai: str, phong: str, ref: str, khoa: str
+def cham_mot(goi: Callable[..., str], tep: str, *, loi_doc: str, ai: str, phong: str, ref: str, khoa: str,
+             nc_anh: Tuple[str, str] = ("", "")
              ) -> Optional[Dict[str, Any]]:
     """MỘT ảnh qua giám khảo của `chon_anh_canh` (đi ví — `qua_vi`). None = AI hỏng / trả rác."""
     from . import chon_anh_canh as cac  # noqa: PLC0415
     from .goi_van_ban import loc_json, qua_vi  # noqa: PLC0415
-    ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=ai, phong_cach=phong, so_tham_chieu=1 if ref else 0, so_ung_vien=1)
+    ln = cac.loi_nhac_cham(loi_doc=loi_doc, mo_ta=ai, phong_cach=phong, so_tham_chieu=1 if ref else 0, so_ung_vien=1,
+                           tieng_en=nc_anh[0], kenh_en=nc_anh[1])
     anh = ([cac.anh_data_url(ref, 512, nhan="REF")] if ref else []) + [cac.anh_data_url(tep, 768, nhan="1")]
     try:
         with qua_vi():
@@ -235,13 +237,15 @@ def cai_tien_anh(goc: str, kenh: str, canh: Sequence[Dict[str, Any]], cham: Sequ
     except Exception:  # noqa: BLE001
         st = {}
     ref, phong = _ref(goc, kenh), _phong(goc, kenh)
+    nc_anh = cac.ngu_canh_anh(goc, kenh)
     thu_muc = _thu_muc(goc, "cai-tien", kenh, _dt.date.today().isoformat())
     os.makedirs(thu_muc, exist_ok=True)
     truoc, sau, mau = [], [], []
     for c, m in cap:
         than, duoi = cac.tach_than_duoi(c["prompt"], st)
         moi = cac.viet_lai_canh(lambda l: goi(l, mo_hinh=cac.MO_HINH_CHAM, khoa="tu-kiem-vl:" + _bam(l), toi_da_token=1200),
-                                than, loi_doc=c["loi_doc"], ghi_chu="- " + luat + "\n- " + str(m.get("ly_do") or ""))
+                                than, loi_doc=c["loi_doc"], ghi_chu="- " + luat + "\n- " + str(m.get("ly_do") or ""),
+                                tieng_en=nc_anh[0], kenh_en=nc_anh[1])
         if not moi:
             continue
         ln = "{0}, {1}".format(moi.rstrip(" ,."), duoi) if duoi else moi
@@ -251,7 +255,7 @@ def cai_tien_anh(goc: str, kenh: str, canh: Sequence[Dict[str, Any]], cham: Sequ
         except Exception as loi:  # noqa: BLE001
             log("cải tiến ảnh: vẽ cảnh {0} hỏng ({1})".format(c["so"], str(loi)[:100]))
             continue
-        b = cham_mot(goi, tep, loi_doc=c["loi_doc"], ai=c["ai"], phong=phong, ref=ref,
+        b = cham_mot(goi, tep, loi_doc=c["loi_doc"], ai=c["ai"], phong=phong, ref=ref, nc_anh=nc_anh,
                      khoa="tu-kiem-cham-sau:" + _bam(tep)) if tep else None
         truoc.append(m)
         sau.append(b)
@@ -306,7 +310,9 @@ def soat_kenh(goc: str, kenh: str, *, thu: bool = False, goi: Optional[Callable[
     # ảnh cảnh
     mc = mau_canh(goc, kenh)
     ref, phong = _ref(goc, kenh), _phong(goc, kenh)
-    cham = [cham_mot(goi, c["tep"], loi_doc=c["loi_doc"], ai=c["ai"], phong=phong, ref=ref,
+    from . import chon_anh_canh as cac_nc  # noqa: PLC0415 — 22/10/2026: câu tả kênh theo hồ sơ ngách
+    nc_anh = cac_nc.ngu_canh_anh(goc, kenh)
+    cham = [cham_mot(goi, c["tep"], loi_doc=c["loi_doc"], ai=c["ai"], phong=phong, ref=ref, nc_anh=nc_anh,
                      khoa="tu-kiem-cham:{0}:{1}:{2}".format(kenh, mc["luot"], c["so"])) if goi else None
             for c in mc["canh"]]
     ra["anh"] = dict(ti_le_anh(cham), luot=mc["luot"], mau=len(mc["canh"]))

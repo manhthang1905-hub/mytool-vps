@@ -2307,8 +2307,8 @@ def test_va_28_09_chot_an_toan_tim_som_khong_tra_ra_run(tmp_path, monkeypatch):
 
 # ═══════════════════════════════════════════════════════════════════════════
 # LỖI 2 (chẩn đoán 27→28/09/2026) — chống làm trùng theo TIÊU ĐỀ, cạnh chống
-# trùng theo MÃ VIDEO đã có. Đúng ca thật: TL1-T7-0006 (nguồn 8nPciHbf194) và
-# TL1-T7-0007 (nguồn OmuR0oP6CYc) — hai mã khác hẳn, CÙNG một tiêu đề.
+# trùng theo MÃ VIDEO đã có. Đúng ca thật: TL1-T7-0006 (nguồn zzW9Mc8J7xu) và
+# TL1-T7-0007 (nguồn zzCHCmnT0OY) — hai mã khác hẳn, CÙNG một tiêu đề.
 # ═══════════════════════════════════════════════════════════════════════════
 
 

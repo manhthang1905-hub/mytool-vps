@@ -133,6 +133,11 @@ class YeuCau:
     thu: bool = False
     bo_nghien_cuu: bool = False
     lam_lai_ngach: bool = False
+    #: 22/10/2026 — mô tả ngách NGƯỜI viết (ngach.txt của `core.khoi_tao_vps`): khán giả, khán giả không nhắm, ghi chú.
+    #: Đi thẳng vào đề bài hồ sơ; `khan_gia`/`khan_gia_loai_tru` người khai thắng câu AI viết.
+    mo_ta_them: str = ""
+    khan_gia: str = ""
+    khan_gia_loai_tru: List[str] = field(default_factory=list)
 
     def chuan(self) -> "YeuCau":
         self.chu_de = " ".join(str(self.chu_de or "").split())
@@ -383,6 +388,9 @@ Yêu cầu:
 5. tu_khoa_tim: 8–12 cụm người xem {ten_tieng} thật sự gõ trên YouTube để tìm video của ngách (đa dạng góc).
 6. tieu_chi_doi_thu: đúng 4 tiêu chí một kênh phải đạt để là đối thủ remake được (ngôn ngữ, nội dung chính,
    khán giả, dạng video).
+6b. chu_de_rong: một cụm ngắn tả CHỦ ĐỀ RỘNG bao quanh ngách (vd "truyện kể / kể chuyện đời người"); khan_gia_mo_ta:
+   một câu tả khán giả thật; khan_gia_loai_tru: 0–4 nhóm khán giả KHÔNG nhắm (video lấy họ làm nhân vật/bối cảnh
+   chính là lạc đề); lac_de_vi_du: 5–10 thể loại LẠC ĐỀ hay lẫn vào trang chủ của khán giả này.
 7. luat_nan_khuon: đúng 2 câu dặn cách nắn một tiêu đề nguồn về KHUÔN tiêu đề đang thắng của kênh (hình dạng câu,
    cách mở, dấu câu/ngoặc quen dùng ở thị trường này) — không bịa số liệu.
 8. thi_truong.gio_dang_goi_y: giờ đăng tốt nhất theo GIỜ ĐỊA PHƯƠNG thị trường (HH:MM). thi_truong.quy_mo: "nho",
@@ -397,6 +405,7 @@ Yêu cầu:
 Trả về DUY NHẤT một JSON (không rào ```), đúng các khoá:
 {{"mo_ta_ngach": "...", "dang_thang": "...", "mo_ta_cho_loc_ai": "...", "luat_chon": ["..."],
  "tieu_chi_doi_thu": ["...", "...", "...", "..."], "khan_gia_mo_ta": "...",
+ "chu_de_rong": "...", "khan_gia_loai_tru": ["..."], "lac_de_vi_du": ["..."],
  "tep_khan_gia": [{{"ma": "...", "ten": "...", "ten_ngan": "..."}}],
  "cum": {{"ma-cum": {{"ten": "...", "tu": ["..."]}}}}, "ngach": {{"tu": ["..."], "tu_lac": ["..."]}},
  "tu_manh": ["..."], "tu_yeu": ["..."], "tu_loai_tru": ["..."], "ten_kenh_loai_tru": ["..."],
@@ -421,6 +430,12 @@ def de_bai_ho_so(goc: str, yc: YeuCau, tieu_de_kenh_mau: Optional[Dict[str, List
     from .ho_so_ngach import ten_tieng  # noqa: PLC0415
 
     them: List[str] = []
+    if yc.mo_ta_them:
+        them.append("- Mô tả ngách của chủ kênh (ĐỌC KỸ, ưu tiên hơn suy đoán): " + " ".join(yc.mo_ta_them.split())[:1500])
+    if yc.khan_gia:
+        them.append("- Khán giả chủ kênh nhắm: " + " ".join(yc.khan_gia.split())[:400])
+    if yc.khan_gia_loai_tru:
+        them.append("- Khán giả KHÔNG nhắm: " + "; ".join(yc.khan_gia_loai_tru)[:400])
     if yc.tu_khoa:
         them.append("- Từ khoá người dùng gợi ý: " + "; ".join(yc.tu_khoa))
     for link, tds in (tieu_de_kenh_mau or {}).items():
@@ -476,6 +491,12 @@ def chuan_hoa_ho_so(du: Dict[str, Any], yc: YeuCau) -> Dict[str, Any]:
     # Không bao giờ để trống: `bien_tap_content` lùi về khán giả MẶC ĐỊNH của mã (người Nhật 55+) khi khoá rỗng.
     ra["khan_gia_mo_ta"] = _mot_dong(du.get("khan_gia_mo_ta"), 300) or "khán giả {0} xem {1} ({2})".format(
         tieng, yc.chu_de, yc.quoc_gia)
+    if yc.khan_gia:
+        ra["khan_gia_mo_ta"] = _mot_dong(yc.khan_gia, 300)
+    # 22/10/2026 — lời nhắc tổng quát (nuôi trang chủ, kiểm đối thủ, chấm tiêu đề) đọc ba khoá này; người khai thắng.
+    ra["chu_de_rong"] = _mot_dong(du.get("chu_de_rong"), 160) or yc.chu_de
+    ra["khan_gia_loai_tru"] = _ds_chuoi(list(yc.khan_gia_loai_tru) or du.get("khan_gia_loai_tru"), 6, 160)
+    ra["lac_de_vi_du"] = _ds_chuoi(du.get("lac_de_vi_du"), 12, 80)
     ra["luat_chon"] = _ds_chuoi(du.get("luat_chon"), 8, 400)
     ra["tieu_chi_doi_thu"] = _ds_chuoi(du.get("tieu_chi_doi_thu"), 6, 300)
 

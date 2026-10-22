@@ -56,7 +56,7 @@ class TestKiemTrungYDonVi:
 
     def test_trung_y_doc_duoc_json_va_gui_dung_ung_vien(self):
         """Ca thật (28→29/09/2026, xem docstring `core/kiem_trung_y.py`):
-        SL94HyyuLXs 「IQが低い人の頭の中で起きていること」 và TL3-T7-0001
+        zzJaQ0HCVdY 「IQが低い人の頭の中で起きていること」 và TL3-T7-0001
         「考えすぎる人の頭の中はこんな世界」 — so CHỮ chỉ 0,485 (dưới ngưỡng 0,80 của
         `trung_tieu_de`), nhưng LLM phải đọc ra CÙNG chủ đề."""
         goi = _goi_gia({"trung": True, "voi": "考えすぎる人の頭の中はこんな世界",

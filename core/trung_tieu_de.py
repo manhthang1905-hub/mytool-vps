@@ -8,8 +8,8 @@ VIDEO NGUỒN — đúng cho ca "cùng một video, remake lại". Nhưng có m�
 hẳn: HAI ĐỐI THỦ KHÁC KÊNH chép cùng một chủ đề (đúng dạng quen ở tiếng Nhật —
 "đối thủ giật lại tiêu đề đang hot của người khác"), ra hai MÃ VIDEO KHÁC
 NHAU nhưng cùng một tiêu đề gần như nguyên văn. Kênh TL1-T7 sản xuất
-TL1-T7-0006 (27/09/2026, nguồn `8nPciHbf194`) rồi TL1-T7-0007 (28/09/2026,
-nguồn `OmuR0oP6CYc`) — hai mã khác hẳn — nhưng CÙNG một câu tiêu đề tiếng
+TL1-T7-0006 (27/09/2026, nguồn `zzW9Mc8J7xu`) rồi TL1-T7-0007 (28/09/2026,
+nguồn `zzCHCmnT0OY`) — hai mã khác hẳn — nhưng CÙNG một câu tiêu đề tiếng
 Nhật (chỉ đối thủ nguồn khác nhau, kênh mình vẫn ra đúng một nội dung hai lần).
 Lọc theo mã không bắt được ca này.
 
@@ -30,7 +30,7 @@ dùng để tự nhận video đã đăng, không thêm phụ thuộc mới).
 con số này AN TOÀN: trần nhiễu đo được (điểm giống cao nhất giữa hai đề THẬT
 SỰ khác nhau) chỉ 0,303 (TL3-T7 0001 "người IQ thấp" đối 0002 "người IQ cao"
 — hai đề GẦN NHAU nhất mà vẫn là hai video khác nhau). Bốn ứng viên trùng đề
-THẬT bắt được ở TL1-T7 (nhóm 0006/0007, "8nPciHbf194"/"OmuR0oP6CYc") nằm ở
+THẬT bắt được ở TL1-T7 (nhóm 0006/0007, "zzW9Mc8J7xu"/"zzCHCmnT0OY") nằm ở
 dải 0,83–0,94 — CÁCH trần nhiễu ít nhất 0,52, dư sức giữ ngưỡng 0,80 mà không
 cần hạ thấp hơn.
 
@@ -42,7 +42,7 @@ nhãn không hề bị cắt — vá bằng cách cắt nhãn trên chuỗi THÔ
 sát biên nhất, 0,7945 — sau khi vá, ca đó lên 0,8286, và ngưỡng giữ nguyên
 0,80 như đề xuất ban đầu thay vì phải hạ xuống 0,75.)
 
-Ca CHƯA bắt được, đã BÁO LẠI (không cố hạ ngưỡng thêm): `SL94HyyuLXs`
+Ca CHƯA bắt được, đã BÁO LẠI (không cố hạ ngưỡng thêm): `zzJaQ0HCVdY`
 "IQが低い人の頭の中で起きていること" so với TL3-T7-0001 "低IQの人の頭の中
 はこんな世界" chỉ đạt 0,485 — cùng kênh, cùng khái niệm "IQ thấp" nhưng đảo
 trật tự từ tiếng Nhật ("IQが低い" đối "低IQ") khiến `SequenceMatcher` — so

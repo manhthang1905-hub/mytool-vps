@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ui_qt.trang_auto import TU_LIEU_TOI_THIEU, kiem_tu_lieu  # noqa: E402
 
 DU_DAI = "あ" * (TU_LIEU_TOI_THIEU + 50)
-LINK = "https://www.youtube.com/watch?v=aO4baOl4Yw8"
+LINK = "https://www.youtube.com/watch?v=zzQwfbz7XV0"
 
 
 class TestMotTrongHaiDuong:

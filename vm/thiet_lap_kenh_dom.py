@@ -1204,15 +1204,47 @@ def do_dai_mo_ta(chu: Any) -> int:
     return len(str(chu or "").replace("\n", ""))
 
 
-def kiem_mo_ta_kenh(chu: Any, toi_thieu: int = MO_TA_KENH_TOI_THIEU, toi_da: int = MO_TA_KENH_TOI_DA) -> List[str]:
-    """Lỗi của mô tả kênh tiếng Nhật ([] = đạt): độ dài, phải có kana, không link/email/@handle/markdown,
+#: 22/10/2026 — độ dài mô tả kênh theo tiếng: chữ Nhật/Hàn/Trung đặc nghĩa (150–300 như cũ); chữ La-tinh/khác cần dài hơn.
+MO_TA_KENH_LA_TINH = (300, 900)
+
+
+def do_dai_mo_ta_cho(ngon_ngu: Any = "ja") -> Tuple[int, int]:
+    """(tối thiểu, tối đa) ký tự mô tả kênh theo mã tiếng — ja/ko/zh: `MO_TA_KENH_TOI_THIEU..TOI_DA`; tiếng khác: La-tinh."""
+    ma = str(ngon_ngu or "ja").strip().lower()[:2]
+    return (MO_TA_KENH_TOI_THIEU, MO_TA_KENH_TOI_DA) if ma in ("ja", "ko", "zh") else MO_TA_KENH_LA_TINH
+
+
+def ngu_canh_mo_ta(kenh: str, goc: str = GOC_TOOL) -> Dict[str, Any]:
+    """Tiếng + ngách của kênh cho lời nhắc mô tả kênh: {ngon_ngu, mac_dinh (ngách tâm lý Nhật → lời nhắc cũ nguyên văn),
+    tieng_en, the_loai}. Không đọc được hồ sơ → ngách mặc định."""
+    ra: Dict[str, Any] = {"ngon_ngu": "ja", "mac_dinh": True, "tieng_en": "Japanese", "the_loai": ""}
+    try:
+        if goc not in sys.path:
+            sys.path.insert(0, goc)
+        from core import ho_so_ngach  # noqa: PLC0415
+        hs = ho_so_ngach.doc_ngach(goc, kenh)
+        ma = ho_so_ngach.ngon_ngu_cua_kenh(goc, kenh, hs) or "ja"
+        ra.update(ngon_ngu=ma, mac_dinh=ho_so_ngach.la_ngach_mac_dinh(hs) and ma == "ja",
+                  tieng_en=ho_so_ngach.ten_tieng(ma, anh=True) or ma,
+                  the_loai=hs.the_loai_en or ho_so_ngach.chu_de_rong_cua(hs))
+    except Exception:  # noqa: BLE001
+        pass
+    return ra
+
+
+def kiem_mo_ta_kenh(chu: Any, toi_thieu: Optional[int] = None, toi_da: Optional[int] = None,
+                    ngon_ngu: str = "ja") -> List[str]:
+    """Lỗi của mô tả kênh ([] = đạt): độ dài (theo tiếng), tiếng Nhật thì phải có kana, không link/email/@handle/markdown,
     không dấu < > (Studio từ chối). Hàm thuần."""
+    mac_thieu, mac_da = do_dai_mo_ta_cho(ngon_ngu)
+    toi_thieu = mac_thieu if toi_thieu is None else toi_thieu
+    toi_da = mac_da if toi_da is None else toi_da
     s = str(chu or "")
     loi = []
     n = do_dai_mo_ta(s)
     if not toi_thieu <= n <= toi_da:
         loi.append("dài {0} ký tự (cần {1}–{2})".format(n, toi_thieu, toi_da))
-    if not re.search(r"[぀-ヿ]", s):
+    if str(ngon_ngu or "ja").lower().startswith("ja") and not re.search(r"[぀-ヿ]", s):
         loi.append("không phải tiếng Nhật (không có kana)")
     if re.search(r"https?://|www\.|\S+@\S+\.\w+|(^|\s)@\w", s):
         loi.append("có link / email / @handle")
@@ -1223,11 +1255,32 @@ def kiem_mo_ta_kenh(chu: Any, toi_thieu: int = MO_TA_KENH_TOI_THIEU, toi_da: int
     return loi
 
 
-def loi_nhac_mo_ta_kenh(ten_kenh: str, kh: Dict[str, Any], tieu_de_thang, mau) -> str:
-    """Lời nhắc viết MÔ TẢ KÊNH (tiếng Nhật, 150–300 ký tự) theo bản sắc kênh (kenh.yaml `ten`/`luat_chon`/`giong_van`),
-    tiêu đề video THẮNG của chính kênh và mô tả THẬT của kênh anh em (bắt giọng, không chép chữ). Hàm thuần."""
+def loi_nhac_mo_ta_kenh(ten_kenh: str, kh: Dict[str, Any], tieu_de_thang, mau, nc: Optional[Dict[str, Any]] = None) -> str:
+    """Lời nhắc viết MÔ TẢ KÊNH theo bản sắc kênh (kenh.yaml `ten`/`luat_chon`/`giong_van`), tiêu đề video THẮNG của chính
+    kênh và mô tả THẬT của kênh anh em (bắt giọng, không chép chữ). `nc` = `ngu_canh_mo_ta(kenh)`; không truyền / ngách
+    mặc định → lời nhắc tâm lý Nhật (150–300 ký tự) NGUYÊN VĂN; ngách khác → tiếng + thể loại của hồ sơ ngách. Hàm thuần."""
     vd = "\n".join("- {0}".format(" / ".join(str(m).split("\n"))[:400]) for m in (mau or []) if str(m or "").strip())
     td = "\n".join("- {0}".format(str(t)[:120]) for t in (tieu_de_thang or []) if str(t or "").strip())
+    if nc and not nc.get("mac_dinh", True):
+        a, b = do_dai_mo_ta_cho(nc.get("ngon_ngu"))
+        tieng = str(nc.get("tieng_en") or nc.get("ngon_ngu") or "the channel's language")
+        the_loai = " ".join(str(nc.get("the_loai") or "").split())
+        lich_su = " Use the natural polite register of {0} viewers.".format(tieng)
+        return (
+            "You write the YouTube CHANNEL DESCRIPTION of a {tieng} {the_loai}channel. Reply with the description text only.\n"
+            "CHANNEL FACTS\n- current YouTube channel name (if you name the channel, use EXACTLY this; never invent another name): {ten}\n"
+            "- identity / angle (internal note, may be partly Vietnamese — do not translate it literally): {goc}\n"
+            "- what the channel is about: {luat}\n- voice and tone: {giong}\n"
+            "- the channel's best-performing video titles (the promise viewers already click on):\n{td}\n"
+            "{vd_}"
+            "WRITE: {tieng}, {a}-{b} characters, 2-4 short paragraphs (line breaks allowed). First sentence = who the channel is for + "
+            "the promise of the channel (taken from what the channel is about above). Then what viewers get from the videos, then a "
+            "warm, natural invitation to subscribe.{lich_su} Calm and warm, no hype, no exaggerated claims. No URLs, no email, no "
+            "@handles, no hashtags, no emoji, no markdown, no < or >.\n"
+        ).format(tieng=tieng, the_loai=(the_loai + " ") if the_loai else "", ten=ten_kenh or "(unknown)",
+                 goc=str(kh.get("ten") or "")[:200], luat=str(kh.get("luat_chon") or "(none)")[:700],
+                 giong=str(kh.get("giong_van") or "")[:300], td=td or "- (none)", a=a, b=b, lich_su=lich_su,
+                 vd_=("DESCRIPTIONS OF SIBLING CHANNELS (match their tone and care, NOT their wording):\n" + vd + "\n") if vd else "")
     return (
         "You write the YouTube CHANNEL DESCRIPTION («概要») of a Japanese psychology channel. Reply with the description text only.\n"
         "CHANNEL FACTS\n- current YouTube channel name (if you name the channel, use EXACTLY this; never invent another name): {ten}\n"
@@ -3291,10 +3344,11 @@ def viet_mo_ta_kenh(kenh: str, ten_kenh: str, ghi, goi=None) -> Tuple[str, str]:
     `kiem_mo_ta_kenh` đạt; ghi `workspace/chan-doan/mo-ta-<TLx>-<dd-mm>.txt`. Tệp hôm nay đã có + đạt → dùng lại (không
     tốn lượt). Trả (chữ, đường tệp); không đạt → LoiMuc."""
     d = duong_mo_ta_moi(kenh)
+    nc = ngu_canh_mo_ta(kenh)                                            # 22/10: tiếng + ngách theo hồ sơ ngách
     try:
         with open(d, "r", encoding="utf-8") as tep:
             cu = lam_sach_mo_ta_kenh(tep.read())
-        if cu and not kiem_mo_ta_kenh(cu):
+        if cu and not kiem_mo_ta_kenh(cu, ngon_ngu=nc["ngon_ngu"]):
             ghi("   mô tả: dùng lại {0} ({1} ký tự)".format(d, do_dai_mo_ta(cu)))
             return cu, d
     except OSError:
@@ -3319,10 +3373,10 @@ def viet_mo_ta_kenh(kenh: str, ten_kenh: str, ghi, goi=None) -> Tuple[str, str]:
             ghi("   (không dựng được client ShopAPI: {0})".format(str(e)[:100]))
             client = None
         goi = lambda p: goi_van_ban(client, tin_nhan_viet(p), toi_da_token=4096, on_log=ghi)   # noqa: E731
-    hoi, loi = loi_nhac_mo_ta_kenh(ten_kenh, kh, thang, mau), []
+    hoi, loi = loi_nhac_mo_ta_kenh(ten_kenh, kh, thang, mau, nc=nc), []
     for _ in range(3):
         chu = lam_sach_mo_ta_kenh(goi(hoi + (("\nPREVIOUS ANSWER WAS REJECTED: " + "; ".join(loi) + ". Fix it.") if loi else "")))
-        loi = kiem_mo_ta_kenh(chu)
+        loi = kiem_mo_ta_kenh(chu, ngon_ngu=nc["ngon_ngu"])
         if not loi:
             os.makedirs(os.path.dirname(d), exist_ok=True)
             with open(d, "w", encoding="utf-8") as tep:

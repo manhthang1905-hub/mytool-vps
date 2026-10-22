@@ -252,3 +252,16 @@ tu_khoa_tim:
 the_loai_en: "home cooking"
 # Khán giả thật, một câu — biên tập viên AI đọc (core/bien_tap_content, đề bài gọn).
 khan_gia_mo_ta: "người Việt 25–55 tuổi tự nấu cơm nhà, xem nhiều trên điện thoại"
+# ── 22/10/2026 — lời nhắc TỔNG QUÁT của ngách khác (nuôi trang chủ, kiểm đối thủ, chấm tiêu đề, ảnh cảnh, cổng chữ bìa):
+# Chủ đề RỘNG quanh ngách — nhãn "đúng chủ đề nhưng chưa đúng ngách" của lượt nuôi trang chủ.
+chu_de_rong: "nấu ăn / ẩm thực gia đình"
+# Nhóm khán giả KHÔNG nhắm: video/kênh lấy họ làm nhân vật hay bối cảnh CHÍNH là lạc đề (để trống nếu không có).
+khan_gia_loai_tru:
+  - "trẻ em, học sinh (đồ ăn vặt trường học, món cho bé)"
+# Thể loại LẠC ĐỀ hay lẫn vào trang chủ của khán giả này (lượt nuôi trang chủ bấm "Không quan tâm").
+lac_de_vi_du:
+  - "mukbang / ăn thử"
+  - "review quán"
+  - "tin tức"
+  - "game"
+  - "nhạc"

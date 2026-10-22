@@ -234,6 +234,16 @@ def _tieng(ngon_ngu: str) -> str:
     return t(ngon_ngu)
 
 
+def _the_loai() -> str:
+    """22/10/2026 — thể loại (tiếng Anh) của ngách MÁY cho lời nhắc cổng chữ: ngách mặc định → "psychology" (nguyên văn
+    bản cũ); máy chạy ngách khác (VPS truyện kể…) → `the_loai_en` của hồ sơ (`ho_so_ngach.the_loai_may`)."""
+    try:
+        from .ho_so_ngach import the_loai_may  # noqa: PLC0415
+        return the_loai_may(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    except Exception:  # noqa: BLE001
+        return "psychology"
+
+
 def _doc_tep(duong: str) -> str:
     try:
         with io.open(duong, encoding="utf-8") as f:
@@ -284,7 +294,7 @@ def kiem_chep(chu: str, doi_thu: Sequence[str] = (), *, nguong: float = NGUONG_C
     return ""
 
 
-LOI_NHAC_CHU_DE = """You check that the {loai} of a {tieng} psychology YouTube video matches THIS video.
+LOI_NHAC_CHU_DE = """You check that the {loai} of a {tieng} {the_loai} YouTube video matches THIS video.
 
 Video title: {tieu_de}
 Script excerpt (what the video really says):
@@ -310,7 +320,7 @@ def kiem_chu_de(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str = "
     from . import soat_bia  # noqa: PLC0415
     ten = "YouTube title" if loai == "tieu_de" else "thumbnail text"
     du = soat_bia._goi_json(goi, LOI_NHAC_CHU_DE.format(  # noqa: SLF001
-        loai=ten, LOAI=ten.upper(), tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "(none)",
+        loai=ten, LOAI=ten.upper(), tieng=_tieng(ngon_ngu), the_loai=_the_loai(), tieu_de=tieu_de or "(none)",
         ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu=" ".join(str(chu or "").split())),
         thang=tuple(thang) or soat_bia.THANG_MO_HINH_CHU, toi_da_token=400,
         khoa="{0}:{1}".format(khoa, hashlib.sha1(chuan(chu).encode("utf-8")).hexdigest()[:8]))
@@ -408,7 +418,7 @@ def _soat_chinh_ta(goi: Optional[Callable[..., str]], chu: str, *, tieu_de: str 
     return r
 
 
-LOI_NHAC_VIET_LAI = """You write the text printed HUGE on a YouTube thumbnail of a {tieng} psychology video.
+LOI_NHAC_VIET_LAI = """You write the text printed HUGE on a YouTube thumbnail of a {tieng} {the_loai} video.
 
 Video title: {tieu_de}
 Script excerpt:
@@ -427,7 +437,7 @@ def viet_lai(goi: Optional[Callable[..., str]], chu_cu: str, *, tieu_de: str = "
     """MỘT lượt viết lại chữ bìa (khi chữ cũ sai mà không sửa được). Hỏng / ngoài khung → ''."""
     if goi is None:
         return ""
-    loi_nhac = LOI_NHAC_VIET_LAI.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de or "",
+    loi_nhac = LOI_NHAC_VIET_LAI.format(tieng=_tieng(ngon_ngu), the_loai=_the_loai(), tieu_de=tieu_de or "",
                                         ngu_canh=(ngu_canh or "")[:2500] or "(none)", chu_cu=chu_cu,
                                         ly_do=(ly_do or "wrong character")[:200], n_min=CHU_MOI_TOI_THIEU,
                                         n_max=CHU_MOI_TOI_DA)
@@ -456,7 +466,7 @@ def ly_do_viet_lai(r: Dict[str, Any]) -> str:
         "{0}→{1}".format(x.get("sai"), x.get("dung")) for x in r.get("loi") or []) or str(r.get("ly_do") or "")
 
 
-LOI_NHAC_CHU_RIENG = """You write the text printed HUGE on a YouTube thumbnail of a {tieng} psychology video.
+LOI_NHAC_CHU_RIENG = """You write the text printed HUGE on a YouTube thumbnail of a {tieng} {the_loai} video.
 
 Video title: {tieu_de}
 Source / script excerpt (what the video covers):
@@ -477,7 +487,7 @@ def viet_chu_bia_rieng(goi: Optional[Callable[..., str]], *, tieu_de: str, ngu_c
     if goi is None or not str(tieu_de or "").strip():
         return ""
     try:
-        tra = goi(LOI_NHAC_CHU_RIENG.format(tieng=_tieng(ngon_ngu), tieu_de=tieu_de, ngu_canh=(ngu_canh or "")[:2500]
+        tra = goi(LOI_NHAC_CHU_RIENG.format(tieng=_tieng(ngon_ngu), the_loai=_the_loai(), tieu_de=tieu_de, ngu_canh=(ngu_canh or "")[:2500]
                                             or "(none)", chu_doi_thu=" ".join(str(chu_doi_thu or "").split()) or "-",
                                             n_min=CHU_MOI_TOI_THIEU, n_max=CHU_MOI_TOI_DA),
                   mo_hinh=mo_hinh, khoa=khoa, toi_da_token=300)

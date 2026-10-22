@@ -188,7 +188,7 @@ def _ngach() -> str:
                 n["ten"], " (market language: {0})".format(n["ngon_ngu"]) if n.get("ngon_ngu") else "")
     except Exception:  # noqa: BLE001
         pass
-    return "a YouTube niche for older adults (aging, psychology, brain science)"
+    return "a YouTube niche (read each title for what it promises its own audience)"
 
 
 def de_bai(tieu_de: Sequence[str], ngach: str = "") -> str:

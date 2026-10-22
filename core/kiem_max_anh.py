@@ -185,8 +185,12 @@ class KiemMax:
 
     def __init__(self, goi: Optional[Callable[[List[Dict[str, Any]], str], str]], *, goc: str = "",
                  phong: str = "", tran: Optional[int] = None, lo: int = LO, cho_gom: float = CHO_GOM,
-                 ghi: Callable[[str], None] = lambda _d: None, anh_url: Optional[Callable[..., str]] = None) -> None:
+                 ghi: Callable[[str], None] = lambda _d: None, anh_url: Optional[Callable[..., str]] = None,
+                 tieng_en: str = "", kenh_en: str = "") -> None:
         self._goi, self.goc, self.phong = goi, goc, phong
+        #: 22/10/2026 — ngách khác ngách mặc định: tiếng lời đọc (tiếng Anh, vd "English") + một câu tả kênh bằng tiếng Anh
+        #: thay câu "Japanese … psychology" của lời nhắc. Rỗng → lời nhắc cũ nguyên văn.
+        self.tieng_en, self.kenh_en = str(tieng_en or "").strip(), str(kenh_en or "").strip()
         self.tran = tran_ngay(goc) if tran is None else int(tran)
         self.lo, self.cho_gom, self.ghi = max(1, int(lo)), float(cho_gom), ghi
         self._khoa = threading.Lock()
@@ -241,7 +245,7 @@ class KiemMax:
         if ref:
             anh.append(self._anh(ref, 448, nhan="REF"))
         for so, m in enumerate(ds, 1):
-            dong.append('Scene {0}: narration (Japanese) 「{1}」 | moment: {2} | candidates: {3}'.format(
+            dong.append(('Scene {0}: narration (' + (self.tieng_en or 'Japanese') + ') 「{1}」 | moment: {2} | candidates: {3}').format(
                 so, " ".join(str(m.get("loi_doc") or "").split())[:240],
                 " ".join(str(m.get("khoanh_khac") or "").split())[:200] or "(not given)",
                 ", ".join("S{0}-{1}".format(so, _NHAN[i]) for i in range(len(m["tep"])))))
@@ -252,6 +256,9 @@ class KiemMax:
                                 'from the REF (mascot vs person, other hair, other age or gender, clothing of a '
                                 'different colour) gets style 2 at most. ' if ref else "", phong=" ".join(str(self.phong or "").split())[:500] or "(none)",
                                 ds="\n".join(dong))
+        if self.kenh_en:
+            ln = ln.replace(LOI_NHAC_LO.split("\n{ta_ref}")[0], "You are a strict art director reviewing scene illustrations for "
+                            + " ".join(self.kenh_en.split()).replace("{", "(").replace("}", ")") + ".")
         tin = [{"role": "user", "content": [{"type": "text", "text": ln}]
                 + [{"type": "image_url", "image_url": {"url": a}} for a in anh]}]
         with _VAN:

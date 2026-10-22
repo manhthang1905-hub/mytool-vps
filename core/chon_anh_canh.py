@@ -235,8 +235,41 @@ _NHAN_VAT_CO = ("the first {k} image(s) are the character reference(s). Judge (a
 _NHAN_VAT_KHONG = "null (no character reference for this scene)."
 
 
+def ngu_canh_anh(goc: str, ma_kenh: str) -> Tuple[str, str]:
+    """22/10/2026 — (tiếng lời đọc bằng tiếng Anh, câu tả kênh bằng tiếng Anh) cho lời nhắc giám khảo/viết lại ảnh cảnh.
+    Ngách mặc định (tâm lý × Nhật) / hồ sơ hỏng → ("", "") = lời nhắc cũ NGUYÊN VĂN. Ngách khác → theo hồ sơ ngách."""
+    try:
+        from . import ho_so_ngach  # noqa: PLC0415
+
+        hs = ho_so_ngach.doc_ngach(goc, ma_kenh)
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return "", ""
+        tieng = ho_so_ngach.ten_tieng(ho_so_ngach.ngon_ngu_cua_kenh(goc, ma_kenh, hs), anh=True) or "local-language"
+        the_loai = hs.the_loai_en or ho_so_ngach.chu_de_rong_cua(hs) or "its niche"
+        return tieng, "a {0} YouTube channel about {1}".format(tieng, " ".join(str(the_loai).split()))
+    except Exception:  # noqa: BLE001
+        return "", ""
+
+
+#: Câu mở đầu (tả kênh) của hai lời nhắc — ngách khác thay bằng câu của hồ sơ (`ban_dia_loi_nhac`).
+_DAU_CHAM = ("You are the art director of a Japanese YouTube channel of WARM, CALM self-understanding psychology\n"
+             "for adults.")
+_DAU_VIET_LAI = ("You rewrite ONE scene image prompt for a WARM, CALM Japanese self-understanding psychology video\n"
+                 "for adults.")
+
+
+def ban_dia_loi_nhac(ln: str, tieng_en: str = "", kenh_en: str = "") -> str:
+    """Đổi câu tả kênh "Japanese … psychology" + "(Japanese)" của lời nhắc theo ngách (rỗng → giữ nguyên văn)."""
+    if not kenh_en:
+        return ln
+    kenh = " ".join(str(kenh_en).split())
+    ln = ln.replace(_DAU_CHAM, "You are the art director of " + kenh + ".")
+    ln = ln.replace(_DAU_VIET_LAI, "You rewrite ONE scene image prompt for a video of " + kenh + ".")
+    return ln.replace("(Japanese): ", "({0}): ".format(tieng_en or "original language"))
+
+
 def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: int, so_ung_vien: int,
-                  nghi: Optional[Dict[int, Sequence[str]]] = None) -> str:
+                  nghi: Optional[Dict[int, Sequence[str]]] = None, tieng_en: str = "", kenh_en: str = "") -> str:
     """`nghi` = {số tấm: [mã nghi của `core.kiem_anh_cung`]} — phép đo máy báo trước để giám khảo nhìn kỹ đúng chỗ."""
     k, n = int(so_tham_chieu), int(so_ung_vien)
     dong = ["candidate {0} {1}".format(so, _NGHI[m]) for so, ds in sorted((nghi or {}).items()) for m in ds
@@ -244,7 +277,7 @@ def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: i
     ta = ("The first {0} image(s) are REFERENCE designs. The last {1} images are CANDIDATES for ONE scene, numbered "
           "1..{1} in order.".format(k, n) if k else
           "The {0} images are CANDIDATES for ONE scene, numbered 1..{0} in order.".format(n))
-    return LOI_NHAC_CHAM.format(
+    return ban_dia_loi_nhac(LOI_NHAC_CHAM.format(
         ta_anh=ta, loi_doc=" ".join(str(loi_doc or "").split())[:400] or "(none)",
         mo_ta=" ".join(str(mo_ta or "").split())[:900] or "(none)",
         phong_cach=" ".join(str(phong_cach or "").split())[:600] or "(none)",
@@ -252,7 +285,7 @@ def loi_nhac_cham(*, loi_doc: str, mo_ta: str, phong_cach: str, so_tham_chieu: i
         nhan_vat=_NHAN_VAT_CO.format(k=k) if k else _NHAN_VAT_KHONG,
         co_nv=(";\n- \"khac_nhan_vat\": the main character is visibly a DIFFERENT figure from the REF image (judge "
                "by the picture, never by the text; a scene that shows only other people is not this flag)") if k else "",
-        nghi=("\nMachine check — look closely: " + "; ".join(dong) + ".") if dong else "")
+        nghi=("\nMachine check — look closely: " + "; ".join(dong) + ".") if dong else ""), tieng_en, kenh_en)
 
 
 def _diem(v: Any) -> Optional[float]:
@@ -406,7 +439,8 @@ Write a better scene prompt:
 Return ONLY the new scene prompt as one paragraph, no commentary."""
 
 
-def viet_lai_canh(goi: Optional[Callable[[str], str]], than: str, *, loi_doc: str, ghi_chu: str) -> str:
+def viet_lai_canh(goi: Optional[Callable[[str], str]], than: str, *, loi_doc: str, ghi_chu: str,
+                  tieng_en: str = "", kenh_en: str = "") -> str:
     """Viết lại THÂN cảnh theo lý do giám khảo. Trả thân mới, hoặc "" khi AI hỏng / trả rác / không đổi gì.
 
     Rào: dài 40..max(900, 2× bản cũ) ký tự; bản cũ có `the reference character` thì bản mới phải giữ."""
@@ -414,8 +448,8 @@ def viet_lai_canh(goi: Optional[Callable[[str], str]], than: str, *, loi_doc: st
     if goi is None or not cu:
         return ""
     try:
-        tra = str(goi(LOI_NHAC_VIET_LAI.format(ghi_chu=ghi_chu or "- (no notes)", than=cu,
-                                               loi_doc=" ".join(str(loi_doc or "").split())[:400])) or "")
+        tra = str(goi(ban_dia_loi_nhac(LOI_NHAC_VIET_LAI.format(ghi_chu=ghi_chu or "- (no notes)", than=cu,
+                                       loi_doc=" ".join(str(loi_doc or "").split())[:400]), tieng_en, kenh_en)) or "")
     except Exception:  # noqa: BLE001 — viết lại hỏng: vòng sau vẽ lại bằng bản cũ (khoá mới)
         return ""
     tra = re.sub(r"^\s*(?:new\s+)?(?:scene\s+)?prompt\s*:\s*", "", tra.strip(), flags=re.I).strip("`\"' \n")

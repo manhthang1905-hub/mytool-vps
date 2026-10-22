@@ -9,7 +9,7 @@ lịch sử. Và nó sẽ dẫn tới làm trùng — hai tuần công sức cho
 Mỗi lượt chạy AUTO cất tư liệu nguồn vào `PROJECTS/AUTO/<kênh>/<lượt>/
 0-doi-thu.txt`, dòng đầu là tiêu đề và dòng thứ hai là:
 
-    VIDEO_ID: tpJyno1BKQc
+    VIDEO_ID: zz-ihjHV17v
 
 Đó là **khoá chắc chắn**, và may là nó có sẵn từ trước chứ không phải thêm
 mới. Nối bằng tiêu đề thì hỏng ngay: kênh remake đặt tiêu đề KHÁC bản gốc

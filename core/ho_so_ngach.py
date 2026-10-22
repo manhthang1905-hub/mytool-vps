@@ -56,8 +56,9 @@ from .kenh import TEP_KENH, doc_yaml, duong_kenh
 
 __all__ = [
     "TEN_TEP_NGACH", "THU_MUC_NHOM", "HoSoNgach", "duong_ngach_yaml",
-    "nhom_cua_kenh", "doc_ngach_tho", "doc_ngach",
+    "nhom_cua_kenh", "doc_ngach_tho", "doc_ngach", "doc_ngach_nhom",
     "MAU_TIEU_DE_GOC", "la_ngach_mac_dinh", "ten_tieng",
+    "chu_de_rong_cua", "khoi_khan_gia", "ngon_ngu_cua_kenh", "nhom_cua_may", "ho_so_may", "the_loai_may",
 ]
 
 _log = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ _KHOA_DS_CHUOI = (
     # (thay luật 3–4 cứng của `auto_khau.de_bai_nan_khuon`), tiêu chí đối thủ cho lượt kiểm ngách
     # (`kiem_ngach_doi_thu`), từ khoá tìm kiếm YouTube (trạm giao cho mắt cào + tìm lúc khởi tạo).
     "luat_nan_khuon", "tieu_chi_doi_thu", "tu_khoa_tim",
+    # 22/10/2026 — ngách khác (VPS thứ hai: TRUYỆN KỂ): khán giả KHÔNG nhắm (học sinh, trẻ em…) và ví dụ
+    # thể loại LẠC ĐỀ cho lời nhắc phân loại trang chủ / kiểm đối thủ / chấm tiêu đề (bản tổng quát).
+    "khan_gia_loai_tru", "lac_de_vi_du",
 )
 
 #: Khoá CHUỖI (mô tả, lời nhắc) — `str(...).strip()`, không khai thì "".
@@ -87,6 +91,9 @@ _KHOA_CHUOI = (
     "mo_ta_phan_cum", "nhan_the_loai_mau", "vi_du_phan_cum",
     # 01/10/2026 — thể loại bằng TIẾNG ANH cho lời nhắc ảnh bìa ("home cooking" thay "psychology").
     "the_loai_en",
+    # 22/10/2026 — CHỦ ĐỀ RỘNG (lớp ngoài ngách: "truyện kể / kể chuyện đời người") và KHÁN GIẢ thật (một câu;
+    # `bien_tap_content` đã đọc khoá này từ tệp thô từ 01/10). Ngách mặc định để TRỐNG → lời nhắc giữ nguyên văn.
+    "chu_de_rong", "khan_gia_mo_ta",
 )
 
 #: Câu `mau_tieu_de` của ngách mặc định trong mã (tâm lý × Nhật). Nhóm tam-ly-nhat khai ĐÚNG chuỗi này,
@@ -211,6 +218,14 @@ class HoSoNgach:
     tu_khoa_tim: List[str] = field(default_factory=list)
     #: 01/10/2026 — thể loại bằng tiếng Anh cho lời nhắc ảnh bìa ("" → "psychology" như cũ).
     the_loai_en: str = ""
+    #: 22/10/2026 — lớp CHỦ ĐỀ RỘNG quanh ngách (nhãn `dung_chu_de` của nuôi trang chủ). "" → `mo_ta_ngach`.
+    chu_de_rong: str = ""
+    #: 22/10/2026 — khán giả thật, một câu (cùng khoá `bien_tap_content` đọc từ tệp thô).
+    khan_gia_mo_ta: str = ""
+    #: 22/10/2026 — nhóm khán giả KHÔNG nhắm: video/kênh lấy họ làm nhân vật/bối cảnh chính là lạc đề.
+    khan_gia_loai_tru: List[str] = field(default_factory=list)
+    #: 22/10/2026 — ví dụ thể loại LẠC ĐỀ (cho lời nhắc phân loại tổng quát).
+    lac_de_vi_du: List[str] = field(default_factory=list)
 
     # ── Thị trường (quốc gia/ngôn ngữ) — thô như trong tệp; `ngu_canh.thi_truong` trộn với
     # kenh.yaml và mặc định. Khoá: quoc_gia, ngon_ngu, mui_gio, bac_lam_tron_view, …
@@ -240,6 +255,82 @@ def la_ngach_mac_dinh(hs: Optional["HoSoNgach"]) -> bool:
     if hs is None or not hs.co():
         return True
     return (hs.mau_tieu_de or "").strip() == MAU_TIEU_DE_GOC
+
+
+def chu_de_rong_cua(hs: Optional["HoSoNgach"]) -> str:
+    """Chủ đề RỘNG của ngách cho lời nhắc tổng quát: `chu_de_rong` > phần đầu `mo_ta_ngach` (trước " — ") > tên nhóm."""
+    if hs is None:
+        return ""
+    return (hs.chu_de_rong or (hs.mo_ta_ngach or "").split(" — ")[0] or hs.nhom or "").strip()
+
+
+def khoi_khan_gia(hs: Optional["HoSoNgach"], nhan_lac: str = "lac_de") -> str:
+    """Câu LUẬT KHÁN GIẢ cho lời nhắc tổng quát (ngách khác ngách mặc định), dựng từ `khan_gia_mo_ta` +
+    `khan_gia_loai_tru`. Không khai gì → "" (lời nhắc không thêm luật khán giả). Ngách mặc định không dùng hàm
+    này — lời nhắc của nó giữ nguyên văn câu 21/10 ("NGƯỜI LỚN TRUNG NIÊN–CAO TUỔI")."""
+    if hs is None:
+        return ""
+    kg = " ".join(str(hs.khan_gia_mo_ta or "").split())
+    loai = [" ".join(str(x).split()) for x in (hs.khan_gia_loai_tru or []) if str(x).strip()]
+    phan = []
+    if kg:
+        phan.append("Khán giả của kênh: {0}.".format(kg.rstrip(".")))
+    if loai:
+        phan.append("Video/kênh mà đối tượng hoặc bối cảnh CHÍNH là {0} → {1}, kể cả khi đúng chủ đề.".format(
+            "; ".join(loai), nhan_lac))
+    return " ".join(phan)
+
+
+def ngon_ngu_cua_kenh(goc: str, ma_kenh: str, hs: Optional["HoSoNgach"] = None) -> str:
+    """Mã tiếng của kênh: `kenh.yaml: ngon_ngu` > tiếng thị trường của hồ sơ ngách > "". Không ném lỗi."""
+    try:
+        cai = doc_yaml(os.path.join(duong_kenh(goc, ma_kenh), TEP_KENH)) if ma_kenh else {}
+    except Exception:  # noqa: BLE001
+        cai = {}
+    ma = str((cai or {}).get("ngon_ngu") or "").split("#")[0].strip().strip('"').strip("'").lower()
+    if not ma and hs is not None:
+        ma = hs.ngon_ngu()
+    return ma.split("-")[0].split("_")[0]
+
+
+def nhom_cua_may(goc: str) -> str:
+    """Nhóm (ngách) CHÍNH của máy — luật chủ: một VPS làm chung MỘT chủ đề. Chỉ một nhóm có `ngach.yaml` → nhóm đó;
+    nhiều nhóm → nhóm nhiều kênh khai `nhom` nhất; không có → "". Không ném lỗi."""
+    try:
+        thu = os.path.join(duong_kenh(goc), THU_MUC_NHOM)
+        co = sorted(t for t in os.listdir(thu) if os.path.isfile(os.path.join(thu, t, TEN_TEP_NGACH)))
+    except OSError:
+        return ""
+    if len(co) <= 1:
+        return co[0] if co else ""
+    dem: Dict[str, int] = {}
+    try:
+        for m in os.listdir(duong_kenh(goc)):
+            if m.startswith("_"):
+                continue
+            n = nhom_cua_kenh(goc, m)
+            if n in co:
+                dem[n] = dem.get(n, 0) + 1
+    except OSError:
+        pass
+    return max(co, key=lambda n: (dem.get(n, 0), n == co[0])) if dem else co[0]
+
+
+def ho_so_may(goc: str) -> HoSoNgach:
+    """Hồ sơ ngách CHÍNH của máy (`nhom_cua_may`) — cho lời nhắc không biết kênh (cổng chữ bìa…)."""
+    return doc_ngach_nhom(goc, nhom_cua_may(goc))
+
+
+def the_loai_may(goc: str, mac_dinh: str = "psychology") -> str:
+    """Thể loại TIẾNG ANH của ngách máy cho lời nhắc "a {tiếng} {thể loại} video": ngách mặc định / chưa có hồ sơ →
+    `mac_dinh` ("psychology" — lời nhắc cũ nguyên văn); ngách khác → `the_loai_en` > chủ đề rộng."""
+    try:
+        hs = ho_so_may(goc)
+        if la_ngach_mac_dinh(hs):
+            return mac_dinh
+        return " ".join(str(hs.the_loai_en or chu_de_rong_cua(hs) or mac_dinh).split())
+    except Exception:  # noqa: BLE001
+        return mac_dinh
 
 
 def duong_ngach_yaml(goc: str, nhom: str) -> str:
@@ -375,7 +466,13 @@ def doc_ngach(goc: str, ma_kenh: str) -> HoSoNgach:
     ma_kenh = (ma_kenh or "").strip()
     if not ma_kenh:
         return HoSoNgach()
-    nhom = nhom_cua_kenh(goc, ma_kenh)
+    return doc_ngach_nhom(goc, nhom_cua_kenh(goc, ma_kenh))
+
+
+def doc_ngach_nhom(goc: str, nhom: str) -> HoSoNgach:
+    """Hồ sơ ngách của NHÓM `nhom` (22/10/2026 — kênh NHÁP đang nuôi trang chủ trong `workspace/chuan-bi-<K>/` chưa có
+    `CHANNEL/<K>/kenh.yaml`, nơi gọi tự đọc `nhom` của bản nháp). Rỗng/hỏng → `HoSoNgach()` như `doc_ngach`."""
+    nhom = (nhom or "").strip()
     if not nhom:
         return HoSoNgach()
     duong = duong_ngach_yaml(goc, nhom)

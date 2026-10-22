@@ -1,0 +1,3 @@
+# Mỗi dòng MỘT voice_id ElevenLabs (mỗi kênh một giọng KHÁC nhau). Ghi chú sau dấu # tuỳ ý.
+# Ví dụ (thay bằng giọng thật của bạn):
+# AbCdEfGhIjKlMnOpQrSt   # giọng nữ trầm ấm

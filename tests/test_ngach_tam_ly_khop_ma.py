@@ -27,6 +27,8 @@ from core.ho_so_ngach import HoSoNgach, doc_ngach
 
 GOC_KHO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 YAML_THAT = os.path.join(GOC_KHO, "CHANNEL", "_NHOM", "tam-ly-nhat", "ngach.yaml")
+pytestmark = pytest.mark.skipif(not os.path.isfile(YAML_THAT),
+                                reason="gói bản sạch (VPS ngách khác) không mang hồ sơ nhóm tam-ly-nhat của máy đầu")
 
 #: trường → hằng số trong mã (so bằng `==` sau khi đổi về list).
 _C = v7.CAU_HINH_MAC_DINH
@@ -68,6 +70,12 @@ HANG_SO = {
     "tieu_chi_doi_thu": [],
     "tu_khoa_tim": [],
     "the_loai_en": "",
+    # 22/10/2026 (VPS thứ hai — ngách truyện kể): bốn khoá của lời nhắc TỔNG QUÁT. Nhóm tâm lý Nhật để TRỐNG — lời nhắc
+    # của nó giữ nguyên văn câu cũ (khán giả "người lớn trung niên–cao tuổi" viết cứng trong bản mặc định).
+    "chu_de_rong": "",
+    "khan_gia_mo_ta": "",
+    "khan_gia_loai_tru": [],
+    "lac_de_vi_du": [],
 }
 
 #: Trường không có hằng tương ứng một-một — được so gián tiếp qua ĐẦU RA của hàm dùng nó (các bài

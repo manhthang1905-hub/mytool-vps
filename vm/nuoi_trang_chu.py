@@ -1281,17 +1281,9 @@ def sai_ngon_ngu(tieu_de: str, ngon_ngu: str = None) -> bool:
     return False
 
 
-def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
-    """{video_id: nhan}. Phân loại theo NGHĨA bằng LLM, cache theo video_id (trong `cache`).
-    Mỗi ô: {id, tieu_de, kenh}. LLM lỗi/thiếu thì ô đó KHÔNG có trong kết quả.
-    Ô sai ngôn ngữ của kênh → `lac_de` ngay bằng mã (không gọi LLM)."""
-    ra = {o["id"]: "lac_de" for o in cac_o if o.get("id") and sai_ngon_ngu(o.get("tieu_de"))}
-    ra.update({o["id"]: cache[o["id"]] for o in cac_o if o["id"] not in ra and cache.get(o["id"]) in NHAN_HOP_LE})
-    chua = [o for o in cac_o if o["id"] not in ra]
-    for i in range(0, len(chua), 30):
-        lo = chua[i:i + 30]
-        ds = "\n".join("{0}|{1}|{2}".format(j + 1, o["tieu_de"][:150], o["kenh"][:50]) for j, o in enumerate(lo))
-        prompt = (
+#: Đề bài phân loại trang chủ của NGÁCH MẶC ĐỊNH (tâm lý × Nhật) — NGUYÊN VĂN bản 21/10 (chỗ {0} mô tả ngách,
+#: {1} danh sách, {2} số ô). Ngách khác: `DE_BAI_PHAN_LOAI_NGACH` dựng từ hồ sơ ngách (`de_bai_phan_loai_cho`).
+DE_BAI_PHAN_LOAI_TAM_LY = (
             "Bạn phân loại video YouTube THEO Ý NGHĨA (không theo từ khoá) cho một kênh tâm lý học tiếng Nhật.\n"
             "NGÁCH của kênh: {0}\n"
             "CHỦ ĐỀ RỘNG của kênh: tâm lý học / khoa học não bộ / hiểu người, tiếng Nhật (tâm lý hành vi, tính cách, "
@@ -1308,7 +1300,77 @@ def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
             "Thêm trường \"tam_ly\": true nếu video NÓI VỀ tâm lý học / hiểu người / não bộ (bất kể ngách hay ngôn ngữ), "
             "false nếu hoàn toàn không phải (nấu ăn, game, tin tức, nhạc…).\n"
             "Danh sách (số|tiêu đề|kênh):\n{1}\n"
-            "Chỉ trả JSON thuần: [{{\"i\":1,\"nhan\":\"dung_ngach\",\"tam_ly\":true}}, ...] đủ {2} phần tử.").format(mo_ta, ds, len(lo))
+            "Chỉ trả JSON thuần: [{{\"i\":1,\"nhan\":\"dung_ngach\",\"tam_ly\":true}}, ...] đủ {2} phần tử.")
+
+
+#: 22/10/2026 — bản cho NGÁCH KHÁC ngách mặc định (VPS thứ hai: truyện kể…): chủ đề rộng, tiếng, ví dụ lạc đề và luật
+#: khán giả đọc từ `ngach.yaml` (`chu_de_rong`, `lac_de_vi_du`, `khan_gia_mo_ta`, `khan_gia_loai_tru`). Trường JSON vẫn
+#: tên `tam_ly` (sổ cũ đọc `tl:<id>`) nhưng nghĩa là "thuộc CHỦ ĐỀ RỘNG của kênh".
+DE_BAI_PHAN_LOAI_NGACH = (
+    "Bạn phân loại video YouTube THEO Ý NGHĨA (không theo từ khoá) cho một kênh YouTube {tieng} về {rong}.\n"
+    "NGÁCH của kênh: {{0}}\n"
+    "CHỦ ĐỀ RỘNG của kênh: {rong} ({tieng}).\n"
+    "Nhãn:\n- dung_ngach: đúng ngách cụ thể của kênh nói trên.\n"
+    "- dung_chu_de: thuộc chủ đề rộng nói trên, {tieng}, nhưng KHÔNG đúng ngách cụ thể.\n"
+    "- lac_de: mọi thứ khác ({lac}, video không phải {tieng}, ...).\n"
+    "QUAN TRỌNG: video của QUỐC GIA/NGÔN NGỮ KHÁC luôn là lac_de, kể cả khi cùng chủ đề.\n"
+    "{khan_gia}"
+    "Thêm trường \"tam_ly\": true nếu video THUỘC CHỦ ĐỀ RỘNG ({rong}) (bất kể ngách hay ngôn ngữ), "
+    "false nếu hoàn toàn không phải.\n"
+    "Danh sách (số|tiêu đề|kênh):\n{{1}}\n"
+    "Chỉ trả JSON thuần: [{{{{\"i\":1,\"nhan\":\"dung_ngach\",\"tam_ly\":true}}}}, ...] đủ {{2}} phần tử.")
+#: Ví dụ lạc đề khi ngách không khai `lac_de_vi_du` — thể loại hầu như không bao giờ là ngách remake.
+LAC_DE_MAC_DINH = ("tin tức", "game", "nhạc", "thể thao", "livestream", "Shorts", "video cắt clip/tổng hợp/reup")
+#: Đề bài của kênh đang nuôi — đặt cùng lúc `NGON_NGU_KENH` (`nap_ngach_kenh`). Mặc định = bản tâm lý Nhật.
+DE_BAI_PHAN_LOAI = DE_BAI_PHAN_LOAI_TAM_LY
+
+
+def _an_ngoac(chu) -> str:
+    return " ".join(str(chu or "").split()).replace("{", "(").replace("}", ")")
+
+
+def de_bai_phan_loai_cho(kenh: str, goc: str = GOC_TOOL) -> str:
+    """Khuôn đề bài phân loại (còn chỗ {0} {1} {2}) theo hồ sơ ngách của kênh: ngách mặc định / không đọc được hồ sơ →
+    `DE_BAI_PHAN_LOAI_TAM_LY` nguyên văn (kênh đang chạy không đổi một ký tự); ngách khác → `DE_BAI_PHAN_LOAI_NGACH`."""
+    try:
+        if goc not in sys.path:
+            sys.path.insert(0, goc)
+        from core import ho_so_ngach                          # noqa: PLC0415
+        cfg = doc_kenh_yaml(kenh, goc)                        # CHANNEL/<K> hoặc bản nháp workspace/chuan-bi-<K>
+        hs = ho_so_ngach.doc_ngach_nhom(goc, cfg.get("nhom") or "")
+        if ho_so_ngach.la_ngach_mac_dinh(hs):
+            return DE_BAI_PHAN_LOAI_TAM_LY
+        tieng = ho_so_ngach.ten_tieng(cfg.get("ngon_ngu") or hs.ngon_ngu()) or "đúng tiếng của kênh"
+        rong = ho_so_ngach.chu_de_rong_cua(hs) or "chủ đề của kênh"
+        lac = [x for x in (hs.lac_de_vi_du or []) if str(x).strip()] or list(LAC_DE_MAC_DINH)
+        kg = ho_so_ngach.khoi_khan_gia(hs, "lac_de")
+        return DE_BAI_PHAN_LOAI_NGACH.format(
+            tieng=_an_ngoac(tieng), rong=_an_ngoac(rong), lac=_an_ngoac(", ".join(lac)),
+            khan_gia=("QUAN TRỌNG: " + _an_ngoac(kg) + " (tam_ly vẫn theo chủ đề).\n") if kg else "")
+    except Exception:  # noqa: BLE001 — hồ sơ hỏng: giữ đề bài cũ, phiên nuôi không vỡ
+        return DE_BAI_PHAN_LOAI_TAM_LY
+
+
+def nap_ngach_kenh(kenh: str, goc: str = GOC_TOOL) -> tuple:
+    """Đặt `NGON_NGU_KENH` + `DE_BAI_PHAN_LOAI` cho kênh sắp nuôi/đo. Trả (ngôn ngữ cũ, đề bài cũ) để trả lại."""
+    global NGON_NGU_KENH, DE_BAI_PHAN_LOAI
+    cu = (NGON_NGU_KENH, DE_BAI_PHAN_LOAI)
+    NGON_NGU_KENH = str(doc_kenh_yaml(kenh, goc).get("ngon_ngu") or "ja").strip().lower()
+    DE_BAI_PHAN_LOAI = de_bai_phan_loai_cho(kenh, goc)
+    return cu
+
+
+def phan_loai(goi, mo_ta: str, cac_o: list, cache: dict) -> dict:
+    """{video_id: nhan}. Phân loại theo NGHĨA bằng LLM, cache theo video_id (trong `cache`).
+    Mỗi ô: {id, tieu_de, kenh}. LLM lỗi/thiếu thì ô đó KHÔNG có trong kết quả.
+    Ô sai ngôn ngữ của kênh → `lac_de` ngay bằng mã (không gọi LLM)."""
+    ra = {o["id"]: "lac_de" for o in cac_o if o.get("id") and sai_ngon_ngu(o.get("tieu_de"))}
+    ra.update({o["id"]: cache[o["id"]] for o in cac_o if o["id"] not in ra and cache.get(o["id"]) in NHAN_HOP_LE})
+    chua = [o for o in cac_o if o["id"] not in ra]
+    for i in range(0, len(chua), 30):
+        lo = chua[i:i + 30]
+        ds = "\n".join("{0}|{1}|{2}".format(j + 1, o["tieu_de"][:150], o["kenh"][:50]) for j, o in enumerate(lo))
+        prompt = DE_BAI_PHAN_LOAI.format(mo_ta, ds, len(lo))
         try:
             if GOC_TOOL not in sys.path:
                 sys.path.insert(0, GOC_TOOL)
@@ -1664,7 +1726,9 @@ def cau_hinh_kenh_moi(agent, kenh: str) -> dict:
     RIÊNG (9304+), không đụng cổng 9300–9303 của TL4/1/2/3 đang đăng."""
     cfg = agent.doc_cau_hinh()
     cac = list(agent.danh_sach_kenh(cfg))
-    for k in KENH_MOI_THU_TU + (kenh,):
+    # 22/10/2026: kênh NHÁP đang nuôi (máy mới: K2…Kn chưa vào máy đăng) xếp theo tên SAU 4 mã cũ — mỗi kênh một vị trí
+    # cố định → cổng DevTools riêng (trước đây mọi kênh nháp cùng rơi vào một vị trí cuối = trùng cổng khi nuôi song song).
+    for k in KENH_MOI_THU_TU + tuple(sorted(cac_kenh_bat(GOC_TOOL))) + (kenh,):
         if k not in cac:
             cac.append(k)
     cfg = dict(cfg, cac_kenh=cac)
@@ -1931,8 +1995,7 @@ def chay_phien(kenh: str, so_video: int, ghi, rng=None, bo_qua_khung: bool = Fal
         cdp = cdp_mod.Cdp.mo(ws)
         tab = Tab.gan(cdp, rng)
         tab.ngu(3)
-        global NGON_NGU_KENH
-        NGON_NGU_KENH = str(doc_kenh_yaml(kenh).get("ngon_ngu") or "ja").strip().lower()
+        nap_ngach_kenh(kenh)                                # ngôn ngữ + đề bài phân loại theo hồ sơ ngách (22/10)
         tra_ngon_ngu(cdp, kenh, ghi)                        # 19/10: giao diện đúng ngôn ngữ kênh trước khi đọc trang chủ
         mo_ta, goi = mo_ta_ngach(kenh), tao_llm()
 
@@ -2139,8 +2202,7 @@ def chay_do(kenh: str, ghi, bo_qua_khung: bool = False, on_dinh: bool = False, r
         canh_tien_trien.bat_canh(lambda: (cdp_mod.dong_trinh_duyet(cdp) if cdp.tu_mo else cdp.dong()), ghi=ghi)
         tid, sid = cdp.tao_tab("about:blank")
         tab = Tab(cdp, tid, sid, rng)
-        global NGON_NGU_KENH
-        NGON_NGU_KENH = str(doc_kenh_yaml(kenh).get("ngon_ngu") or "ja").strip().lower()
+        nap_ngach_kenh(kenh)                                # ngôn ngữ + đề bài phân loại theo hồ sơ ngách (22/10)
         hl = tra_ngon_ngu(cdp, kenh, ghi)
         mo_ta, goi = mo_ta_ngach(kenh), tao_llm()
 
@@ -2259,14 +2321,14 @@ def do_tu_quet(kenh: str, ghi, goi=None, goc: str = GOC_TOOL, luc: float = None)
     if kenh in cac_kenh_dang_nuoi():
         ghi("hoãn đo từ lần quét: kênh {0} đang có phiên nuôi (phiên giữ sổ)".format(kenh))
         return MA_HOAN
-    global NGON_NGU_KENH
-    ngon_cu, NGON_NGU_KENH = NGON_NGU_KENH, str(doc_kenh_yaml(kenh, goc).get("ngon_ngu") or "ja").strip().lower()
+    global NGON_NGU_KENH, DE_BAI_PHAN_LOAI
+    ngon_cu, de_cu = nap_ngach_kenh(kenh, goc)
     cache = dict(so.get("cache") or {})                 # LLM chạy NGOÀI khoá kênh; khoá chỉ giữ lúc ghi sổ (mili giây)
     moi = sum(1 for x in o if cache.get(x["id"]) not in NHAN_HOP_LE)
     try:
         nl, od = phan_loai_bau(goi or tao_llm(), mo_ta_ngach(kenh, goc), o, cache)
     finally:
-        NGON_NGU_KENH = ngon_cu
+        NGON_NGU_KENH, DE_BAI_PHAN_LOAI = ngon_cu, de_cu
     ket = phan_tram([nl[x["id"]] for x in o if x["id"] in nl])
     ket.update(vi_du_lac_de=["{0} — {1}".format(x["kenh"][:25], x["tieu_de"][:60]) for x in o if nl.get(x["id"]) == "lac_de"],
                bo_qua=q["bo"], quet={"luc": q["luc"], "o_lan_quet": q["tong"], "o_moi_phan_loai": moi})

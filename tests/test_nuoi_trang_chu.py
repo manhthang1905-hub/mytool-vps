@@ -305,7 +305,7 @@ def test_ly_do_dung_nhuong_viec_dang_va_khe_nang(tmp_path, monkeypatch):
 
 
 def test_ma_video_va_ten():
-    assert n.ma_video("https://www.youtube.com/watch?v=WATghdSAZ4g&t=1") == "WATghdSAZ4g"
+    assert n.ma_video("https://www.youtube.com/watch?v=zzc4-2FoV1r&t=1") == "zzc4-2FoV1r"
     assert n.chuan_ten(" Ｋ ênh ") == n.chuan_ten("kênh")
 
 

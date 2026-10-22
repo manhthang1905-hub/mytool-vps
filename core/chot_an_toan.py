@@ -359,7 +359,7 @@ def kiem_giong_trung(goc: str) -> List[Dict[str, Any]]:
             "{0} kênh ({1}) đang dùng CHUNG một giọng đọc (voice_id {2}…) — video nghe giống "
             "hệt nhau, dễ bị coi là nội dung lặp hoặc các kênh bị liên kết với nhau."
             .format(len(cac), ", ".join(cac), vid[:6]),
-            "Chọn giọng tiếng Nhật KHÁC nhau cho từng kênh (gợi ý: workspace/giong-doc-goi-y.md) "
+            "Chọn giọng ĐÚNG TIẾNG kênh, KHÁC nhau cho từng kênh (gợi ý: workspace/giong-doc-goi-y.md) "
             "rồi sửa \"voice_id\" trong CHANNEL/<kênh>/kenh.yaml. Máy KHÔNG tự đổi giọng.",
             "Rủi ro nội dung lặp / kênh bị YouTube coi là cùng một chủ.",
             khoa="giong:" + vid, lap_gio=LAP_NGAY_GIO * 7))

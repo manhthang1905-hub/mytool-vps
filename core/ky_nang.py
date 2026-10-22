@@ -1168,6 +1168,24 @@ def d_thay_kenh(goc, kenh):
     return thay_kenh.can_lam(goc, _gio())
 
 
+# D28 · Khởi tạo VPS mới cho ngách mới (22/10/2026) — `core/khoi_tao_vps.py` ─────────────────────────────────────
+
+def k_khoi_tao_vps(goc, kenh):
+    from core import khoi_tao_vps  # noqa: PLC0415
+    so = khoi_tao_vps.doc_so(goc)
+    b = so.get("buoc")
+    if not b:
+        return KHONG, "máy không khởi tạo bằng luồng VPS mới"
+    if so.get("loi"):
+        return LOI, "bước {0}: {1}".format(b, str(so.get("loi"))[:120])
+    return (DAT if b == "xong" else CHO), "bước {0} · {1} kênh".format(b, len(so.get("kenh") or {}))
+
+
+def d_khoi_tao_vps(goc, kenh):
+    from core import khoi_tao_vps  # noqa: PLC0415
+    return khoi_tao_vps.can_lam(goc, _gio())
+
+
 def k_tao_kenh_thuong_hieu(goc, kenh):
     """Kênh thương hiệu mới đã tạo (vm/logs/tao-kenh/<K>.json, ghi bởi vm/tao_kenh_thuong_hieu.py)."""
     d = _json(_vm(goc, "logs", "tao-kenh", kenh + ".json"))
@@ -1416,6 +1434,17 @@ DANH_MUC: List[KyNang] = [
            "python -X utf8 -m core.thay_kenh chay", k_thay_kenh, ["D01"], dieu_kien=d_thay_kenh,
            chay=lambda goc, kenh: _py("-m", "core.thay_kenh", "chay"), nhip_gio=1, tu_ap=True, toan_may=True,
            han_phut=40),
+    KyNang("D28", "Khởi tạo VPS mới cho ngách mới", "mo_rong",
+           "Máy MỚI, ngách MỚI (22/10/2026): đầu vào chỉ là kho Chrome đã đăng nhập Gmail + <cha>\\khoi-tao\\{ngach,giong,"
+           "doi-thu}.txt. Bước: kiểm → đặt Chrome kho thành K1…Kn → khởi tạo ngách bằng AI (hồ sơ + kênh đầu + đối thủ "
+           "hạt giống + Một nút) → nuôi trang chủ mọi tài khoản tới ≥ 90% đúng chủ đề (chờ tối đa 7 ngày) → ô trang chủ "
+           "đúng ngách ra đối thủ mới → Một nút → chia TUYẾN theo nghĩa từ content đối thủ (core/tuyen_thi_truong) → chia "
+           "kênh cho tuyến (danh mục, không ăn view nhau) → mo_kenh dựng từng kênh (góc + nhân vật mới, giọng riêng) → "
+           "kênh thương hiệu + UC → thiết lập 11/11 → bật tự chạy/đăng → một tin báo. Xong thì đo lại thị trường mỗi "
+           "25 ngày. Lần đầu chạy tay: python -m core.khoi_tao_vps chay.",
+           "python -X utf8 -m core.khoi_tao_vps nhip", k_khoi_tao_vps, ["D20"], dieu_kien=d_khoi_tao_vps,
+           chay=lambda goc, kenh: _py("-m", "core.khoi_tao_vps", "nhip"), nhip_gio=1, tu_ap=True, toan_may=True,
+           han_phut=90),
 ]
 
 
