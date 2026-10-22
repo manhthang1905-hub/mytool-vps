@@ -404,7 +404,18 @@ def _dau_giong(goc: str, nhom: str) -> str:
 
 # ═══════════════════════════ MỘT NHỊP ═════════════════════════════════════════
 def _cho_nguoi(l: Dict[str, Any], khoa: str, chu: str, goi_y: str, dau: str) -> None:
-    l["cho_nguoi"] = {"khoa": khoa, "chu": chu, "goi_y": goi_y, "dau": dau}
+    l["cho_nguoi"] = {"khoa": khoa, "chu": chu, "goi_y": goi_y, "dau": dau,
+                      "luc": l.get("cap_nhat") or _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+
+def _cho_qua_lau(cn: Dict[str, Any], bay_gio: _dt.datetime) -> bool:
+    """22/10/2026: việc chờ người được XÉT LẠI định kỳ (≥ `GIO_THU_LAI_CAN_NGUOI` giờ) dù dấu vết không đổi — mã/luật có
+    thể đã đổi (vd hồi sinh giữ giọng cũ) mà dấu vết (tệp giọng, kho) đứng yên → không được kẹt mãi khi không ai canh."""
+    try:
+        t = _dt.datetime.strptime(str(cn.get("luc") or ""), "%Y-%m-%d %H:%M")
+    except ValueError:
+        return True
+    return (bay_gio - t).total_seconds() >= GIO_THU_LAI_CAN_NGUOI * 3600
 
 
 def buoc(goc: str, l: Dict[str, Any], so: Dict[str, Any], *, bay_gio: _dt.datetime, log: Callable[[str], None],
@@ -804,6 +815,8 @@ def can_lam(goc: str, bay_gio: Optional[_dt.datetime] = None) -> Tuple[bool, str
         b = l.get("buoc")
         cn = l.get("cho_nguoi") or {}
         if cn:
+            if _cho_qua_lau(cn, bay_gio):
+                return True, "xét lại định kỳ việc chờ người ({0} → {1}, bước {2})".format(l["cu"], l["moi"], b)
             if b == "chon_chrome" and cn.get("dau") != _dau_kho(goc):
                 return True, "kho Chrome đổi — xét lại (thay {0})".format(l["cu"])
             if b == "giong" and l.get("loai") == LOAI_HOI_SINH:
