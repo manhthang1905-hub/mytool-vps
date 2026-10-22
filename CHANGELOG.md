@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.6** — 2026-10-22 — `vps-jp1` — feat(phong-thi-nghiem): khoa chu - gia thuyet chu cho chay bong toi ngay X khong duoc mo thu/tot nghiep (22/10: chi chay that V7, VPH, POOL, RADAR toi 12/11)
 - **2.230.5** — 2026-10-22 — `vps-jp1` — fix(thiet-lap-kenh): anh nhan vat/logo - trung Idempotency-Key (link tham chieu moi sau lan cho qua lau) thi dat lai bang khoa moi 1 lan
 - **2.230.4** — 2026-10-22 — `vps-jp1` — fix(nhan-vat): tu cu chi lay tu khoa nhan vat (reference_lock chi tu ghep), them hu tu tieng Anh - TL7/TL8 viet lai dat
 - **2.230.3** — 2026-10-22 — `vps-jp1` — fix(nhan-vat): boc JSON cau tra loi viet lai nhan vat - nguyen khoi {..} truoc (doan prompt .md co rao code lam loc_json cat nham)
