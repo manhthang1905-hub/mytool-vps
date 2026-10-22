@@ -326,9 +326,19 @@ def kiem_tra_loi(du: Any, style: Dict[str, str], doan: Dict[str, str], cac_tu: S
 
 
 def _bat_json(chu: str) -> Any:
+    """22/10/2026: câu trả lời chứa NGUYÊN VĂN đoạn prompt/*.md — có sẵn ``` bên trong chuỗi JSON → `loc_json` (bóc
+    khối ```…```) cắt nhầm giữa chuỗi → "Expecting property name … char 1" (TL7/TL8 hỏng 2/2 lượt). Thử nguyên khối
+    { … } trước, rồi mới lùi `loc_json`."""
     from .goi_van_ban import loc_json  # noqa: PLC0415
 
-    return loc_json(str(chu or ""))
+    tho = str(chu or "").strip()
+    a, b = tho.find("{"), tho.rfind("}")
+    if 0 <= a < b:
+        try:
+            return json.loads(tho[a:b + 1], strict=False)
+        except ValueError:
+            pass
+    return loc_json(tho)
 
 
 def viet_lai_thu_muc(thu_muc: str, cac_tu: Sequence[str], goi: Callable[[str], str], *, lock: str, prompt: str,

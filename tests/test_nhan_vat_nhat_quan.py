@@ -257,3 +257,10 @@ def test_giam_khao_loai_tam_khac_nhan_vat_tham_chieu():
     ung = [{"tep": "a", "vong": 0, "so": 1, "cham": kq[1]}, {"tep": "b", "vong": 0, "so": 2, "cham": kq[2]}]
     assert cac.xep_hang(ung)[0]["tep"] == "b"
     assert "NOT the reference character" in cac.ghi_chu_viet_lai(ung)
+
+
+def test_bat_json_chiu_duoc_rao_code_trong_chuoi():
+    """22/10: đoạn prompt/*.md có ``` bên trong chuỗi JSON — không được cắt nhầm."""
+    from core import nhan_vat_nhat_quan as nv
+    s = '```json\n{"style": {"a": "x"}, "doan": {"p#1": "code:\n```\nabc\n```\nend"}}\n```'
+    assert nv._bat_json(s) == {"style": {"a": "x"}, "doan": {"p#1": "code:\n```\nabc\n```\nend"}}
