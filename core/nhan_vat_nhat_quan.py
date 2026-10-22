@@ -58,7 +58,13 @@ TOKEN_VIET = 8000
 _HU = frozenset("""a an the of in on at to with without over under and or no not per every each same one two three
 four is are its it his her their very do does don't add any free scene scenes expression expressions style styles
 look looks match matching attached reference image exactly redesign twin reflection second figure fixed traits lock
-always never wearing wears wear holding sitting standing change keep draw drawn show make both""".split())
+always never wearing wears wear holding sitting standing change keep draw drawn show make both
+into onto from this that these those than then when where while which what who whom whose also only just even still
+such some other others more most less least much many few here there inside outside around through across between
+behind above below beside near far left right front back side sides top bottom upper lower middle center centre whole
+part parts full half feet foot ground floor contact weight fill fills filled straight heavy shadow shadows clean cold
+neutral natural normal clear plain real true itself himself herself themselves must should would could will shall may
+might can cannot being been have has had having like than""".split())
 #: Màu đơn / bộ phận / đồ mặc chung — một mình không nói lên nhân vật nào (vẫn ghép cặp được: `pink cheeks`).
 _MAU = frozenset("""white black dark light grey gray brown cream beige pink blue navy green red yellow orange purple
 silver gold pure faint warm""".split())
@@ -111,7 +117,11 @@ def tu_cu(nhan_vat_goc: Sequence[str], nhan_vat_moi: Sequence[str]) -> List[str]
 
     `nhan_vat_goc` = [lock, reference_lock] của kênh gốc; `nhan_vat_moi` = [lock, prompt nhân vật…] của kênh mới.
     Hai bên giống nhau (thay kênh giữ nguyên nhân vật) → []."""
-    goc = " , ".join(str(x or "") for x in nhan_vat_goc)
+    # 22/10/2026: từ đơn CHỈ lấy từ dòng khoá nhân vật (`default_character_lock`); đoạn `reference_lock` là văn xuôi dài
+    # (TL7/TL8 khuôn TL3/TL2: "into, this, outside, even, feet…" thành "từ cũ" → AI không bao giờ viết lại đạt). Từ đoạn
+    # ấy chỉ lấy TỪ GHÉP có gạch nối (pure-white, slashed-circle) — dấu hiệu nét riêng của nhân vật.
+    phu = " ".join(w for x in list(nhan_vat_goc)[1:] for w in _cac_tu(x) if "-" in w)
+    goc = " , ".join([str(nhan_vat_goc[0] or "") if nhan_vat_goc else "", phu])
     moi = " ".join(str(x or "") for x in nhan_vat_moi)
     moi_c = _chuan(moi)
     if not goc.strip() or _chuan(goc) == moi_c:
