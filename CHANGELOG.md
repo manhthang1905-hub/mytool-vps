@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.10** — 2026-10-23 — `vps-jp1` — fix(clip): job ShopAPI con xep hang (queued) thi doi tiep, tran 12 phut tinh tu started_at, tran cung 150 phut
 - **2.230.9** — 2026-10-23 — `vps-jp1` — fix(tieu de): bang CTR cho AI cham tieu de chi dung so cua chinh kenh khi du 5 dong (truoc lan tieu de kenh khac -> TL2 bi ep khuon nhan)
 - **2.230.8** — 2026-10-23 — `vps-jp1` — fix(tieu de): kenh tieng Nhat bo ban tieu de AI sai tieng (Trung gian the/Viet/khong kana)
 - **2.230.7** — 2026-10-23 — `vps-jp1` — fix(anh-canh): co khac_nhan_vat khong con loai tam (gia khao re bao nham hang loat -> ve lai 3 vong, khau anh 1h->17h, 22/10 khong ra video); chi xep tam khong co len truoc; nhan vat khac han = toi da 5
