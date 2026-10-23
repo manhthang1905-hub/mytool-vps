@@ -219,7 +219,10 @@ CO_CUNG = {"chu": "chữ/số trong ảnh", "danh_dau": "mũi tên/dấu vẽ ch
 #: `khac_nhan_vat` (21/10/2026): nhân vật chính là một hình KHÁC ảnh tham chiếu. Chủ bắt kênh mới vẽ linh vật đầu mochi
 #: của kênh gốc dù ảnh tham chiếu là người thật: lời nhắc + ghi chú phong cách còn tả nhân vật cũ, nên giám khảo chấm vế
 #: nhân vật 10/10 theo CHỮ. Ảnh tham chiếu là sự thật; tấm vẽ nhân vật khác bị loại, vòng sau viết lại lời nhắc.
-CO_LOAI = ("chu", "danh_dau", "luoi", "khac_nhan_vat")
+#: 23/10/2026: `khac_nhan_vat` KHÔNG còn loại tấm (điểm 0) — giám khảo ví (model rẻ) báo nhầm hàng loạt (TL1 không lẫn
+#: nhân vật vẫn 21 cờ/video), mọi cảnh trượt ngưỡng → vẽ lại 3 vòng, khâu ảnh 1 giờ → 17 giờ, 22/10 KHÔNG ra video nào.
+#: Cờ còn dùng để XẾP tấm không cờ lên trước trong cùng vòng (`xep_hang`); lời nhắc sạch nhân vật cũ (v2.227) mới là gốc.
+CO_LOAI = ("chu", "danh_dau", "luoi")
 _NGHI = {"mui_ten_do": "has a large pure-red mark (maybe an arrow or annotation drawn over the picture)",
          "luoi": "may be split into panels (long straight lines across the whole frame)"}
 
@@ -230,8 +233,9 @@ _NHAN_VAT_CO = ("the first {k} image(s) are the character reference(s). Judge (a
                 "redrawn; 2 = a named character missing, doubled or swapped. null when the description names nobody. "
                 "The REF image(s) are the ONLY truth for how the main character looks: when the channel style note or "
                 "the description describes the character differently, ignore the text and follow the REF. A candidate "
-                "whose main character is a different figure from the REF (a mascot or round-headed figure instead of a "
-                "person or the reverse, other hair, other age or gender, clothing of a different colour) = 2 at most.")
+                "whose main character is clearly a different KIND of figure from the REF (a mascot or round-headed "
+                "figure instead of a person, or the reverse; other gender or a very different age) = 5 at most. Small "
+                "differences in shade, lighting, pose or outfit details are NOT a different figure.")
 _NHAN_VAT_KHONG = "null (no character reference for this scene)."
 
 
@@ -368,6 +372,7 @@ def _tb(muc: Dict[str, Any]) -> float:
 def xep_hang(ung_vien: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Tấm tốt nhất trước: sạch (không cờ rợn) > điểm tổng > trung bình các mục > vòng sớm hơn. Tấm chưa chấm cuối."""
     return sorted(ung_vien, key=lambda u: (u.get("cham") is None, bool((u.get("cham") or {}).get("kinh_di")),
+                                           "khac_nhan_vat" in ((u.get("cham") or {}).get("co") or []),
                                            -float((u.get("cham") or {}).get("tong") or 0),
                                            -_tb(u.get("cham") or {}), int(u.get("vong") or 0), int(u.get("so") or 0)))
 

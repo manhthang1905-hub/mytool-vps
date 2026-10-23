@@ -252,9 +252,10 @@ class KiemMax:
             anh += [self._anh(t, 640, nhan="S{0}-{1}".format(so, _NHAN[i])) for i, t in enumerate(m["tep"])]
         ln = LOI_NHAC_LO.format(ta_ref='The first image (label "REF") is the channel\'s reference character and the '
                                 'ONLY truth for how the main character looks - if the style note describes it '
-                                'differently, follow the REF; a candidate whose main character is a different figure '
-                                'from the REF (mascot vs person, other hair, other age or gender, clothing of a '
-                                'different colour) gets style 2 at most. ' if ref else "", phong=" ".join(str(self.phong or "").split())[:500] or "(none)",
+                                'differently, follow the REF; a candidate whose main character is clearly a different '
+                                'KIND of figure from the REF (mascot vs person, other gender, very different age) gets '
+                                'style 5 at most; small shade/pose/outfit differences are not a different figure. '
+                                if ref else "", phong=" ".join(str(self.phong or "").split())[:500] or "(none)",
                                 ds="\n".join(dong))
         if self.kenh_en:
             ln = ln.replace(LOI_NHAC_LO.split("\n{ta_ref}")[0], "You are a strict art director reviewing scene illustrations for "
