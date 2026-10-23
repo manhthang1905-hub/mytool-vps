@@ -263,6 +263,12 @@ Be comparative and strict: an average candidate is 5-6.
 Return JSON only: {{"ung_vien": [{{"so": 1, "bam_nhu_thang": 0, "noi_dung": 0, "to_mo": 0, "ro_120": 0, "cam_xuc": 0, \
 "phong_cach": 0, "nv": "same", "nguoi_khac": "none", "yeu": [], "loi": [], "ly_do": "one short line IN VIETNAMESE: \
 what works and what is missing"}}]}} — one item per candidate."""
+#: 23/10/2026 — hỏi lại riêng một tấm bị phán "nhân vật khác": chỉ ảnh nhân vật kênh (1) + tấm bìa (2).
+LOI_NHAC_HOI_LAI_NV = (
+    "Image 1 is a channel's CHARACTER REFERENCE. Image 2 is a YouTube thumbnail. Is the MAIN figure in image 2 the same "
+    "character design as image 1 — same kind of figure, same hair, same clothes, same drawing style? Pose, expression, "
+    "camera angle and lighting may differ; that is still the same character. Answer JSON only: "
+    "{\"cung\": true} or {\"cung\": false, \"vi_sao\": \"short reason\"}.")
 #: Câu nói ảnh NHÂN VẬT tham chiếu trong lời nhắc chấm vòng 1 (ảnh đứng ngay sau các bìa thắng).
 NV_CAU_CHAM = (" Image {so} is the channel's CHARACTER REFERENCE (only the figure): the main character of every "
                "thumbnail must be exactly this figure.")
@@ -2678,6 +2684,31 @@ def cham(goi: Callable[..., str], ds: List[Dict[str, Any]], *, mau: Sequence[str
                 u["loai"] = "nhân vật lệch kênh: " + lech_nhan_vat(u)
     with ThreadPoolExecutor(max_workers=SONG_SONG_CHAM) as ex:
         list(ex.map(vong_1, enumerate(nhom)))
+
+    # 23/10/2026 — kênh MƯỢN bìa thắng nhân vật khác (`mau_muon`): giám khảo vòng 1 nhìn bìa thắng + ảnh nhân vật cùng
+    # lúc nên hay phán nhầm "different" (TL4-T7-K3: 26/28 tấm bị loại dù vẽ ĐÚNG người tóc đen áo xanh → 2 video kẹt).
+    # Tấm bị loại CHỈ vì nv=different được hỏi lại riêng: ảnh nhân vật kênh + tấm ấy, không có bìa thắng.
+    def hoi_lai_nv(u) -> None:
+        try:
+            tho = goi_dem(LOI_NHAC_HOI_LAI_NV, khoa="{0}:nv2:{1}".format(khoa, u["ma"]), toi_da_token=300,
+                          mo_hinh=MO_HINH_CHAM, anh=nv_url + [_url_anh(u["tep"])])
+            du = _json(tho)
+        except Exception:  # noqa: BLE001 — hỏi lại hỏng: giữ phán quyết cũ
+            return
+        if isinstance(du, dict) and du.get("cung") is True:
+            u["nv"] = "same"
+            u["nv_hoi_lai"] = True
+            u.pop("loai", None)
+    if nv_url:
+        nghi = [u for u in qua if str(u.get("loai") or "").startswith("nhân vật lệch kênh")
+                and u.get("nv") == "different" and str(u.get("nguoi_khac") or "") not in ("faces", "photo")]
+        if nghi:
+            with ThreadPoolExecutor(max_workers=SONG_SONG_CHAM) as ex:
+                list(ex.map(hoi_lai_nv, nghi[:12]))
+            n_lai = sum(1 for u in nghi if u.get("nv_hoi_lai"))
+            if n_lai:
+                log("  (bìa lô: hỏi lại nhân vật — {0}/{1} tấm thật ra ĐÚNG nhân vật kênh, gỡ loại)".format(
+                    n_lai, len(nghi)))
 
     def con() -> List[Dict[str, Any]]:
         return sorted([u for u in qua if not u.get("loai") and u.get("tong") is not None], key=lambda u: -u["tong"])
