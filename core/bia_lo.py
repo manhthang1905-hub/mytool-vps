@@ -1253,6 +1253,17 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         except Exception as loi:  # noqa: BLE001 — dữ liệu hỏng: theo cấu hình như cũ
             log("  (bìa lô: chọn họ kiểu chữ theo dữ liệu hỏng: {0})".format(str(loi)[:160]))
             ho = {}
+    thu_ho = {} if ep_ho else _thu_ho_muon(goc, kenh, cai, luot)
+    if thu_ho:
+        ho = {"ho": thu_ho["ho"], "cach": "thu-ho-muon", "ly_do": thu_ho["ly_do"]}
+        if ghi_so and luot:
+            try:
+                from . import bia_du_lieu  # noqa: PLC0415
+                bia_du_lieu.ghi_so_cai(goc, kenh, os.path.basename(os.path.normpath(luot)),
+                                       {"ho": ho["ho"], "cach": ho["cach"], "ly_do": ho["ly_do"],
+                                        "luc_chon": time.strftime("%Y-%m-%d %H:%M:%S")})
+            except Exception:  # noqa: BLE001
+                pass
     if ho.get("ho"):
         kieu = "hop" if ho["ho"] == "hop" or (ho["ho"] == "dai" and kieu == "hop") else "tran"
     # `san_nv` (19/10/2026): lời nhắc ảnh có câu khoá nhân vật kênh + màu đậm (hồ sơ dựng tay của bài kiểm cũ: không)
@@ -1342,7 +1353,8 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
             hs["muc_tieu"] = {}
         if hs["ho"] == "dai":
             # 20/10/2026: họ "dai" — DẢI màu sau MỌI dòng: màu đo trên dải của bìa thắng cùng họ, lùi nhãn AI
-            hs["dai_moi_dong"] = str((hs.get("muc_tieu") or {}).get("mau_dai_dong") or "") or _mau_ho(tm, "dai")
+            hs["dai_moi_dong"] = str((hs.get("muc_tieu") or {}).get("mau_dai_dong") or "") or _mau_ho(
+                thu_ho.get("mau") or tm, "dai")
     elif kieu == "tran":
         hs["nen"] = "; ".join(x for x in (nen_tu_khuon(kc), mt.get("nen") or "") if x)
         cung = [b for b in mt.get("bia") or [] if b.get("kieu_chu") == "tran" and os.path.isfile(str(b.get("tep")))
@@ -1361,7 +1373,49 @@ def ho_so_kieu(goc: str, kenh: str, *, goi: Optional[Callable[..., str]] = None,
         imp = [float(b["imp"]) for b in mt.get("bia") or [] if isinstance(b.get("imp"), (int, float))]
         hs["bang_chung"] = " ({0}-{1} impressions)".format(_k(min(imp)), _k(max(imp))) if imp else ""
     gan_adn(hs, goc, tm, log=log)
+    if thu_ho and hs.get("kieu") == "tran":
+        # Họ mượn: nét vẽ / nhân vật / nền vẫn theo bìa thắng CỦA KÊNH (tm); chỉ GÓC NGHIÊNG chữ + dải lấy từ bìa thắng
+        # cùng họ của thư mục mượn (không đưa ảnh kênh khác vào làm tham chiếu — tránh lẫn nhân vật).
+        try:
+            from . import adn_bia  # noqa: PLC0415
+            a = adn_bia.adn_thu_muc(thu_ho["mau"], goc=goc)
+            h = adn_bia.adn_ho(a, thu_ho["ho"])
+            gv = adn_bia.goc_ve(h, dict(a.get("kenh") or {}))
+            if gv:
+                hs["goc_ve"] = gv
+            hs["thu_ho_muon"] = {"ho": thu_ho["ho"], "mau": thu_ho["mau"], "goc_ve": gv}
+        except Exception as loi:  # noqa: BLE001
+            log("  (bìa lô: góc nghiêng của họ mượn hỏng: {0})".format(str(loi)[:160]))
     return hs
+
+
+#: 23/10/2026 — chủ duyệt: kênh CHƯA có khuôn thắng riêng (chỉ mượn kiểu chữ thẳng của kênh gốc) thử thêm họ bìa đã
+#: thắng ở kênh khác (TL2: chữ trên dải màu nghiêng) cho ~1/3 số bìa; CTR thật của chính kênh quyết định về sau.
+#: `kenh.yaml: bia_lo_thu_ho: {ho: dai, mau: workspace/bia-tl2/thang, ti_le: 0.33}`.
+def _thu_ho_muon(goc: str, kenh: str, cai: Dict[str, Any], luot: str) -> Dict[str, Any]:
+    """{ho, mau, ly_do} khi lượt này rơi vào nhánh thử họ mượn (tất định theo kênh + lượt); {} nếu không."""
+    c = cai.get("bia_lo_thu_ho") if isinstance(cai, dict) else None
+    if not isinstance(c, dict) or not luot or cai.get("bia_lo_kieu_ghim") is True:
+        return {}
+    from . import bia_du_lieu  # noqa: PLC0415
+    ho = str(c.get("ho") or "").strip()
+    mau = str(c.get("mau") or "").strip()
+    mau = os.path.join(goc, mau) if mau and not os.path.isabs(mau) else mau
+    try:
+        ti_le = max(0.0, min(1.0, float(c.get("ti_le") or 0.0)))
+    except (TypeError, ValueError):
+        ti_le = 0.0
+    if ho not in bia_du_lieu.HO or not mau or not os.path.isdir(mau) or ti_le <= 0:
+        return {}
+    if ho not in bia_du_lieu.ho_trong_thu_muc(mau):
+        return {}
+    khoa = os.path.basename(os.path.normpath(luot))
+    rut = int(hashlib.sha1("thu-ho|{0}|{1}".format(kenh, khoa).encode("utf-8")).hexdigest()[:8], 16) / float(0xFFFFFFFF)
+    if rut >= ti_le:
+        return {}
+    return {"ho": ho, "mau": os.path.abspath(mau),
+            "ly_do": "thử họ {0} mượn từ {1} ({2:.0%} số lượt — chủ duyệt 23/10)".format(
+                ho, os.path.basename(os.path.dirname(os.path.abspath(mau))), ti_le)}
 
 
 def gan_adn(hs: Dict[str, Any], goc: str, tm: str, *, log: Callable[[str], None] = print) -> None:
