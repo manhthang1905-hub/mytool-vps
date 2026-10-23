@@ -4891,6 +4891,11 @@ _KHUON_CHAM_TIEU_DE = (
     "<<COMPETITOR_TRANSCRIPT>>\n\n<<CAC_BAN>>")
 
 
+#: Bảng CTR cho AI chấm tiêu đề: dưới mức hiển thị này CTR là nhiễu; kênh có ≥ số dòng này thì chỉ dùng số riêng.
+_HIEN_THI_TOI_THIEU_BANG_CTR = 500
+_SO_DONG_RIENG_DU = 5
+
+
 def _du_lieu_cham_tieu_de(goc: str, ma_kenh: str) -> Dict[str, str]:
     """Dựng `<<BANG_CTR>>`/`<<TIEU_DE_GAN_DAY>>` cho `_KHUON_CHAM_TIEU_DE` —
     đọc hồ sơ video (`core.ho_so_video`, đã có số liệu Studio thật nhờ vòng học
@@ -4901,7 +4906,8 @@ def _du_lieu_cham_tieu_de(goc: str, ma_kenh: str) -> Dict[str, str]:
     from . import ho_so_video  # noqa: PLC0415 — tránh vòng nhập lúc nạp module
     #     (ho_so_video.py nhập ngược `KIEU_THUMB` từ chính tệp này).
 
-    ds = list(ho_so_video.doc_bang_hieu_suat_tieu_de(goc, ma_kenh))
+    rieng = list(ho_so_video.doc_bang_hieu_suat_tieu_de(goc, ma_kenh))
+    ds = list(rieng)
     try:
         from . import nhom_kenh  # noqa: PLC0415
 
@@ -4915,7 +4921,23 @@ def _du_lieu_cham_tieu_de(goc: str, ma_kenh: str) -> Dict[str, str]:
         return {"BANG_CTR": "(chưa có số liệu Studio nào — chấm theo các tiêu chí còn lại)",
                 "TIEU_DE_GAN_DAY": "(chưa có tiêu đề nào trong 30 ngày gần đây)"}
 
-    xep = sorted(ds, key=lambda r: r["ctr"], reverse=True)
+    # 23/10/2026 — TL2 tụt: nhóm là CẢ 13 kênh, nên 7/8 dòng "CAO NHẤT" của TL2 là tiêu đề 【脳科学】/【心理学】…｜…
+    # của TL1/TL3 → AI chấm tin đó là "dạng CTR cao của kênh" và chọn bản nắn nhãn, trong khi khuôn thắng của
+    # TL2 là câu ngắn không nhãn. Kênh đã đủ số của mình thì CHỈ dùng số của mình; dòng ít hiển thị (CTR nhiễu,
+    # vd 9,52% trên 42 lượt) bị bỏ khi còn đủ dòng.
+    def _du_hien_thi(r: Dict[str, Any]) -> bool:
+        try:
+            return float(r.get("impressions") or 0) >= _HIEN_THI_TOI_THIEU_BANG_CTR
+        except (TypeError, ValueError):
+            return False
+
+    rieng_ok = [r for r in rieng if _du_hien_thi(r)]
+    if len(rieng_ok) >= _SO_DONG_RIENG_DU:
+        nguon = rieng_ok
+    else:
+        ca_nhom_ok = [r for r in ds if _du_hien_thi(r)]
+        nguon = ca_nhom_ok if len(ca_nhom_ok) >= _SO_DONG_RIENG_DU else ds
+    xep = sorted(nguon, key=lambda r: r["ctr"], reverse=True)
     cao = xep[:8]
     thap = [r for r in xep[-3:] if r not in cao] if len(xep) > 8 else []
 
