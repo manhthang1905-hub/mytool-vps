@@ -158,7 +158,7 @@ class TestDoiChungVaDuongLui:
         assert "TITLE: 対抗の元タイトル" in noi_dung
 
     def test_cham_hong_thi_giu_doi_chung_khong_vo_luot(self):
-        goi = _GoiChatKichBan(n_ban="TITLE: bản khác hẳn\n", loi_cham=True)
+        goi = _GoiChatKichBan(n_ban="TITLE: まったく別のたいとる\n", loi_cham=True)
         with tempfile.TemporaryDirectory() as d:
             bc = _bc(d, goi, lay=_LAY_GIA, tai_anh=lambda u: b"\xff\xd8jpeg")
             _chay(bc, _kenh(so_tieu_de=4), d, {"link": "http://x"})
@@ -169,7 +169,7 @@ class TestDoiChungVaDuongLui:
         assert "hỏng" in cham["ly_do"]
 
     def test_cham_tra_json_sai_dang_thi_giu_doi_chung(self):
-        goi = _GoiChatKichBan(n_ban="TITLE: bản khác hẳn\n", cham="không phải JSON")
+        goi = _GoiChatKichBan(n_ban="TITLE: まったく別のたいとる\n", cham="không phải JSON")
         with tempfile.TemporaryDirectory() as d:
             bc = _bc(d, goi, lay=_LAY_GIA, tai_anh=lambda u: b"\xff\xd8jpeg")
             _chay(bc, _kenh(so_tieu_de=4), d, {"link": "http://x"})
@@ -186,20 +186,20 @@ class TestDoiChungVaDuongLui:
 class TestChonBanTheoBoCham:
     def test_chon_ban_n_thu_hai_qua_cham(self):
         # Đối chứng = A, bản N đầu tiên = B — bộ chấm chọn B.
-        goi = _GoiChatKichBan(n_ban="TITLE: bản hay hơn\nTITLE: bản khác\n",
+        goi = _GoiChatKichBan(n_ban="TITLE: もっといいたいとる\nTITLE: べつのたいとる\n",
                               cham='{"chon": "B", "ly_do": "giống dạng CTR cao"}')
         with tempfile.TemporaryDirectory() as d:
             bc = _bc(d, goi, lay=_LAY_GIA, tai_anh=lambda u: b"\xff\xd8jpeg")
             _chay(bc, _kenh(so_tieu_de=4), d, {"link": "http://x"})
             noi_dung = _tieu_de_da_ghi(d)
             cham = _tieu_de_cham_json(d)
-        assert "TITLE: bản hay hơn" in noi_dung
+        assert "TITLE: もっといいたいとる" in noi_dung
         assert cham["chon"] == 1
         assert cham["ten_chon"] == "bản 1"
-        assert cham["tieu_de_chon"] == "bản hay hơn"
+        assert cham["tieu_de_chon"] == "もっといいたいとる"
         assert cham["ly_do"] == "giống dạng CTR cao"
         assert [u["tieu_de"] for u in cham["ung_vien"]] == [
-            "対抗の元タイトル", "bản hay hơn", "bản khác"]
+            "対抗の元タイトル", "もっといいたいとる", "べつのたいとる"]
 
     def test_nan_khuon_bat_them_mot_ung_vien(self, monkeypatch):
         import core.auto_khau as ak

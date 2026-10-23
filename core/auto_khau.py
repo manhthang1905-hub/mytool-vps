@@ -4804,6 +4804,22 @@ def _de_bai_n_ban_tieu_de(tieu_de_nguon: str, so_ban: int, nhan: str = "", luat_
 _RE_TITLE_DONG = re.compile(r"(?im)^[ \t]*TITLE[ \t]*:[ \t]*(.+?)[ \t]*$")
 
 
+#: Chữ Hán GIẢN THỂ hay gặp (không có trong tiếng Nhật) + dấu tiếng Việt — 23/10/2026: model ví (rẻ) viết bản tiêu đề lẫn
+#: tiếng Trung («辞职组vs65岁…惊人») và cả bản tiếng Việt («Dạy con thành công…») cho kênh Nhật.
+#: CHỈ chữ giản thể KHÁC dạng tiếng Nhật (学/会/点… người Nhật cũng viết y hệt — không được ở đây).
+_HAN_GIAN_THE = frozenset("后们这个说时对过还进发现经总样么为东车长门问间关头见气让开运动实认岁职组惊亲书买卖觉业电话爱钱")
+_RE_DAU_VIET = re.compile(r"[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]", re.I)
+_RE_KANA = re.compile(r"[぀-ヿ]")
+
+
+def tieu_de_dung_tieng(t: str, ngon_ngu: str = "ja") -> bool:
+    """Bản tiêu đề đúng tiếng của kênh? Kênh Nhật: phải có kana, không dấu Việt, không chữ Hán giản thể."""
+    if not str(ngon_ngu or "").lower().startswith(("ja", "japan")):     # chỉ kênh KHAI tiếng Nhật
+        return True
+    t = str(t or "")
+    return bool(_RE_KANA.search(t)) and not _RE_DAU_VIET.search(t) and not any(ch in _HAN_GIAN_THE for ch in t)
+
+
 def _doc_nhieu_tieu_de(chu: str, toi_da: int) -> List[str]:
     """Bóc mọi dòng `TITLE: …` (tối đa `toi_da` bản, bỏ trùng) — dùng cho lượt
     sinh N BẢN TIÊU ĐỀ (Việc 5); khác `_doc_tieu_de` (chỉ đọc dòng ĐẦU TIÊN
@@ -5005,6 +5021,11 @@ def _chon_tieu_de_nguyen_goc(bc: "BoiCanh", luot: "LuotChay", k: Kenh, d: str,
                                              luat_do_dai_tieu_de(k)) + khoi_bai_td + khoi_thi_truong,
                       _khoa_chat(luot, "tieu-de:n-ban"))
             moi_ds = _doc_nhieu_tieu_de(tra, k.so_tieu_de)
+            sai = [t for t in moi_ds if not tieu_de_dung_tieng(t, getattr(k, "ngon_ngu", "") or "")]
+            if sai:
+                bc.ghi("  bỏ {0} bản tiêu đề sai tiếng (Trung/Việt/không kana): {1}".format(
+                    len(sai), " · ".join(x[:30] for x in sai)))
+                moi_ds = [t for t in moi_ds if t not in sai]
             for moi in moi_ds:
                 if moi not in ban:
                     ban.append(moi)
