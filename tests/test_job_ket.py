@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.auto_khau import KHOANG_KE_CHO, LoiKetJob, _cho_job
+from core.auto_khau import KHOANG_KE_CHO, TRAN_CHO_JOB, LoiKetJob, _cho_job
 
 
 class DongHoGia:
@@ -146,6 +146,13 @@ class TestKetThiChiuThua:
             "đợi {0:.0f} phút là quá lâu cho một clip 1–3 phút".format(da_doi / 60)
         assert da_doi > 5 * 60, \
             "đợi quá ít thì job chậm thật cũng bị bỏ, và tiền đã tiêu rồi"
+
+    def test_dang_xep_hang_thi_doi_tiep_khong_bo(self, gia):
+        """23/10/2026: hàng chờ ShopAPI ~37 phút — job còn "queued" quá 12 phút không được bỏ."""
+        bc = BoiCanhGia(MayChuGia(["queued"] * 200 + ["succeeded"]), gia)
+        dau = gia.bay_gio
+        _cho_job(bc, {"id": "job_x", "status": "queued"})
+        assert gia.bay_gio - dau > TRAN_CHO_JOB
 
     def test_cau_loi_noi_ro_da_doi_bao_lau(self, gia):
         bc = BoiCanhGia(MayChuGia([]), gia)

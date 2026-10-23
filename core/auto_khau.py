@@ -1571,6 +1571,36 @@ KHOANG_KE_CHO = 90.0
 #: cho lúc nhà máy đông, đủ hẹp để cái kẹt lộ ra khi khách còn ngồi đó.
 TRAN_CHO_JOB = 12 * 60.0
 
+#: 23/10/2026 — hàng chờ ShopAPI đông: job nằm "chưa bắt đầu" ~37 phút rồi mới dựng 1 phút. Trần 12 phút
+#: tính từ lúc GỬI nên máy bỏ job đang xếp hàng, gửi khoá mới → xuống cuối hàng → lặp mãi, 0 clip về
+#: đĩa suốt 2 giờ dù máy chủ dựng xong hàng trăm clip. Nay: hết trần thì hỏi đúng job một lần — còn xếp
+#: hàng (chưa `started_at`) thì đợi tiếp; đã bắt đầu thì trần tính từ `started_at`. Trần cứng tổng
+#: `TRAN_CHO_XEP_HANG` để job kẹt thật vẫn lộ ra.
+TRAN_CHO_XEP_HANG = 150 * 60.0
+GIA_HAN_XEP_HANG = 5 * 60.0
+
+
+def _moc_gia_han(goi: Dict[str, Any], bat_dau: float, tran: float,
+                 bay_gio: Optional[float] = None) -> Optional[float]:
+    """Hạn chờ mới nếu job đang hợp lệ (còn xếp hàng, hoặc mới bắt đầu dựng chưa quá `tran`); None = kẹt thật."""
+    bay_gio = time.time() if bay_gio is None else bay_gio
+    tran_cung = bat_dau + TRAN_CHO_XEP_HANG
+    if not isinstance(goi, dict) or bay_gio >= tran_cung or _xong_han(goi.get("status")):
+        return None
+    bd = str(goi.get("started_at") or "").strip()
+    if not bd:
+        # Chỉ trạng thái XẾP HÀNG thật ("queued", core/jobs.py) mới được gia hạn; "processing" không mốc → như cũ.
+        if str(goi.get("status") or "") in ("queued", "pending"):
+            return min(bay_gio + GIA_HAN_XEP_HANG, tran_cung)
+        return None
+    try:
+        import datetime as _dt  # noqa: PLC0415
+        ts = _dt.datetime.fromisoformat(bd.replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
+    moc = ts + max(60.0, float(tran))
+    return min(moc, tran_cung) if moc > bay_gio else None
+
 #: Riêng khâu đọc thành giọng đợi lâu hơn.
 #:
 #: Một đoạn kịch bản dài ba nghìn ký tự đọc ra vài phút tiếng, và máy chủ phải
@@ -1786,7 +1816,23 @@ class SoTheoDoi:
                     return _ket_job(goi)
                 bay_gio = time.time()
                 if bay_gio >= het_han:
-                    break
+                    # Hết trần: hỏi đúng job một lần — đang xếp hàng thì đợi tiếp, không bỏ (xem TRAN_CHO_XEP_HANG).
+                    try:
+                        xin_nhip(self._bc.on_log, ngu=self._bc.ngu)
+                        hien = _goi_dict(self._bc.client.jobs.retrieve(ma))
+                    except Exception:  # noqa: BLE001 — hỏi hỏng thì coi như kẹt, như cũ
+                        hien = {}
+                    if _xong_han(hien.get("status")):
+                        self._nhan(ma, hien)
+                        return _ket_job(hien)
+                    moc_moi = _moc_gia_han(hien, bat_dau, tran, bay_gio)
+                    if moc_moi is None:
+                        break
+                    het_han = moc_moi
+                    self._bc.ghi("    {0}: máy chủ {1}, đã đợi {2:.0f} phút — đợi tiếp, không gửi lại.".format(
+                        ten_viec or ma[:16], "còn xếp hàng" if not hien.get("started_at") else "đang dựng",
+                        (bay_gio - bat_dau) / 60.0))
+                    continue
                 # Nằm trên `Event` chứ không hỏi máy chủ: nửa giây một nhịp là
                 # đủ để nút Dừng ăn ngay, mà không tốn lượt gọi nào.
                 self._nam_cho(ma, min(0.5, het_han - bay_gio))
@@ -2006,6 +2052,10 @@ def _cho_job(bc: BoiCanh, job, tran: float = TRAN_CHO_JOB,
         # giọng đọc 3 ngày 03/09/2026) ghi ở đó.
         if _xong_han(trang_thai):
             return _ket_job(goi)
+        if time.time() >= het_han:  # 23/10: còn xếp hàng/mới dựng thì gia hạn, không bỏ job (TRAN_CHO_XEP_HANG)
+            moc_moi = _moc_gia_han(goi, bat_dau, tran)
+            if moc_moi is not None:
+                het_han = moc_moi
         # ═══ NÓI RA TRONG LÚC ĐỢI ═══
         #
         # Vòng này từng đợi trong im lặng tuyệt đối. Đã xảy ra thật
