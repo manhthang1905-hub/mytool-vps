@@ -694,8 +694,15 @@ def _ly_do_vuot_tran_phuc_hoi(run: Dict[str, Any], ngay_hien_tai: _dt.date,
     """
     ph = run.get("phuc_hoi") if isinstance(run.get("phuc_hoi"), dict) else {}
     cho_engine = _dang_cho_engine(run)
+    # 23/10/2026: video ĐÃ DỰNG XONG, chỉ còn khâu ảnh bìa hỏng (giám khảo/ShopAPI chưa chấm được, cổng bìa chưa có tấm
+    # đạt) → KHÔNG bỏ lượt theo số lần / số giờ: bỏ là mất cả video đã trả tiền (TL4-K3/0005, TL8/0001, TL7/0001 bị
+    # bỏ oan). Chỉ còn lưới cửa sổ quét ở cuối.
+    sx = run.get("san_xuat") if isinstance(run.get("san_xuat"), dict) else {}
+    chi_con_bia = list(sx.get("khau_hong") or []) == ["thumbnail"]
 
     so_lan = int(ph.get("so_lan") or 0)
+    if chi_con_bia:
+        cho_engine = True  # bỏ qua cửa 1–3 (đếm lần, đếm giờ, lỗi lặp) — xuống thẳng lưới cửa sổ
     if so_lan >= TRAN_SO_LAN_PHUC_HOI and not cho_engine and not _dung_vi_phia_shopapi(run):
         return ("đã tự phục hồi (nhặt lại) {0} lần mà vẫn chưa xong — chạm trần {1} lần, "
                 "khả năng nguồn hoặc khâu nào đó kẹt vĩnh viễn.").format(
