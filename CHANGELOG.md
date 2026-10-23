@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.13** — 2026-10-23 — `vps-jp1` — fix(phuc hoi): luot da dung xong video chi con hong anh bia khong bi bo theo so lan/so gio (chi con luoi cua so 7 ngay)
 - **2.230.12** — 2026-10-23 — `vps-jp1` — fix(bia): kenh muon bia thang nhan vat khac - tam bi phan 'lech nhan vat' duoc hoi lai rieng (anh nhan vat + tam bia) truoc khi loai
 - **2.230.11** — 2026-10-23 — `vps-jp1` — feat(bia): kenh chua co khuon thang rieng thu ho bia mượn (bia_lo_thu_ho, vd dai nghieng TL2) ~1/3 so luot, giu anh tham chieu cua kenh
 - **2.230.10** — 2026-10-23 — `vps-jp1` — fix(clip): job ShopAPI con xep hang (queued) thi doi tiep, tran 12 phut tinh tu started_at, tran cung 150 phut
