@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.8** — 2026-10-23 — `vps-jp1` — fix(tieu de): kenh tieng Nhat bo ban tieu de AI sai tieng (Trung gian the/Viet/khong kana)
 - **2.230.7** — 2026-10-23 — `vps-jp1` — fix(anh-canh): co khac_nhan_vat khong con loai tam (gia khao re bao nham hang loat -> ve lai 3 vong, khau anh 1h->17h, 22/10 khong ra video); chi xep tam khong co len truoc; nhan vat khac han = toi da 5
 - **2.230.6** — 2026-10-22 — `vps-jp1` — feat(phong-thi-nghiem): khoa chu - gia thuyet chu cho chay bong toi ngay X khong duoc mo thu/tot nghiep (22/10: chi chay that V7, VPH, POOL, RADAR toi 12/11)
 - **2.230.5** — 2026-10-22 — `vps-jp1` — fix(thiet-lap-kenh): anh nhan vat/logo - trung Idempotency-Key (link tham chieu moi sau lan cho qua lau) thi dat lai bang khoa moi 1 lan
