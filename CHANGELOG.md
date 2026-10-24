@@ -6,6 +6,7 @@ người cần biết "bản mới có gì" mà không cần đọc hết nhật
 
 ## Các bản đẩy lên kho chung (tự ghi bởi `dong_bo_git day`, mới nhất ở trên)
 
+- **2.230.15** — 2026-10-24 — `vps-jp1` — fix(mo kenh): chi con @handle bi YouTube khoa 14 ngay thi van bat san xuat, handle tu doi sau
 - **2.230.14** — 2026-10-24 — `vps-jp1` — fix(cong su): link moi mo hop 'Ban nhan duoc loi moi cong tac' - bam Chap nhan trong hop thay vi tim hang video
 - **2.230.13** — 2026-10-23 — `vps-jp1` — fix(phuc hoi): luot da dung xong video chi con hong anh bia khong bi bo theo so lan/so gio (chi con luoi cua so 7 ngay)
 - **2.230.12** — 2026-10-23 — `vps-jp1` — fix(bia): kenh muon bia thang nhan vat khac - tam bi phan 'lech nhan vat' duoc hoi lai rieng (anh nhan vat + tam bia) truoc khi loai
