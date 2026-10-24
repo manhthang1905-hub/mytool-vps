@@ -292,6 +292,14 @@ class TrangCongSu:
         except Exception:  # noqa: BLE001
             return ""
 
+    def co_nut_chu(self, chu: list) -> bool:
+        """Có nút chữ KHỚP NGUYÊN VĂN một trong `chu` trong hộp thoại đang hiện (KHÔNG bấm)."""
+        try:
+            return bool(self.tr.js_tho(_JS_BAM_CHU.replace("b.click(); return t;", "return t;")
+                                       % json.dumps(list(chu), ensure_ascii=False)))
+        except Exception:  # noqa: BLE001
+            return False
+
     def link_moi(self) -> str:
         """Link mời cộng tác đang hiện trong hộp (ô chỉ đọc / thẻ a / chữ) — '' nếu chưa có."""
         try:
@@ -445,6 +453,8 @@ class MayCongSu:
     #: Chữ nút của hộp con «Mời người cộng tác» (đo thật 22/10/2026, ảnh vm/logs/dom/…-cong-su-moi-loi.png).
     CHU_TAO_LINK = ("Tạo đường liên kết", "Create link", "リンクを作成")
     CHU_DONG_LINK = ("Xong", "Đóng", "Done", "Close", "完了", "閉じる")
+    #: Nút nhận trong hộp «Bạn nhận được lời mời cộng tác» (đo thật 23/10/2026, giao diện vi).
+    CHU_CHAP_NHAN = ("Chấp nhận", "Accept", "承認", "承諾")
 
     def tao_lien_ket(self) -> str:
         """Sau khi chọn kênh, YouTube mở hộp con «Mời người cộng tác» (thẻ kênh + «Cho phép xem số liệu phân tích» +
@@ -572,6 +582,24 @@ class MayCongSu:
         self.trang.mo(url)
         self.ngu(4.0)
         self.kiem_canh_bao("mo_loi_moi")
+        # 23/10/2026 (ảnh vm/logs/dom/20261023-083058-cong-su-chua-co-loi-moi.png): mở LINK MỜI → Studio chuyển tới
+        # `…/videos/upload?d=acd&v=<video>` và hiện HỘP «Bạn nhận được lời mời cộng tác» (Từ chối / Chấp nhận) — không
+        # có hàng nào trong danh sách. 11/11 lượt nhận hỏng vì máy đi tìm hàng. Hộp hiện + URL mang ĐÚNG video → bấm
+        # Chấp nhận trong hộp, đọc lại là nút đã mất.
+        if hasattr(self.trang, "co_nut_chu") and viec.get("link") and vid and vid in str(self.trang.url() or ""):
+            if self._cho(lambda: self.trang.co_nut_chu(list(self.CHU_CHAP_NHAN)) or None, so_lan=12):
+                if che_do == "thu":
+                    return {"ket": "thu:co_hop_nhan"}
+                bam = self.trang.bam_chu(list(self.CHU_CHAP_NHAN))
+                self.nk("cộng sự: hộp lời mời {0} — đã bấm «{1}»".format(vid, bam))
+                self.ngu(3.0)
+                self.kiem_canh_bao("nhan")
+                da_mat = self._cho(lambda: (not self.trang.co_nut_chu(list(self.CHU_CHAP_NHAN))) or None, so_lan=12)
+                if bam and da_mat:
+                    self.trang.ghi_chan_doan("cong-su-nhan-hop")
+                    return {"ket": "da_nhan", "chu": "hộp lời mời"}
+                self.trang.ghi_chan_doan("cong-su-nhan-hop-chua-an")
+                raise LoiCongSu("cs_nut_nhan", "bấm Chấp nhận trong hộp lời mời xong nút vẫn còn")
         r = self._cho(lambda: (lambda x: x if x.get("hang") else None)(self.trang.hang_video(vid)), so_lan=24)             or self.trang.hang_video(vid)
         if not r.get("hang"):
             self.trang.ghi_chan_doan("cong-su-chua-co-loi-moi")
