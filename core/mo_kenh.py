@@ -1248,11 +1248,20 @@ def kich_hoat(goc: str, ma: str, *, kiem_dang_nhap: Optional[Callable[[str], Tup
     if tt == "dang_thiet_lap":
         so = (doc_so or (lambda m: doc_so_thiet_lap(m, goc)))(ma)
         tinh = str(so.get("trang_thai") or "")
+        # 24/10/2026: 10/11 mục đạt, CHỈ còn @handle đang "cho" (YouTube khoá đổi handle 14 ngày) → không giữ kênh đứng
+        # hai tuần: bật sản xuất; sổ thiết lập vẫn "dang_lam" nên skill thiết lập tự đổi handle khi hết hạn khoá.
+        muc_tl = so.get("muc") if isinstance(so.get("muc"), dict) else {}
+        chua_tl = [m for m, v in muc_tl.items() if not (isinstance(v, dict) and v.get("tt") == "dat")]
+        chi_cho_handle = (tinh != "xong" and chua_tl == ["handle"]
+                          and str((muc_tl.get("handle") or {}).get("tt") or "") == "cho")
+        if chi_cho_handle:
+            tinh = "xong"
         if tinh == "xong" and d.get("can_thuong_hieu") and not ep:
             # kênh thay tự động (chủ duyệt 20/10): bật tu_chay/tu_duyet/tu_dang CHỈ khi thiết lập đủ 11/11 + UC đã ghim
             from .thay_kenh import MUC_THIET_LAP, thuong_hieu_xong  # noqa: PLC0415
 
             dat = sum(1 for v in (so.get("muc") or {}).values() if isinstance(v, dict) and v.get("tt") == "dat")
+            dat += 1 if chi_cho_handle else 0
             ok_th, ly_th = thuong_hieu_xong(goc, ma)
             if dat < MUC_THIET_LAP or not ok_th:
                 d["loi"] = "thiết lập {0}/{1}{2} — chưa bật tự chạy".format(dat, MUC_THIET_LAP, "" if ok_th else "; " + ly_th)
